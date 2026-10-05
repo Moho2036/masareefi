@@ -21,15 +21,27 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 
 export const auth = getAuth(app)
 
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || undefined
+
 let firestoreInstance
 try {
-  firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  })
+  firestoreInstance = databaseId
+    ? initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        },
+        databaseId
+      )
+    : initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      })
 } catch {
-  firestoreInstance = getFirestore(app)
+  firestoreInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app)
 }
 
 export const db = firestoreInstance
