@@ -76,6 +76,9 @@ export async function updateRecurring(
   if (rec.categoryId !== undefined) {
     payload.categoryId = rec.categoryId
   }
+  if (rec.title !== undefined) {
+    payload.title = typeof rec.title === 'string' ? rec.title.trim().slice(0, 100) : ''
+  }
   if (rec.note !== undefined) {
     payload.note = typeof rec.note === 'string' ? rec.note.slice(0, 500) : ''
   }
@@ -145,7 +148,7 @@ export async function processDueRecurring(
     for (const occDate of dates) {
       const txId = getDeterministicTxId(rec.id, occDate)
       const txRef = doc(db, 'users', uid, 'transactions', txId)
-      batch.set(txRef, {
+      const newTxData: Record<string, unknown> = {
         type: rec.type,
         amountFils: rec.amountFils,
         categoryId: rec.categoryId,
@@ -153,7 +156,11 @@ export async function processDueRecurring(
         note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
         recurringId: rec.id,
         createdAt: serverTimestamp(),
-      })
+      }
+      if (rec.title) {
+        newTxData.title = rec.title.slice(0, 100)
+      }
+      batch.set(txRef, newTxData)
       createdCount++
     }
 

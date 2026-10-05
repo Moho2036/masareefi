@@ -83,6 +83,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
     return ''
   })
 
+  const [title, setTitle] = useState<string>(initialRecurring?.title ?? '')
   const [note, setNote] = useState<string>(initialRecurring?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -138,11 +139,13 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
     setSubmitting(true)
     try {
+      const trimmedTitle = title.trim().slice(0, 100)
       if (isEditing && initialRecurring) {
         await updateRecurring(user.uid, initialRecurring.id, {
           type,
           amountFils,
           categoryId: activeCategoryId,
+          title: trimmedTitle,
           note: note.trim().slice(0, 500),
           frequency,
           startDate: parsedStartDate,
@@ -154,6 +157,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           type,
           amountFils,
           categoryId: activeCategoryId,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
           note: note.trim().slice(0, 500),
           frequency,
           startDate: parsedStartDate,
@@ -281,6 +285,18 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* Title Input */}
+      <div>
+        <Input
+          type="text"
+          label="عنوان المعاملة (اختياري)"
+          placeholder="مثال: اشتراك نت، قسط سيارة..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={100}
+        />
       </div>
 
       {/* Frequency selector: أسبوعي / شهري / سنوي */}

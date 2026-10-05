@@ -11,13 +11,17 @@ import type { User } from 'firebase/auth'
 import { db } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
-import { addDefaultCategoriesToBatch } from './seed'
+import { addDefaultCategoriesToBatch, syncCategoriesForUser } from './seed'
 
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
   const snap = await getDoc(userRef)
 
   if (snap.exists()) {
+    // Non-blocking sync for newly introduced/renamed default categories
+    syncCategoriesForUser(user.uid).catch((err) =>
+      console.warn('Categories sync deferred:', err)
+    )
     return snap.data()
   }
 

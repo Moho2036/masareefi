@@ -40,8 +40,9 @@ export function filterTransactions(
       return false
     }
     if (normalizedQuery) {
+      const normalizedTitle = tx.title ? normalizeArabic(tx.title) : ''
       const normalizedNote = normalizeArabic(tx.note)
-      if (!normalizedNote.includes(normalizedQuery)) {
+      if (!normalizedTitle.includes(normalizedQuery) && !normalizedNote.includes(normalizedQuery)) {
         return false
       }
     }

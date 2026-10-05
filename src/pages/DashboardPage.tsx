@@ -267,10 +267,10 @@ export const DashboardPage: React.FC = () => {
                       </span>
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          {tx.note || (cat ? cat.name : 'معاملة')}
+                          {tx.title || tx.note || (cat ? cat.name : 'معاملة')}
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-                          {tx.note && cat && (
+                          {cat && (
                             <>
                               <span className="truncate">{cat.name}</span>
                               <span>•</span>
@@ -358,9 +358,15 @@ export const DashboardPage: React.FC = () => {
                       </span>
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-                          {item.note || (cat ? cat.name : 'معاملة متكررة')}
+                          {item.title || item.note || (cat ? cat.name : 'معاملة متكررة')}
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                          {cat && (
+                            <>
+                              <span className="truncate">{cat.name}</span>
+                              <span>•</span>
+                            </>
+                          )}
                           <Calendar className="w-3 h-3 shrink-0" />
                           <span className="truncate">{nextDateFormatted}</span>
                         </div>

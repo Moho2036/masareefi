@@ -28,12 +28,13 @@ rules_version = '2';
 //   - amountFils: int (required, 1..1000000000000)
 //   - categoryId: string (required, 1..128)
 //   - date: timestamp (required)
+//   - title: string (optional, 0..100)
 //   - note: string (required, 0..500)
 //   - recurringId: string (optional, 1..128)
 //   - createdAt: timestamp (required, immutable)
 //
 // Collection: users/{uid}/recurring    Document ID: any
-//   - type, amountFils, categoryId, note: same as transactions
+//   - type, amountFils, categoryId, title, note: same as transactions
 //   - frequency: string (required, 'weekly' | 'monthly' | 'yearly')
 //   - startDate: timestamp (required)
 //   - nextDate: timestamp (required)
@@ -93,23 +94,25 @@ service cloud.firestore {
     }
 
     function isValidTransaction(data) {
-      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'date', 'note', 'recurringId', 'createdAt'])
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'date', 'title', 'note', 'recurringId', 'createdAt'])
         && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'date', 'note', 'createdAt'])
         && isTxType(data.type)
         && isValidAmount(data.amountFils)
         && isStr(data.categoryId, 1, 128)
         && data.date is timestamp
+        && (!('title' in data) || isStr(data.title, 0, 100))
         && isStr(data.note, 0, 500)
         && (!('recurringId' in data) || isStr(data.recurringId, 1, 128))
         && data.createdAt is timestamp;
     }
 
     function isValidRecurring(data) {
-      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active'])
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'title', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active'])
         && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'active'])
         && isTxType(data.type)
         && isValidAmount(data.amountFils)
         && isStr(data.categoryId, 1, 128)
+        && (!('title' in data) || isStr(data.title, 0, 100))
         && isStr(data.note, 0, 500)
         && data.frequency in ['weekly', 'monthly', 'yearly']
         && data.startDate is timestamp

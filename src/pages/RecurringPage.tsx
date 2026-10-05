@@ -209,13 +209,17 @@ export const RecurringPage: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <span className="font-bold text-sm text-slate-800 dark:text-slate-100 block truncate">
-                        {name}
+                        {item.title || name}
                       </span>
-                      {item.note ? (
-                        <p className="text-xs text-slate-400 dark:text-slate-400 truncate">
-                          {item.note}
-                        </p>
-                      ) : null}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                        {item.title ? (
+                          <>
+                            <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                            {item.note ? <span>•</span> : null}
+                          </>
+                        ) : null}
+                        {item.note ? <span>{item.note}</span> : null}
+                      </div>
                     </div>
                   </div>
 

@@ -46,6 +46,9 @@ export const transactionConverter: FirestoreDataConverter<Transaction> = {
           ? Timestamp.fromDate(tx.createdAt)
           : (tx.createdAt ?? serverTimestamp()),
     }
+    if (tx.title) {
+      data.title = tx.title.trim().slice(0, 100)
+    }
     if (tx.recurringId) {
       data.recurringId = tx.recurringId
     }
@@ -67,6 +70,9 @@ export const transactionConverter: FirestoreDataConverter<Transaction> = {
             ? new Date(data.createdAt)
             : new Date(),
     }
+    if (data.title) {
+      tx.title = data.title
+    }
     if (data.recurringId) {
       tx.recurringId = data.recurringId
     }
@@ -87,6 +93,9 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
       nextDate:
         rec.nextDate instanceof Date ? Timestamp.fromDate(rec.nextDate) : rec.nextDate,
       active: Boolean(rec.active),
+    }
+    if (rec.title) {
+      data.title = rec.title.trim().slice(0, 100)
     }
     if (rec.endDate) {
       data.endDate =
@@ -112,6 +121,9 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
           ? data.nextDate.toDate()
           : new Date(data.nextDate),
       active: Boolean(data.active),
+    }
+    if (data.title) {
+      rec.title = data.title
     }
     if (data.endDate) {
       rec.endDate =

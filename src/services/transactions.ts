@@ -84,6 +84,9 @@ export async function updateTransaction(
   if (tx.date !== undefined) {
     payload.date = tx.date instanceof Date ? Timestamp.fromDate(tx.date) : tx.date
   }
+  if (tx.title !== undefined) {
+    payload.title = typeof tx.title === 'string' ? tx.title.trim().slice(0, 100) : ''
+  }
   if (tx.note !== undefined) {
     payload.note = typeof tx.note === 'string' ? tx.note.slice(0, 500) : ''
   }

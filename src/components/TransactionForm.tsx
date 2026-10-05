@@ -59,6 +59,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     return format(new Date(), 'yyyy-MM-dd')
   })
 
+  const [title, setTitle] = useState<string>(initialTransaction?.title ?? '')
   const [note, setNote] = useState<string>(initialTransaction?.note ?? '')
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
@@ -108,12 +109,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
     setSubmitting(true)
     try {
+      const trimmedTitle = title.trim().slice(0, 100)
       if (isEditing && initialTransaction) {
         await updateTransaction(user.uid, initialTransaction.id, {
           type,
           amountFils,
           categoryId: activeCategoryId,
           date: parsedDate,
+          title: trimmedTitle,
           note: note.trim().slice(0, 500),
         })
         showToast('تم تعديل المعاملة بنجاح', 'success')
@@ -125,6 +128,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             type,
             amountFils,
             categoryId: activeCategoryId,
+            ...(trimmedTitle ? { title: trimmedTitle } : {}),
             note: note.trim().slice(0, 500),
             frequency: recurringFrequency,
             startDate: parsedDate,
@@ -138,6 +142,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           amountFils,
           categoryId: activeCategoryId,
           date: parsedDate,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
           note: note.trim().slice(0, 500),
           ...(recurringId ? { recurringId } : {}),
         })
@@ -276,6 +281,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* Title Input */}
+      <div>
+        <Input
+          type="text"
+          label="عنوان المعاملة (اختياري)"
+          placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={100}
+        />
       </div>
 
       {/* Date Input */}

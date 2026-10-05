@@ -44,6 +44,7 @@ describe('aggregate helpers', () => {
         amountFils: 20000,
         categoryId: 'cat-rent',
         date: new Date('2026-10-02T10:00:00Z'),
+        title: 'فاتورة الكهرباء',
         note: 'إيجار شقة',
         createdAt: new Date('2026-10-02T10:00:00Z'),
       },
@@ -77,7 +78,7 @@ describe('aggregate helpers', () => {
       expect(filtered[0].id).toBe('1')
     })
 
-    it('filters by Arabic query tolerant of hamza and taa marbuta', () => {
+    it('filters by Arabic query tolerant of hamza and taa marbuta in note and title', () => {
       // Searching without hamza matches note with hamza "إيجار"
       const result = filterTransactions(txs, { query: 'ايجار' })
       expect(result).toHaveLength(1)
@@ -87,6 +88,11 @@ describe('aggregate helpers', () => {
       const result2 = filterTransactions(txs, { query: 'العائله' })
       expect(result2).toHaveLength(1)
       expect(result2[0].id).toBe('1')
+
+      // Searching matches title "فاتورة الكهرباء"
+      const result3 = filterTransactions(txs, { query: 'الكهرباء' })
+      expect(result3).toHaveLength(1)
+      expect(result3[0].id).toBe('2')
     })
   })
 

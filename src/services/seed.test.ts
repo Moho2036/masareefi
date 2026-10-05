@@ -3,17 +3,17 @@ import type { WriteBatch, DocumentReference } from 'firebase/firestore'
 import { DEFAULT_CATEGORIES, addDefaultCategoriesToBatch } from './seed'
 
 describe('DEFAULT_CATEGORIES seed data', () => {
-  it('contains exactly 18 categories (13 expenses, 5 incomes)', () => {
-    expect(DEFAULT_CATEGORIES).toHaveLength(18)
+  it('contains exactly 23 categories (18 expenses, 5 incomes)', () => {
+    expect(DEFAULT_CATEGORIES).toHaveLength(23)
 
     const expenses = DEFAULT_CATEGORIES.filter((c) => c.type === 'expense')
     const incomes = DEFAULT_CATEGORIES.filter((c) => c.type === 'income')
 
-    expect(expenses).toHaveLength(13)
+    expect(expenses).toHaveLength(18)
     expect(incomes).toHaveLength(5)
   })
 
-  it('matches category names required by PLAN.md', () => {
+  it('matches category names required by user specification', () => {
     const expectedExpenses = [
       'طعام وبقالة',
       'مطاعم',
@@ -22,11 +22,16 @@ describe('DEFAULT_CATEGORIES seed data', () => {
       'فواتير',
       'اتصالات',
       'صحة',
-      'تسوق وملابس',
+      'ملابس وإكسسوارات',
       'ترفيه',
       'تعليم',
       'اشتراكات',
-      'عائلة وهدايا',
+      'الهدايا والمناسبات',
+      'التأمين',
+      'العطاء الخيري',
+      'المصاريف المصرفية',
+      'سداد الديون والأقساط',
+      'العناية الشخصية',
       'أخرى',
     ]
 
@@ -86,7 +91,7 @@ describe('DEFAULT_CATEGORIES seed data', () => {
     }
   })
 
-  it('addDefaultCategoriesToBatch sets all 18 categories to the batch', () => {
+  it('addDefaultCategoriesToBatch sets all 23 categories to the batch', () => {
     const setCalls: { ref: unknown; data: unknown }[] = []
     const mockBatch = {
       set: vi.fn((ref: DocumentReference, data: unknown) => {
@@ -97,8 +102,8 @@ describe('DEFAULT_CATEGORIES seed data', () => {
 
     addDefaultCategoriesToBatch(mockBatch, 'test-uid')
 
-    expect(mockBatch.set).toHaveBeenCalledTimes(18)
-    expect(setCalls).toHaveLength(18)
+    expect(mockBatch.set).toHaveBeenCalledTimes(23)
+    expect(setCalls).toHaveLength(23)
 
     // Verify first and last category
     expect(setCalls[0].data).toEqual({
@@ -109,13 +114,13 @@ describe('DEFAULT_CATEGORIES seed data', () => {
       archived: false,
       order: 0,
     })
-    expect(setCalls[17].data).toEqual({
+    expect(setCalls[22].data).toEqual({
       name: 'أخرى',
       type: 'income',
       icon: '➕',
       color: '#64748B',
       archived: false,
-      order: 17,
+      order: 22,
     })
   })
 })

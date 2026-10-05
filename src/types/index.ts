@@ -20,6 +20,7 @@ export interface Transaction {
   amountFils: number
   categoryId: string
   date: Date
+  title?: string
   note: string
   recurringId?: string
   createdAt: Date
@@ -30,6 +31,7 @@ export interface Recurring {
   type: TxType
   amountFils: number
   categoryId: string
+  title?: string
   note: string
   frequency: Frequency
   startDate: Date

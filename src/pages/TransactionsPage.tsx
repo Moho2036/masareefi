@@ -128,7 +128,7 @@ export const TransactionsPage: React.FC = () => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث في الملاحظات..."
+            placeholder="ابحث في العنوان أو الملاحظات..."
             className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
           />
         </div>
@@ -259,7 +259,7 @@ export const TransactionsPage: React.FC = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-                              {name}
+                              {tx.title || name}
                             </span>
                             {tx.recurringId && (
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold shrink-0">
@@ -268,11 +268,15 @@ export const TransactionsPage: React.FC = () => {
                             )}
                           </div>
 
-                          {tx.note ? (
-                            <p className="text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
-                              {tx.note}
-                            </p>
-                          ) : null}
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                            {tx.title ? (
+                              <>
+                                <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                                {tx.note ? <span>•</span> : null}
+                              </>
+                            ) : null}
+                            {tx.note ? <span>{tx.note}</span> : null}
+                          </div>
                         </div>
                       </div>
 

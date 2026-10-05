@@ -130,6 +130,21 @@ describe('transaction validation', () => {
       setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t1`), { ...validTx(), amountFils: '100' }),
     );
   });
+  it('allows valid optional title', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t1`), { ...validTx(), title: 'lunch with team' }),
+    );
+  });
+  it('denies title longer than 100 chars', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t1`), { ...validTx(), title: 'a'.repeat(101) }),
+    );
+  });
+  it('denies non-string title', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t1`), { ...validTx(), title: 123 }),
+    );
+  });
   it('denies extra field', async () => {
     await assertFails(
       setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t1`), { ...validTx(), hacked: true }),
@@ -143,6 +158,21 @@ describe('transaction validation', () => {
 });
 
 describe('recurring validation', () => {
+  it('allows valid optional title', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), title: 'gym' }),
+    );
+  });
+  it('denies title longer than 100 chars', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), title: 'a'.repeat(101) }),
+    );
+  });
+  it('denies non-string title', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), title: false }),
+    );
+  });
   it('denies invalid frequency', async () => {
     await assertFails(
       setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), frequency: 'daily' }),
