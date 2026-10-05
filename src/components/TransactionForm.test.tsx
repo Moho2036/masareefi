@@ -41,6 +41,14 @@ vi.mock('../hooks/useToast', () => ({
   }),
 }))
 
+vi.mock('../hooks/useSelectedMonth', () => ({
+  useSelectedMonth: () => ({
+    selectedDate: new Date('2026-10-01'),
+    setSelectedDate: vi.fn(),
+    range: { start: new Date('2026-10-01'), end: new Date('2026-11-01') },
+  }),
+}))
+
 describe('TransactionForm Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()

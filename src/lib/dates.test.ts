@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { getFinancialMonthRange, formatMonthLabel, formatDayHeader } from './dates'
+import {
+  getFinancialMonthRange,
+  formatMonthLabel,
+  formatDayHeader,
+  parseLocalDateInput,
+} from './dates'
 
 describe('dates lib', () => {
   describe('getFinancialMonthRange', () => {
@@ -91,6 +96,30 @@ describe('dates lib', () => {
 
     it('formats older days without today/yesterday prefix', () => {
       expect(formatDayHeader(thursdayOct1, sundayOct4)).toBe('الخميس 1 أكتوبر')
+    })
+  })
+
+  describe('parseLocalDateInput', () => {
+    it('parses YYYY-MM-DD into a Date at midday local time', () => {
+      const d = parseLocalDateInput('2026-10-05')
+      expect(d.getFullYear()).toBe(2026)
+      expect(d.getMonth()).toBe(9) // 0-indexed October
+      expect(d.getDate()).toBe(5)
+      expect(d.getHours()).toBe(12)
+    })
+
+    it('correctly handles month boundaries', () => {
+      const firstDay = parseLocalDateInput('2026-10-01')
+      expect(firstDay.getFullYear()).toBe(2026)
+      expect(firstDay.getMonth()).toBe(9)
+      expect(firstDay.getDate()).toBe(1)
+      expect(firstDay.getHours()).toBe(12)
+
+      const lastDay = parseLocalDateInput('2026-10-31')
+      expect(lastDay.getFullYear()).toBe(2026)
+      expect(lastDay.getMonth()).toBe(9)
+      expect(lastDay.getDate()).toBe(31)
+      expect(lastDay.getHours()).toBe(12)
     })
   })
 })

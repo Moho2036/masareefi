@@ -57,10 +57,14 @@ export function subscribeUserSettings(
   const userRef = doc(db, 'users', uid).withConverter(userSettingsConverter)
   return onSnapshot(
     userRef,
+    { includeMetadataChanges: true },
     (snap) => {
       cb(snap.exists() ? snap.data() : null)
     },
-    onError
+    (err) => {
+      console.error('subscribeUserSettings error:', err)
+      onError?.(err)
+    }
   )
 }
 

@@ -31,11 +31,15 @@ export function subscribeTransactions(
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const items = snapshot.docs.map((d) => d.data())
       cb(items)
     },
-    onError
+    (err) => {
+      console.error('subscribeTransactions error:', err)
+      onError?.(err)
+    }
   )
 }
 

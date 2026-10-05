@@ -17,14 +17,17 @@ interface SelectedMonthContextValue {
   goToPreviousMonth: () => void
   goToNextMonth: () => void
   goToCurrentMonth: () => void
+  refreshData: () => void
+  refreshKey: number
   monthLabel: string
   range: { start: Date; end: Date }
 }
 
-const SelectedMonthContext = createContext<SelectedMonthContextValue | null>(null)
+export const SelectedMonthContext = createContext<SelectedMonthContextValue | null>(null)
 
 export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [refreshKey, setRefreshKey] = useState<number>(0)
   const { data: settings } = useUserSettings()
 
   const monthStartDay = settings?.monthStartDay ?? 1
@@ -39,6 +42,10 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
 
   const goToCurrentMonth = useCallback(() => {
     setSelectedDate(new Date())
+  }, [])
+
+  const refreshData = useCallback(() => {
+    setRefreshKey((k) => k + 1)
   }, [])
 
   const monthLabel = useMemo(() => {
@@ -56,6 +63,8 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       goToPreviousMonth,
       goToNextMonth,
       goToCurrentMonth,
+      refreshData,
+      refreshKey,
       monthLabel,
       range,
     }),
@@ -64,6 +73,8 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       goToPreviousMonth,
       goToNextMonth,
       goToCurrentMonth,
+      refreshData,
+      refreshKey,
       monthLabel,
       range,
     ]

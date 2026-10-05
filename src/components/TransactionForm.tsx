@@ -7,11 +7,13 @@ import { Input } from './ui/Input'
 import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
+import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { addTransaction, updateTransaction, deleteTransaction } from '../services/transactions'
 import { addRecurring } from '../services/recurring'
 import { advanceDate } from '../lib/recurring'
 import { toFils } from '../lib/money'
+import { parseLocalDateInput } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType, Frequency } from '../types'
 
@@ -30,6 +32,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
+  const { selectedDate, setSelectedDate, range } = useSelectedMonth()
   const { showToast } = useToast()
 
   const isEditing = Boolean(initialTransaction)
@@ -56,7 +59,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           : new Date(initialTransaction.date)
       return format(d, 'yyyy-MM-dd')
     }
-    return format(new Date(), 'yyyy-MM-dd')
+    const now = new Date()
+    const isViewingCurrentMonth =
+      now.getFullYear() === selectedDate.getFullYear() &&
+      now.getMonth() === selectedDate.getMonth()
+    return format(isViewingCurrentMonth ? now : selectedDate, 'yyyy-MM-dd')
   })
 
   const [title, setTitle] = useState<string>(initialTransaction?.title ?? '')
@@ -101,7 +108,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
-    const parsedDate = new Date(dateStr)
+    const parsedDate = parseLocalDateInput(dateStr)
     if (isNaN(parsedDate.getTime())) {
       setError('يرجى اختيار تاريخ صالح')
       return
@@ -152,6 +159,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             : 'تمت إضافة المعاملة بنجاح',
           'success'
         )
+      }
+
+      if (parsedDate < range.start || parsedDate >= range.end) {
+        setSelectedDate(parsedDate)
       }
 
       onSuccess?.()

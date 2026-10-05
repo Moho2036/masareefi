@@ -86,3 +86,22 @@ export function formatDayHeader(date: Date, today: Date): string {
 
   return formattedDate
 }
+
+/**
+ * Safely parses a 'YYYY-MM-DD' HTML date input string into a Date object
+ * set to local midday (12:00:00). This guarantees that timezone offsets
+ * and daylight savings shifts never push the date across calendar or month boundaries.
+ */
+export function parseLocalDateInput(dateStr: string): Date {
+  if (!dateStr) return new Date()
+  const [yearStr, monthStr, dayStr] = dateStr.split('-')
+  const year = Number(yearStr)
+  const month = Number(monthStr)
+  const day = Number(dayStr)
+
+  if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+    return new Date(year, month - 1, day, 12, 0, 0, 0)
+  }
+  return new Date(dateStr)
+}
+

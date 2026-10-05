@@ -1,15 +1,33 @@
-import React from 'react'
-import { ChevronRight, ChevronLeft, Calendar } from 'lucide-react'
+import React, { useState } from 'react'
+import { ChevronRight, ChevronLeft, Calendar, RotateCw } from 'lucide-react'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
+import { useToast } from '../../hooks/useToast'
 import { cn } from '../../lib/cn'
 
 interface MonthSelectorProps {
   className?: string
   showIcon?: boolean
+  showRefresh?: boolean
 }
 
-export const MonthSelector: React.FC<MonthSelectorProps> = ({ className, showIcon = true }) => {
-  const { monthLabel, goToPreviousMonth, goToNextMonth } = useSelectedMonth()
+export const MonthSelector: React.FC<MonthSelectorProps> = ({
+  className,
+  showIcon = true,
+  showRefresh = true,
+}) => {
+  const { monthLabel, goToPreviousMonth, goToNextMonth, refreshData } = useSelectedMonth()
+  const { showToast } = useToast()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    refreshData()
+    showToast('تم تحديث البيانات', 'info')
+    setTimeout(() => {
+      setIsRefreshing(false)
+    }, 600)
+  }
 
   return (
     <div
@@ -45,6 +63,27 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({ className, showIco
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
+
+      {/* Quick Refresh Button */}
+      {showRefresh && (
+        <>
+          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:text-emerald-400 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+            aria-label="تحديث البيانات"
+            title="تحديث البيانات"
+          >
+            <RotateCw
+              className={cn(
+                'w-3.5 h-3.5 transition-transform',
+                isRefreshing && 'animate-spin text-emerald-600 dark:text-emerald-400'
+              )}
+            />
+          </button>
+        </>
+      )}
     </div>
   )
 }

@@ -27,11 +27,15 @@ export function subscribeRecurring(
 
   return onSnapshot(
     colRef,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const items = snapshot.docs.map((d) => d.data())
       cb(items)
     },
-    onError
+    (err) => {
+      console.error('subscribeRecurring error:', err)
+      onError?.(err)
+    }
   )
 }
 

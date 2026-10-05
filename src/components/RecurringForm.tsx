@@ -11,6 +11,7 @@ import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { addRecurring, updateRecurring } from '../services/recurring'
 import { toFils } from '../lib/money'
+import { parseLocalDateInput } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -118,7 +119,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       return
     }
 
-    const parsedStartDate = new Date(startDateStr)
+    const parsedStartDate = parseLocalDateInput(startDateStr)
     if (isNaN(parsedStartDate.getTime())) {
       setError('يرجى اختيار تاريخ بداية صالح')
       return
@@ -126,7 +127,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
     let parsedEndDate: Date | null = null
     if (hasEndDate && endDateStr) {
-      parsedEndDate = new Date(endDateStr)
+      parsedEndDate = parseLocalDateInput(endDateStr)
       if (isNaN(parsedEndDate.getTime())) {
         setError('يرجى اختيار تاريخ انتهاء صالح')
         return

@@ -22,11 +22,15 @@ export function subscribeCategories(
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const categories = snapshot.docs.map((d) => d.data())
       cb(categories)
     },
-    onError
+    (err) => {
+      console.error('subscribeCategories error:', err)
+      onError?.(err)
+    }
   )
 }
 
