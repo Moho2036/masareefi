@@ -2,11 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { TransactionForm } from './TransactionForm'
 import * as txServices from '../services/transactions'
+import * as recurringServices from '../services/recurring'
 
 vi.mock('../services/transactions', () => ({
   addTransaction: vi.fn().mockResolvedValue('mock-id'),
   updateTransaction: vi.fn().mockResolvedValue(undefined),
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../services/recurring', () => ({
+  addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -111,5 +116,51 @@ describe('TransactionForm Component', () => {
     expect(screen.getByDisplayValue('تعبئة بنزين')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'تعديل المعاملة' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حذف المعاملة' })).toBeInTheDocument()
+  })
+
+  it('creates recurring transaction when recurring toggle is enabled', async () => {
+    const onClose = vi.fn()
+    const onSuccess = vi.fn()
+
+    render(<TransactionForm onClose={onClose} onSuccess={onSuccess} />)
+
+    const amountInput = screen.getByPlaceholderText('0.000')
+    fireEvent.change(amountInput, { target: { value: '25' } })
+
+    const foodCatBtn = screen.getByRole('button', { name: /طعام وبقالة/ })
+    fireEvent.click(foodCatBtn)
+
+    // Toggle recurring switch
+    const recurringSwitch = screen.getByRole('switch')
+    fireEvent.click(recurringSwitch)
+
+    // Verify frequency selector appears
+    expect(screen.getByText('دورية التكرار')).toBeInTheDocument()
+
+    // Submit form
+    const submitBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.addRecurring).toHaveBeenCalledTimes(1)
+      expect(recurringServices.addRecurring).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          type: 'expense',
+          amountFils: 25000,
+          categoryId: 'c-food',
+          frequency: 'monthly',
+          active: true,
+        })
+      )
+      expect(txServices.addTransaction).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          recurringId: 'mock-rec-id',
+        })
+      )
+      expect(onClose).toHaveBeenCalled()
+      expect(onSuccess).toHaveBeenCalled()
+    })
   })
 })

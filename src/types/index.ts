@@ -34,7 +34,7 @@ export interface Recurring {
   frequency: Frequency
   startDate: Date
   nextDate: Date
-  endDate?: Date
+  endDate?: Date | null
   active: boolean
   createdAt?: Date
 }

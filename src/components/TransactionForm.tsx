@@ -4,13 +4,16 @@ import { Check, Trash2, AlertCircle } from 'lucide-react'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { addTransaction, updateTransaction, deleteTransaction } from '../services/transactions'
+import { addRecurring } from '../services/recurring'
+import { advanceDate } from '../lib/recurring'
 import { toFils } from '../lib/money'
 import { cn } from '../lib/cn'
-import type { Transaction, TxType } from '../types'
+import type { Transaction, TxType, Frequency } from '../types'
 
 export interface TransactionFormProps {
   initialTransaction?: Transaction | null
@@ -57,6 +60,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   })
 
   const [note, setNote] = useState<string>(initialTransaction?.note ?? '')
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -113,14 +118,35 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         })
         showToast('تم تعديل المعاملة بنجاح', 'success')
       } else {
+        let recurringId: string | undefined
+        if (isRecurring) {
+          const nextDate = advanceDate(parsedDate, recurringFrequency)
+          recurringId = await addRecurring(user.uid, {
+            type,
+            amountFils,
+            categoryId: activeCategoryId,
+            note: note.trim().slice(0, 500),
+            frequency: recurringFrequency,
+            startDate: parsedDate,
+            nextDate,
+            active: true,
+          })
+        }
+
         await addTransaction(user.uid, {
           type,
           amountFils,
           categoryId: activeCategoryId,
           date: parsedDate,
           note: note.trim().slice(0, 500),
+          ...(recurringId ? { recurringId } : {}),
         })
-        showToast('تمت إضافة المعاملة بنجاح', 'success')
+        showToast(
+          isRecurring
+            ? 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
+            : 'تمت إضافة المعاملة بنجاح',
+          'success'
+        )
       }
 
       onSuccess?.()
@@ -274,6 +300,36 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           maxLength={500}
         />
       </div>
+
+      {/* Recurring Option (only for new transactions) */}
+      {!isEditing && (
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          <Toggle
+            checked={isRecurring}
+            onChange={setIsRecurring}
+            label="جعلها معاملة متكررة"
+            description="تكرار هذه المعاملة تلقائياً وفق دورية زمنية محددة"
+          />
+
+          {isRecurring && (
+            <div className="space-y-1.5 pe-1">
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+                دورية التكرار
+              </label>
+              <SegmentedControl<Frequency>
+                value={recurringFrequency}
+                onChange={setRecurringFrequency}
+                options={[
+                  { value: 'weekly', label: 'أسبوعي' },
+                  { value: 'monthly', label: 'شهري' },
+                  { value: 'yearly', label: 'سنوي' },
+                ]}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error message */}
       {error && (

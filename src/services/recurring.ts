@@ -1,16 +1,22 @@
 import {
   collection,
   doc,
+  query,
+  where,
+  getDocs,
+  writeBatch,
   onSnapshot,
   addDoc,
   updateDoc,
   deleteDoc,
   Timestamp,
+  serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { Recurring } from '../types'
 import { recurringConverter } from './converters'
+import { calculateDueOccurrences, getDeterministicTxId } from '../lib/recurring'
 
 export function subscribeRecurring(
   uid: string,
@@ -104,4 +110,66 @@ export async function updateRecurring(
 export async function deleteRecurring(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'recurring', id)
   await deleteDoc(docRef)
+}
+
+/**
+ * Checks for all due recurring transactions up to `today`,
+ * creates idempotent transactions with deterministic IDs, and updates recurring items.
+ * Returns the number of new transactions created.
+ */
+export async function processDueRecurring(
+  uid: string,
+  today: Date = new Date()
+): Promise<number> {
+  const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
+  const q = query(
+    colRef,
+    where('active', '==', true),
+    where('nextDate', '<=', Timestamp.fromDate(today))
+  )
+
+  const snap = await getDocs(q)
+  if (snap.empty) {
+    return 0
+  }
+
+  let createdCount = 0
+  const batch = writeBatch(db)
+
+  for (const docSnap of snap.docs) {
+    const rec = docSnap.data()
+    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, today)
+
+    if (dates.length === 0) continue
+
+    for (const occDate of dates) {
+      const txId = getDeterministicTxId(rec.id, occDate)
+      const txRef = doc(db, 'users', uid, 'transactions', txId)
+      batch.set(txRef, {
+        type: rec.type,
+        amountFils: rec.amountFils,
+        categoryId: rec.categoryId,
+        date: Timestamp.fromDate(occDate),
+        note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+        recurringId: rec.id,
+        createdAt: serverTimestamp(),
+      })
+      createdCount++
+    }
+
+    const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+    const updatePayload: Record<string, unknown> = {
+      nextDate: Timestamp.fromDate(newNextDate),
+    }
+    if (shouldDeactivate) {
+      updatePayload.active = false
+    }
+    batch.update(recRef, updatePayload)
+  }
+
+  if (createdCount > 0) {
+    await batch.commit()
+  }
+
+  return createdCount
 }

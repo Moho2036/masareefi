@@ -14,8 +14,12 @@ import { SelectedMonthProvider } from './hooks/useSelectedMonth'
 import { TransactionModalProvider } from './hooks/useTransactionModal'
 import { ToastContainer } from './components/ui/Toast'
 import { useTheme } from './hooks/useTheme'
+import { useRecurringProcessor } from './hooks/useRecurringProcessor'
 
 function AppRoutes() {
+  // Process any due recurring transactions when user is logged in
+  useRecurringProcessor()
+
   return (
     <Routes>
       {/* Auth Route without shell (redirects to / if already logged in) */}
