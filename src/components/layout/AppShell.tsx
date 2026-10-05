@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Link, useLocation, Outlet } from 'react-router'
 import {
   Home,
@@ -9,14 +9,11 @@ import {
   Settings,
   Plus,
   Wallet,
-  Calendar,
 } from 'lucide-react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
-import { Modal } from '../ui/Modal'
-import { Input } from '../ui/Input'
-import { SegmentedControl } from '../ui/SegmentedControl'
-import { Toggle } from '../ui/Toggle'
+import { useAuth } from '../../hooks/useAuth'
+import { useTransactionModal } from '../../hooks/useTransactionModal'
 import { cn } from '../../lib/cn'
 
 interface NavItem {
@@ -37,9 +34,8 @@ const navItems: NavItem[] = [
 export const AppShell: React.FC = () => {
   const location = useLocation()
   const pathname = location.pathname
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [modalTxType, setModalTxType] = useState<'expense' | 'income'>('expense')
-  const [isRecurring, setIsRecurring] = useState(false)
+  const { user } = useAuth()
+  const { openAdd } = useTransactionModal()
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans">
@@ -77,7 +73,7 @@ export const AppShell: React.FC = () => {
                   'flex items-center gap-3.5 px-4 py-3 rounded-xl font-medium transition-all text-sm select-none',
                   isActive
                     ? 'bg-emerald-500 text-white shadow-xs font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/80',
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
                 )}
               >
                 <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500')} />
@@ -90,15 +86,24 @@ export const AppShell: React.FC = () => {
         {/* Sidebar Footer / User Profile snippet */}
         <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between px-2">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm border border-emerald-200 dark:border-emerald-800">
-              م
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                مستخدم تجريبي
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || ''}
+                className="w-9 h-9 rounded-full object-cover border border-emerald-200 dark:border-emerald-800"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm border border-emerald-200 dark:border-emerald-800">
+                {user?.displayName ? user.displayName.charAt(0) : 'م'}
               </div>
-              <div className="text-[11px] text-slate-400">
-                المرحلة 1: التأسيس
+            )}
+            <div className="truncate">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                {user?.displayName || 'مستخدم مصاريفي'}
+              </div>
+              <div className="text-[11px] text-slate-400 truncate" dir="ltr">
+                {user?.email || ''}
               </div>
             </div>
           </div>
@@ -120,7 +125,6 @@ export const AppShell: React.FC = () => {
           </div>
 
           <div className="hidden lg:block">
-            {/* Desktop breadcrumb or subtle info */}
             <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
               تطبيق إدارة المصاريف والمداخيل الشخصية
             </span>
@@ -132,7 +136,7 @@ export const AppShell: React.FC = () => {
               variant="primary"
               size="sm"
               icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => openAdd('expense')}
               className="font-semibold"
             >
               إضافة معاملة
@@ -147,81 +151,7 @@ export const AppShell: React.FC = () => {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <BottomNav onOpenAddModal={() => setIsAddModalOpen(true)} />
-
-      {/* Global Add Transaction Placeholder Modal */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="إضافة معاملة"
-      >
-        <div className="space-y-4 pt-1">
-          {/* Segmented Control for Expense / Income */}
-          <SegmentedControl<'expense' | 'income'>
-            value={modalTxType}
-            onChange={setModalTxType}
-            options={[
-              { value: 'expense', label: 'مصروف' },
-              { value: 'income', label: 'دخل' },
-            ]}
-            className="w-full"
-          />
-
-          {/* Amount input */}
-          <Input
-            label="المبلغ (د.أ)"
-            type="number"
-            step="0.001"
-            placeholder="0.000"
-            className="text-lg font-bold text-center"
-          />
-
-          {/* Note input */}
-          <Input
-            label="ملاحظة (اختياري)"
-            placeholder="مثال: بقالة، وقود، غداء عمل..."
-          />
-
-          {/* Date placeholder */}
-          <Input
-            label="التاريخ"
-            type="date"
-            defaultValue={new Date().toISOString().split('T')[0]}
-            startIcon={<Calendar className="w-4 h-4" />}
-          />
-
-          {/* Toggle recurring */}
-          <div className="pt-2">
-            <Toggle
-              checked={isRecurring}
-              onChange={setIsRecurring}
-              label="جعلها معاملة متكررة"
-              description="تكرار هذه المعاملة تلقائياً في مواعيد محددة"
-            />
-          </div>
-
-          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs text-center border border-emerald-100 dark:border-emerald-900/40">
-            نموذج إضافة المعاملات الحقيقي سيتم ربطه بقاعدة البيانات في المرحلة القادمة.
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-700/60">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setIsAddModalOpen(false)}
-            >
-              إلغاء
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setIsAddModalOpen(false)}
-            >
-              حفظ
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <BottomNav onOpenAddModal={() => openAdd('expense')} />
     </div>
   )
 }

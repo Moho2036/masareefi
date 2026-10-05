@@ -9,6 +9,10 @@ import { SettingsPage } from './pages/SettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './hooks/useAuth'
+import { ToastProvider } from './hooks/useToast'
+import { SelectedMonthProvider } from './hooks/useSelectedMonth'
+import { TransactionModalProvider } from './hooks/useTransactionModal'
+import { ToastContainer } from './components/ui/Toast'
 import { useTheme } from './hooks/useTheme'
 
 function AppRoutes() {
@@ -46,7 +50,14 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <SelectedMonthProvider>
+            <TransactionModalProvider>
+              <AppRoutes />
+              <ToastContainer />
+            </TransactionModalProvider>
+          </SelectedMonthProvider>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   )
