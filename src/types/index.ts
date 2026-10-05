@@ -10,7 +10,8 @@ export interface Category {
   type: TxType
   icon: string
   color: string
-  archived?: boolean
+  archived: boolean
+  order: number
 }
 
 export interface Transaction {
@@ -43,6 +44,6 @@ export interface UserSettings {
   displayName: string
   currency: string
   monthStartDay: number
-  theme?: ThemePreference
+  theme: ThemePreference
   createdAt?: Date
 }

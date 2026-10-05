@@ -6,11 +6,21 @@ import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { Select } from '../components/ui/Select'
 import { Button } from '../components/ui/Button'
 import { useTheme } from '../hooks/useTheme'
+import { useAuth } from '../hooks/useAuth'
+import { useUserSettings } from '../hooks/useUserSettings'
+import { signOutUser } from '../services/auth'
 import type { ThemePreference } from '../types'
 
 export const SettingsPage: React.FC = () => {
   const { theme, setTheme, resolvedTheme } = useTheme()
-  const [startDay, setStartDay] = useState('1')
+  const { user } = useAuth()
+  const { data: settings, updateSettings } = useUserSettings()
+
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const currentStartDay =
+    selectedDay ?? (settings?.monthStartDay ? String(settings.monthStartDay) : '1')
 
   const themeOptions: { value: ThemePreference; label: string; icon: React.ReactNode }[] = [
     { value: 'system', label: 'تلقائي', icon: <Laptop className="w-4 h-4" /> },
@@ -22,6 +32,36 @@ export const SettingsPage: React.FC = () => {
     value: String(i + 1),
     label: `يوم ${i + 1} من كل شهر`,
   }))
+
+  const handleThemeChange = async (newTheme: ThemePreference) => {
+    setTheme(newTheme)
+    try {
+      await updateSettings({ theme: newTheme })
+    } catch (err) {
+      console.error('Failed to persist theme:', err)
+    }
+  }
+
+  const handleStartDayChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    setSelectedDay(val)
+    try {
+      await updateSettings({ monthStartDay: parseInt(val, 10) })
+    } catch (err) {
+      console.error('Failed to persist month start day:', err)
+    }
+  }
+
+  const handleSignOut = async () => {
+    setLoggingOut(true)
+    try {
+      await signOutUser()
+    } catch (err) {
+      console.error('Failed to sign out:', err)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -38,7 +78,7 @@ export const SettingsPage: React.FC = () => {
         <div className="space-y-4 pt-2">
           <SegmentedControl<ThemePreference>
             value={theme}
-            onChange={setTheme}
+            onChange={handleThemeChange}
             options={themeOptions}
             className="w-full sm:w-auto"
           />
@@ -61,8 +101,8 @@ export const SettingsPage: React.FC = () => {
         <div className="pt-2 max-w-xs">
           <Select
             label="يوم بداية الدورة المالية"
-            value={startDay}
-            onChange={(e) => setStartDay(e.target.value)}
+            value={currentStartDay}
+            onChange={handleStartDayChange}
             options={dayOptions}
             helperText="الافتراضي هو اليوم الأول من كل شهر (1 إلى 28)."
           />
@@ -93,14 +133,25 @@ export const SettingsPage: React.FC = () => {
       <Card title="الحساب الشخصي" subtitle="معلومات تسجيل الدخول عبر Google">
         <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
-              م
-            </div>
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || 'صورة المستخدم'}
+                className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
+                {user?.displayName ? user.displayName.charAt(0) : 'م'}
+              </div>
+            )}
             <div>
               <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                مستخدم تجريبي
+                {user?.displayName || 'مستخدم مصاريفي'}
               </div>
-              <div className="text-xs text-slate-400">user@example.com</div>
+              <div className="text-xs text-slate-400" dir="ltr">
+                {user?.email || 'بدون بريد إلكتروني'}
+              </div>
             </div>
           </div>
 
@@ -108,9 +159,10 @@ export const SettingsPage: React.FC = () => {
             variant="outline"
             size="sm"
             icon={<LogOut className="w-4 h-4 rtl:rotate-180" />}
-            disabled
+            onClick={handleSignOut}
+            disabled={loggingOut}
           >
-            تسجيل الخروج (المرحلة 2)
+            {loggingOut ? 'جاري الخروج...' : 'تسجيل الخروج'}
           </Button>
         </div>
       </Card>

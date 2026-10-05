@@ -7,7 +7,37 @@ import { ReportsPage } from './pages/ReportsPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { LoginPage } from './pages/LoginPage'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { AuthProvider } from './hooks/useAuth'
 import { useTheme } from './hooks/useTheme'
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Auth Route without shell (redirects to / if already logged in) */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Protected Application Routes wrapped in AppShell */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<DashboardPage />} />
+        <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="recurring" element={<RecurringPage />} />
+        <Route path="reports" element={<ReportsPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
 
 export function App() {
   // Initialize and apply theme to documentElement
@@ -15,23 +45,9 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Auth Route without shell */}
-        <Route path="/login" element={<LoginPage />} />
-
-        {/* Application Routes wrapped in AppShell */}
-        <Route path="/" element={<AppShell />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="transactions" element={<TransactionsPage />} />
-          <Route path="recurring" element={<RecurringPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="categories" element={<CategoriesPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   )
 }

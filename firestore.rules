@@ -1,0 +1,152 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model (see docs/PLAN.md)
+// ===============================================================
+//
+// All user data lives under users/{uid}. Only the signed-in owner
+// (request.auth.uid == uid) may read or write. Everything else is denied.
+//
+// Collection: users            Document ID: Firebase Auth uid
+//   - displayName: string (required, 0..100)
+//   - currency: string (required, must be 'JOD')
+//   - monthStartDay: int (required, 1..28)
+//   - theme: string (required, 'system' | 'light' | 'dark')
+//   - createdAt: timestamp (required, immutable)
+//   Delete: denied.
+//
+// Collection: users/{uid}/categories   Document ID: any
+//   - name: string (required, 1..40)
+//   - type: string (required, 'expense' | 'income', immutable)
+//   - icon: string (required, 1..16)
+//   - color: string (required, ^#[0-9A-Fa-f]{6}$)
+//   - archived: bool (required)
+//   - order: int (required, >= 0)
+//
+// Collection: users/{uid}/transactions Document ID: any
+//   - type: string (required, 'expense' | 'income')
+//   - amountFils: int (required, 1..1000000000000)
+//   - categoryId: string (required, 1..128)
+//   - date: timestamp (required)
+//   - note: string (required, 0..500)
+//   - recurringId: string (optional, 1..128)
+//   - createdAt: timestamp (required, immutable)
+//
+// Collection: users/{uid}/recurring    Document ID: any
+//   - type, amountFils, categoryId, note: same as transactions
+//   - frequency: string (required, 'weekly' | 'monthly' | 'yearly')
+//   - startDate: timestamp (required)
+//   - nextDate: timestamp (required)
+//   - endDate: timestamp | null (optional)
+//   - active: bool (required)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- Helper Functions ----------------
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isStr(v, minLen, maxLen) {
+      return v is string && v.size() >= minLen && v.size() <= maxLen;
+    }
+
+    function isValidAmount(v) {
+      return v is int && v > 0 && v <= 1000000000000;
+    }
+
+    function isTxType(v) {
+      return v in ['expense', 'income'];
+    }
+
+    function fieldUnchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    // ---------------- Domain Validators ----------------
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt'])
+        && data.keys().hasAll(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt'])
+        && isStr(data.displayName, 0, 100)
+        && data.currency == 'JOD'
+        && data.monthStartDay is int && data.monthStartDay >= 1 && data.monthStartDay <= 28
+        && data.theme in ['system', 'light', 'dark']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasOnly(['name', 'type', 'icon', 'color', 'archived', 'order'])
+        && data.keys().hasAll(['name', 'type', 'icon', 'color', 'archived', 'order'])
+        && isStr(data.name, 1, 40)
+        && isTxType(data.type)
+        && isStr(data.icon, 1, 16)
+        && data.color is string && data.color.matches('^#[0-9A-Fa-f]{6}$')
+        && data.archived is bool
+        && data.order is int && data.order >= 0;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'date', 'note', 'recurringId', 'createdAt'])
+        && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'date', 'note', 'createdAt'])
+        && isTxType(data.type)
+        && isValidAmount(data.amountFils)
+        && isStr(data.categoryId, 1, 128)
+        && data.date is timestamp
+        && isStr(data.note, 0, 500)
+        && (!('recurringId' in data) || isStr(data.recurringId, 1, 128))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRecurring(data) {
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active'])
+        && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'active'])
+        && isTxType(data.type)
+        && isValidAmount(data.amountFils)
+        && isStr(data.categoryId, 1, 128)
+        && isStr(data.note, 0, 500)
+        && data.frequency in ['weekly', 'monthly', 'yearly']
+        && data.startDate is timestamp
+        && data.nextDate is timestamp
+        && (!('endDate' in data) || data.endDate == null || data.endDate is timestamp)
+        && data.active is bool;
+    }
+
+    // ---------------- Rules ----------------
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(uid) && isValidUserProfile(request.resource.data)
+        && fieldUnchanged('createdAt');
+      allow delete: if false;
+
+      match /categories/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidCategory(request.resource.data);
+        allow update: if isOwner(uid) && isValidCategory(request.resource.data)
+          && fieldUnchanged('type');
+      }
+
+      match /transactions/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidTransaction(request.resource.data);
+        allow update: if isOwner(uid) && isValidTransaction(request.resource.data)
+          && fieldUnchanged('createdAt');
+      }
+
+      match /recurring/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidRecurring(request.resource.data);
+        allow update: if isOwner(uid) && isValidRecurring(request.resource.data);
+      }
+    }
+
+    // Default deny: no other paths are matched, so all other access is denied.
+  }
+}
