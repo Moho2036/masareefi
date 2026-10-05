@@ -1,16 +1,17 @@
 import {
   doc,
   getDoc,
-  setDoc,
+  writeBatch,
   updateDoc,
   onSnapshot,
+  serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
 import { db } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
-import { seedDefaultCategories } from './seed'
+import { addDefaultCategoriesToBatch } from './seed'
 
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
@@ -28,14 +29,18 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
     theme: 'system',
   }
 
-  // Create user profile in Firestore
-  await setDoc(userRef, {
-    ...initialSettings,
-    createdAt: new Date(), // converter will map or we can let converter use serverTimestamp
+  // Atomically create user profile document AND seed default categories in ONE writeBatch
+  const batch = writeBatch(db)
+  const rawUserDoc = doc(db, 'users', user.uid)
+  batch.set(rawUserDoc, {
+    displayName: initialSettings.displayName,
+    currency: initialSettings.currency,
+    monthStartDay: initialSettings.monthStartDay,
+    theme: initialSettings.theme,
+    createdAt: serverTimestamp(),
   })
-
-  // Seed default categories
-  await seedDefaultCategories(user.uid)
+  addDefaultCategoriesToBatch(batch, user.uid)
+  await batch.commit()
 
   return initialSettings
 }

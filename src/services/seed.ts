@@ -1,4 +1,4 @@
-import { writeBatch, collection, doc } from 'firebase/firestore'
+import { writeBatch, collection, doc, type WriteBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { TxType } from '../types'
 
@@ -35,8 +35,7 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<SeedCategory> = [
   { name: 'أخرى', type: 'income', icon: '➕', color: '#64748B', archived: false, order: 17 },
 ]
 
-export async function seedDefaultCategories(uid: string): Promise<void> {
-  const batch = writeBatch(db)
+export function addDefaultCategoriesToBatch(batch: WriteBatch, uid: string): void {
   const categoriesRef = collection(db, 'users', uid, 'categories')
 
   for (const cat of DEFAULT_CATEGORIES) {
@@ -50,6 +49,10 @@ export async function seedDefaultCategories(uid: string): Promise<void> {
       order: cat.order,
     })
   }
+}
 
+export async function seedDefaultCategories(uid: string): Promise<void> {
+  const batch = writeBatch(db)
+  addDefaultCategoriesToBatch(batch, uid)
   await batch.commit()
 }

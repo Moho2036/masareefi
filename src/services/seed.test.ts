@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { DEFAULT_CATEGORIES } from './seed'
+import { describe, it, expect, vi } from 'vitest'
+import type { WriteBatch, DocumentReference } from 'firebase/firestore'
+import { DEFAULT_CATEGORIES, addDefaultCategoriesToBatch } from './seed'
 
 describe('DEFAULT_CATEGORIES seed data', () => {
   it('contains exactly 18 categories (13 expenses, 5 incomes)', () => {
@@ -83,5 +84,38 @@ describe('DEFAULT_CATEGORIES seed data', () => {
       expect(['expense', 'income']).toContain(cat.type)
       expect(cat.archived).toBe(false)
     }
+  })
+
+  it('addDefaultCategoriesToBatch sets all 18 categories to the batch', () => {
+    const setCalls: { ref: unknown; data: unknown }[] = []
+    const mockBatch = {
+      set: vi.fn((ref: DocumentReference, data: unknown) => {
+        setCalls.push({ ref, data })
+        return mockBatch
+      }),
+    } as unknown as WriteBatch
+
+    addDefaultCategoriesToBatch(mockBatch, 'test-uid')
+
+    expect(mockBatch.set).toHaveBeenCalledTimes(18)
+    expect(setCalls).toHaveLength(18)
+
+    // Verify first and last category
+    expect(setCalls[0].data).toEqual({
+      name: 'طعام وبقالة',
+      type: 'expense',
+      icon: '🛒',
+      color: '#F59E0B',
+      archived: false,
+      order: 0,
+    })
+    expect(setCalls[17].data).toEqual({
+      name: 'أخرى',
+      type: 'income',
+      icon: '➕',
+      color: '#64748B',
+      archived: false,
+      order: 17,
+    })
   })
 })
