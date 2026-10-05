@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="walletBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="walletBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#047857" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Rounded Container -->
+  <rect width="512" height="512" rx="128" fill="url(#walletBg)" />
+
+  <!-- Wallet Body -->
+  <g filter="url(#shadow)">
+    <!-- Card peeking out -->
+    <rect x="176" y="116" width="160" height="90" rx="18" fill="#A7F3D0" />
+    
+    <!-- Main Wallet Pocket -->
+    <rect x="106" y="160" width="300" height="226" rx="36" fill="url(#walletBody)" />
+    
+    <!-- Wallet Flap Clasp -->
+    <path d="M 406 230 L 290 230 C 272 230 258 244 258 262 C 258 280 272 294 290 294 L 406 294 Z" fill="#10B981" />
+    
+    <!-- Clasp Button -->
+    <circle cx="294" cy="262" r="14" fill="#FFFFFF" />
+    <circle cx="294" cy="262" r="6" fill="#047857" />
+  </g>
+</svg>

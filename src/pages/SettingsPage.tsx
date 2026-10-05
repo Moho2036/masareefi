@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Sun, Moon, Laptop, DollarSign, LogOut } from 'lucide-react'
+import { Sun, Moon, Laptop, DollarSign, LogOut, Download, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Card } from '../components/ui/Card'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { useTheme } from '../hooks/useTheme'
 import { useAuth } from '../hooks/useAuth'
 import { useUserSettings } from '../hooks/useUserSettings'
+import { usePWAInstall } from '../hooks/usePWAInstall'
 import { signOutUser } from '../services/auth'
 import type { ThemePreference } from '../types'
 
@@ -15,6 +16,7 @@ export const SettingsPage: React.FC = () => {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const { user } = useAuth()
   const { data: settings, updateSettings } = useUserSettings()
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall()
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -126,6 +128,50 @@ export const SettingsPage: React.FC = () => {
               1 دينار = 1000 فلس (حسابات دقيقة بدون كسور عشرية)
             </div>
           </div>
+        </div>
+      </Card>
+
+      {/* PWA App Installation Card */}
+      <Card
+        title="تثبيت التطبيق (PWA)"
+        subtitle="يمكنك تثبيت تطبيق مصاريفي على هاتفك أو حاسوبك للعمل بدون إنترنت وسرعة فائقة"
+      >
+        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <Download className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                {isInstalled ? 'التطبيق مثبت حالياً' : 'تطبيق ويب تقدمي (PWA)'}
+              </div>
+              <div className="text-xs text-slate-400">
+                {isInstalled
+                  ? 'يعمل التطبيق كبرنامج مستقل مع دعم كامل للعمل بلا اتصال'
+                  : 'يعمل بكامل ميزاته مباشرة من الشاشة الرئيسية دون الحاجة للمتجر'}
+              </div>
+            </div>
+          </div>
+
+          {isInstalled ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>مثبت على الجهاز</span>
+            </div>
+          ) : isInstallable ? (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Download className="w-4 h-4" />}
+              onClick={promptInstall}
+            >
+              تثبيت التطبيق على جهازك
+            </Button>
+          ) : (
+            <span className="text-xs text-slate-400 font-medium">
+              متاح للتثبيت من متصفحك عبر زر المشاركة أو القائمة
+            </span>
+          )}
         </div>
       </Card>
 

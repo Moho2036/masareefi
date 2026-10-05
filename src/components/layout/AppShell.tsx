@@ -9,11 +9,13 @@ import {
   Settings,
   Plus,
   Wallet,
+  WifiOff,
 } from 'lucide-react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { useTransactionModal } from '../../hooks/useTransactionModal'
+import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { cn } from '../../lib/cn'
 
 interface NavItem {
@@ -36,6 +38,7 @@ export const AppShell: React.FC = () => {
   const pathname = location.pathname
   const { user } = useAuth()
   const { openAdd } = useTransactionModal()
+  const isOnline = useOnlineStatus()
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans">
@@ -112,6 +115,17 @@ export const AppShell: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Offline Status Banner */}
+        {!isOnline && (
+          <div
+            role="status"
+            className="bg-amber-500 text-amber-950 dark:bg-amber-600 dark:text-amber-50 text-xs font-bold py-2 px-4 text-center shadow-xs flex items-center justify-center gap-2 sticky top-0 z-30"
+          >
+            <WifiOff className="w-4 h-4 shrink-0" />
+            <span>أنت غير متصل بالإنترنت - يتم حفظ التغييرات محلياً وستتم المزامنة تلقائياً</span>
+          </div>
+        )}
+
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 px-4 lg:px-8 py-3.5 flex items-center justify-between gap-4">
           {/* Mobile brand logo (visible only on small screens) */}
