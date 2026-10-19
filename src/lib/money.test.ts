@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toFils, fromFils, formatJOD, formatSigned } from './money'
+import { toFils, fromFils, formatJOD, formatSigned, formatMoney } from './money'
 
 describe('money lib', () => {
   describe('toFils', () => {
@@ -24,15 +24,21 @@ describe('money lib', () => {
       expect(toFils('0.75')).toBe(750)
     })
 
-    it('handles thousands commas', () => {
-      expect(toFils('12,500')).toBe(12500000)
-      expect(toFils('1,250.500')).toBe(1250500)
-      expect(toFils('1,000,000')).toBe(1000000000)
-    })
-
-    it('handles decimal comma when not thousands separator', () => {
+    it('handles single comma as decimal separator (including 3 decimals for JOD)', () => {
+      expect(toFils('12,500')).toBe(12500)
+      expect(toFils('0,500')).toBe(500)
       expect(toFils('12,5')).toBe(12500)
       expect(toFils('12,50')).toBe(12500)
+    })
+
+    it('handles multiple commas as thousands separators', () => {
+      expect(toFils('1,000,000')).toBe(1000000000)
+      expect(toFils('2,500,000')).toBe(2500000000)
+    })
+
+    it('handles both comma and dot together', () => {
+      expect(toFils('1,250.500')).toBe(1250500)
+      expect(toFils('1.250,500')).toBe(1250500)
     })
 
     it('handles Arabic-Indic numerals', () => {
@@ -96,6 +102,34 @@ describe('money lib', () => {
     it('handles negative values correctly without double signs', () => {
       expect(formatSigned(-12500, 'expense')).toBe('- 12.500 د.أ')
       expect(formatSigned(-12500, 'income')).toBe('+ 12.500 د.أ')
+    })
+  })
+
+  describe('multi-currency support (formatMoney)', () => {
+    it('formats SAR with 2 decimal places and ر.س symbol', () => {
+      expect(formatMoney(12500, 'SAR')).toBe('12.50 ر.س')
+      expect(formatMoney(350000, 'SAR')).toBe('350.00 ر.س')
+    })
+
+    it('formats USD with 2 decimal places and $ symbol', () => {
+      expect(formatMoney(12500, 'USD')).toBe('12.50 $')
+    })
+
+    it('formats EUR with 2 decimal places and € symbol', () => {
+      expect(formatMoney(12500, 'EUR')).toBe('12.50 €')
+    })
+
+    it('formats AED with 2 decimal places and د.إ symbol', () => {
+      expect(formatMoney(12500, 'AED')).toBe('12.50 د.إ')
+    })
+
+    it('formats custom currency with 2 decimals and custom symbol', () => {
+      expect(formatMoney(12500, 'ج.م')).toBe('12.50 ج.م')
+      expect(formatMoney(12500, 'د.ك')).toBe('12.50 د.ك')
+    })
+
+    it('falls back to JOD when no currency specified', () => {
+      expect(formatMoney(12500)).toBe('12.500 د.أ')
     })
   })
 })

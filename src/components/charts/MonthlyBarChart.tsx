@@ -8,8 +8,9 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { formatJOD, fromFils } from '../../lib/money'
+import { fromFils } from '../../lib/money'
 import { toWesternDigits } from '../../lib/dates'
+import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
 import type { MonthlyBreakdownItem } from '../../lib/reports'
 
@@ -25,6 +26,7 @@ interface CustomTooltipProps {
 }
 
 const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
+  const { format } = useCurrency()
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
     return (
@@ -39,7 +41,7 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
               المداخيل:
             </span>
             <span className="font-bold text-emerald-600 dark:text-emerald-400">
-              {formatJOD(item.income)}
+              {format(item.income)}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3">
@@ -48,7 +50,7 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
               المصاريف:
             </span>
             <span className="font-bold text-red-500 dark:text-red-400">
-              {formatJOD(item.expense)}
+              {format(item.expense)}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-700/60">
@@ -63,7 +65,7 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
                   : 'text-red-500 dark:text-red-400'
               )}
             >
-              {formatJOD(item.balance)}
+              {format(item.balance)}
             </span>
           </div>
         </div>
@@ -73,16 +75,20 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
   return null
 }
 
-export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
+export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   data,
   className,
   height = 300,
 }) => {
-  const chartData = data.map((item) => ({
-    ...item,
-    incomeJod: fromFils(item.income),
-    expenseJod: fromFils(item.expense),
-  }))
+  const chartData = React.useMemo(
+    () =>
+      data.map((item) => ({
+        ...item,
+        incomeJod: fromFils(item.income),
+        expenseJod: fromFils(item.expense),
+      })),
+    [data]
+  )
 
   const hasData = data.some((d) => d.income > 0 || d.expense > 0)
 
@@ -136,7 +142,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
               fill="#10B981"
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
-              animationDuration={800}
+              animationDuration={300}
             />
             <Bar
               dataKey="expenseJod"
@@ -144,7 +150,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
               fill="#EF4444"
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
-              animationDuration={800}
+              animationDuration={300}
             />
           </BarChart>
         </ResponsiveContainer>
@@ -158,4 +164,6 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
       </div>
     </div>
   )
-}
+})
+
+MonthlyBarChart.displayName = 'MonthlyBarChart'

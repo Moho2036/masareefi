@@ -25,16 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
-      if (currentUser) {
-        try {
-          await ensureUserProfile(currentUser)
-        } catch (err) {
-          console.error('Failed to ensure user profile:', err)
-        }
-      }
       setLoading(false)
+      if (currentUser) {
+        ensureUserProfile(currentUser).catch((err) => {
+          console.error('Failed to ensure user profile:', err)
+        })
+      }
     })
 
     return () => unsubscribe()

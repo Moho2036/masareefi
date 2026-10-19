@@ -1,0 +1,3976 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+  <file path="src/components/TransactionForm.tsx">
+<![CDATA[
+import React, { useState, useRef, useMemo } from 'react'
+import { format } from 'date-fns'
+import { Check, Trash2, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Link } from 'react-router'
+import { SegmentedControl } from './ui/SegmentedControl'
+import { Button } from './ui/Button'
+import { Input } from './ui/Input'
+import { Toggle } from './ui/Toggle'
+import { useAuth } from '../hooks/useAuth'
+import { useCategories } from '../hooks/useCategories'
+import { useSelectedMonth } from '../hooks/useSelectedMonth'
+import { useToast } from '../hooks/useToast'
+import { useCurrency } from '../hooks/useCurrency'
+import {
+  addTransaction,
+  updateTransaction,
+  deleteTransaction,
+} from '../services/transactions'
+import { addRecurring } from '../services/recurring'
+import { advanceDate } from '../lib/recurring'
+import { toFils, fromFils } from '../lib/money'
+import { parseLocalDateInput } from '../lib/dates'
+import {
+  getCategoryUsageMap,
+  recordCategoryUsage,
+  sortCategoriesByUsage,
+} from '../lib/categoryUsage'
+import { cn } from '../lib/cn'
+import type { Transaction, TxType, Frequency } from '../types'
+
+export interface TransactionFormProps {
+  initialTransaction?: Transaction | null
+  duplicateFrom?: Transaction | null
+  initialType?: TxType
+  onClose: () => void
+  onSuccess?: () => void
+}
+
+export const TransactionForm: React.FC<TransactionFormProps> = ({
+  initialTransaction,
+  duplicateFrom,
+  initialType = 'expense',
+  onClose,
+  onSuccess,
+}) => {
+  const { user } = useAuth()
+  const { data: categories, loading: categoriesLoading } = useCategories()
+  const { setSelectedDate, range } = useSelectedMonth()
+  const { showToast } = useToast()
+  const { config: currencyConfig } = useCurrency()
+
+  const isEditing = Boolean(initialTransaction)
+  const isLinkedToDebt = Boolean(
+    initialTransaction?.id &&
+      (initialTransaction.id.startsWith('debt_init_') ||
+        initialTransaction.id.startsWith('debt_pay_'))
+  )
+  const amountInputRef = useRef<HTMLInputElement>(null)
+
+  const [type, setType] = useState<TxType>(() => {
+    if (initialTransaction) return initialTransaction.type
+    if (duplicateFrom) return duplicateFrom.type
+    return initialType
+  })
+
+  const [amountStr, setAmountStr] = useState<string>(() => {
+    if (initialTransaction) return String(fromFils(initialTransaction.amountFils))
+    if (duplicateFrom) return String(fromFils(duplicateFrom.amountFils))
+    return ''
+  })
+
+  const [categoryId, setCategoryId] = useState<string>(() => {
+    if (initialTransaction) return initialTransaction.categoryId
+    if (duplicateFrom) return duplicateFrom.categoryId
+    return ''
+  })
+
+  const [dateStr, setDateStr] = useState<string>(() => {
+    if (initialTransaction?.date) {
+      const d =
+        initialTransaction.date instanceof Date
+          ? initialTransaction.date
+          : new Date(initialTransaction.date)
+      return format(d, 'yyyy-MM-dd')
+    }
+    const now = new Date()
+    const isWithinRange = now >= range.start && now < range.end
+    return format(isWithinRange ? now : range.start, 'yyyy-MM-dd')
+  })
+
+  const [title, setTitle] = useState<string>(
+    initialTransaction?.title ?? duplicateFrom?.title ?? ''
+  )
+  const [note, setNote] = useState<string>(
+    initialTransaction?.note ?? duplicateFrom?.note ?? ''
+  )
+  const [showNoteField, setShowNoteField] = useState<boolean>(() =>
+    Boolean(initialTransaction?.note || duplicateFrom?.note)
+  )
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Track category usage frequencies to prioritize top categories (read once on open)
+  const usageMap = useMemo(() => getCategoryUsageMap(), [])
+
+  // Filter & sort available categories for current transaction type
+  const availableCategories = useMemo(() => {
+    const filtered = categories.filter((c) => c.type === type && !c.archived)
+    return sortCategoriesByUsage(filtered, usageMap)
+  }, [categories, type, usageMap])
+
+  // Compute the effectively selected category ID:
+  // If user selected one that belongs to available categories, use it.
+  // Otherwise, fallback to the top (most frequent) available category.
+  const activeCategoryId =
+    categoryId && availableCategories.some((c) => c.id === categoryId)
+      ? categoryId
+      : availableCategories[0]?.id ?? ''
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!user) {
+      setError('يجب تسجيل الدخول أولاً')
+      return
+    }
+
+    const amountFils = toFils(amountStr)
+    if (amountFils <= 0) {
+      setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (!activeCategoryId) {
+      setError('يرجى اختيار التصنيف')
+      return
+    }
+
+    const parsedDate = parseLocalDateInput(dateStr)
+    if (isNaN(parsedDate.getTime())) {
+      setError('يرجى اختيار تاريخ صالح')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const trimmedTitle = title.trim().slice(0, 100)
+      if (isEditing && initialTransaction) {
+        const finalType = isLinkedToDebt ? initialTransaction.type : type
+        const finalAmountFils = isLinkedToDebt ? initialTransaction.amountFils : amountFils
+        await updateTransaction(user.uid, initialTransaction.id, {
+          type: finalType,
+          amountFils: finalAmountFils,
+          categoryId: activeCategoryId,
+          date: parsedDate,
+          title: trimmedTitle,
+          note: note.trim().slice(0, 500),
+        })
+        recordCategoryUsage(activeCategoryId)
+        showToast('تم تعديل المعاملة بنجاح', 'success')
+      } else {
+        let recurringId: string | undefined
+        if (isRecurring) {
+          const nextDate = advanceDate(parsedDate, recurringFrequency)
+          recurringId = await addRecurring(user.uid, {
+            type,
+            amountFils,
+            categoryId: activeCategoryId,
+            ...(trimmedTitle ? { title: trimmedTitle } : {}),
+            note: note.trim().slice(0, 500),
+            frequency: recurringFrequency,
+            startDate: parsedDate,
+            nextDate,
+            active: true,
+          })
+        }
+
+        await addTransaction(user.uid, {
+          type,
+          amountFils,
+          categoryId: activeCategoryId,
+          date: parsedDate,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          note: note.trim().slice(0, 500),
+          ...(recurringId ? { recurringId } : {}),
+        })
+
+        recordCategoryUsage(activeCategoryId)
+
+        showToast(
+          duplicateFrom
+            ? 'تم حفظ المعاملة المكررة بنجاح'
+            : isRecurring
+              ? 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
+              : 'تمت إضافة المعاملة بنجاح',
+          'success'
+        )
+      }
+
+      if (parsedDate < range.start || parsedDate >= range.end) {
+        setSelectedDate(parsedDate)
+      }
+
+      onSuccess?.()
+      onClose()
+    } catch (err: unknown) {
+      console.error('Failed to save transaction:', err)
+      setError('تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSaveAndAddAnother = async () => {
+    setError(null)
+
+    if (!user) {
+      setError('يجب تسجيل الدخول أولاً')
+      return
+    }
+
+    const amountFils = toFils(amountStr)
+    if (amountFils <= 0) {
+      setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (!activeCategoryId) {
+      setError('يرجى اختيار التصنيف')
+      return
+    }
+
+    const parsedDate = parseLocalDateInput(dateStr)
+    if (isNaN(parsedDate.getTime())) {
+      setError('يرجى اختيار تاريخ صالح')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const trimmedTitle = title.trim().slice(0, 100)
+      let recurringId: string | undefined
+      if (isRecurring) {
+        const nextDate = advanceDate(parsedDate, recurringFrequency)
+        recurringId = await addRecurring(user.uid, {
+          type,
+          amountFils,
+          categoryId: activeCategoryId,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          note: note.trim().slice(0, 500),
+          frequency: recurringFrequency,
+          startDate: parsedDate,
+          nextDate,
+          active: true,
+        })
+      }
+
+      await addTransaction(user.uid, {
+        type,
+        amountFils,
+        categoryId: activeCategoryId,
+        date: parsedDate,
+        ...(trimmedTitle ? { title: trimmedTitle } : {}),
+        note: note.trim().slice(0, 500),
+        ...(recurringId ? { recurringId } : {}),
+      })
+
+      recordCategoryUsage(activeCategoryId)
+
+      showToast('تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية', 'success')
+
+      if (parsedDate < range.start || parsedDate >= range.end) {
+        setSelectedDate(parsedDate)
+      }
+
+      onSuccess?.()
+
+      // Reset fields for consecutive rapid entries
+      setAmountStr('')
+      setTitle('')
+      setNote('')
+      setIsRecurring(false)
+
+      setTimeout(() => {
+        amountInputRef.current?.focus()
+      }, 50)
+    } catch (err: unknown) {
+      console.error('Failed to save transaction:', err)
+      setError('تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!user || !initialTransaction) return
+    if (isLinkedToDebt) {
+      setError('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteTransaction(user.uid, initialTransaction.id)
+      showToast('تم حذف المعاملة', 'info')
+      onSuccess?.()
+      onClose()
+    } catch (err) {
+      console.error('Failed to delete transaction:', err)
+      setError('تعذر حذف المعاملة')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const typeOptions: { value: TxType; label: string }[] = [
+    { value: 'expense', label: 'مصروف' },
+    { value: 'income', label: 'دخل' },
+  ]
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Linked Debt Warning Banner */}
+      {isLinkedToDebt && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+          <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>معاملة متزامنة مع سجل الديون</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+            هذه المعاملة مرتبطة بسجل الديون، لتعديل المبلغ أو حذفها يرجى إدارة الدفعة من صفحة الديون.
+          </p>
+          <Link
+            to="/debts"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+          >
+            <span>الانتقال إلى سجل الديون لتعديل أو حذف الدفعة</span>
+            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+          </Link>
+        </div>
+      )}
+
+      {/* Type Toggle: مصروف / دخل */}
+      <div>
+        <SegmentedControl<TxType>
+          value={type}
+          disabled={isLinkedToDebt}
+          onChange={(newType) => {
+            setType(newType)
+            setCategoryId('')
+            setError(null)
+          }}
+          options={typeOptions}
+          className="w-full"
+        />
+      </div>
+
+      {/* Big Amount Input */}
+      <div>
+        <label
+          htmlFor="tx-amount"
+          className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5"
+        >
+          المبلغ
+        </label>
+        <div
+          className={cn(
+            'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
+            error && amountStr && toFils(amountStr) <= 0
+              ? 'border-red-500 ring-2 ring-red-500/20'
+              : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20',
+            isLinkedToDebt && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
+          )}
+        >
+          <input
+            ref={amountInputRef}
+            id="tx-amount"
+            type="text"
+            inputMode="decimal"
+            readOnly={isLinkedToDebt}
+            disabled={isLinkedToDebt}
+            value={amountStr}
+            onChange={(e) => {
+              if (isLinkedToDebt) return
+              setAmountStr(e.target.value)
+              setError(null)
+            }}
+            placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
+            className={cn(
+              'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
+              isLinkedToDebt && 'cursor-not-allowed'
+            )}
+            autoFocus={!isEditing && !isLinkedToDebt}
+          />
+          <span className="text-base lg:text-lg font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+            {currencyConfig.symbol}
+          </span>
+        </div>
+      </div>
+
+      {/* Category Chips Grid */}
+      <div>
+        <div className="mb-2">
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+            التصنيف
+          </label>
+        </div>
+        {categoriesLoading ? (
+          <div className="py-4 text-center text-xs text-slate-400">جاري تحميل التصنيفات...</div>
+        ) : availableCategories.length === 0 ? (
+          <div className="py-3 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
+            لا توجد تصنيفات متاحة لهذا النوع
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5">
+            {availableCategories.map((cat) => {
+              const isSelected = activeCategoryId === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => {
+                    setCategoryId(cat.id)
+                    setError(null)
+                  }}
+                  className={cn(
+                    'flex items-center gap-2 p-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all text-start cursor-pointer select-none min-w-0',
+                    isSelected
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                  )}
+                >
+                  <span
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-base"
+                    style={{ backgroundColor: `${cat.color}25` }}
+                  >
+                    {cat.icon}
+                  </span>
+                  <span className="truncate flex-1 text-xs sm:text-sm font-semibold">{cat.name}</span>
+                  {isSelected && (
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Date Input with Quick Select Buttons */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label
+            htmlFor="tx-date"
+            className="block text-xs font-bold text-slate-500 dark:text-slate-400"
+          >
+            التاريخ
+          </label>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date()
+                setDateStr(format(today, 'yyyy-MM-dd'))
+              }}
+              className={cn(
+                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
+                dateStr === format(new Date(), 'yyyy-MM-dd')
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              )}
+            >
+              اليوم
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const yesterday = new Date()
+                yesterday.setDate(yesterday.getDate() - 1)
+                setDateStr(format(yesterday, 'yyyy-MM-dd'))
+              }}
+              className={cn(
+                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
+                (() => {
+                  const y = new Date()
+                  y.setDate(y.getDate() - 1)
+                  return dateStr === format(y, 'yyyy-MM-dd')
+                })()
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              )}
+            >
+              أمس
+            </button>
+          </div>
+        </div>
+        <Input
+          id="tx-date"
+          type="date"
+          value={dateStr}
+          onChange={(e) => setDateStr(e.target.value)}
+          required
+        />
+      </div>
+
+      {/* Description / Title Input */}
+      <div>
+        <Input
+          type="text"
+          label="الوصف / العنوان (اختياري)"
+          placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={100}
+        />
+      </div>
+
+      {/* Note Input (Collapsible) */}
+      {showNoteField ? (
+        <div>
+          <Input
+            type="text"
+            label="ملاحظة تفصيلية (اختياري)"
+            placeholder="مثال: غداء مع الأصدقاء"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+          />
+        </div>
+      ) : (
+        <div className="-mt-2">
+          <button
+            type="button"
+            onClick={() => setShowNoteField(true)}
+            className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+          >
+            <span>+ إضافة ملاحظة تفصيلية</span>
+          </button>
+        </div>
+      )}
+
+      {/* Recurring Option (only for new transactions) */}
+      {!isEditing && (
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          <Toggle
+            checked={isRecurring}
+            onChange={setIsRecurring}
+            label="جعلها معاملة متكررة"
+            description="تكرار هذه المعاملة تلقائياً وفق دورية زمنية محددة"
+          />
+
+          {isRecurring && (
+            <div className="space-y-1.5 pe-1">
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+                دورية التكرار
+              </label>
+              <SegmentedControl<Frequency>
+                value={recurringFrequency}
+                onChange={setRecurringFrequency}
+                options={[
+                  { value: 'weekly', label: 'أسبوعي' },
+                  { value: 'monthly', label: 'شهري' },
+                  { value: 'yearly', label: 'سنوي' },
+                ]}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 p-3 text-start rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 text-xs font-semibold"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Delete confirmation if editing */}
+      {isEditing && !isLinkedToDebt && showDeleteConfirm ? (
+        <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 space-y-2.5">
+          <p className="text-xs font-bold text-red-800 dark:text-red-300">
+            هل أنت متأكد من حذف هذه المعاملة نهائياً؟
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1"
+            >
+              {deleting ? 'جاري الحذف...' : 'نعم، احذف المعاملة'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+            >
+              تراجع
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Actions */}
+      <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={submitting}
+            className="flex-1"
+          >
+            {submitting
+              ? 'جاري الحفظ...'
+              : isEditing
+                ? 'تعديل المعاملة'
+                : duplicateFrom
+                  ? 'حفظ النسخة'
+                  : 'حفظ'}
+          </Button>
+
+          {!isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSaveAndAddAnother}
+              disabled={submitting}
+              className="text-xs sm:text-sm font-semibold whitespace-nowrap"
+            >
+              حفظ وإضافة أخرى
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            إلغاء
+          </Button>
+        </div>
+
+        {isEditing && !isLinkedToDebt && !showDeleteConfirm && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setShowDeleteConfirm(true)}
+            aria-label="حذف المعاملة"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 p-2.5"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    </form>
+  )
+}
+
+]]>
+  </file>
+  <file path="src/pages/DashboardPage.tsx">
+<![CDATA[
+import React, { useMemo, useState, useEffect } from 'react'
+import { Link } from 'react-router'
+import {
+  Plus,
+  Receipt,
+  Calendar,
+  ChevronLeft,
+  ArrowUpRight,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+  HandCoins,
+  Scale,
+  ShieldCheck,
+  Copy,
+} from 'lucide-react'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/EmptyState'
+import { QuickFeatureHub } from '../components/dashboard/QuickFeatureHub'
+import { HeroCardSkeleton } from '../components/skeletons/HeroCardSkeleton'
+
+const CategoryPieChart = React.lazy(() =>
+  import('../components/charts/CategoryPieChart').then((m) => ({ default: m.CategoryPieChart }))
+)
+const DailyExpenseChart = React.lazy(() =>
+  import('../components/charts/DailyExpenseChart').then((m) => ({ default: m.DailyExpenseChart }))
+)
+import { useAuth } from '../hooks/useAuth'
+import { useSelectedMonth } from '../hooks/useSelectedMonth'
+import { useTransactions } from '../hooks/useTransactions'
+import { useCategories } from '../hooks/useCategories'
+import { useRecurring } from '../hooks/useRecurring'
+import { useDebts } from '../hooks/useDebts'
+import { useUserSettings } from '../hooks/useUserSettings'
+import { useCurrency } from '../hooks/useCurrency'
+import { useTransactionModal } from '../hooks/useTransactionModal'
+import { subscribePriorBalance } from '../services/transactions'
+import { sumByType } from '../lib/aggregate'
+import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/reports'
+import { calculateDebtSummary } from '../lib/debts'
+import { calculateForecast } from '../lib/forecast'
+import { toWesternDigits, formatDayHeader } from '../lib/dates'
+import { format as formatDate } from 'date-fns'
+import { ar } from 'date-fns/locale'
+import { cn } from '../lib/cn'
+
+export const DashboardPage: React.FC = () => {
+  const { user } = useAuth()
+  const { range } = useSelectedMonth()
+  const { data: rawTransactions, loading: txLoading } = useTransactions(range)
+  const { data: categories } = useCategories()
+  const { data: recurringList } = useRecurring()
+  const { data: debts } = useDebts()
+  const { data: settings } = useUserSettings()
+  const { format, formatWithSign } = useCurrency()
+  const { openAdd, openEdit, openDuplicate } = useTransactionModal()
+
+  const [rolloverBalance, setRolloverBalance] = useState<number>(0)
+  const isRolloverEnabled = Boolean(settings?.rolloverBalance)
+
+  useEffect(() => {
+    if (!user?.uid || !isRolloverEnabled) {
+      return
+    }
+    const unsub = subscribePriorBalance(
+      user.uid,
+      range.start,
+      (bal) => {
+        setRolloverBalance(bal)
+      },
+      (err) => {
+        console.error('Failed to subscribe prior balance:', err)
+      }
+    )
+    return () => {
+      unsub()
+    }
+  }, [user?.uid, isRolloverEnabled, range.start])
+
+  const monthStartDay = settings?.monthStartDay ?? 1
+  const effectiveRollover = isRolloverEnabled ? rolloverBalance : 0
+
+  // Calculate monthly totals
+  const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
+  const displayBalance = sums.balance + effectiveRollover
+
+  // Calculate forecast & daily safe budget
+  const forecast = useMemo(() => {
+    return calculateForecast({
+      transactions: rawTransactions,
+      recurring: recurringList,
+      debts,
+      monthStartDay,
+      periodRange: range,
+      rolloverBalanceFils: effectiveRollover,
+    })
+  }, [rawTransactions, recurringList, debts, monthStartDay, range, effectiveRollover])
+
+  // Calculate active debts summary
+  const debtSummary = useMemo(() => calculateDebtSummary(debts), [debts])
+
+  // Map categoryId to Category object
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, (typeof categories)[0]>()
+    for (const c of categories) {
+      map.set(c.id, c)
+    }
+    return map
+  }, [categories])
+
+  // Category distribution for donut chart
+  const categoryDistribution = useMemo(
+    () => calculateCategoryDistribution(rawTransactions, categories, 'expense'),
+    [rawTransactions, categories]
+  )
+
+  // Daily expenses for trend area chart
+  const dailyExpenses = useMemo(
+    () => calculateDailyExpenses(rawTransactions, range.start, range.end),
+    [rawTransactions, range.start, range.end]
+  )
+
+  // Up to 5 most recent transactions
+  const recentTransactions = useMemo(
+    () => rawTransactions.slice(0, 5),
+    [rawTransactions]
+  )
+
+  // Up to 5 upcoming active recurring items
+  const upcomingRecurring = useMemo(() => {
+    return recurringList
+      .filter((r) => r.active)
+      .sort((a, b) => {
+        const dateA = a.nextDate instanceof Date ? a.nextDate : new Date(a.nextDate)
+        const dateB = b.nextDate instanceof Date ? b.nextDate : new Date(b.nextDate)
+        return dateA.getTime() - dateB.getTime()
+      })
+      .slice(0, 5)
+  }, [recurringList])
+
+  const today = useMemo(() => new Date(), [])
+
+  // Guard against initial loading state where rawTransactions is [] and txLoading is true,
+  // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
+  const isInitialOrLoading = txLoading && rawTransactions.length === 0
+
+  // Dynamic Hero Card Palette based on financial health:
+  // safe (excellent) -> Emerald / Green (lighter, vibrant, distinct)
+  // warning (medium) -> Amber / Yellow (warm, bright, clear)
+  // danger (bad) -> Rose / Red (striking, clear crimson)
+  const heroTheme = useMemo(() => {
+    let status: 'safe' | 'warning' | 'danger'
+    if (isInitialOrLoading) {
+      status = 'safe'
+    } else if (displayBalance < 0 || forecast.freeBalance < 0) {
+      status = 'danger'
+    } else if (forecast.healthStatus === 'warning' || forecast.healthStatus === 'danger') {
+      status = 'warning'
+    } else {
+      status = 'safe'
+    }
+
+    if (status === 'safe') {
+      return {
+        cardBg:
+          'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 border-emerald-400/40 shadow-xl shadow-emerald-900/15',
+        walletBg: 'bg-white/20 text-white',
+        badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+        badgeText: isInitialOrLoading
+          ? 'جاري التحديث...'
+          : 'فائض مالي',
+        subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
+        subLabel: 'text-emerald-100',
+        stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
+        stripText: 'text-emerald-100',
+      }
+    }
+    if (status === 'warning') {
+      return {
+        cardBg:
+          'bg-gradient-to-br from-amber-600 via-amber-700 to-yellow-800 border-amber-400/40 shadow-xl shadow-amber-900/15',
+        walletBg: 'bg-white/20 text-white',
+        badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+        badgeText: 'انتبه للوتيرة',
+        subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
+        subLabel: 'text-amber-100',
+        stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
+        stripText: 'text-amber-100',
+      }
+    }
+    return {
+      cardBg:
+        'bg-gradient-to-br from-rose-600 via-red-700 to-rose-800 border-rose-400/40 shadow-xl shadow-rose-900/20',
+      walletBg: 'bg-white/20 text-white',
+      badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+      badgeText: displayBalance < 0 ? 'عجز مالي' : 'التزامات تفوق الرصيد',
+      subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
+      subLabel: 'text-rose-100',
+      stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
+      stripText: 'text-rose-100',
+    }
+  }, [isInitialOrLoading, forecast.healthStatus, forecast.freeBalance, displayBalance])
+
+  return (
+    <div className="space-y-6 animate-slide-up">
+      {/* Header with Title and Desktop-only Quick Add */}
+      <PageHeader
+        title="لوحة التحكم"
+        subtitle="نظرة شاملة وسريعة على وضعك المالي لهذا الشهر"
+        actions={
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => openAdd('expense')}
+            className="hidden lg:inline-flex gap-1.5 shadow-xs font-semibold press-scale"
+          >
+            <Plus className="w-4 h-4" />
+            <span>إضافة معاملة</span>
+          </Button>
+        }
+      />
+
+      {/* 1. Hero Card: Clean, Vibrant, High-Contrast Cash Balance */}
+      {isInitialOrLoading ? (
+        <HeroCardSkeleton />
+      ) : (
+        <div
+          className={cn(
+            'text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-md border space-y-4 transition-colors duration-300',
+            heroTheme.cardBg
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-xl flex items-center justify-center',
+                  heroTheme.walletBg
+                )}
+              >
+                <Wallet className="w-4 h-4 stroke-[2.2]" />
+              </div>
+              <span className="text-xs sm:text-sm font-semibold text-white/90">
+                {isRolloverEnabled ? 'الرصيد المتاح (شامل المرحّل)' : 'الرصيد المتاح (لهذا الشهر)'}
+              </span>
+            </div>
+            <span
+              className={cn(
+                'text-xs font-black px-2.5 py-0.5 rounded-full select-none border',
+                heroTheme.badge
+              )}
+            >
+              {heroTheme.badgeText}
+            </span>
+          </div>
+
+          <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none">
+            {format(displayBalance)}
+          </div>
+
+          {/* Rollover Breakdown Subline */}
+          {isRolloverEnabled && (
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-medium text-white/95 -mt-1 pb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/15 backdrop-blur-xs border border-white/20">
+                <span className="text-white/80 text-[11px] sm:text-xs">صافي هذا الشهر:</span>
+                <span className="font-black text-white">
+                  {sums.balance > 0
+                    ? `+ ${format(sums.balance)}`
+                    : sums.balance < 0
+                      ? `- ${format(Math.abs(sums.balance))}`
+                      : format(0)}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/15 backdrop-blur-xs border border-white/20">
+                <span className="text-white/80 text-[11px] sm:text-xs">الرصيد المرحّل:</span>
+                <span className="font-black text-white">
+                  {effectiveRollover > 0
+                    ? `+ ${format(effectiveRollover)}`
+                    : effectiveRollover < 0
+                      ? `- ${format(Math.abs(effectiveRollover))}`
+                      : format(0)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Total Income & Total Expenses Row */}
+          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/15">
+            <div
+              className={cn(
+                'flex items-center gap-2.5 p-2.5 rounded-xl border',
+                heroTheme.subBox
+              )}
+            >
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0 font-bold">
+                <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <div className={cn('text-[11px] font-medium', heroTheme.subLabel)}>
+                  إجمالي المداخيل
+                </div>
+                <div className="text-sm sm:text-base font-black truncate text-white">
+                  {format(sums.income)}
+                </div>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'flex items-center gap-2.5 p-2.5 rounded-xl border',
+                heroTheme.subBox
+              )}
+            >
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0 font-bold">
+                <TrendingDown className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <div className={cn('text-[11px] font-medium', heroTheme.subLabel)}>
+                  إجمالي المصاريف
+                </div>
+                <div className="text-sm sm:text-base font-black truncate text-white">
+                  {format(sums.expense)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily Safe Budget Interactive Strip */}
+          {forecast.isCurrentMonth && (
+            <Link
+              to="/reports"
+              className={cn(
+                'press-scale flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors group cursor-pointer',
+                heroTheme.stripBg
+              )}
+              title="عرض التفاصيل في التقارير"
+            >
+              <div className="flex items-center gap-2 text-white font-medium">
+                <div className="w-6 h-6 rounded-lg bg-white/20 text-white flex items-center justify-center">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </div>
+                <span>ميزانية الأمان اليومي:</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-end">
+                <span className="font-black text-white text-sm sm:text-base">
+                  {format(forecast.dailySafeFils)}
+                </span>
+                <span className={cn('text-[11px] font-medium', heroTheme.stripText)}>
+                  / اليوم
+                </span>
+                <ChevronLeft className="w-3.5 h-3.5 text-white/80 group-hover:-translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
+
+      {/* Quick Feature Access Hub (Mobile only, hidden on lg desktop) */}
+      <QuickFeatureHub />
+
+      {/* 2. Core Activity: Recent Transactions (col 7) & Debts Summary + Upcoming Recurring (col 5) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Recent Transactions: lg:col-span-7 */}
+        <div className="lg:col-span-7">
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  آخر المعاملات
+                </h2>
+              </div>
+              <Link
+                to="/transactions"
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+              >
+                <span>عرض الكل</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {isInitialOrLoading ? (
+              <div className="space-y-2.5">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-750/40 animate-pulse"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0" />
+                      <div className="space-y-1.5">
+                        <div className="w-28 h-3.5 rounded bg-slate-200 dark:bg-slate-700" />
+                        <div className="w-16 h-2.5 rounded bg-slate-100 dark:bg-slate-750" />
+                      </div>
+                    </div>
+                    <div className="w-16 h-4 rounded bg-slate-200 dark:bg-slate-700 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            ) : recentTransactions.length === 0 ? (
+              <EmptyState
+                icon={<Receipt className="w-6 h-6" />}
+                title="لا توجد معاملات مسجلة"
+                description="أضف معاملتك الأولى لهذا الشهر للبدء بتتبع مصاريفك ومداخيلك."
+                action={
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => openAdd('expense')}
+                    className="gap-1 mt-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة معاملة</span>
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="space-y-1.5">
+                {recentTransactions.map((tx) => {
+                  const cat = categoryMap.get(tx.categoryId)
+                  const isExpense = tx.type === 'expense'
+                  const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+                  const dateHeader = formatDayHeader(txDate, today)
+
+                  return (
+                    <div
+                      key={tx.id}
+                      onClick={() => openEdit(tx)}
+                      className="press-scale flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base shadow-xs"
+                          style={{
+                            backgroundColor: cat ? `${cat.color}25` : '#94A3B825',
+                          }}
+                        >
+                          {cat ? cat.icon : '📁'}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            {tx.title || tx.note || (cat ? cat.name : 'معاملة')}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                            {cat && (
+                              <>
+                                <span className="truncate">{cat.name}</span>
+                                <span>•</span>
+                              </>
+                            )}
+                            <span className="truncate">{dateHeader}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 ps-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openDuplicate(tx)
+                          }}
+                          className="hidden sm:inline-flex opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                          aria-label="تكرار المعاملة"
+                          title="تكرار المعاملة"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <div
+                          className={cn(
+                            'text-xs sm:text-sm font-extrabold select-none ps-0.5',
+                            isExpense
+                              ? 'text-red-500 dark:text-red-400'
+                              : 'text-emerald-600 dark:text-emerald-400'
+                          )}
+                        >
+                          {formatWithSign(tx.amountFils, tx.type)}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Debts Summary & Upcoming Recurring: lg:col-span-5 */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* Active Debts Summary */}
+          <Card className="p-4 sm:p-5 border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 rounded-2xl">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <HandCoins className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  ملخص الديون والالتزامات
+                </h2>
+              </div>
+              <Link
+                to="/debts"
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+              >
+                <span>إدارة الديون</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5">
+              {/* Lent to others (مستحقات لك) */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
+                    لي
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      مستحقات لك
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {debtSummary.lentActiveCount} ديون نشطة
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 select-none">
+                  {format(debtSummary.lentFils)}
+                </div>
+              </div>
+
+              {/* Borrowed from others (التزامات عليك) */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 flex items-center justify-center font-bold text-xs">
+                    عليّ
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      التزامات عليك
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {debtSummary.borrowedActiveCount} ديون نشطة
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-rose-600 dark:text-rose-400 select-none">
+                  {format(debtSummary.borrowedFils)}
+                </div>
+              </div>
+
+              {/* Net difference (الصافي) */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/60 border border-slate-100 dark:border-slate-700/40">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs">
+                    <Scale className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      صافي المركز
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {debtSummary.netFils >= 0 ? 'فائض لصالحك' : 'عجز عليك'}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    'text-xs sm:text-sm font-black select-none',
+                    debtSummary.netFils >= 0
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-rose-600 dark:text-rose-400'
+                  )}
+                >
+                  {debtSummary.netFils >= 0 ? '+' : ''}
+                  {format(debtSummary.netFils)}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Upcoming Recurring */}
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  المتكررات القادمة
+                </h2>
+              </div>
+              <Link
+                to="/recurring"
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+              >
+                <span>إدارة المتكررة</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {upcomingRecurring.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
+                <p className="font-semibold mb-2">لا توجد معاملات متكررة نشطة</p>
+                <Link
+                  to="/recurring"
+                  className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
+                >
+                  <span>ضبط معاملة متكررة جديدة</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {upcomingRecurring.map((item) => {
+                  const cat = categoryMap.get(item.categoryId)
+                  const isExpense = item.type === 'expense'
+                  const nextDate =
+                    item.nextDate instanceof Date
+                      ? item.nextDate
+                      : new Date(item.nextDate)
+                  const nextDateFormatted = toWesternDigits(
+                    formatDate(nextDate, 'd MMMM', { locale: ar })
+                  )
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm shadow-xs"
+                          style={{
+                            backgroundColor: cat ? `${cat.color}25` : '#94A3B825',
+                          }}
+                        >
+                          {cat ? cat.icon : '🔄'}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                            {item.title || item.note || (cat ? cat.name : 'معاملة متكررة')}
+                          </div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {nextDateFormatted}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-end shrink-0 ps-2">
+                        <div
+                          className={cn(
+                            'text-xs font-extrabold select-none',
+                            isExpense
+                              ? 'text-red-500 dark:text-red-400'
+                              : 'text-emerald-600 dark:text-emerald-400'
+                          )}
+                        >
+                          {formatWithSign(item.amountFils, item.type)}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* 3. Analytical Charts at the Bottom */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Category Pie Chart Card */}
+        <Card className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+              المصاريف حسب التصنيف
+            </h2>
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+              {categoryDistribution.length} تصنيفات
+            </span>
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <React.Suspense
+              fallback={
+                <div className="h-56 w-full flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-full border-8 border-slate-200/80 dark:border-slate-700/60 animate-pulse" />
+                </div>
+              }
+            >
+              <CategoryPieChart data={categoryDistribution} className="w-full" />
+            </React.Suspense>
+          </div>
+        </Card>
+
+        {/* Daily Expenses Chart Card */}
+        <Card className="p-4 sm:p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+              المصاريف اليومية
+            </h2>
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+              حركة الصرف اليومية
+            </span>
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <React.Suspense
+              fallback={
+                <div className="h-56 w-full flex items-end justify-between gap-2 px-4 pb-4 animate-pulse">
+                  {[40, 65, 30, 80, 50, 95, 45, 70, 60, 85].map((height, idx) => (
+                    <div
+                      key={idx}
+                      className="w-full bg-slate-200/80 dark:bg-slate-700/60 rounded-t-lg"
+                      style={{ height: `${height}%` }}
+                    />
+                  ))}
+                </div>
+              }
+            >
+              <DailyExpenseChart data={dailyExpenses} className="w-full" />
+            </React.Suspense>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+]]>
+  </file>
+  <file path="src/pages/TransactionsPage.tsx">
+<![CDATA[
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react'
+import { Link } from 'react-router'
+import {
+  ArrowLeftRight,
+  Search,
+  Plus,
+  Pencil,
+  Trash2,
+  Calendar,
+  HandCoins,
+  Copy,
+  X,
+  ExternalLink,
+  TrendingUp,
+  TrendingDown,
+} from 'lucide-react'
+import { PageHeader } from '../components/layout/PageHeader'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Button } from '../components/ui/Button'
+import { Modal } from '../components/ui/Modal'
+import { useAuth } from '../hooks/useAuth'
+import { useCategories } from '../hooks/useCategories'
+import { useTransactions } from '../hooks/useTransactions'
+import { useSelectedMonth } from '../hooks/useSelectedMonth'
+import { useTransactionModal } from '../hooks/useTransactionModal'
+import { useToast } from '../hooks/useToast'
+import { useCurrency } from '../hooks/useCurrency'
+import { deleteTransaction } from '../services/transactions'
+import { formatDayHeader } from '../lib/dates'
+import {
+  getCategoryUsageMap,
+  sortCategoriesByUsage,
+  buildUsageFromTransactions,
+  mergeUsageMaps,
+  saveCategoryUsageMap,
+} from '../lib/categoryUsage'
+import { filterTransactions, sumByType, groupByDay } from '../lib/aggregate'
+import { cn } from '../lib/cn'
+import type { Transaction, TxType } from '../types'
+
+export const TransactionsPage: React.FC = () => {
+  const { user } = useAuth()
+  const { range } = useSelectedMonth()
+  const { data: rawTransactions, loading: txLoading } = useTransactions(range)
+  const { data: categories } = useCategories()
+  const { openAdd, openEdit, openDuplicate } = useTransactionModal()
+  const { showToast } = useToast()
+  const { format, formatWithSign } = useCurrency()
+
+  const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
+  const [filterType, setFilterType] = useState<TxType | 'all'>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [txToDelete, setTxToDelete] = useState<Transaction | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const isFilterActive = Boolean(
+    query.trim() || filterType !== 'all' || selectedCategory !== 'all'
+  )
+
+  const handleResetFilters = () => {
+    setQuery('')
+    setFilterType('all')
+    setSelectedCategory('all')
+  }
+
+  // Map categoryId to Category for O(1) lookups
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, (typeof categories)[0]>()
+    for (const c of categories) {
+      map.set(c.id, c)
+    }
+    return map
+  }, [categories])
+
+  // Track category usage from transactions in memory (read-only calculation during render)
+  const usageMap = useMemo(() => {
+    const txMap = buildUsageFromTransactions(rawTransactions)
+    return mergeUsageMaps(txMap, getCategoryUsageMap())
+  }, [rawTransactions])
+
+  // Save merged category usage in localStorage outside render in an effect
+  useEffect(() => {
+    if (rawTransactions.length > 0) {
+      saveCategoryUsageMap(usageMap)
+    }
+  }, [rawTransactions.length, usageMap])
+
+  // Relevant categories for horizontal chips (sorted by usage frequency)
+  const relevantCategories = useMemo(() => {
+    const filtered = categories.filter(
+      (c) => (filterType === 'all' ? true : c.type === filterType) && !c.archived
+    )
+    return sortCategoriesByUsage(filtered, usageMap)
+  }, [categories, filterType, usageMap])
+
+  // Filtered transactions (using deferredQuery to prevent keyboard lag on mobile)
+  const filteredTransactions = useMemo(() => {
+    return filterTransactions(rawTransactions, {
+      query: deferredQuery,
+      type: filterType,
+      categoryId: selectedCategory,
+    })
+  }, [rawTransactions, deferredQuery, filterType, selectedCategory])
+
+  // Summary totals for filtered set
+  const totals = useMemo(() => {
+    return sumByType(filteredTransactions)
+  }, [filteredTransactions])
+
+  // Grouped by day
+  const today = useMemo(() => new Date(), [])
+  const dayGroups = useMemo(() => {
+    return groupByDay(filteredTransactions)
+  }, [filteredTransactions])
+
+  const handleDeleteConfirm = async () => {
+    if (!user || !txToDelete) return
+    if (txToDelete.id.startsWith('debt_init_') || txToDelete.id.startsWith('debt_pay_')) {
+      showToast('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+      setTxToDelete(null)
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteTransaction(user.uid, txToDelete.id)
+      showToast('تم حذف المعاملة بنجاح', 'info')
+      setTxToDelete(null)
+    } catch (err) {
+      console.error('Failed to delete transaction:', err)
+      showToast('تعذر حذف المعاملة', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 animate-slide-up">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <PageHeader
+          title="المعاملات"
+          subtitle="سجل كامل بجميع المصاريف والمداخيل وتفاصيلها"
+        />
+        <Button
+          variant="primary"
+          icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+          onClick={() => openAdd('expense')}
+          className="hidden lg:inline-flex self-start sm:self-auto font-semibold"
+        >
+          إضافة معاملة
+        </Button>
+      </div>
+
+      {/* 2-Column Responsive Layout on Desktop (Filters/Totals in Sticky Sidebar, Transactions in Main) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Sidebar Column: Filter Bar & Monthly Totals */}
+        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20">
+          {/* Filter Bar */}
+          <div className="bg-white dark:bg-slate-800 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs space-y-2.5">
+            {/* Top Row: Search Input & Type Toggle */}
+            <div className="flex flex-col items-stretch gap-2">
+              {/* Search Input */}
+              <div className="relative">
+                <div className="absolute inset-y-0 start-0 ps-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="ابحث في العنوان أو الملاحظات..."
+                  className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+              </div>
+
+              {/* Type Toggle: الكل / مصاريف / مداخيل */}
+              <SegmentedControl<TxType | 'all'>
+                value={filterType}
+                onChange={(val) => {
+                  setFilterType(val)
+                  setSelectedCategory('all')
+                }}
+                options={[
+                  { value: 'all', label: 'الكل' },
+                  { value: 'expense', label: 'مصاريف' },
+                  { value: 'income', label: 'مداخيل' },
+                ]}
+              />
+            </div>
+
+            {/* Bottom Row: Horizontal Scrollable Category Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 select-none text-xs">
+              {/* All Categories Chip */}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                  selectedCategory === 'all'
+                    ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                    : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                )}
+              >
+                كل التصنيفات
+              </button>
+
+              {/* Individual Category Chips */}
+              {relevantCategories.map((cat) => {
+                const isSelected = selectedCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(isSelected ? 'all' : cat.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                      isSelected
+                        ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                        : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    <span className="text-sm shrink-0">{cat.icon}</span>
+                    <span className="font-semibold">{cat.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Active Filter & Search Summary Strip */}
+          {isFilterActive && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl text-xs shadow-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-200">
+                  <Search className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>النتائج:</span>
+                  <span className="px-1.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black">
+                    {filteredTransactions.length}
+                  </span>
+                </span>
+
+                <span className="text-emerald-300 dark:text-emerald-700">•</span>
+
+                <div className="flex items-center gap-1.5 flex-wrap font-medium text-slate-700 dark:text-slate-300">
+                  <span>المجموع:</span>
+                  {filterType === 'expense' ? (
+                    <span className="font-black text-red-600 dark:text-red-400">
+                      {format(totals.expense)}
+                    </span>
+                  ) : filterType === 'income' ? (
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">
+                      {format(totals.income)}
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-red-600 dark:text-red-400 font-bold">
+                        -{format(totals.expense)}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-600">/</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                        +{format(totals.income)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="self-end sm:self-auto text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-100 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>مسح</span>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Monthly Totals Strip Card */}
+          <div className="grid grid-cols-2 gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المداخيل</div>
+                <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 truncate">
+                  {format(totals.income)}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 border-s border-slate-100 dark:border-slate-700 ps-3">
+              <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+                <TrendingDown className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المصاريف</div>
+                <div className="text-sm sm:text-base font-black text-red-500 dark:text-red-400 truncate">
+                  {format(totals.expense)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Column: Transactions List */}
+        <main className="lg:col-span-8 space-y-4">
+          {txLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : dayGroups.length === 0 ? (
+            <EmptyState
+              icon={<ArrowLeftRight className="w-8 h-8" />}
+              title={
+                query || filterType !== 'all' || selectedCategory !== 'all'
+                  ? 'لا توجد معاملات مطابقة للفلترة'
+                  : 'لا توجد معاملات لهذا الشهر'
+              }
+              description="ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول."
+              action={
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+                  onClick={() => openAdd('expense')}
+                >
+                  إضافة أول معاملة
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-5">
+              {dayGroups.map((group) => {
+                const dayNetFils = group.transactions.reduce((acc, tx) => {
+                  return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
+                }, 0)
+
+                return (
+                  <div key={group.dateKey} className="space-y-2">
+                    {/* Day Header with clearly displayed net spend */}
+                    <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{formatDayHeader(group.date, today)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">صافي اليوم:</span>
+                        <span
+                          className={cn(
+                            'font-extrabold text-xs select-none',
+                            dayNetFils > 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : dayNetFils < 0
+                                ? 'text-red-500 dark:text-red-400'
+                                : 'text-slate-400'
+                          )}
+                        >
+                          {dayNetFils > 0
+                            ? `+ ${format(dayNetFils)}`
+                            : dayNetFils < 0
+                              ? `- ${format(Math.abs(dayNetFils))}`
+                              : format(0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Transactions in this day */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs divide-y divide-slate-100 dark:divide-slate-700/50 overflow-hidden">
+                      {group.transactions.map((tx) => {
+                        const cat = categoryMap.get(tx.categoryId)
+                        const icon = cat?.icon ?? '➕'
+                        const color = cat?.color ?? '#94A3B8'
+                        const name = cat?.name ?? 'غير مصنف'
+                        const isExpense = tx.type === 'expense'
+
+                        return (
+                          <div
+                            key={tx.id}
+                            onClick={() => openEdit(tx)}
+                            className="group flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+                          >
+                            {/* Right side: Emoji circle + Category Name + Note */}
+                            <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
+                              <div
+                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-base sm:text-lg shrink-0"
+                                style={{ backgroundColor: `${color}20` }}
+                              >
+                                {icon}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                                    {tx.title || name}
+                                  </span>
+                                  {tx.id.startsWith('debt_') && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 font-bold shrink-0">
+                                      <HandCoins className="w-2.5 h-2.5" />
+                                      <span>دين</span>
+                                    </span>
+                                  )}
+                                  {tx.recurringId && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold shrink-0">
+                                      متكررة
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                                  {tx.title ? (
+                                    <>
+                                      <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                                      {tx.note ? <span>•</span> : null}
+                                    </>
+                                  ) : null}
+                                  {tx.note ? <span>{tx.note}</span> : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Left side: Amount Pill & Actions */}
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              {/* Amount Pill */}
+                              <div
+                                className={cn(
+                                  'font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-xl select-none',
+                                  isExpense
+                                    ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+                                    : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                )}
+                              >
+                                {formatWithSign(tx.amountFils, tx.type)}
+                              </div>
+
+                              {/* Action Buttons: hidden on mobile, smooth group hover on desktop */}
+                              <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openDuplicate(tx)
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                  aria-label="تكرار المعاملة"
+                                  title="تكرار المعاملة"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openEdit(tx)
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                  aria-label="تعديل المعاملة"
+                                  title="تعديل المعاملة"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                {tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_') ? (
+                                  <Link
+                                    to="/debts"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
+                                    aria-label="الانتقال إلى صفحة الديون"
+                                    title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Link>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setTxToDelete(tx)
+                                    }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                    aria-label="حذف المعاملة"
+                                    title="حذف المعاملة"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(txToDelete)}
+        onClose={() => setTxToDelete(null)}
+        title="تأكيد حذف المعاملة"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            هل أنت متأكد من رغبتك في حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء.
+          </p>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setTxToDelete(null)}
+              disabled={deleting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? 'جاري الحذف...' : 'حذف المعاملة'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+]]>
+  </file>
+  <file path="src/pages/RecurringPage.tsx">
+<![CDATA[
+import React, { useState, useMemo } from 'react'
+import { Link } from 'react-router'
+import { format as formatDate, addMonths } from 'date-fns'
+import { ar } from 'date-fns/locale'
+import {
+  RefreshCw,
+  Plus,
+  Pencil,
+  Trash2,
+  Calendar,
+  AlertCircle,
+  Users,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  Crown,
+} from 'lucide-react'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Button } from '../components/ui/Button'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Modal } from '../components/ui/Modal'
+import { Toggle } from '../components/ui/Toggle'
+import { RecurringForm } from '../components/RecurringForm'
+import { useAuth } from '../hooks/useAuth'
+import { useCategories } from '../hooks/useCategories'
+import { useRecurring } from '../hooks/useRecurring'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
+import { useCurrency } from '../hooks/useCurrency'
+import { useToast } from '../hooks/useToast'
+import { addRecurring, updateRecurring, deleteRecurring } from '../services/recurring'
+import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle } from '../services/moneyCircles'
+import { calculateMonthlyEquivalent, isOccurrenceSkipped } from '../lib/recurring'
+import { toWesternDigits } from '../lib/dates'
+import { cn } from '../lib/cn'
+import type { Recurring, Frequency } from '../types'
+
+export const RecurringPage: React.FC = () => {
+  const { user } = useAuth()
+  const { data: recurringItems, loading: recurringLoading } = useRecurring()
+  const { data: categories } = useCategories()
+  const { data: circles } = useMoneyCircles()
+  const { format, formatWithSign } = useCurrency()
+  const { showToast } = useToast()
+
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<Recurring | null>(null)
+  const [itemToDelete, setItemToDelete] = useState<Recurring | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const activeCircles = useMemo(() => circles.filter((c) => c.status === 'active'), [circles])
+
+  // Map categoryId to Category
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, (typeof categories)[0]>()
+    for (const c of categories) {
+      map.set(c.id, c)
+    }
+    return map
+  }, [categories])
+
+  // Monthly equivalents (waives turn month for circle recurring items)
+  const monthlyStats = useMemo(() => {
+    return calculateMonthlyEquivalent(recurringItems, new Date())
+  }, [recurringItems])
+
+  const handleScheduleCircle = async (circle: (typeof circles)[0]) => {
+    if (!user) return
+    const defaultExpenseCategory = categories.find((c) => c.type === 'expense' && !c.archived)
+    if (!defaultExpenseCategory) {
+      showToast('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
+      return
+    }
+    try {
+      const recId = await addRecurring(user.uid, {
+        type: 'expense',
+        amountFils: circle.monthlyAmountFils,
+        categoryId: defaultExpenseCategory.id,
+        title: `قسط ${circle.name}`,
+        note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`,
+        frequency: 'monthly',
+        startDate: circle.startDate,
+        nextDate: circle.startDate,
+        endDate: addMonths(circle.startDate, circle.membersCount - 1),
+        active: true,
+        circleId: circle.id,
+        skipMonth: circle.myTurnMonth,
+      })
+      await updateMoneyCircle(user.uid, circle.id, { recurringId: recId })
+      showToast('تمت جدولة القسط في المعاملات المتكررة بنجاح مع تخطي شهر استلامك!', 'success')
+    } catch (err) {
+      console.error('Failed to schedule circle:', err)
+      showToast('تعذر جدولة القسط', 'error')
+    }
+  }
+
+  const handleToggleActive = async (item: Recurring) => {
+    if (!user) return
+    const newActive = !item.active
+    try {
+      await updateRecurring(user.uid, item.id, { active: newActive })
+      showToast(
+        newActive
+          ? 'تم تفعيل المعاملة المتكررة'
+          : 'تم إيقاف المعاملة المتكررة مؤقتاً',
+        'info'
+      )
+    } catch (err) {
+      console.error('Failed to toggle recurring item:', err)
+      showToast('تعذر تغيير حالة المعاملة', 'error')
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!user || !itemToDelete) return
+    setDeleting(true)
+    try {
+      await deleteRecurring(user.uid, itemToDelete.id)
+      showToast('تم حذف المعاملة المتكررة بنجاح', 'info')
+      setItemToDelete(null)
+    } catch (err) {
+      console.error('Failed to delete recurring item:', err)
+      showToast('تعذر حذف المعاملة', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const frequencyLabels: Record<Frequency, string> = {
+    weekly: 'أسبوعي',
+    monthly: 'شهري',
+    yearly: 'سنوي',
+  }
+
+  return (
+    <div className="space-y-6 animate-slide-up">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <PageHeader
+          title="المعاملات المتكررة"
+          subtitle="جدولة المصاريف والمداخيل الدورية كالراتب والإيجار والاشتراكات"
+        />
+        <Button
+          variant="primary"
+          icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+          onClick={() => {
+            setEditingItem(null)
+            setIsFormOpen(true)
+          }}
+          className="self-start sm:self-auto font-semibold"
+        >
+          إضافة متكررة
+        </Button>
+      </div>
+
+      {/* KPI Cards: Monthly Income & Expense */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Income Card */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
+              مداخيل ثابتة شهرياً
+            </span>
+            <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
+              {format(monthlyStats.monthlyIncome)}
+            </span>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <TrendingUp className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Expense Card */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
+              مصاريف ثابتة شهرياً
+            </span>
+            <span className="text-2xl sm:text-3xl font-black text-red-500 dark:text-red-400">
+              {format(monthlyStats.monthlyExpense)}
+            </span>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+            <TrendingDown className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Active Money Circles Section */}
+      {activeCircles.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Users className="w-4 h-4 text-emerald-500" />
+              <span>أقساط الجمعيات والصناديق المشتركة</span>
+            </h3>
+            <Link
+              to="/tools?tool=circles"
+              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+            >
+              إدارة الجمعيات ←
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {activeCircles.map((circle) => {
+              const isUserTurn = isUserTurnMonth(circle)
+              const currentMonth = getCurrentCircleMonth(circle)
+              return (
+                <div
+                  key={circle.id}
+                  className={cn(
+                    'p-4 rounded-2xl border transition-all flex flex-col justify-between',
+                    isUserTurn
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
+                      : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100">
+                      {circle.name}
+                    </span>
+                    {isUserTurn ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                        <Crown className="w-3 h-3" />
+                        <span>دورك في الاستلام!</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        الشهر {currentMonth} من {circle.membersCount}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {isUserTurn ? 'مبلغ الاستلام الإجمالي:' : 'القسط الشهري المطلوب:'}
+                    </span>
+                    <span
+                      className={cn(
+                        'font-black text-sm',
+                        isUserTurn
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-500 dark:text-red-400'
+                      )}
+                    >
+                      {isUserTurn
+                        ? `+ ${format(circle.totalAmountFils)}`
+                        : `- ${format(circle.monthlyAmountFils)}`}
+                    </span>
+                  </div>
+
+                  {isUserTurn && (
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-2 font-medium">
+                      ✓ لن يتم خصم قسط منك هذا الشهر لأنك مستلم الجمعية!
+                    </p>
+                  )}
+
+                  {/* Recurring Schedule Link / Status */}
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                    {circle.recurringId ? (
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span>مجدولة بالمعاملات</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleScheduleCircle(circle)}
+                        className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                        <span>جدولة القسط شهرياً</span>
+                      </button>
+                    )}
+                    {isUserTurn && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">معفى من الخصم</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Recurring Items Grid */}
+      {recurringLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-44 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+            />
+          ))}
+        </div>
+      ) : recurringItems.length === 0 ? (
+        <EmptyState
+          icon={<RefreshCw className="w-8 h-8" />}
+          title="لا توجد معاملات متكررة"
+          description="أضف التزاماتك الثابتة (رواتب، إيجار، اشتراكات) ليقوم التطبيق بتسجيلها تلقائياً عند حلول موعدها."
+          action={
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+              onClick={() => {
+                setEditingItem(null)
+                setIsFormOpen(true)
+              }}
+            >
+              إضافة أول معاملة متكررة
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {recurringItems.map((item) => {
+            const cat = categoryMap.get(item.categoryId)
+            const icon = cat?.icon ?? '➕'
+            const color = cat?.color ?? '#94A3B8'
+            const name = cat?.name ?? 'غير مصنف'
+            const isExpense = item.type === 'expense'
+            const isCircleItem = Boolean(item.circleId || item.skipMonth)
+            const isCurrentMonthTurn = isCircleItem && isOccurrenceSkipped(item, new Date())
+
+            const nextDateFormatted = toWesternDigits(
+              formatDate(
+                item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate),
+                'd LLLL yyyy',
+                { locale: ar }
+              )
+            )
+
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  'group rounded-2xl p-5 border transition-all flex flex-col justify-between',
+                  item.active
+                    ? 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md'
+                    : 'bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-75'
+                )}
+              >
+                {/* Top Row: Category + Frequency Badge */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                      style={{ backgroundColor: `${color}25` }}
+                    >
+                      {icon}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-bold text-sm text-slate-800 dark:text-slate-100 block truncate">
+                        {item.title || name}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                        {item.title ? (
+                          <>
+                            <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                            {item.note ? <span>•</span> : null}
+                          </>
+                        ) : null}
+                        {item.note ? <span>{item.note}</span> : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!item.active && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
+                        متوقفة مؤقتاً
+                      </span>
+                    )}
+                    <span className="text-xs px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200/60 dark:border-amber-900/40">
+                      {frequencyLabels[item.frequency]}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Circle Skip Month Indicator */}
+                {isCircleItem && (
+                  <div className="my-1.5">
+                    {isCurrentMonthTurn ? (
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Crown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>دورك في الاستلام هذا الشهر!</span>
+                        </span>
+                        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-black">
+                          معفى من الخصم تلقائياً
+                        </span>
+                      </div>
+                    ) : item.skipMonth ? (
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span>قسط جمعية (معفى من الخصم في الشهر رقم {item.skipMonth})</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Middle: Amount in large bold text */}
+                <div className="my-2">
+                  <div
+                    className={cn(
+                      'text-xl sm:text-2xl font-black select-none',
+                      isExpense
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                    )}
+                  >
+                    {formatWithSign(item.amountFils, item.type)}
+                  </div>
+                </div>
+
+                {/* Bottom Row: Next date, Active toggle, Actions */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-1 text-slate-400 dark:text-slate-400 truncate">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">الموعد القادم: {nextDateFormatted}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Toggle button */}
+                    <Toggle
+                      checked={item.active}
+                      onChange={() => handleToggleActive(item)}
+                      aria-label={item.active ? 'إيقاف مؤقت' : 'تفعيل'}
+                      className="shrink-0"
+                    />
+
+                    {/* Edit button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingItem(item)
+                        setIsFormOpen(true)
+                      }}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                      aria-label="تعديل المعاملة المتكررة"
+                      title="تعديل المعاملة المتكررة"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => setItemToDelete(item)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                      aria-label="حذف المعاملة المتكررة"
+                      title="حذف المعاملة المتكررة"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Recurring Form Modal */}
+      <RecurringForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        initialRecurring={editingItem}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(itemToDelete)}
+        onClose={() => setItemToDelete(null)}
+        title="تأكيد حذف المعاملة المتكررة"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <p className="text-sm font-semibold">
+              هل أنت متأكد من حذف هذه المعاملة المتكررة؟ لن يتم إنشاء أي معاملات مستقبلية منها.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setItemToDelete(null)}
+              disabled={deleting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? 'جاري الحذف...' : 'حذف المعاملة المتكررة'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+]]>
+  </file>
+  <file path="src/pages/SettingsPage.tsx">
+<![CDATA[
+import React, { useState, useRef } from 'react'
+import {
+  Sun,
+  Moon,
+  Laptop,
+  Coins,
+  LogOut,
+  Download,
+  Upload,
+  Database,
+  AlertTriangle,
+  CheckCircle2,
+  FileSpreadsheet,
+} from 'lucide-react'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Card } from '../components/ui/Card'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { Select } from '../components/ui/Select'
+import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
+import { Toggle } from '../components/ui/Toggle'
+import { Modal } from '../components/ui/Modal'
+import { useTheme } from '../hooks/useTheme'
+import { useAuth } from '../hooks/useAuth'
+import { useUserSettings } from '../hooks/useUserSettings'
+import { useCategories } from '../hooks/useCategories'
+import { useToast } from '../hooks/useToast'
+import { usePWAInstall } from '../hooks/usePWAInstall'
+import { signOutUser } from '../services/auth'
+import { getAllTransactions } from '../services/transactions'
+import { getAllDebts } from '../services/debts'
+import { exportTransactionsToCsv, exportDebtsToCsv } from '../lib/exportCsv'
+import {
+  createFullBackup,
+  downloadBackupFile,
+  validateBackup,
+  restoreBackup,
+  type BackupValidationResult,
+} from '../lib/backupRestore'
+import { PRESET_CURRENCIES, getCurrencyConfig } from '../lib/money'
+import { cn } from '../lib/cn'
+import type { ThemePreference } from '../types'
+
+export const SettingsPage: React.FC = () => {
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { user } = useAuth()
+  const { data: settings, updateSettings } = useUserSettings()
+  const { data: categories } = useCategories()
+  const { showToast } = useToast()
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall()
+
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [exportingTxs, setExportingTxs] = useState(false)
+  const [exportingDebts, setExportingDebts] = useState(false)
+  const [exportingJson, setExportingJson] = useState(false)
+  const [restoringJson, setRestoringJson] = useState(false)
+  const [restoreValidation, setRestoreValidation] = useState<BackupValidationResult | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const activeCurrency = settings?.currency || 'JOD'
+  const isPreset = Boolean(PRESET_CURRENCIES[activeCurrency])
+  const [isCustomCurrency, setIsCustomCurrency] = useState(!isPreset && activeCurrency !== 'JOD')
+  const [customCurrencyInput, setCustomCurrencyInput] = useState(isPreset ? '' : activeCurrency)
+  const [savingCurrency, setSavingCurrency] = useState(false)
+
+  // Track previous settings to adjust state during render when settings load or change from Firestore
+  const [prevCurrency, setPrevCurrency] = useState(settings?.currency)
+  if (settings?.currency !== prevCurrency) {
+    setPrevCurrency(settings?.currency)
+    const isCustom = settings?.currency ? !PRESET_CURRENCIES[settings.currency] : false
+    setIsCustomCurrency(isCustom)
+    setCustomCurrencyInput(isCustom ? settings?.currency || '' : '')
+  }
+
+  const [prevMonthStartDay, setPrevMonthStartDay] = useState(settings?.monthStartDay)
+  if (settings?.monthStartDay !== prevMonthStartDay) {
+    setPrevMonthStartDay(settings?.monthStartDay)
+    if (settings?.monthStartDay !== undefined) {
+      setSelectedDay(String(settings.monthStartDay))
+    }
+  }
+
+  const activeConfig = getCurrencyConfig(activeCurrency)
+
+  const handleSelectPreset = async (code: string) => {
+    setIsCustomCurrency(false)
+    try {
+      await updateSettings({ currency: code })
+      showToast(`تم تغيير العملة إلى ${PRESET_CURRENCIES[code]?.name || code} بنجاح`, 'success')
+    } catch (err) {
+      console.error('Failed to update currency:', err)
+      showToast('تعذر تغيير العملة', 'error')
+    }
+  }
+
+  const handleSaveCustomCurrency = async () => {
+    const trimmed = customCurrencyInput.trim()
+    if (!trimmed) return
+    setSavingCurrency(true)
+    try {
+      await updateSettings({ currency: trimmed })
+      showToast(`تم تعيين العملة المخصصة: ${trimmed}`, 'success')
+    } catch (err) {
+      console.error('Failed to save custom currency:', err)
+      showToast('تعذر حفظ العملة المخصصة', 'error')
+    } finally {
+      setSavingCurrency(false)
+    }
+  }
+
+  const currentStartDay =
+    selectedDay ?? (settings?.monthStartDay ? String(settings.monthStartDay) : '1')
+
+  const themeOptions: { value: ThemePreference; label: string; icon: React.ReactNode }[] = [
+    { value: 'system', label: 'تلقائي', icon: <Laptop className="w-4 h-4" /> },
+    { value: 'light', label: 'فاتح', icon: <Sun className="w-4 h-4" /> },
+    { value: 'dark', label: 'داكن', icon: <Moon className="w-4 h-4" /> },
+  ]
+
+  const dayOptions = Array.from({ length: 28 }, (_, i) => ({
+    value: String(i + 1),
+    label: `يوم ${i + 1} من كل شهر`,
+  }))
+
+  const handleThemeChange = async (newTheme: ThemePreference) => {
+    setTheme(newTheme)
+    try {
+      await updateSettings({ theme: newTheme })
+    } catch (err) {
+      console.error('Failed to persist theme:', err)
+    }
+  }
+
+  const handleStartDayChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    setSelectedDay(val)
+    try {
+      await updateSettings({ monthStartDay: parseInt(val, 10) })
+    } catch (err) {
+      console.error('Failed to persist month start day:', err)
+    }
+  }
+
+  const handleSignOut = async () => {
+    setLoggingOut(true)
+    try {
+      await signOutUser()
+    } catch (err) {
+      console.error('Failed to sign out:', err)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  const handleExportTransactions = async () => {
+    if (!user) return
+    setExportingTxs(true)
+    try {
+      const txs = await getAllTransactions(user.uid)
+      if (txs.length === 0) {
+        showToast('لا توجد أي معاملات لتصديرها', 'info')
+        return
+      }
+      exportTransactionsToCsv(txs, categories, {
+        symbol: activeConfig.symbol,
+        decimals: activeConfig.decimals,
+      })
+      showToast('تم تصدير المعاملات بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to export transactions:', err)
+      showToast('تعذر تصدير المعاملات', 'error')
+    } finally {
+      setExportingTxs(false)
+    }
+  }
+
+  const handleExportDebts = async () => {
+    if (!user) return
+    setExportingDebts(true)
+    try {
+      const debts = await getAllDebts(user.uid)
+      if (debts.length === 0) {
+        showToast('لا توجد أي ديون لتصديرها', 'info')
+        return
+      }
+      exportDebtsToCsv(debts, {
+        symbol: activeConfig.symbol,
+        decimals: activeConfig.decimals,
+      })
+      showToast('تم تصدير سجل الديون بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to export debts:', err)
+      showToast('تعذر تصدير سجل الديون', 'error')
+    } finally {
+      setExportingDebts(false)
+    }
+  }
+
+  const handleToggleRollover = async (checked: boolean) => {
+    try {
+      await updateSettings({ rolloverBalance: checked })
+      showToast(
+        checked
+          ? 'تم تفعيل ترحيل الرصيد المتبقي تلقائياً'
+          : 'تم إيقاف ترحيل الرصيد، يعتمد التطبيق الآن على كل شهر منفصلاً',
+        'success'
+      )
+    } catch (err) {
+      console.error('Failed to toggle rollover balance:', err)
+      showToast('تعذر تحديث إعدادات ترحيل الرصيد', 'error')
+    }
+  }
+
+  const handleDownloadJsonBackup = async () => {
+    if (!user) return
+    setExportingJson(true)
+    try {
+      const backup = await createFullBackup(user.uid)
+      downloadBackupFile(backup)
+      showToast('تم تنزيل النسخة الاحتياطية الشاملة بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to export full backup:', err)
+      showToast('تعذر إنشاء النسخة الاحتياطية', 'error')
+    } finally {
+      setExportingJson(false)
+    }
+  }
+
+  const handleTriggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result
+      if (typeof text !== 'string') return
+      const res = validateBackup(text)
+      if (!res.valid) {
+        showToast(res.error || 'ملف غير صالح', 'error')
+        return
+      }
+      setRestoreValidation(res)
+    }
+    reader.onerror = () => {
+      showToast('تعذر قراءة الملف المحدد', 'error')
+    }
+    reader.readAsText(file, 'utf-8')
+  }
+
+  const handleConfirmRestore = async () => {
+    if (!user || !restoreValidation?.data) return
+    setRestoringJson(true)
+    try {
+      await restoreBackup(user.uid, restoreValidation.data)
+      showToast('تمت استعادة النسخة الاحتياطية بنجاح!', 'success')
+      setRestoreValidation(null)
+    } catch (err) {
+      console.error('Failed to restore backup:', err)
+      showToast('تعذر استعادة النسخة الاحتياطية', 'error')
+    } finally {
+      setRestoringJson(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto animate-slide-up">
+      <PageHeader
+        title="الإعدادات"
+        subtitle="تفضيلات المظهر، بداية الشهر المالي، وإدارة الحساب"
+      />
+
+      {/* Theme Settings Card */}
+      <Card
+        title="المظهر والألوان"
+        subtitle="اختر المظهر المفضل للتطبيق أو دعه يتبع إعدادات جهازك"
+      >
+        <div className="space-y-4 pt-2">
+          <SegmentedControl<ThemePreference>
+            value={theme}
+            onChange={handleThemeChange}
+            options={themeOptions}
+            className="w-full sm:w-auto"
+          />
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            الوضع الحالي النشط:{' '}
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {resolvedTheme === 'dark' ? 'داكن' : 'فاتح'}
+            </span>{' '}
+            {theme === 'system' && '(تلقائي حسب النظام)'}
+          </p>
+        </div>
+      </Card>
+
+      {/* Financial Month Start Day & Rollover */}
+      <Card
+        title="إعدادات الدورة المالية"
+        subtitle="حدد يوم بداية الدورة المالية وإمكانية ترحيل الرصيد التراكمي من الأشهر السابقة"
+      >
+        <div className="pt-2 space-y-5">
+          <div className="max-w-xs">
+            <Select
+              label="يوم بداية الدورة المالية"
+              value={currentStartDay}
+              onChange={handleStartDayChange}
+              options={dayOptions}
+              helperText="الافتراضي هو اليوم الأول من كل شهر (1 إلى 28)."
+            />
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <label htmlFor="rollover-toggle" className="text-sm font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                ترحيل الرصيد المتبقي من الأشهر السابقة تلقائياً
+              </label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                عند التفعيل، يُضاف الفائض أو العجز المتراكم من الأشهر السابقة إلى رصيد الشهر الحالي، مما يمنحك رصيداً تراكمياً حقيقياً وتفادي العجز الوهمي في بداية الشهر.
+              </p>
+            </div>
+            <Toggle
+              id="rollover-toggle"
+              checked={Boolean(settings?.rolloverBalance)}
+              onChange={handleToggleRollover}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Currency Selection Card */}
+      <Card
+        title="العملة الرسمية"
+        subtitle="اختر العملة المعتمدة في حساباتك وشاشات التطبيق"
+      >
+        <div className="space-y-4 pt-2">
+          {/* Preset Buttons Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {Object.values(PRESET_CURRENCIES).map((curr) => {
+              const isSelected = !isCustomCurrency && activeCurrency === curr.code
+              return (
+                <button
+                  key={curr.code}
+                  type="button"
+                  onClick={() => handleSelectPreset(curr.code)}
+                  className={cn(
+                    'flex items-center gap-2.5 p-3 rounded-xl border text-start transition-all cursor-pointer',
+                    isSelected
+                      ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  )}
+                >
+                  <span className="text-xl select-none">{curr.flag}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold truncate">{curr.name}</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                      {curr.code} ({curr.symbol})
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+
+            {/* Custom Currency Option */}
+            <button
+              type="button"
+              onClick={() => setIsCustomCurrency(true)}
+              className={cn(
+                'flex items-center gap-2.5 p-3 rounded-xl border text-start transition-all cursor-pointer',
+                isCustomCurrency
+                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                  : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+              )}
+            >
+              <span className="text-xl select-none">✏️</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold truncate">عملة أخرى</div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate">
+                  {isCustomCurrency && customCurrencyInput ? customCurrencyInput : 'تحديد يدوي'}
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Custom Currency Input */}
+          {isCustomCurrency && (
+            <div className="p-3.5 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-800/70 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-2.5 items-end">
+                <div className="flex-1 w-full">
+                  <Input
+                    label="رمز أو اسم العملة المخصصة"
+                    placeholder="مثال: ج.م أو د.ك أو QAR أو ليرة"
+                    value={customCurrencyInput}
+                    onChange={(e) => setCustomCurrencyInput(e.target.value)}
+                    maxLength={20}
+                    helperText="سيظهر هذا الرمز بجانب جميع المبالغ المالية في التطبيق."
+                  />
+                </div>
+                <Button
+                  onClick={handleSaveCustomCurrency}
+                  disabled={!customCurrencyInput.trim() || savingCurrency}
+                  variant="primary"
+                  className="w-full sm:w-auto"
+                >
+                  {savingCurrency ? 'جاري الحفظ...' : 'تطبيق العملة'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1 text-xs text-slate-500 dark:text-slate-400">
+            <Coins className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>
+              العملة النشطة الحالية:{' '}
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {activeConfig.name} ({activeConfig.symbol})
+              </span>
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* PWA App Installation Card */}
+      <Card
+        title="تثبيت التطبيق (PWA)"
+        subtitle="يمكنك تثبيت تطبيق مصاريفي على هاتفك أو حاسوبك للعمل بدون إنترنت وسرعة فائقة"
+      >
+        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <Download className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                {isInstalled ? 'التطبيق مثبت حالياً' : 'تطبيق ويب تقدمي (PWA)'}
+              </div>
+              <div className="text-xs text-slate-400">
+                {isInstalled
+                  ? 'يعمل التطبيق كبرنامج مستقل مع دعم كامل للعمل بلا اتصال'
+                  : 'يعمل بكامل ميزاته مباشرة من الشاشة الرئيسية دون الحاجة للمتجر'}
+              </div>
+            </div>
+          </div>
+
+          {isInstalled ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>مثبت على الجهاز</span>
+            </div>
+          ) : isInstallable ? (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Download className="w-4 h-4" />}
+              onClick={promptInstall}
+            >
+              تثبيت التطبيق على جهازك
+            </Button>
+          ) : (
+            <span className="text-xs text-slate-400 font-medium">
+              متاح للتثبيت من متصفحك عبر زر المشاركة أو القائمة
+            </span>
+          )}
+        </div>
+      </Card>
+
+      {/* Data Export & Backup Card */}
+      <Card
+        title="تصدير البيانات والنسخ الاحتياطي"
+        subtitle="تصدير بياناتك المالية وسجلات الديون إلى ملفات Excel/CSV أو نسخ احتياطي شامل JSON"
+      >
+        <div className="pt-2 space-y-5">
+          {/* Section 1: Comprehensive JSON Backup */}
+          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <Database className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                  النسخ الاحتياطي الشامل (JSON)
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  حفظ أو استعادة كافة بيانات حسابك (المعاملات، التصنيفات، الديون، المتكررات، الجمعيات، والإعدادات) في ملف واحد.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Download className="w-4 h-4" />}
+                onClick={handleDownloadJsonBackup}
+                disabled={exportingJson || !user}
+                className="flex-1 font-bold text-xs sm:text-sm"
+              >
+                {exportingJson ? 'جاري التحضير...' : 'تنزيل نسخة احتياطية شاملة (JSON)'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="md"
+                icon={<Upload className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                onClick={handleTriggerFileInput}
+                disabled={restoringJson || !user}
+                className="flex-1 font-bold text-xs sm:text-sm"
+              >
+                استعادة نسخة احتياطية (JSON)
+              </Button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleFileSelected}
+                className="hidden"
+                aria-label="اختيار ملف النسخة الاحتياطية"
+              />
+            </div>
+          </div>
+
+          {/* Section 2: CSV Exports */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              تصدير الجداول (Excel / CSV مع دعم العربية):
+            </h4>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="outline"
+                size="md"
+                icon={<FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                onClick={handleExportTransactions}
+                disabled={exportingTxs || !user}
+                className="flex-1 font-bold"
+              >
+                {exportingTxs ? 'جاري التصدير...' : 'تصدير جميع المعاملات (CSV)'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="md"
+                icon={<FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                onClick={handleExportDebts}
+                disabled={exportingDebts || !user}
+                className="flex-1 font-bold"
+              >
+                {exportingDebts ? 'جاري التصدير...' : 'تصدير سجل الديون (CSV)'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Account Info */}
+      <Card title="الحساب الشخصي" subtitle="معلومات تسجيل الدخول عبر Google">
+        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || 'صورة المستخدم'}
+                className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
+                {user?.displayName ? user.displayName.charAt(0) : 'م'}
+              </div>
+            )}
+            <div>
+              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                {user?.displayName || 'مستخدم مصاريفي'}
+              </div>
+              <div className="text-xs text-slate-400" dir="ltr">
+                {user?.email || 'بدون بريد إلكتروني'}
+              </div>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<LogOut className="w-4 h-4 rtl:rotate-180" />}
+            onClick={handleSignOut}
+            disabled={loggingOut}
+          >
+            {loggingOut ? 'جاري الخروج...' : 'تسجيل الخروج'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Restore Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(restoreValidation?.valid)}
+        onClose={() => setRestoreValidation(null)}
+        title="تأكيد استعادة النسخة الاحتياطية"
+      >
+        <div className="space-y-4">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            تم فحص ملف النسخة الاحتياطية بنجاح. فيما يلي ملخص البيانات التي سيتم استعادتها وحفظها في حسابك:
+          </p>
+
+          {restoreValidation?.summary && (
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500">تاريخ إنشاء النسخة:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200" dir="ltr">
+                  {new Date(restoreValidation.summary.exportedAt).toLocaleDateString('ar-EG', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500">المعاملات المالية:</span>
+                <span className="font-black text-emerald-600 dark:text-emerald-400">
+                  {restoreValidation.summary.transactionsCount} معاملة
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500">التصنيفات:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {restoreValidation.summary.categoriesCount} تصنيف
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500">سجلات الديون:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {restoreValidation.summary.debtsCount} دين
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-500">المعاملات المتكررة:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {restoreValidation.summary.recurringCount} معاملة
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">الجمعيات المالية:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {restoreValidation.summary.circlesCount} جمعية
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <p className="leading-relaxed">
+              تتم الاستعادة مع الحفاظ على المعرفات الأصلية لمنع تكرار السجلات في حال استعادة نفس النسخة أكثر من مرة.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setRestoreValidation(null)}
+              disabled={restoringJson}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleConfirmRestore}
+              disabled={restoringJson}
+            >
+              {restoringJson ? 'جاري الاستعادة...' : 'تأكيد واستعادة البيانات'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+]]>
+  </file>
+  <file path="src/services/transactions.ts">
+<![CDATA[
+import {
+  collection,
+  doc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  limit,
+  Timestamp,
+  type Unsubscribe,
+} from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import type { Transaction } from '../types'
+import { transactionConverter } from './converters'
+
+export function subscribeTransactions(
+  uid: string,
+  range: { start: Date; end: Date },
+  cb: (transactions: Transaction[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(
+    colRef,
+    where('date', '>=', Timestamp.fromDate(range.start)),
+    where('date', '<', Timestamp.fromDate(range.end)),
+    orderBy('date', 'desc')
+  )
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => d.data())
+      cb(items)
+    },
+    (err) => {
+      console.error('subscribeTransactions error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function getRecentTransactions(
+  uid: string,
+  limitCount = 100
+): Promise<Transaction[]> {
+  try {
+    const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+    const q = query(colRef, orderBy('date', 'desc'), limit(limitCount))
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((d) => d.data())
+  } catch (err) {
+    console.error('getRecentTransactions error:', err)
+    return []
+  }
+}
+
+export async function addTransaction(
+  uid: string,
+  tx: Omit<Transaction, 'id' | 'createdAt'>
+): Promise<string> {
+  if (!Number.isInteger(tx.amountFils) || tx.amountFils <= 0) {
+    throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const docRef = await addDoc(colRef, {
+    ...tx,
+    id: '',
+    note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
+    createdAt: new Date(),
+  })
+
+  return docRef.id
+}
+
+export async function updateTransaction(
+  uid: string,
+  id: string,
+  tx: Partial<Omit<Transaction, 'id' | 'createdAt'>>
+): Promise<void> {
+  if (tx.amountFils !== undefined) {
+    if (!Number.isInteger(tx.amountFils) || tx.amountFils <= 0) {
+      throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+    }
+  }
+
+  const docRef = doc(db, 'users', uid, 'transactions', id)
+  const payload: Record<string, unknown> = {}
+
+  if (tx.type !== undefined) {
+    payload.type = tx.type
+  }
+  if (tx.amountFils !== undefined) {
+    payload.amountFils = tx.amountFils
+  }
+  if (tx.categoryId !== undefined) {
+    payload.categoryId = tx.categoryId
+  }
+  if (tx.date !== undefined) {
+    payload.date = tx.date instanceof Date ? Timestamp.fromDate(tx.date) : tx.date
+  }
+  if (tx.title !== undefined) {
+    payload.title = typeof tx.title === 'string' ? tx.title.trim().slice(0, 100) : ''
+  }
+  if (tx.note !== undefined) {
+    payload.note = typeof tx.note === 'string' ? tx.note.slice(0, 500) : ''
+  }
+  if (tx.recurringId !== undefined) {
+    payload.recurringId = tx.recurringId
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(docRef, payload)
+  }
+}
+
+export async function deleteTransaction(uid: string, id: string): Promise<void> {
+  const docRef = doc(db, 'users', uid, 'transactions', id)
+  await deleteDoc(docRef)
+}
+
+export async function getAllTransactions(uid: string): Promise<Transaction[]> {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(colRef, orderBy('date', 'desc'))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => d.data())
+}
+
+export function subscribePriorBalance(
+  uid: string,
+  beforeDate: Date,
+  cb: (balance: number) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(
+    colRef,
+    where('date', '<', Timestamp.fromDate(beforeDate)),
+    orderBy('date', 'desc')
+  )
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      let balance = 0
+      for (const d of snapshot.docs) {
+        const tx = d.data()
+        if (tx.type === 'income') {
+          balance += tx.amountFils || 0
+        } else if (tx.type === 'expense') {
+          balance -= tx.amountFils || 0
+        }
+      }
+      cb(balance)
+    },
+    (err) => {
+      console.error('subscribePriorBalance error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function getPriorBalance(uid: string, beforeDate: Date): Promise<number> {
+  try {
+    const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+    const q = query(
+      colRef,
+      where('date', '<', Timestamp.fromDate(beforeDate))
+    )
+    const snap = await getDocs(q)
+    let balance = 0
+    for (const d of snap.docs) {
+      const tx = d.data()
+      if (tx.type === 'income') {
+        balance += tx.amountFils || 0
+      } else if (tx.type === 'expense') {
+        balance -= tx.amountFils || 0
+      }
+    }
+    return balance
+  } catch (err) {
+    console.error('getPriorBalance error:', err)
+    return 0
+  }
+}
+
+
+]]>
+  </file>
+  <file path="src/services/recurring.ts">
+<![CDATA[
+import {
+  collection,
+  doc,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  writeBatch,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  Timestamp,
+  serverTimestamp,
+  type Unsubscribe,
+} from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import type { Recurring } from '../types'
+import { recurringConverter } from './converters'
+import { calculateDueOccurrences, getDeterministicTxId } from '../lib/recurring'
+
+export function subscribeRecurring(
+  uid: string,
+  cb: (recurring: Recurring[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
+
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => d.data())
+      cb(items)
+    },
+    (err) => {
+      console.error('subscribeRecurring error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function addRecurring(
+  uid: string,
+  rec: Omit<Recurring, 'id'>
+): Promise<string> {
+  if (!Number.isInteger(rec.amountFils) || rec.amountFils <= 0) {
+    throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
+  const docRef = await addDoc(colRef, {
+    ...rec,
+    id: '',
+    note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+  })
+
+  return docRef.id
+}
+
+export async function updateRecurring(
+  uid: string,
+  id: string,
+  rec: Partial<Omit<Recurring, 'id'>>
+): Promise<void> {
+  if (rec.amountFils !== undefined) {
+    if (!Number.isInteger(rec.amountFils) || rec.amountFils <= 0) {
+      throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+    }
+  }
+
+  const docRef = doc(db, 'users', uid, 'recurring', id)
+  const payload: Record<string, unknown> = {}
+
+  if (rec.type !== undefined) {
+    payload.type = rec.type
+  }
+  if (rec.amountFils !== undefined) {
+    payload.amountFils = rec.amountFils
+  }
+  if (rec.categoryId !== undefined) {
+    payload.categoryId = rec.categoryId
+  }
+  if (rec.title !== undefined) {
+    payload.title = typeof rec.title === 'string' ? rec.title.trim().slice(0, 100) : ''
+  }
+  if (rec.note !== undefined) {
+    payload.note = typeof rec.note === 'string' ? rec.note.slice(0, 500) : ''
+  }
+  if (rec.frequency !== undefined) {
+    payload.frequency = rec.frequency
+  }
+  if (rec.startDate !== undefined) {
+    payload.startDate =
+      rec.startDate instanceof Date ? Timestamp.fromDate(rec.startDate) : rec.startDate
+  }
+  if (rec.nextDate !== undefined) {
+    payload.nextDate =
+      rec.nextDate instanceof Date ? Timestamp.fromDate(rec.nextDate) : rec.nextDate
+  }
+  if (rec.endDate !== undefined) {
+    payload.endDate =
+      rec.endDate === null
+        ? null
+        : rec.endDate instanceof Date
+          ? Timestamp.fromDate(rec.endDate)
+          : rec.endDate
+  }
+  if (rec.active !== undefined) {
+    payload.active = Boolean(rec.active)
+  }
+  if (rec.circleId !== undefined) {
+    payload.circleId = rec.circleId
+  }
+  if (rec.skipMonth !== undefined) {
+    payload.skipMonth = Math.round(rec.skipMonth)
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(docRef, payload)
+  }
+}
+
+export async function deleteRecurring(uid: string, id: string): Promise<void> {
+  const docRef = doc(db, 'users', uid, 'recurring', id)
+  await deleteDoc(docRef)
+}
+
+/**
+ * Checks for all due recurring transactions up to `today`,
+ * creates idempotent transactions with deterministic IDs, and updates recurring items.
+ * Returns the number of new transactions created.
+ */
+export async function processDueRecurring(
+  uid: string,
+  today: Date = new Date()
+): Promise<number> {
+  const endOfToday = new Date(today.getTime())
+  endOfToday.setHours(23, 59, 59, 999)
+
+  const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
+  const q = query(
+    colRef,
+    where('active', '==', true),
+    where('nextDate', '<=', Timestamp.fromDate(endOfToday))
+  )
+
+  const snap = await getDocs(q)
+  if (snap.empty) {
+    return 0
+  }
+
+  let createdCount = 0
+  let batchHasWrites = false
+  const batch = writeBatch(db)
+
+  for (const docSnap of snap.docs) {
+    const rec = docSnap.data()
+    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, endOfToday)
+
+    if (dates.length > 0) {
+      for (const occDate of dates) {
+        const txId = getDeterministicTxId(rec.id, occDate)
+        const txRef = doc(db, 'users', uid, 'transactions', txId)
+        const txSnap = await getDoc(txRef)
+
+        if (!txSnap.exists()) {
+          const newTxData: Record<string, unknown> = {
+            type: rec.type,
+            amountFils: rec.amountFils,
+            categoryId: rec.categoryId,
+            date: Timestamp.fromDate(occDate),
+            note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+            recurringId: rec.id,
+            createdAt: serverTimestamp(),
+          }
+          if (rec.title) {
+            newTxData.title = rec.title.slice(0, 100)
+          }
+          batch.set(txRef, newTxData)
+          createdCount++
+        }
+      }
+    }
+
+    const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+    const updatePayload: Record<string, unknown> = {
+      nextDate: Timestamp.fromDate(newNextDate),
+    }
+    if (shouldDeactivate) {
+      updatePayload.active = false
+    }
+    batch.update(recRef, updatePayload)
+    batchHasWrites = true
+  }
+
+  if (batchHasWrites) {
+    await batch.commit()
+  }
+
+  return createdCount
+}
+
+]]>
+  </file>
+  <file path="src/services/userProfile.ts">
+<![CDATA[
+import {
+  doc,
+  getDoc,
+  writeBatch,
+  updateDoc,
+  onSnapshot,
+  serverTimestamp,
+  type Unsubscribe,
+} from 'firebase/firestore'
+import type { User } from 'firebase/auth'
+import { db } from '../lib/firebase'
+import type { UserSettings } from '../types'
+import { userSettingsConverter } from './converters'
+import { addDefaultCategoriesToBatch } from './seed'
+
+export async function ensureUserProfile(user: User): Promise<UserSettings> {
+  const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
+  const snap = await getDoc(userRef)
+
+  if (snap.exists()) {
+    return snap.data()
+  }
+
+  const initialSettings: UserSettings = {
+    uid: user.uid,
+    displayName: (user.displayName || 'مستخدم').slice(0, 100),
+    currency: 'JOD',
+    monthStartDay: 1,
+    theme: 'system',
+  }
+
+  // Atomically create user profile document AND seed default categories in ONE writeBatch
+  const batch = writeBatch(db)
+  const rawUserDoc = doc(db, 'users', user.uid)
+  batch.set(rawUserDoc, {
+    displayName: initialSettings.displayName,
+    currency: initialSettings.currency,
+    monthStartDay: initialSettings.monthStartDay,
+    theme: initialSettings.theme,
+    createdAt: serverTimestamp(),
+  })
+  addDefaultCategoriesToBatch(batch, user.uid)
+  await batch.commit()
+
+  return initialSettings
+}
+
+export function subscribeUserSettings(
+  uid: string,
+  cb: (settings: UserSettings | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const userRef = doc(db, 'users', uid).withConverter(userSettingsConverter)
+  return onSnapshot(
+    userRef,
+    (snap) => {
+      cb(snap.exists() ? snap.data() : null)
+    },
+    (err) => {
+      console.error('subscribeUserSettings error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function updateUserSettings(
+  uid: string,
+  partial: Partial<Omit<UserSettings, 'uid' | 'createdAt'>>
+): Promise<void> {
+  const userRef = doc(db, 'users', uid)
+  const payload: Record<string, unknown> = {}
+
+  if (partial.displayName !== undefined) {
+    payload.displayName = partial.displayName.slice(0, 100)
+  }
+  if (partial.currency !== undefined) {
+    payload.currency = (partial.currency || 'JOD').trim().slice(0, 20)
+  }
+  if (partial.monthStartDay !== undefined) {
+    payload.monthStartDay = Math.min(28, Math.max(1, Math.round(partial.monthStartDay)))
+  }
+  if (partial.theme !== undefined) {
+    payload.theme = partial.theme
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(userRef, payload)
+  }
+}
+
+]]>
+  </file>
+  <file path="src/services/seed.ts">
+<![CDATA[
+import {
+  writeBatch,
+  collection,
+  doc,
+  getDocs,
+  type WriteBatch,
+} from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import type { TxType } from '../types'
+
+export interface SeedCategory {
+  name: string
+  type: TxType
+  icon: string
+  color: string
+  archived: boolean
+  order: number
+}
+
+export const DEFAULT_CATEGORIES: ReadonlyArray<SeedCategory> = [
+  // Expense categories
+  { name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#F59E0B', archived: false, order: 0 },
+  { name: 'مطاعم', type: 'expense', icon: '☕', color: '#EA580C', archived: false, order: 1 },
+  { name: 'مواصلات ووقود', type: 'expense', icon: '⛽', color: '#3B82F6', archived: false, order: 2 },
+  { name: 'إيجار وسكن', type: 'expense', icon: '🏠', color: '#6366F1', archived: false, order: 3 },
+  { name: 'فواتير', type: 'expense', icon: '💡', color: '#EAB308', archived: false, order: 4 },
+  { name: 'اتصالات', type: 'expense', icon: '📱', color: '#06B6D4', archived: false, order: 5 },
+  { name: 'صحة', type: 'expense', icon: '💊', color: '#EF4444', archived: false, order: 6 },
+  { name: 'ملابس وإكسسوارات', type: 'expense', icon: '👕', color: '#EC4899', archived: false, order: 7 },
+  { name: 'ترفيه', type: 'expense', icon: '🎮', color: '#8B5CF6', archived: false, order: 8 },
+  { name: 'تعليم', type: 'expense', icon: '📚', color: '#14B8A6', archived: false, order: 9 },
+  { name: 'اشتراكات', type: 'expense', icon: '🔁', color: '#64748B', archived: false, order: 10 },
+  { name: 'الهدايا والمناسبات', type: 'expense', icon: '🎁', color: '#F43F5E', archived: false, order: 11 },
+  { name: 'التأمين', type: 'expense', icon: '🛡️', color: '#0284C7', archived: false, order: 12 },
+  { name: 'العطاء الخيري', type: 'expense', icon: '🤲', color: '#10B981', archived: false, order: 13 },
+  { name: 'المصاريف المصرفية', type: 'expense', icon: '🏦', color: '#475569', archived: false, order: 14 },
+  { name: 'سداد الديون والأقساط', type: 'expense', icon: '💳', color: '#D97706', archived: false, order: 15 },
+  { name: 'العناية الشخصية', type: 'expense', icon: '✨', color: '#A855F7', archived: false, order: 16 },
+  { name: 'أخرى', type: 'expense', icon: '➕', color: '#94A3B8', archived: false, order: 17 },
+
+  // Income categories
+  { name: 'راتب', type: 'income', icon: '💼', color: '#10B981', archived: false, order: 18 },
+  { name: 'عمل حر', type: 'income', icon: '💻', color: '#0EA5E9', archived: false, order: 19 },
+  { name: 'هدايا', type: 'income', icon: '🎁', color: '#A855F7', archived: false, order: 20 },
+  { name: 'استثمار', type: 'income', icon: '📈', color: '#059669', archived: false, order: 21 },
+  { name: 'أخرى', type: 'income', icon: '➕', color: '#64748B', archived: false, order: 22 },
+]
+
+export function addDefaultCategoriesToBatch(batch: WriteBatch, uid: string): void {
+  const categoriesRef = collection(db, 'users', uid, 'categories')
+
+  for (const cat of DEFAULT_CATEGORIES) {
+    const docRef = doc(categoriesRef, `seed_${cat.type}_${cat.order}`)
+    batch.set(docRef, {
+      name: cat.name,
+      type: cat.type,
+      icon: cat.icon,
+      color: cat.color,
+      archived: cat.archived,
+      order: cat.order,
+    })
+  }
+}
+
+export async function seedDefaultCategories(uid: string): Promise<void> {
+  const batch = writeBatch(db)
+  addDefaultCategoriesToBatch(batch, uid)
+  await batch.commit()
+}
+
+/**
+ * Syncs any renamed or newly added default categories to existing user accounts.
+ */
+export async function syncCategoriesForUser(uid: string): Promise<void> {
+  const categoriesRef = collection(db, 'users', uid, 'categories')
+  const snap = await getDocs(categoriesRef)
+
+  if (snap.empty) {
+    await seedDefaultCategories(uid)
+    return
+  }
+
+  const existingDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; name: string; type: TxType; order?: number }))
+  const existingNames = new Set(existingDocs.map((c) => c.name))
+  const batch = writeBatch(db)
+  let changed = false
+
+  // Handle renames
+  for (const docItem of existingDocs) {
+    if (docItem.name === 'تسوق وملابس') {
+      const ref = doc(categoriesRef, docItem.id)
+      batch.update(ref, { name: 'ملابس وإكسسوارات' })
+      existingNames.delete('تسوق وملابس')
+      existingNames.add('ملابس وإكسسوارات')
+      changed = true
+    } else if (docItem.name === 'عائلة وهدايا') {
+      const ref = doc(categoriesRef, docItem.id)
+      batch.update(ref, { name: 'الهدايا والمناسبات' })
+      existingNames.delete('عائلة وهدايا')
+      existingNames.add('الهدايا والمناسبات')
+      changed = true
+    }
+  }
+
+  // Handle missing new categories
+  let maxOrder = existingDocs.reduce((acc, c) => Math.max(acc, c.order ?? 0), 0)
+
+  for (const defaultCat of DEFAULT_CATEGORIES) {
+    if (!existingNames.has(defaultCat.name)) {
+      maxOrder++
+      const newDocRef = doc(categoriesRef)
+      batch.set(newDocRef, {
+        name: defaultCat.name,
+        type: defaultCat.type,
+        icon: defaultCat.icon,
+        color: defaultCat.color,
+        archived: false,
+        order: maxOrder,
+      })
+      changed = true
+    }
+  }
+
+  if (changed) {
+    await batch.commit()
+  }
+}
+
+]]>
+  </file>
+  <file path="src/types/index.ts">
+<![CDATA[
+export type TxType = 'expense' | 'income'
+
+export type Frequency = 'weekly' | 'monthly' | 'yearly'
+
+export type ThemePreference = 'system' | 'light' | 'dark'
+
+export interface Category {
+  id: string
+  name: string
+  type: TxType
+  icon: string
+  color: string
+  archived: boolean
+  order: number
+}
+
+export interface Transaction {
+  id: string
+  type: TxType
+  amountFils: number
+  categoryId: string
+  date: Date
+  title?: string
+  note: string
+  recurringId?: string
+  createdAt: Date
+}
+
+export interface Recurring {
+  id: string
+  type: TxType
+  amountFils: number
+  categoryId: string
+  title?: string
+  note: string
+  frequency: Frequency
+  startDate: Date
+  nextDate: Date
+  endDate?: Date | null
+  active: boolean
+  circleId?: string
+  skipMonth?: number
+  createdAt?: Date
+}
+
+export interface UserSettings {
+  uid?: string
+  displayName: string
+  currency: string
+  monthStartDay: number
+  theme: ThemePreference
+  rolloverBalance?: boolean
+  createdAt?: Date
+}
+
+export type DebtType = 'lent' | 'borrowed'
+
+export interface DebtPayment {
+  id: string
+  amountFils: number
+  date: Date
+  note?: string
+  createdAt: Date
+}
+
+export interface Debt {
+  id: string
+  personName: string
+  type: DebtType
+  amountFils: number
+  paidFils: number
+  startDate: Date
+  dueDate?: Date | null
+  note: string
+  settled: boolean
+  payments: DebtPayment[]
+  createdAt: Date
+}
+
+export interface CircleMember {
+  id: string
+  name: string
+  turnMonth: number
+  paidMonths: number[] // Array of month numbers (1..membersCount) they have paid
+}
+
+export interface MoneyCircle {
+  id: string
+  name: string
+  monthlyAmountFils: number
+  membersCount: number
+  totalAmountFils: number
+  myTurnMonth: number
+  startDate: Date
+  members: CircleMember[]
+  status: 'active' | 'completed'
+  recurringId?: string
+  isManager?: boolean
+  createdAt: Date
+}
+
+
+]]>
+  </file>
+  <file path="src/App.tsx">
+<![CDATA[
+import { lazy } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+import { AppShell } from './components/layout/AppShell'
+import { DashboardPage } from './pages/DashboardPage'
+import { TransactionsPage } from './pages/TransactionsPage'
+import { LoginPage } from './pages/LoginPage'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { AuthProvider } from './hooks/useAuth'
+import { AppDataProvider } from './context/AppDataContext'
+import { ToastProvider } from './hooks/useToast'
+import { SelectedMonthProvider } from './hooks/useSelectedMonth'
+import { TransactionModalProvider } from './hooks/useTransactionModal'
+import { ToastContainer } from './components/ui/Toast'
+import { useTheme } from './hooks/useTheme'
+import { useRecurringProcessor } from './hooks/useRecurringProcessor'
+
+// Lazy loaded secondary/heavy pages to prevent blocking the initial bundle
+const DebtsPage = lazy(() => import('./pages/DebtsPage').then((m) => ({ default: m.DebtsPage })))
+const RecurringPage = lazy(() => import('./pages/RecurringPage').then((m) => ({ default: m.RecurringPage })))
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })))
+const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then((m) => ({ default: m.CategoriesPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const ToolsPage = lazy(() => import('./pages/ToolsPage').then((m) => ({ default: m.ToolsPage })))
+
+function AppRoutes() {
+  // Initialize and sync theme with user settings and localStorage
+  useTheme()
+
+  // Process any due recurring transactions when user is logged in
+  useRecurringProcessor()
+
+  return (
+    <Routes>
+      {/* Auth Route without shell (redirects to / if already logged in) */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Protected Application Routes wrapped in AppShell */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<DashboardPage />} />
+        <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="debts" element={<DebtsPage />} />
+        <Route path="tools" element={<ToolsPage />} />
+        <Route path="recurring" element={<RecurringPage />} />
+        <Route path="reports" element={<ReportsPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppDataProvider>
+          <ToastProvider>
+            <SelectedMonthProvider>
+              <TransactionModalProvider>
+                <AppRoutes />
+                <ToastContainer />
+              </TransactionModalProvider>
+            </SelectedMonthProvider>
+          </ToastProvider>
+        </AppDataProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
+
+export default App
+
+]]>
+  </file>
+</repository>

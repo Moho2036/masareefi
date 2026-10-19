@@ -63,6 +63,17 @@ export function formatMonthLabel(date: Date): string {
 }
 
 /**
+ * Formats a financial date range into an Arabic descriptive string with Western digits.
+ * Example: "25 سبتمبر - 24 أكتوبر"
+ */
+export function formatFinancialRangeLabel(range: { start: Date; end: Date }): string {
+  const inclusiveEnd = subDays(range.end, 1)
+  const startStr = toWesternDigits(format(range.start, 'd MMMM', { locale: ar }))
+  const endStr = toWesternDigits(format(inclusiveEnd, 'd MMMM', { locale: ar }))
+  return `${startStr} - ${endStr}`
+}
+
+/**
  * Formats a transaction day header.
  * - Today: "اليوم - السبت 4 أكتوبر"
  * - Yesterday: "أمس - الجمعة 3 أكتوبر"

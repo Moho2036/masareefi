@@ -6,7 +6,7 @@ import {
   Cell,
   Tooltip,
 } from 'recharts'
-import { formatJOD } from '../../lib/money'
+import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
 import type { CategoryDistributionItem } from '../../lib/reports'
 
@@ -22,6 +22,7 @@ interface CustomTooltipProps {
 }
 
 const CustomPieTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
+  const { format } = useCurrency()
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
     return (
@@ -31,7 +32,7 @@ const CustomPieTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
           <span className="truncate">{item.name}</span>
         </div>
         <div className="text-red-500 dark:text-red-400 font-black text-sm">
-          {formatJOD(item.amountFils)}
+          {format(item.amountFils)}
         </div>
         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
           {item.percentage}% من إجمالي المصاريف
@@ -42,11 +43,17 @@ const CustomPieTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
   return null
 }
 
-export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
+export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
   data,
   className,
   height = 240,
 }) => {
+  const { format } = useCurrency()
+  const totalExpenses = React.useMemo(
+    () => data.reduce((sum, item) => sum + item.amountFils, 0),
+    [data]
+  )
+
   if (data.length === 0) {
     return (
       <div
@@ -66,7 +73,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
   return (
     <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-4 items-center', className)}>
       {/* Pie Donut Chart */}
-      <div className="w-full relative" style={{ height }}>
+      <div className="w-full relative flex items-center justify-center" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -78,7 +85,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
               innerRadius={55}
               outerRadius={80}
               paddingAngle={3}
-              animationDuration={800}
+              animationDuration={300}
             >
               {data.map((entry) => (
                 <Cell
@@ -91,11 +98,21 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
             <Tooltip content={<CustomPieTooltip />} />
           </PieChart>
         </ResponsiveContainer>
+
+        {/* Donut Center Label: Total Expenses */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none text-center">
+          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+            الإجمالي
+          </span>
+          <span className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">
+            {format(totalExpenses)}
+          </span>
+        </div>
       </div>
 
-      {/* Legend with emojis, names, amounts and percentages */}
-      <div className="space-y-2 max-h-56 overflow-y-auto pe-1">
-        {data.slice(0, 6).map((item) => (
+      {/* Legend with emojis, names, amounts and percentages (No inner scroll trap) */}
+      <div className="space-y-1.5 w-full">
+        {data.slice(0, 5).map((item) => (
           <div
             key={item.categoryId}
             className="flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-xs"
@@ -112,7 +129,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="font-bold text-slate-800 dark:text-slate-100">
-                {formatJOD(item.amountFils)}
+                {format(item.amountFils)}
               </span>
               <span className="text-[11px] font-semibold text-slate-400 min-w-8 text-end">
                 {item.percentage}%
@@ -120,12 +137,15 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
             </div>
           </div>
         ))}
-        {data.length > 6 && (
-          <div className="text-[11px] text-center text-slate-400 pt-1">
-            + {data.length - 6} تصنيفات أخرى
+        {data.length > 5 && (
+          <div className="text-[11px] text-center text-slate-400 pt-0.5">
+            + {data.length - 5} تصنيفات أخرى
           </div>
         )}
       </div>
     </div>
   )
-}
+})
+
+CategoryPieChart.displayName = 'CategoryPieChart'
+

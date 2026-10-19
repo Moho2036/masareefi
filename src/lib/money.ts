@@ -1,15 +1,69 @@
-export interface FormatJODOptions {
-  showCurrency?: boolean
+export interface CurrencyInfo {
+  code: string
+  name: string
+  symbol: string
+  decimals: number
+  flag: string
 }
 
-const jodFormatter = new Intl.NumberFormat('ar-JO', {
-  numberingSystem: 'latn',
-  minimumFractionDigits: 3,
-  maximumFractionDigits: 3,
-})
+export const PRESET_CURRENCIES: Record<string, CurrencyInfo> = {
+  JOD: { code: 'JOD', name: 'دينار أردني', symbol: 'د.أ', decimals: 3, flag: '🇯🇴' },
+  SAR: { code: 'SAR', name: 'ريال سعودي', symbol: 'ر.س', decimals: 2, flag: '🇸🇦' },
+  USD: { code: 'USD', name: 'دولار أمريكي', symbol: '$', decimals: 2, flag: '🇺🇸' },
+  EUR: { code: 'EUR', name: 'يورو أوروبي', symbol: '€', decimals: 2, flag: '🇪🇺' },
+  AED: { code: 'AED', name: 'درهم إماراتي', symbol: 'د.إ', decimals: 2, flag: '🇦🇪' },
+}
+
+export function getCurrencyConfig(currencyCode?: string): CurrencyInfo {
+  if (!currencyCode || currencyCode === 'JOD') {
+    return PRESET_CURRENCIES.JOD
+  }
+  if (PRESET_CURRENCIES[currencyCode]) {
+    return PRESET_CURRENCIES[currencyCode]
+  }
+  // Custom user currency: default to 2 decimal places with the custom string as symbol
+  const clean = currencyCode.trim().slice(0, 20)
+  return {
+    code: clean,
+    name: clean,
+    symbol: clean,
+    decimals: 2,
+    flag: '🪙',
+  }
+}
 
 /**
- * Converts a dinar amount (string or number) into integer fils (1 JOD = 1000 fils).
+ * Returns a suitable input placeholder according to currency decimal places.
+ * e.g. 3 decimals -> '0.000', 2 decimals -> '0.00'
+ */
+export function getCurrencyPlaceholder(decimals: number): string {
+  return decimals === 3 ? '0.000' : '0.00'
+}
+
+export interface FormatOptions {
+  showCurrency?: boolean
+  currency?: string
+}
+
+export type FormatJODOptions = FormatOptions
+
+const formattersCache = new Map<number, Intl.NumberFormat>()
+
+function getFormatter(decimals: number): Intl.NumberFormat {
+  let formatter = formattersCache.get(decimals)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('ar-JO', {
+      numberingSystem: 'latn',
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })
+    formattersCache.set(decimals, formatter)
+  }
+  return formatter
+}
+
+/**
+ * Converts a currency amount (string or number) into integer thousandths (1 unit = 1000 fils/base units).
  * Handles inputs like '12.5', '12.500', '1,250.500', '12,5', '12,500', Arabic numerals, etc.
  */
 export function toFils(input: string | number): number {
@@ -49,15 +103,8 @@ export function toFils(input: string | number): number {
       // Multiple commas e.g. 1,000,000 -> thousands separator
       clean = clean.replace(/,/g, '')
     } else {
-      // Single comma
-      const parts = clean.split(',')
-      // If the part after comma is exactly 3 digits, treat as thousands separator per "strip spaces/commas, parse"
-      if (parts[1] && parts[1].length === 3) {
-        clean = clean.replace(',', '')
-      } else {
-        // e.g. 12,5 or 12,50 -> decimal comma
-        clean = clean.replace(',', '.')
-      }
+      // Single comma and no dot: always treat as decimal comma
+      clean = clean.replace(',', '.')
     }
   }
 
@@ -67,7 +114,7 @@ export function toFils(input: string | number): number {
 }
 
 /**
- * Converts integer fils back to decimal dinars (e.g. 12500 -> 12.5).
+ * Converts integer base units back to decimal units (e.g. 12500 -> 12.5).
  */
 export function fromFils(fils: number): number {
   if (isNaN(fils) || !isFinite(fils)) return 0
@@ -75,15 +122,30 @@ export function fromFils(fils: number): number {
 }
 
 /**
- * Formats fils as Jordan Dinar representation (e.g. 12500 -> "12.500 د.أ").
+ * Formats amount according to specified currency (or JOD by default).
  */
-export function formatJOD(fils: number, opts: FormatJODOptions = {}): string {
+export function formatMoney(
+  fils: number,
+  currencyCode?: string,
+  opts: FormatOptions = {}
+): string {
+  const code = currencyCode || opts.currency
+  const config = getCurrencyConfig(code)
   const amount = fromFils(fils)
-  const formattedNumber = jodFormatter.format(amount)
+  const formatter = getFormatter(config.decimals)
+  const formattedNumber = formatter.format(amount)
+
   if (opts.showCurrency === false) {
     return formattedNumber
   }
-  return `${formattedNumber} د.أ`
+  return `${formattedNumber} ${config.symbol}`
+}
+
+/**
+ * Formats fils as currency representation (defaults to JOD for backward compatibility).
+ */
+export function formatJOD(fils: number, opts: FormatOptions = {}): string {
+  return formatMoney(fils, opts.currency, opts)
 }
 
 /**
@@ -94,9 +156,9 @@ export function formatJOD(fils: number, opts: FormatJODOptions = {}): string {
 export function formatSigned(
   fils: number,
   type: 'expense' | 'income',
-  opts: FormatJODOptions = {},
+  opts: FormatOptions = {}
 ): string {
   const prefix = type === 'income' ? '+ ' : '- '
-  const absFormatted = formatJOD(Math.abs(fils), opts)
+  const absFormatted = formatMoney(Math.abs(fils), opts.currency, opts)
   return `${prefix}${absFormatted}`
 }

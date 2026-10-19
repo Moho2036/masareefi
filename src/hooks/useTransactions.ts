@@ -11,7 +11,15 @@ export interface UseTransactionsResult {
   refresh: () => void
 }
 
-export function useTransactions(range: { start: Date; end: Date }): UseTransactionsResult {
+export interface UseTransactionsOptions {
+  enabled?: boolean
+}
+
+export function useTransactions(
+  range: { start: Date; end: Date },
+  options?: UseTransactionsOptions
+): UseTransactionsResult {
+  const enabled = options?.enabled ?? true
   const { user } = useAuth()
   const monthContext = useContext(SelectedMonthContext)
   const refreshKey = monthContext?.refreshKey ?? 0
@@ -27,25 +35,14 @@ export function useTransactions(range: { start: Date; end: Date }): UseTransacti
     setRefreshTick((t) => t + 1)
   }, [])
 
-  // Auto-refresh when user switches back to tab or unlocks phone
   useEffect(() => {
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        setRefreshTick((t) => t + 1)
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('focus', handleVisibility)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('focus', handleVisibility)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!user) {
+    if (!user || !enabled || startTime >= endTime) {
       return
     }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true)
+    setError(null)
 
     const unsubscribe = subscribeTransactions(
       user.uid,
@@ -61,12 +58,13 @@ export function useTransactions(range: { start: Date; end: Date }): UseTransacti
     )
 
     return () => unsubscribe()
-  }, [user, startTime, endTime, refreshTick, refreshKey])
+  }, [user, enabled, startTime, endTime, refreshTick, refreshKey])
 
-  if (!user) {
+  if (!user || !enabled || startTime >= endTime) {
     return { data: [], loading: false, error: null, refresh }
   }
 
   return { data, loading, error, refresh }
 }
+
 

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useContext } from 'react'
 import { useAuth } from './useAuth'
 import { subscribeUserSettings, updateUserSettings } from '../services/userProfile'
+import { AppDataContext } from '../context/AppDataContext'
 import type { UserSettings } from '../types'
 
 export interface UseUserSettingsResult {
@@ -11,42 +12,63 @@ export interface UseUserSettingsResult {
 }
 
 export function useUserSettings(): UseUserSettingsResult {
+  const appData = useContext(AppDataContext)
   const { user } = useAuth()
-  const [data, setData] = useState<UserSettings | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+
+  // Local fallback states if used outside AppDataProvider
+  const [localData, setLocalData] = useState<UserSettings | null>(null)
+  const [localLoading, setLocalLoading] = useState(true)
+  const [localError, setLocalError] = useState<Error | null>(null)
 
   useEffect(() => {
-    if (!user) {
+    // If context is provided, AppDataProvider manages the subscription
+    if (appData || !user) {
       return
     }
 
     const unsubscribe = subscribeUserSettings(
       user.uid,
       (settings) => {
-        setData(settings)
-        setLoading(false)
+        setLocalData(settings)
+        setLocalLoading(false)
       },
       (err) => {
-        setError(err)
-        setLoading(false)
+        setLocalError(err)
+        setLocalLoading(false)
       }
     )
 
     return () => unsubscribe()
-  }, [user])
+  }, [appData, user])
 
-  const updateSettings = useCallback(
+  const handleUpdateSettings = useCallback(
     async (partial: Partial<Omit<UserSettings, 'uid' | 'createdAt'>>): Promise<void> => {
+      if (appData) {
+        return appData.updateSettings(partial)
+      }
       if (!user) throw new Error('No authenticated user')
       await updateUserSettings(user.uid, partial)
     },
-    [user]
+    [appData, user]
   )
 
-  if (!user) {
-    return { data: null, loading: false, error: null, updateSettings }
+  if (appData) {
+    return {
+      data: appData.settings,
+      loading: appData.settingsLoading,
+      error: appData.settingsError,
+      updateSettings: appData.updateSettings,
+    }
   }
 
-  return { data, loading, error, updateSettings }
+  if (!user) {
+    return { data: null, loading: false, error: null, updateSettings: handleUpdateSettings }
+  }
+
+  return {
+    data: localData,
+    loading: localLoading,
+    error: localError,
+    updateSettings: handleUpdateSettings,
+  }
 }

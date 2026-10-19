@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useAuth } from './useAuth'
 import { subscribeCategories } from '../services/categories'
+import { AppDataContext } from '../context/AppDataContext'
 import type { Category } from '../types'
 
 export interface UseCategoriesResult {
@@ -10,34 +11,50 @@ export interface UseCategoriesResult {
 }
 
 export function useCategories(): UseCategoriesResult {
+  const appData = useContext(AppDataContext)
   const { user } = useAuth()
-  const [data, setData] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+
+  // Local fallback states if used outside AppDataProvider
+  const [localData, setLocalData] = useState<Category[]>([])
+  const [localLoading, setLocalLoading] = useState(true)
+  const [localError, setLocalError] = useState<Error | null>(null)
 
   useEffect(() => {
-    if (!user) {
+    // If context is provided, AppDataProvider manages the subscription
+    if (appData || !user) {
       return
     }
 
     const unsubscribe = subscribeCategories(
       user.uid,
       (categories) => {
-        setData(categories)
-        setLoading(false)
+        setLocalData(categories)
+        setLocalLoading(false)
       },
       (err) => {
-        setError(err)
-        setLoading(false)
+        setLocalError(err)
+        setLocalLoading(false)
       }
     )
 
     return () => unsubscribe()
-  }, [user])
+  }, [appData, user])
+
+  if (appData) {
+    return {
+      data: appData.categories,
+      loading: appData.categoriesLoading,
+      error: appData.categoriesError,
+    }
+  }
 
   if (!user) {
     return { data: [], loading: false, error: null }
   }
 
-  return { data, loading, error }
+  return {
+    data: localData,
+    loading: localLoading,
+    error: localError,
+  }
 }

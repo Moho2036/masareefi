@@ -35,8 +35,39 @@ export interface DueOccurrencesResult {
 }
 
 /**
+ * Calculates the 1-based month index of an occurrence relative to the start date.
+ * Example: start 2026-01-15, occurrence 2026-01-15 -> 1
+ * occurrence 2026-02-15 -> 2
+ * occurrence 2026-04-15 -> 4
+ */
+export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): number {
+  const start = startDate instanceof Date ? startDate : new Date(startDate)
+  const occ = occurrenceDate instanceof Date ? occurrenceDate : new Date(occurrenceDate)
+  const diffMonths =
+    (occ.getFullYear() - start.getFullYear()) * 12 +
+    (occ.getMonth() - start.getMonth()) +
+    1
+  return diffMonths
+}
+
+/**
+ * Determines whether a recurring occurrence should be skipped.
+ * For money circles, the user's turn month is exempt from paying an installment.
+ */
+export function isOccurrenceSkipped(recurring: Recurring, occurrenceDate: Date): boolean {
+  if (recurring.skipMonth === undefined || recurring.skipMonth === null) {
+    return false
+  }
+  const monthIdx = getOccurrenceMonthIndex(recurring.startDate, occurrenceDate)
+  return monthIdx === recurring.skipMonth
+}
+
+/**
  * Calculates due occurrences for a recurring transaction up to `today`.
+ * Compares against end-of-day so occurrences due today are not skipped if opened in the morning.
  * Collects each due date and advances `nextDate` until nextDate > today or nextDate > endDate.
+ * If an occurrence matches skipMonth (e.g. money circle turn month), it is NOT added to dates
+ * (no transaction is created), but nextDate still advances past it.
  */
 export function calculateDueOccurrences(
   recurring: Recurring,
@@ -45,19 +76,32 @@ export function calculateDueOccurrences(
   const dates: Date[] = []
   let curNextDate = new Date(recurring.nextDate.getTime())
 
+  // Normalize today and endDate to end-of-day so occurrences due today (even if at noon)
+  // are processed even when the user opens the app in the morning.
+  const endOfToday = new Date(today.getTime())
+  endOfToday.setHours(23, 59, 59, 999)
+
+  const endOfEndDate = recurring.endDate ? new Date(recurring.endDate.getTime()) : null
+  if (endOfEndDate) {
+    endOfEndDate.setHours(23, 59, 59, 999)
+  }
+
   // Safety safeguard against unbounded iterations
   let loopLimit = 500
 
-  while (curNextDate <= today && loopLimit-- > 0) {
-    if (recurring.endDate && curNextDate > recurring.endDate) {
+  while (curNextDate <= endOfToday && loopLimit-- > 0) {
+    if (endOfEndDate && curNextDate > endOfEndDate) {
       break
     }
-    dates.push(new Date(curNextDate.getTime()))
+    // Only push to dates if this occurrence is NOT skipped
+    if (!isOccurrenceSkipped(recurring, curNextDate)) {
+      dates.push(new Date(curNextDate.getTime()))
+    }
     curNextDate = advanceDate(curNextDate, recurring.frequency)
   }
 
   const shouldDeactivate = Boolean(
-    recurring.endDate && curNextDate > recurring.endDate
+    endOfEndDate && curNextDate > endOfEndDate
   )
 
   return {
@@ -65,6 +109,37 @@ export function calculateDueOccurrences(
     newNextDate: curNextDate,
     shouldDeactivate,
   }
+}
+
+/**
+ * Calculates the updated nextDate when editing an existing recurring transaction whose
+ * startDate or frequency was modified.
+ * - If newStartDate is in the future (after today's date), nextDate is set to newStartDate.
+ * - Otherwise, advances from newStartDate by frequency until reaching the first upcoming occurrence (>= today).
+ */
+export function calculateNextDateOnEdit(
+  newStartDate: Date,
+  frequency: Frequency,
+  today: Date = new Date()
+): Date {
+  const startOfToday = new Date(today.getTime())
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const startOfNewStart = new Date(newStartDate.getTime())
+  startOfNewStart.setHours(0, 0, 0, 0)
+
+  if (startOfNewStart > startOfToday) {
+    return new Date(newStartDate.getTime())
+  }
+
+  let candidate = new Date(newStartDate.getTime())
+  let loopLimit = 1000
+
+  while (candidate < startOfToday && loopLimit-- > 0) {
+    candidate = advanceDate(candidate, frequency)
+  }
+
+  return candidate
 }
 
 export interface MonthlyEquivalentResult {
@@ -77,15 +152,22 @@ export interface MonthlyEquivalentResult {
  * - weekly: amount * (52 / 12)
  * - monthly: amount * 1
  * - yearly: amount / 12
+ * If an item is a money circle whose turn month matches refDate, its expense is 0 this month.
  */
 export function calculateMonthlyEquivalent(
-  items: Recurring[]
+  items: Recurring[],
+  refDate: Date = new Date()
 ): MonthlyEquivalentResult {
   let monthlyIncome = 0
   let monthlyExpense = 0
 
   for (const item of items) {
     if (!item.active) continue
+
+    // If this month is the skipped turn month for this item, no installment is due
+    if (item.type === 'expense' && isOccurrenceSkipped(item, refDate)) {
+      continue
+    }
 
     let equivalentFils = 0
     switch (item.frequency) {

@@ -105,7 +105,8 @@ describe('DEFAULT_CATEGORIES seed data', () => {
     expect(mockBatch.set).toHaveBeenCalledTimes(23)
     expect(setCalls).toHaveLength(23)
 
-    // Verify first and last category
+    // Verify deterministic IDs and first/last category
+    expect((setCalls[0].ref as DocumentReference).id).toBe('seed_expense_0')
     expect(setCalls[0].data).toEqual({
       name: 'طعام وبقالة',
       type: 'expense',
@@ -114,6 +115,7 @@ describe('DEFAULT_CATEGORIES seed data', () => {
       archived: false,
       order: 0,
     })
+    expect((setCalls[22].ref as DocumentReference).id).toBe('seed_income_22')
     expect(setCalls[22].data).toEqual({
       name: 'أخرى',
       type: 'income',

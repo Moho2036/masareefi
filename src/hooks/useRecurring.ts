@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useAuth } from './useAuth'
 import { subscribeRecurring } from '../services/recurring'
+import { AppDataContext } from '../context/AppDataContext'
 import type { Recurring } from '../types'
 
 export interface UseRecurringResult {
@@ -10,34 +11,50 @@ export interface UseRecurringResult {
 }
 
 export function useRecurring(): UseRecurringResult {
+  const appData = useContext(AppDataContext)
   const { user } = useAuth()
-  const [data, setData] = useState<Recurring[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+
+  // Local fallback states if used outside AppDataProvider
+  const [localData, setLocalData] = useState<Recurring[]>([])
+  const [localLoading, setLocalLoading] = useState(true)
+  const [localError, setLocalError] = useState<Error | null>(null)
 
   useEffect(() => {
-    if (!user) {
+    // If context is provided, AppDataProvider manages the single deduplicated subscription
+    if (appData || !user) {
       return
     }
 
     const unsubscribe = subscribeRecurring(
       user.uid,
       (items) => {
-        setData(items)
-        setLoading(false)
+        setLocalData(items)
+        setLocalLoading(false)
       },
       (err) => {
-        setError(err)
-        setLoading(false)
+        setLocalError(err)
+        setLocalLoading(false)
       }
     )
 
     return () => unsubscribe()
-  }, [user])
+  }, [appData, user])
+
+  if (appData) {
+    return {
+      data: appData.recurring,
+      loading: appData.recurringLoading,
+      error: appData.recurringError,
+    }
+  }
 
   if (!user) {
     return { data: [], loading: false, error: null }
   }
 
-  return { data, loading, error }
+  return {
+    data: localData,
+    loading: localLoading,
+    error: localError,
+  }
 }

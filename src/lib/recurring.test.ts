@@ -4,6 +4,9 @@ import {
   getDeterministicTxId,
   calculateDueOccurrences,
   calculateMonthlyEquivalent,
+  calculateNextDateOnEdit,
+  getOccurrenceMonthIndex,
+  isOccurrenceSkipped,
 } from './recurring'
 import type { Recurring } from '../types'
 
@@ -137,6 +140,31 @@ describe('recurring pure logic', () => {
       expect(result.dates[0].toISOString().slice(0, 10)).toBe('2026-03-01')
       expect(result.shouldDeactivate).toBe(true)
     })
+
+    it('processes due occurrence when user opens app in the morning (before 12:00 noon)', () => {
+      // parseLocalDateInput sets nextDate to 12:00:00 local time
+      const nextDateNoon = new Date(2026, 9, 15, 12, 0, 0)
+      const rec: Recurring = {
+        id: 'r-morning',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'c1',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date(2026, 8, 15, 12, 0, 0),
+        nextDate: nextDateNoon,
+        active: true,
+      }
+
+      // User opens app at 8:30 AM on the due date
+      const todayMorning = new Date(2026, 9, 15, 8, 30, 0)
+      const result = calculateDueOccurrences(rec, todayMorning)
+
+      expect(result.dates).toHaveLength(1)
+      expect(result.dates[0].getFullYear()).toBe(2026)
+      expect(result.dates[0].getMonth()).toBe(9)
+      expect(result.dates[0].getDate()).toBe(15)
+    })
   })
 
   describe('calculateMonthlyEquivalent', () => {
@@ -193,4 +221,145 @@ describe('recurring pure logic', () => {
       expect(result.monthlyExpense).toBe(110000) // 100000 + 10000
     })
   })
+
+  describe('calculateNextDateOnEdit', () => {
+    it('returns newStartDate when newStartDate is in the future', () => {
+      const today = new Date(2026, 9, 15) // Oct 15, 2026
+      const futureStart = new Date(2026, 10, 1) // Nov 1, 2026
+      const nextDate = calculateNextDateOnEdit(futureStart, 'monthly', today)
+
+      expect(nextDate.getFullYear()).toBe(2026)
+      expect(nextDate.getMonth()).toBe(10)
+      expect(nextDate.getDate()).toBe(1)
+    })
+
+    it('returns newStartDate when newStartDate is today', () => {
+      const today = new Date(2026, 9, 15, 9, 0, 0)
+      const startTodayNoon = new Date(2026, 9, 15, 12, 0, 0)
+      const nextDate = calculateNextDateOnEdit(startTodayNoon, 'monthly', today)
+
+      expect(nextDate.getDate()).toBe(15)
+      expect(nextDate.getMonth()).toBe(9)
+    })
+
+    it('advances past start date to next upcoming date when newStartDate is in the past', () => {
+      const today = new Date(2026, 9, 17) // Oct 17, 2026
+      const pastStart = new Date(2026, 7, 20) // Aug 20, 2026
+
+      // monthly: Aug 20 -> Sep 20 -> Oct 20 (upcoming)
+      const nextDate = calculateNextDateOnEdit(pastStart, 'monthly', today)
+      expect(nextDate.getFullYear()).toBe(2026)
+      expect(nextDate.getMonth()).toBe(9) // October
+      expect(nextDate.getDate()).toBe(20)
+    })
+
+    it('advances weekly past start date until reaching today or next cycle', () => {
+      const today = new Date(2026, 9, 17) // Oct 17, 2026
+      const pastStart = new Date(2026, 9, 3) // Oct 3 (+7 = Oct 10, +7 = Oct 17)
+
+      const nextDate = calculateNextDateOnEdit(pastStart, 'weekly', today)
+      expect(nextDate.getDate()).toBe(17)
+      expect(nextDate.getMonth()).toBe(9)
+    })
+  })
+
+  describe('Money Circle turn-month skipping logic', () => {
+    it('calculates 1-based month index accurately', () => {
+      const start = new Date(2026, 0, 1) // Jan 1, 2026
+      expect(getOccurrenceMonthIndex(start, new Date(2026, 0, 1))).toBe(1)
+      expect(getOccurrenceMonthIndex(start, new Date(2026, 1, 1))).toBe(2)
+      expect(getOccurrenceMonthIndex(start, new Date(2026, 3, 1))).toBe(4)
+      expect(getOccurrenceMonthIndex(start, new Date(2026, 9, 1))).toBe(10)
+      // Dates before start date return actual diffMonths without clamping
+      expect(getOccurrenceMonthIndex(start, new Date(2025, 11, 1))).toBe(0)
+      expect(getOccurrenceMonthIndex(start, new Date(2025, 10, 1))).toBe(-1)
+    })
+
+    it('identifies when an occurrence is the skipped turn month', () => {
+      const rec: Recurring = {
+        id: 'r_circle',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c1',
+        note: 'جمعية الأهل',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1), // Jan 1
+        nextDate: new Date(2026, 0, 1),
+        active: true,
+        circleId: 'circle_123',
+        skipMonth: 4, // Turn is Month 4 (April)
+      }
+
+      // Jan (Month 1): not skipped
+      expect(isOccurrenceSkipped(rec, new Date(2026, 0, 1))).toBe(false)
+      // Mar (Month 3): not skipped
+      expect(isOccurrenceSkipped(rec, new Date(2026, 2, 1))).toBe(false)
+      // Apr (Month 4): SKIPPED! (User's turn to receive payout)
+      expect(isOccurrenceSkipped(rec, new Date(2026, 3, 1))).toBe(true)
+      // May (Month 5): not skipped
+      expect(isOccurrenceSkipped(rec, new Date(2026, 4, 1))).toBe(false)
+    })
+
+    it('skips generating transaction for the turn month in calculateDueOccurrences', () => {
+      // Circle started in Jan, today is May 15. User turn is Month 4 (April).
+      const rec: Recurring = {
+        id: 'r_circle',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c1',
+        note: 'جمعية الأهل',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1), // Jan 1, 2026
+        nextDate: new Date(2026, 0, 1),
+        active: true,
+        circleId: 'circle_123',
+        skipMonth: 4, // April should NOT be deducted
+      }
+
+      const today = new Date(2026, 4, 15) // May 15, 2026
+      const result = calculateDueOccurrences(rec, today)
+
+      // Expected occurrences up to May 15:
+      // Month 1 (Jan 1) -> included
+      // Month 2 (Feb 1) -> included
+      // Month 3 (Mar 1) -> included
+      // Month 4 (Apr 1) -> SKIPPED (user's turn to receive payout!)
+      // Month 5 (May 1) -> included
+      expect(result.dates.length).toBe(4) // 4 dates instead of 5
+      const dateStrings = result.dates.map((d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`)
+      expect(dateStrings).toContain('2026-1-1')
+      expect(dateStrings).toContain('2026-2-1')
+      expect(dateStrings).toContain('2026-3-1')
+      expect(dateStrings).not.toContain('2026-4-1') // April must NOT be in the created transactions!
+      expect(dateStrings).toContain('2026-5-1')
+
+      // nextDate should still correctly advance to June 1
+      expect(result.newNextDate.getMonth()).toBe(5) // June
+    })
+
+    it('waives monthly expense in calculateMonthlyEquivalent during the turn month', () => {
+      const circleRec: Recurring = {
+        id: 'r_circle',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c1',
+        note: 'جمعية',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1),
+        nextDate: new Date(2026, 3, 1),
+        active: true,
+        circleId: 'c1',
+        skipMonth: 4,
+      }
+
+      // In March (Month 3): expense is counted
+      const marchResult = calculateMonthlyEquivalent([circleRec], new Date(2026, 2, 15))
+      expect(marchResult.monthlyExpense).toBe(100000)
+
+      // In April (Month 4 - User's turn): expense is 0! (waived)
+      const aprilResult = calculateMonthlyEquivalent([circleRec], new Date(2026, 3, 15))
+      expect(aprilResult.monthlyExpense).toBe(0)
+    })
+  })
 })
+

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   LayoutGrid,
   Plus,
@@ -7,9 +7,12 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
+  Trash2,
+  AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
+import { Modal } from '../components/ui/Modal'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { CategoryForm } from '../components/CategoryForm'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -18,8 +21,14 @@ import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
-import { archiveCategory } from '../services/categories'
+import { archiveCategory, deleteCategory } from '../services/categories'
 import { countByCategory } from '../lib/aggregate'
+import {
+  getCategoryUsageMap,
+  buildUsageFromTransactions,
+  mergeUsageMaps,
+  saveCategoryUsageMap,
+} from '../lib/categoryUsage'
 import type { Category, TxType } from '../types'
 
 export const CategoriesPage: React.FC = () => {
@@ -33,16 +42,54 @@ export const CategoriesPage: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false)
+  const [catToDelete, setCatToDelete] = useState<Category | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleConfirmDelete = async () => {
+    if (!user || !catToDelete) return
+    setIsDeleting(true)
+    try {
+      await deleteCategory(user.uid, catToDelete.id)
+      showToast('تم حذف التصنيف نهائياً', 'info')
+      setCatToDelete(null)
+    } catch (err) {
+      console.error('Failed to delete category:', err)
+      showToast(err instanceof Error ? err.message : 'تعذر حذف التصنيف', 'error')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   // Transaction count per category for current financial month
   const txCounts = useMemo(() => {
     return countByCategory(transactions)
   }, [transactions])
 
-  // Active categories for the selected type
+  // Track category usage frequencies in memory
+  const usageMap = useMemo(() => {
+    const txMap = buildUsageFromTransactions(transactions)
+    return mergeUsageMaps(txMap, getCategoryUsageMap())
+  }, [transactions])
+
+  // Save merged category usage in localStorage outside render in an effect
+  useEffect(() => {
+    if (transactions.length > 0) {
+      saveCategoryUsageMap(usageMap)
+    }
+  }, [transactions.length, usageMap])
+
+  // Active categories for the selected type, sorted from most used to least used
   const activeCategories = useMemo(() => {
-    return categories.filter((c) => c.type === categoryType && !c.archived)
-  }, [categories, categoryType])
+    const filtered = categories.filter((c) => c.type === categoryType && !c.archived)
+    return [...filtered].sort((a, b) => {
+      const scoreA = (txCounts[a.id] || 0) * 1000 + (usageMap[a.id] || 0)
+      const scoreB = (txCounts[b.id] || 0) * 1000 + (usageMap[b.id] || 0)
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA // Highest usage first
+      }
+      return a.order - b.order
+    })
+  }, [categories, categoryType, txCounts, usageMap])
 
   // Archived categories for the selected type
   const archivedCategories = useMemo(() => {
@@ -81,8 +128,11 @@ export const CategoriesPage: React.FC = () => {
     }
   }
 
-  const formatCount = (count: number) => {
-    if (count === 0) return 'لا توجد معاملات هذا الشهر'
+  const formatCount = (count: number, total = 0) => {
+    if (count === 0) {
+      if (total > 0) return `0 هذا الشهر (${total} إجمالاً)`
+      return 'لا توجد معاملات مسجلة'
+    }
     if (count === 1) return 'معاملة واحدة هذا الشهر'
     if (count === 2) return 'معاملتان هذا الشهر'
     if (count >= 3 && count <= 10) return `${count} معاملات هذا الشهر`
@@ -172,7 +222,7 @@ export const CategoriesPage: React.FC = () => {
                       {cat.name}
                     </h3>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      {formatCount(count)}
+                      {formatCount(count, usageMap[cat.id] || 0)}
                     </p>
                   </div>
                 </div>
@@ -190,11 +240,23 @@ export const CategoriesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleArchive(cat)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
                     aria-label={`أرشفة تصنيف ${cat.name}`}
+                    title="أرشفة التصنيف"
                   >
                     <Archive className="w-4 h-4" />
                   </button>
+                  {count === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCatToDelete(cat)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                      aria-label={`حذف تصنيف ${cat.name} نهائياً`}
+                      title="حذف نهائي (لا توجد معاملات مرتبطة)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -223,29 +285,45 @@ export const CategoriesPage: React.FC = () => {
 
           {isArchivedExpanded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
-              {archivedCategories.map((cat) => (
-                <div
-                  key={cat.id}
-                  className="bg-slate-50 dark:bg-slate-850/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-3 opacity-80"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xl shrink-0">{cat.icon}</span>
-                    <span className="font-semibold text-sm text-slate-600 dark:text-slate-300 truncate">
-                      {cat.name}
-                    </span>
-                  </div>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<RotateCcw className="w-3.5 h-3.5" />}
-                    onClick={() => handleRestore(cat)}
-                    className="text-xs shrink-0 font-bold text-emerald-600 dark:text-emerald-400"
+              {archivedCategories.map((cat) => {
+                const count = txCounts[cat.id] || 0
+                return (
+                  <div
+                    key={cat.id}
+                    className="bg-slate-50 dark:bg-slate-850/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-3 opacity-80"
                   >
-                    استعادة
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xl shrink-0">{cat.icon}</span>
+                      <span className="font-semibold text-sm text-slate-600 dark:text-slate-300 truncate">
+                        {cat.name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<RotateCcw className="w-3.5 h-3.5" />}
+                        onClick={() => handleRestore(cat)}
+                        className="text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                      >
+                        استعادة
+                      </Button>
+                      {count === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setCatToDelete(cat)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                          aria-label={`حذف تصنيف ${cat.name} نهائياً`}
+                          title="حذف نهائي"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -258,6 +336,42 @@ export const CategoriesPage: React.FC = () => {
         initialCategory={editingCategory}
         defaultType={categoryType}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(catToDelete)}
+        onClose={() => {
+          if (!isDeleting) setCatToDelete(null)
+        }}
+        title="تأكيد حذف التصنيف"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <p className="text-sm font-semibold">
+              هل أنت متأكد من حذف تصنيف &quot;{catToDelete?.name}&quot; نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setCatToDelete(null)}
+              disabled={isDeleting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'جاري الحذف...' : 'حذف نهائي'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

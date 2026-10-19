@@ -1,7 +1,6 @@
-import React, { useState } from 'react'
-import { ChevronRight, ChevronLeft, Calendar, RotateCw } from 'lucide-react'
+import React from 'react'
+import { ChevronRight, ChevronLeft, Calendar } from 'lucide-react'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
-import { useToast } from '../../hooks/useToast'
 import { cn } from '../../lib/cn'
 
 interface MonthSelectorProps {
@@ -13,21 +12,14 @@ interface MonthSelectorProps {
 export const MonthSelector: React.FC<MonthSelectorProps> = ({
   className,
   showIcon = true,
-  showRefresh = true,
 }) => {
-  const { monthLabel, goToPreviousMonth, goToNextMonth, refreshData } = useSelectedMonth()
-  const { showToast } = useToast()
-  const [isRefreshing, setIsRefreshing] = useState(false)
-
-  const handleRefresh = () => {
-    if (isRefreshing) return
-    setIsRefreshing(true)
-    refreshData()
-    showToast('تم تحديث البيانات', 'info')
-    setTimeout(() => {
-      setIsRefreshing(false)
-    }, 600)
-  }
+  const {
+    monthLabel,
+    goToPreviousMonth,
+    goToNextMonth,
+    monthStartDay,
+    rangeLabel,
+  } = useSelectedMonth()
 
   return (
     <div
@@ -48,10 +40,17 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      {/* Month Label */}
-      <div className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-bold text-slate-800 dark:text-slate-100 select-none">
-        {showIcon && <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />}
-        <span>{monthLabel}</span>
+      {/* Month Label & Financial Period Range */}
+      <div className="flex flex-col items-center justify-center px-2 py-0.5 text-center select-none">
+        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-slate-100">
+          {showIcon && <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />}
+          <span>{monthLabel}</span>
+        </div>
+        {monthStartDay !== 1 && rangeLabel && (
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 leading-tight">
+            {rangeLabel}
+          </span>
+        )}
       </div>
 
       {/* Next month (In RTL, ChevronLeft points forward to next) */}
@@ -63,27 +62,6 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
-
-      {/* Quick Refresh Button */}
-      {showRefresh && (
-        <>
-          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:text-emerald-400 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-            aria-label="تحديث البيانات"
-            title="تحديث البيانات"
-          >
-            <RotateCw
-              className={cn(
-                'w-3.5 h-3.5 transition-transform',
-                isRefreshing && 'animate-spin text-emerald-600 dark:text-emerald-400'
-              )}
-            />
-          </button>
-        </>
-      )}
     </div>
   )
 }

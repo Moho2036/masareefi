@@ -14,6 +14,7 @@ import type { Transaction, TxType } from '../types'
 interface TransactionModalContextValue {
   openAdd: (type?: TxType) => void
   openEdit: (tx: Transaction) => void
+  openDuplicate: (tx: Transaction) => void
   closeModal: () => void
   isOpen: boolean
 }
@@ -23,16 +24,26 @@ const TransactionModalContext = createContext<TransactionModalContextValue | nul
 export function TransactionModalProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [duplicateTransaction, setDuplicateTransaction] = useState<Transaction | null>(null)
   const [defaultType, setDefaultType] = useState<TxType>('expense')
 
   const openAdd = useCallback((type: TxType = 'expense') => {
     setEditingTransaction(null)
+    setDuplicateTransaction(null)
     setDefaultType(type)
     setIsOpen(true)
   }, [])
 
   const openEdit = useCallback((tx: Transaction) => {
     setEditingTransaction(tx)
+    setDuplicateTransaction(null)
+    setDefaultType(tx.type)
+    setIsOpen(true)
+  }, [])
+
+  const openDuplicate = useCallback((tx: Transaction) => {
+    setEditingTransaction(null)
+    setDuplicateTransaction(tx)
     setDefaultType(tx.type)
     setIsOpen(true)
   }, [])
@@ -40,17 +51,25 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
   const closeModal = useCallback(() => {
     setIsOpen(false)
     setEditingTransaction(null)
+    setDuplicateTransaction(null)
   }, [])
 
   const value = useMemo(
     () => ({
       openAdd,
       openEdit,
+      openDuplicate,
       closeModal,
       isOpen,
     }),
-    [openAdd, openEdit, closeModal, isOpen]
+    [openAdd, openEdit, openDuplicate, closeModal, isOpen]
   )
+
+  const modalTitle = editingTransaction
+    ? 'تعديل المعاملة'
+    : duplicateTransaction
+      ? 'تكرار المعاملة'
+      : 'إضافة معاملة'
 
   return (
     <TransactionModalContext.Provider value={value}>
@@ -58,13 +77,16 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
       <Modal
         isOpen={isOpen}
         onClose={closeModal}
-        title={editingTransaction ? 'تعديل المعاملة' : 'إضافة معاملة'}
+        title={modalTitle}
       >
-        <TransactionForm
-          initialTransaction={editingTransaction}
-          initialType={defaultType}
-          onClose={closeModal}
-        />
+        {isOpen && (
+          <TransactionForm
+            initialTransaction={editingTransaction}
+            duplicateFrom={duplicateTransaction}
+            initialType={defaultType}
+            onClose={closeModal}
+          />
+        )}
       </Modal>
     </TransactionModalContext.Provider>
   )

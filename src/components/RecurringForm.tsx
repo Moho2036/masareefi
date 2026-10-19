@@ -8,10 +8,13 @@ import { SegmentedControl } from './ui/SegmentedControl'
 import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useToast } from '../hooks/useToast'
 import { addRecurring, updateRecurring } from '../services/recurring'
-import { toFils } from '../lib/money'
+import { toFils, fromFils } from '../lib/money'
+import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
+import { calculateNextDateOnEdit } from '../lib/recurring'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -39,6 +42,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
   const { showToast } = useToast()
+  const { format: formatCurrency, config: currencyConfig } = useCurrency()
 
   const isEditing = Boolean(initialRecurring)
 
@@ -48,8 +52,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
   const [amountStr, setAmountStr] = useState<string>(() => {
     if (!initialRecurring) return ''
-    const val = initialRecurring.amountFils / 1000
-    return String(val)
+    return String(fromFils(initialRecurring.amountFils))
   })
 
   const [categoryId, setCategoryId] = useState<string>(
@@ -88,6 +91,12 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [note, setNote] = useState<string>(initialRecurring?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const { data: circles } = useMoneyCircles()
+  const activeCircles = circles.filter((c) => c.status === 'active')
+
+  const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
+  const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
 
   // Filter available categories for current transaction type
   const availableCategories = categories.filter(
@@ -142,6 +151,19 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
     try {
       const trimmedTitle = title.trim().slice(0, 100)
       if (isEditing && initialRecurring) {
+        const initialStart =
+          initialRecurring.startDate instanceof Date
+            ? initialRecurring.startDate
+            : new Date(initialRecurring.startDate)
+        const startDateChanged =
+          format(initialStart, 'yyyy-MM-dd') !== format(parsedStartDate, 'yyyy-MM-dd')
+        const frequencyChanged = initialRecurring.frequency !== frequency
+
+        const nextDate =
+          startDateChanged || frequencyChanged
+            ? calculateNextDateOnEdit(parsedStartDate, frequency)
+            : undefined
+
         await updateRecurring(user.uid, initialRecurring.id, {
           type,
           amountFils,
@@ -150,7 +172,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           note: note.trim().slice(0, 500),
           frequency,
           startDate: parsedStartDate,
+          ...(nextDate ? { nextDate } : {}),
           endDate: parsedEndDate,
+          circleId: circleId || undefined,
+          skipMonth: skipMonth !== undefined ? skipMonth : undefined,
         })
         showToast('تم تعديل المعاملة المتكررة بنجاح', 'success')
       } else {
@@ -165,6 +190,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           nextDate: parsedStartDate,
           endDate: parsedEndDate ?? undefined,
           active: true,
+          circleId: circleId || undefined,
+          skipMonth: skipMonth !== undefined ? skipMonth : undefined,
         })
         showToast('تمت إضافة المعاملة المتكررة بنجاح', 'success')
       }
@@ -236,7 +263,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             autoFocus={!isEditing}
           />
           <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
-            د.أ
+            {currencyConfig.symbol}
           </span>
         </div>
       </div>
@@ -312,6 +339,46 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           className="w-full"
         />
       </div>
+
+      {/* Money Circle Link / Skip Month */}
+      {type === 'expense' && activeCircles.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            ربط مع جمعية نشطة (تخطي الخصم في شهر الاستلام):
+          </label>
+          <select
+            value={circleId}
+            onChange={(e) => {
+              const selectedId = e.target.value
+              setCircleId(selectedId)
+              if (selectedId) {
+                const c = activeCircles.find((circ) => circ.id === selectedId)
+                if (c) {
+                  setSkipMonth(c.myTurnMonth)
+                  setFrequency('monthly')
+                  if (!title) setTitle(`قسط ${c.name}`)
+                  if (!amountStr || parseFloat(amountStr) === 0) setAmountStr(String(fromFils(c.monthlyAmountFils)))
+                }
+              } else {
+                setSkipMonth(undefined)
+              }
+            }}
+            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="">-- ليست مرتبطة بجمعية --</option>
+            {activeCircles.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} (قسط: {formatCurrency(c.monthlyAmountFils)} - شهر استلامك: {c.myTurnMonth})
+              </option>
+            ))}
+          </select>
+          {circleId && skipMonth && (
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1">
+              <span>✓ لن يتم خصم قسط منك في الشهر {skipMonth} لأن هذا الشهر هو دور استلامك للجمعية!</span>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Dates: Start Date & Optional End Date */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

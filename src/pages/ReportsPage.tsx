@@ -21,6 +21,9 @@ import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactions } from '../hooks/useTransactions'
 import { useCategories } from '../hooks/useCategories'
 import { useUserSettings } from '../hooks/useUserSettings'
+import { useDebts } from '../hooks/useDebts'
+import { useRecurring } from '../hooks/useRecurring'
+import { useCurrency } from '../hooks/useCurrency'
 import { sumByType } from '../lib/aggregate'
 import {
   calculateCategoryDistribution,
@@ -28,7 +31,8 @@ import {
   calculateSavingsRate,
 } from '../lib/reports'
 import { getFinancialMonthRange } from '../lib/dates'
-import { formatJOD } from '../lib/money'
+import { calculateForecast } from '../lib/forecast'
+import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
 import { cn } from '../lib/cn'
 
 export const ReportsPage: React.FC = () => {
@@ -37,10 +41,28 @@ export const ReportsPage: React.FC = () => {
   // Monthly data hooks
   const { selectedDate, range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
+  const { data: debts } = useDebts()
+  const { data: recurring } = useRecurring()
+  const { format } = useCurrency()
   const monthStartDay = settings?.monthStartDay ?? 1
 
-  const { data: monthTransactions, loading: monthLoading } = useTransactions(range)
+  const isMonthly = reportPeriod === 'monthly'
+  const isYearly = reportPeriod === 'yearly'
+
+  const { data: monthTransactions, loading: monthLoading } = useTransactions(range, {
+    enabled: isMonthly,
+  })
   const { data: categories } = useCategories()
+
+  const forecast = useMemo(() => {
+    return calculateForecast({
+      transactions: monthTransactions,
+      recurring,
+      debts,
+      monthStartDay,
+      periodRange: range,
+    })
+  }, [monthTransactions, recurring, debts, monthStartDay, range])
 
   // Previous month range for monthly comparison
   const prevMonthRange = useMemo(() => {
@@ -48,7 +70,9 @@ export const ReportsPage: React.FC = () => {
     return getFinancialMonthRange(prevDate, monthStartDay)
   }, [selectedDate, monthStartDay])
 
-  const { data: prevMonthTransactions } = useTransactions(prevMonthRange)
+  const { data: prevMonthTransactions } = useTransactions(prevMonthRange, {
+    enabled: isMonthly,
+  })
 
   // Yearly data hooks
   const currentYear = useMemo(() => new Date().getFullYear(), [])
@@ -62,7 +86,9 @@ export const ReportsPage: React.FC = () => {
     [selectedYear]
   )
 
-  const { data: yearTransactions, loading: yearLoading } = useTransactions(yearRange)
+  const { data: yearTransactions, loading: yearLoading } = useTransactions(yearRange, {
+    enabled: isYearly,
+  })
 
   // Monthly calculations
   const monthSums = useMemo(() => sumByType(monthTransactions), [monthTransactions])
@@ -108,12 +134,14 @@ export const ReportsPage: React.FC = () => {
       { value: String(currentYear), label: `سنة ${currentYear}` },
       { value: String(currentYear - 1), label: `سنة ${currentYear - 1}` },
       { value: String(currentYear - 2), label: `سنة ${currentYear - 2}` },
+      { value: String(currentYear - 3), label: `سنة ${currentYear - 3}` },
+      { value: String(currentYear - 4), label: `سنة ${currentYear - 4}` },
     ],
     [currentYear]
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       {/* Header with Title and Period Switcher */}
       <PageHeader
         title="التقارير المالية"
@@ -134,7 +162,7 @@ export const ReportsPage: React.FC = () => {
               <div className="w-36">
                 <Select
                   value={String(selectedYear)}
-                  onChange={(val) => setSelectedYear(Number(val))}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
                   options={yearOptions}
                 />
               </div>
@@ -148,10 +176,13 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================= */}
       {reportPeriod === 'monthly' && (
         <div className="space-y-6">
+          {/* Safe Daily Spend & Month-End Forecast Card */}
+          <SafeDailySpendCard forecast={forecast} />
+
           {/* 4 Monthly KPI Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Income */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   إجمالي المداخيل
@@ -160,8 +191,8 @@ export const ReportsPage: React.FC = () => {
                   <TrendingUp className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                {formatJOD(monthSums.income)}
+              <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
+                {format(monthSums.income)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 الدخل المحصل في هذا الشهر
@@ -169,7 +200,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Expenses */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   إجمالي المصاريف
@@ -178,8 +209,8 @@ export const ReportsPage: React.FC = () => {
                   <TrendingDown className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                {formatJOD(monthSums.expense)}
+              <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
+                {format(monthSums.expense)}
               </div>
               <div className="mt-1">
                 {monthComparison ? (
@@ -210,7 +241,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Net Savings */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   صافي الادخار
@@ -221,13 +252,13 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div
                 className={cn(
-                  'text-xl sm:text-2xl font-black select-none',
+                  'text-lg sm:text-2xl font-black select-none',
                   monthSums.balance >= 0
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-red-500 dark:text-red-400'
                 )}
               >
-                {formatJOD(monthSums.balance)}
+                {format(monthSums.balance)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 المبلغ المتبقي بعد كل المصاريف
@@ -235,7 +266,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Savings Rate */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   نسبة الادخار
@@ -246,7 +277,7 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div
                 className={cn(
-                  'text-xl sm:text-2xl font-black select-none',
+                  'text-lg sm:text-2xl font-black select-none',
                   monthSavingsRate >= 0
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-red-500 dark:text-red-400'
@@ -309,7 +340,7 @@ export const ReportsPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                            {formatJOD(item.amountFils)}
+                            {format(item.amountFils)}
                           </span>
                           <span className="font-bold text-slate-400 dark:text-slate-500 min-w-8 text-end">
                             {item.percentage}%
@@ -342,9 +373,9 @@ export const ReportsPage: React.FC = () => {
       {reportPeriod === 'yearly' && (
         <div className="space-y-6">
           {/* 4 Yearly KPI Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Total Annual Income */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   إجمالي المداخيل السنوية
@@ -353,8 +384,8 @@ export const ReportsPage: React.FC = () => {
                   <TrendingUp className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                {formatJOD(yearSums.income)}
+              <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
+                {format(yearSums.income)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 إجمالي الدخل خلال سنة {selectedYear}
@@ -362,7 +393,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Total Annual Expense */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   إجمالي المصاريف السنوية
@@ -371,8 +402,8 @@ export const ReportsPage: React.FC = () => {
                   <TrendingDown className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                {formatJOD(yearSums.expense)}
+              <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
+                {format(yearSums.expense)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 إجمالي المصاريف خلال سنة {selectedYear}
@@ -380,7 +411,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Annual Net Savings */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   صافي الادخار السنوي
@@ -391,13 +422,13 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div
                 className={cn(
-                  'text-xl sm:text-2xl font-black select-none',
+                  'text-lg sm:text-2xl font-black select-none',
                   yearSums.balance >= 0
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-red-500 dark:text-red-400'
                 )}
               >
-                {formatJOD(yearSums.balance)}
+                {format(yearSums.balance)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 الفائض المالي السنوي
@@ -405,7 +436,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Monthly Expense Average */}
-            <Card className="p-4 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   متوسط المصاريف الشهري
@@ -414,8 +445,8 @@ export const ReportsPage: React.FC = () => {
                   <Calendar className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 select-none">
-                {formatJOD(monthlyAverage)}
+              <div className="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100 select-none">
+                {format(monthlyAverage)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 معدل الصرف لكل شهر
@@ -473,7 +504,7 @@ export const ReportsPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                            {formatJOD(item.amountFils)}
+                            {format(item.amountFils)}
                           </span>
                           <span className="font-bold text-slate-400 dark:text-slate-500 min-w-8 text-end">
                             {item.percentage}%
@@ -528,10 +559,10 @@ export const ReportsPage: React.FC = () => {
                           {row.monthName}
                         </td>
                         <td className="p-2.5 font-bold text-emerald-600 dark:text-emerald-400">
-                          {formatJOD(row.income)}
+                          {format(row.income)}
                         </td>
                         <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
-                          {formatJOD(row.expense)}
+                          {format(row.expense)}
                         </td>
                         <td
                           className={cn(
@@ -541,7 +572,7 @@ export const ReportsPage: React.FC = () => {
                               : 'text-red-500 dark:text-red-400'
                           )}
                         >
-                          {formatJOD(row.balance)}
+                          {format(row.balance)}
                         </td>
                       </tr>
                     ))}

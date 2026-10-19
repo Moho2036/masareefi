@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
-import { Check, Trash2, AlertCircle } from 'lucide-react'
+import { Check, Trash2, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Link } from 'react-router'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -9,16 +10,27 @@ import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
-import { addTransaction, updateTransaction, deleteTransaction } from '../services/transactions'
+import { useCurrency } from '../hooks/useCurrency'
+import {
+  addTransaction,
+  updateTransaction,
+  deleteTransaction,
+} from '../services/transactions'
 import { addRecurring } from '../services/recurring'
 import { advanceDate } from '../lib/recurring'
-import { toFils } from '../lib/money'
+import { toFils, fromFils } from '../lib/money'
 import { parseLocalDateInput } from '../lib/dates'
+import {
+  getCategoryUsageMap,
+  recordCategoryUsage,
+  sortCategoriesByUsage,
+} from '../lib/categoryUsage'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType, Frequency } from '../types'
 
 export interface TransactionFormProps {
   initialTransaction?: Transaction | null
+  duplicateFrom?: Transaction | null
   initialType?: TxType
   onClose: () => void
   onSuccess?: () => void
@@ -26,30 +38,42 @@ export interface TransactionFormProps {
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
   initialTransaction,
+  duplicateFrom,
   initialType = 'expense',
   onClose,
   onSuccess,
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
-  const { selectedDate, setSelectedDate, range } = useSelectedMonth()
+  const { setSelectedDate, range } = useSelectedMonth()
   const { showToast } = useToast()
+  const { config: currencyConfig } = useCurrency()
 
   const isEditing = Boolean(initialTransaction)
-
-  const [type, setType] = useState<TxType>(
-    initialTransaction ? initialTransaction.type : initialType
+  const isLinkedToDebt = Boolean(
+    initialTransaction?.id &&
+      (initialTransaction.id.startsWith('debt_init_') ||
+        initialTransaction.id.startsWith('debt_pay_'))
   )
+  const amountInputRef = useRef<HTMLInputElement>(null)
 
-  const [amountStr, setAmountStr] = useState<string>(() => {
-    if (!initialTransaction) return ''
-    const val = initialTransaction.amountFils / 1000
-    return String(val)
+  const [type, setType] = useState<TxType>(() => {
+    if (initialTransaction) return initialTransaction.type
+    if (duplicateFrom) return duplicateFrom.type
+    return initialType
   })
 
-  const [categoryId, setCategoryId] = useState<string>(
-    initialTransaction ? initialTransaction.categoryId : ''
-  )
+  const [amountStr, setAmountStr] = useState<string>(() => {
+    if (initialTransaction) return String(fromFils(initialTransaction.amountFils))
+    if (duplicateFrom) return String(fromFils(duplicateFrom.amountFils))
+    return ''
+  })
+
+  const [categoryId, setCategoryId] = useState<string>(() => {
+    if (initialTransaction) return initialTransaction.categoryId
+    if (duplicateFrom) return duplicateFrom.categoryId
+    return ''
+  })
 
   const [dateStr, setDateStr] = useState<string>(() => {
     if (initialTransaction?.date) {
@@ -60,14 +84,19 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return format(d, 'yyyy-MM-dd')
     }
     const now = new Date()
-    const isViewingCurrentMonth =
-      now.getFullYear() === selectedDate.getFullYear() &&
-      now.getMonth() === selectedDate.getMonth()
-    return format(isViewingCurrentMonth ? now : selectedDate, 'yyyy-MM-dd')
+    const isWithinRange = now >= range.start && now < range.end
+    return format(isWithinRange ? now : range.start, 'yyyy-MM-dd')
   })
 
-  const [title, setTitle] = useState<string>(initialTransaction?.title ?? '')
-  const [note, setNote] = useState<string>(initialTransaction?.note ?? '')
+  const [title, setTitle] = useState<string>(
+    initialTransaction?.title ?? duplicateFrom?.title ?? ''
+  )
+  const [note, setNote] = useState<string>(
+    initialTransaction?.note ?? duplicateFrom?.note ?? ''
+  )
+  const [showNoteField, setShowNoteField] = useState<boolean>(() =>
+    Boolean(initialTransaction?.note || duplicateFrom?.note)
+  )
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
   const [error, setError] = useState<string | null>(null)
@@ -75,14 +104,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Filter available categories for current transaction type
-  const availableCategories = categories.filter(
-    (c) => c.type === type && !c.archived
-  )
+  // Track category usage frequencies to prioritize top categories (read once on open)
+  const usageMap = useMemo(() => getCategoryUsageMap(), [])
+
+  // Filter & sort available categories for current transaction type
+  const availableCategories = useMemo(() => {
+    const filtered = categories.filter((c) => c.type === type && !c.archived)
+    return sortCategoriesByUsage(filtered, usageMap)
+  }, [categories, type, usageMap])
 
   // Compute the effectively selected category ID:
   // If user selected one that belongs to available categories, use it.
-  // Otherwise, fallback to the first available category without an effect.
+  // Otherwise, fallback to the top (most frequent) available category.
   const activeCategoryId =
     categoryId && availableCategories.some((c) => c.id === categoryId)
       ? categoryId
@@ -118,14 +151,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     try {
       const trimmedTitle = title.trim().slice(0, 100)
       if (isEditing && initialTransaction) {
+        const finalType = isLinkedToDebt ? initialTransaction.type : type
+        const finalAmountFils = isLinkedToDebt ? initialTransaction.amountFils : amountFils
         await updateTransaction(user.uid, initialTransaction.id, {
-          type,
-          amountFils,
+          type: finalType,
+          amountFils: finalAmountFils,
           categoryId: activeCategoryId,
           date: parsedDate,
           title: trimmedTitle,
           note: note.trim().slice(0, 500),
         })
+        recordCategoryUsage(activeCategoryId)
         showToast('تم تعديل المعاملة بنجاح', 'success')
       } else {
         let recurringId: string | undefined
@@ -153,10 +189,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           note: note.trim().slice(0, 500),
           ...(recurringId ? { recurringId } : {}),
         })
+
+        recordCategoryUsage(activeCategoryId)
+
         showToast(
-          isRecurring
-            ? 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
-            : 'تمت إضافة المعاملة بنجاح',
+          duplicateFrom
+            ? 'تم حفظ المعاملة المكررة بنجاح'
+            : isRecurring
+              ? 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
+              : 'تمت إضافة المعاملة بنجاح',
           'success'
         )
       }
@@ -175,8 +216,93 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }
 
+  const handleSaveAndAddAnother = async () => {
+    setError(null)
+
+    if (!user) {
+      setError('يجب تسجيل الدخول أولاً')
+      return
+    }
+
+    const amountFils = toFils(amountStr)
+    if (amountFils <= 0) {
+      setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (!activeCategoryId) {
+      setError('يرجى اختيار التصنيف')
+      return
+    }
+
+    const parsedDate = parseLocalDateInput(dateStr)
+    if (isNaN(parsedDate.getTime())) {
+      setError('يرجى اختيار تاريخ صالح')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const trimmedTitle = title.trim().slice(0, 100)
+      let recurringId: string | undefined
+      if (isRecurring) {
+        const nextDate = advanceDate(parsedDate, recurringFrequency)
+        recurringId = await addRecurring(user.uid, {
+          type,
+          amountFils,
+          categoryId: activeCategoryId,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          note: note.trim().slice(0, 500),
+          frequency: recurringFrequency,
+          startDate: parsedDate,
+          nextDate,
+          active: true,
+        })
+      }
+
+      await addTransaction(user.uid, {
+        type,
+        amountFils,
+        categoryId: activeCategoryId,
+        date: parsedDate,
+        ...(trimmedTitle ? { title: trimmedTitle } : {}),
+        note: note.trim().slice(0, 500),
+        ...(recurringId ? { recurringId } : {}),
+      })
+
+      recordCategoryUsage(activeCategoryId)
+
+      showToast('تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية', 'success')
+
+      if (parsedDate < range.start || parsedDate >= range.end) {
+        setSelectedDate(parsedDate)
+      }
+
+      onSuccess?.()
+
+      // Reset fields for consecutive rapid entries
+      setAmountStr('')
+      setTitle('')
+      setNote('')
+      setIsRecurring(false)
+
+      setTimeout(() => {
+        amountInputRef.current?.focus()
+      }, 50)
+    } catch (err: unknown) {
+      console.error('Failed to save transaction:', err)
+      setError('تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!user || !initialTransaction) return
+    if (isLinkedToDebt) {
+      setError('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
+      return
+    }
     setDeleting(true)
     try {
       await deleteTransaction(user.uid, initialTransaction.id)
@@ -198,10 +324,32 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Linked Debt Warning Banner */}
+      {isLinkedToDebt && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+          <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>معاملة متزامنة مع سجل الديون</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+            هذه المعاملة مرتبطة بسجل الديون، لتعديل المبلغ أو حذفها يرجى إدارة الدفعة من صفحة الديون.
+          </p>
+          <Link
+            to="/debts"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+          >
+            <span>الانتقال إلى سجل الديون لتعديل أو حذف الدفعة</span>
+            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+          </Link>
+        </div>
+      )}
+
       {/* Type Toggle: مصروف / دخل */}
       <div>
         <SegmentedControl<TxType>
           value={type}
+          disabled={isLinkedToDebt}
           onChange={(newType) => {
             setType(newType)
             setCategoryId('')
@@ -225,33 +373,43 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
             error && amountStr && toFils(amountStr) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20'
+              : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20',
+            isLinkedToDebt && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
           )}
         >
           <input
+            ref={amountInputRef}
             id="tx-amount"
             type="text"
             inputMode="decimal"
+            readOnly={isLinkedToDebt}
+            disabled={isLinkedToDebt}
             value={amountStr}
             onChange={(e) => {
+              if (isLinkedToDebt) return
               setAmountStr(e.target.value)
               setError(null)
             }}
-            placeholder="0.000"
-            className="w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
-            autoFocus={!isEditing}
+            placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
+            className={cn(
+              'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
+              isLinkedToDebt && 'cursor-not-allowed'
+            )}
+            autoFocus={!isEditing && !isLinkedToDebt}
           />
           <span className="text-base lg:text-lg font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
-            د.أ
+            {currencyConfig.symbol}
           </span>
         </div>
       </div>
 
       {/* Category Chips Grid */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">
-          التصنيف
-        </label>
+        <div className="mb-2">
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+            التصنيف
+          </label>
+        </div>
         {categoriesLoading ? (
           <div className="py-4 text-center text-xs text-slate-400">جاري تحميل التصنيفات...</div>
         ) : availableCategories.length === 0 ? (
@@ -259,7 +417,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             لا توجد تصنيفات متاحة لهذا النوع
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5">
             {availableCategories.map((cat) => {
               const isSelected = activeCategoryId === cat.id
               return (
@@ -271,21 +429,21 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     setError(null)
                   }}
                   className={cn(
-                    'flex items-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none',
+                    'flex items-center gap-2 p-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all text-start cursor-pointer select-none min-w-0',
                     isSelected
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-xs'
                       : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   )}
                 >
                   <span
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-sm"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-base"
                     style={{ backgroundColor: `${cat.color}25` }}
                   >
                     {cat.icon}
                   </span>
-                  <span className="truncate flex-1">{cat.name}</span>
+                  <span className="truncate flex-1 text-xs sm:text-sm font-semibold">{cat.name}</span>
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   )}
                 </button>
               )
@@ -294,11 +452,67 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
       </div>
 
-      {/* Title Input */}
+      {/* Date Input with Quick Select Buttons */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label
+            htmlFor="tx-date"
+            className="block text-xs font-bold text-slate-500 dark:text-slate-400"
+          >
+            التاريخ
+          </label>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date()
+                setDateStr(format(today, 'yyyy-MM-dd'))
+              }}
+              className={cn(
+                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
+                dateStr === format(new Date(), 'yyyy-MM-dd')
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              )}
+            >
+              اليوم
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const yesterday = new Date()
+                yesterday.setDate(yesterday.getDate() - 1)
+                setDateStr(format(yesterday, 'yyyy-MM-dd'))
+              }}
+              className={cn(
+                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
+                (() => {
+                  const y = new Date()
+                  y.setDate(y.getDate() - 1)
+                  return dateStr === format(y, 'yyyy-MM-dd')
+                })()
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              )}
+            >
+              أمس
+            </button>
+          </div>
+        </div>
+        <Input
+          id="tx-date"
+          type="date"
+          value={dateStr}
+          onChange={(e) => setDateStr(e.target.value)}
+          required
+        />
+      </div>
+
+      {/* Description / Title Input */}
       <div>
         <Input
           type="text"
-          label="عنوان المعاملة (اختياري)"
+          label="الوصف / العنوان (اختياري)"
           placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -306,28 +520,29 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         />
       </div>
 
-      {/* Date Input */}
-      <div>
-        <Input
-          type="date"
-          label="التاريخ"
-          value={dateStr}
-          onChange={(e) => setDateStr(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Note Input */}
-      <div>
-        <Input
-          type="text"
-          label="ملاحظة (اختياري)"
-          placeholder="مثال: غداء مع الأصدقاء"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={500}
-        />
-      </div>
+      {/* Note Input (Collapsible) */}
+      {showNoteField ? (
+        <div>
+          <Input
+            type="text"
+            label="ملاحظة تفصيلية (اختياري)"
+            placeholder="مثال: غداء مع الأصدقاء"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+          />
+        </div>
+      ) : (
+        <div className="-mt-2">
+          <button
+            type="button"
+            onClick={() => setShowNoteField(true)}
+            className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+          >
+            <span>+ إضافة ملاحظة تفصيلية</span>
+          </button>
+        </div>
+      )}
 
       {/* Recurring Option (only for new transactions) */}
       {!isEditing && (
@@ -371,7 +586,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* Delete confirmation if editing */}
-      {isEditing && showDeleteConfirm ? (
+      {isEditing && !isLinkedToDebt && showDeleteConfirm ? (
         <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 space-y-2.5">
           <p className="text-xs font-bold text-red-800 dark:text-red-300">
             هل أنت متأكد من حذف هذه المعاملة نهائياً؟
@@ -402,18 +617,37 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-3 pt-2">
-        <div className="flex items-center gap-2 flex-1">
+        <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
           <Button
             type="submit"
             variant="primary"
             disabled={submitting}
             className="flex-1"
           >
-            {submitting ? 'جاري الحفظ...' : isEditing ? 'تعديل المعاملة' : 'حفظ'}
+            {submitting
+              ? 'جاري الحفظ...'
+              : isEditing
+                ? 'تعديل المعاملة'
+                : duplicateFrom
+                  ? 'حفظ النسخة'
+                  : 'حفظ'}
           </Button>
+
+          {!isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSaveAndAddAnother}
+              disabled={submitting}
+              className="text-xs sm:text-sm font-semibold whitespace-nowrap"
+            >
+              حفظ وإضافة أخرى
+            </Button>
+          )}
+
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
           >
@@ -421,7 +655,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </Button>
         </div>
 
-        {isEditing && !showDeleteConfirm && (
+        {isEditing && !isLinkedToDebt && !showDeleteConfirm && (
           <Button
             type="button"
             variant="ghost"

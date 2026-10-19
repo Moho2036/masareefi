@@ -9,9 +9,10 @@ rules_version = '2';
 //
 // Collection: users            Document ID: Firebase Auth uid
 //   - displayName: string (required, 0..100)
-//   - currency: string (required, must be 'JOD')
+//   - currency: string (required, 1..20)
 //   - monthStartDay: int (required, 1..28)
 //   - theme: string (required, 'system' | 'light' | 'dark')
+//   - rolloverBalance: bool (optional)
 //   - createdAt: timestamp (required, immutable)
 //   Delete: denied.
 //
@@ -40,6 +41,33 @@ rules_version = '2';
 //   - nextDate: timestamp (required)
 //   - endDate: timestamp | null (optional)
 //   - active: bool (required)
+//   - circleId: string (optional, 1..128)
+//   - skipMonth: int (optional, 1..50)
+//
+// Collection: users/{uid}/debts        Document ID: any
+//   - personName: string (required, 1..100)
+//   - type: string (required, 'lent' | 'borrowed')
+//   - amountFils: int (required, 1..1000000000000)
+//   - paidFils: int (required, 0..amountFils)
+//   - startDate: timestamp (required)
+//   - dueDate: timestamp | null (optional)
+//   - note: string (required, 0..500)
+//   - settled: bool (required)
+//   - payments: list (required, <= 100)
+//   - createdAt: timestamp (required, immutable)
+//
+// Collection: users/{uid}/circles      Document ID: any
+//   - name: string (required, 1..100)
+//   - monthlyAmountFils: int (required, 1..1000000000000)
+//   - membersCount: int (required, 2..50)
+//   - totalAmountFils: int (required, 1..1000000000000)
+//   - myTurnMonth: int (required, 1..membersCount)
+//   - startDate: timestamp (required)
+//   - members: list (required, <= 50)
+//   - status: string (required, 'active' | 'completed')
+//   - recurringId: string (optional, 1..128)
+//   - isManager: bool (optional)
+//   - createdAt: timestamp (required, immutable)
 //
 // ===============================================================
 
@@ -73,12 +101,13 @@ service cloud.firestore {
 
     // ---------------- Domain Validators ----------------
     function isValidUserProfile(data) {
-      return data.keys().hasOnly(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt'])
+      return data.keys().hasOnly(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt', 'rolloverBalance'])
         && data.keys().hasAll(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt'])
         && isStr(data.displayName, 0, 100)
-        && data.currency == 'JOD'
+        && isStr(data.currency, 1, 20)
         && data.monthStartDay is int && data.monthStartDay >= 1 && data.monthStartDay <= 28
         && data.theme in ['system', 'light', 'dark']
+        && (!('rolloverBalance' in data) || data.rolloverBalance is bool)
         && data.createdAt is timestamp;
     }
 
@@ -107,7 +136,7 @@ service cloud.firestore {
     }
 
     function isValidRecurring(data) {
-      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'title', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active'])
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'title', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active', 'circleId', 'skipMonth'])
         && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'active'])
         && isTxType(data.type)
         && isValidAmount(data.amountFils)
@@ -118,7 +147,41 @@ service cloud.firestore {
         && data.startDate is timestamp
         && data.nextDate is timestamp
         && (!('endDate' in data) || data.endDate == null || data.endDate is timestamp)
-        && data.active is bool;
+        && data.active is bool
+        && (!('circleId' in data) || isStr(data.circleId, 1, 128))
+        && (!('skipMonth' in data) || (data.skipMonth is int && data.skipMonth >= 1 && data.skipMonth <= 50));
+    }
+
+    function isValidDebt(data) {
+      return data.keys().hasOnly(['personName', 'type', 'amountFils', 'paidFils', 'startDate', 'dueDate', 'note', 'settled', 'payments', 'createdAt'])
+        && data.keys().hasAll(['personName', 'type', 'amountFils', 'paidFils', 'startDate', 'note', 'settled', 'payments', 'createdAt'])
+        && isStr(data.personName, 1, 100)
+        && data.type in ['lent', 'borrowed']
+        && isValidAmount(data.amountFils)
+        && data.paidFils is int && data.paidFils >= 0 && data.paidFils <= data.amountFils
+        && data.startDate is timestamp
+        && (!('dueDate' in data) || data.dueDate == null || data.dueDate is timestamp)
+        && isStr(data.note, 0, 500)
+        && data.settled is bool
+        && data.settled == (data.paidFils == data.amountFils)
+        && data.payments is list && data.payments.size() <= 100
+        && data.createdAt is timestamp;
+    }
+
+    function isValidMoneyCircle(data) {
+      return data.keys().hasOnly(['name', 'monthlyAmountFils', 'membersCount', 'totalAmountFils', 'myTurnMonth', 'startDate', 'members', 'status', 'createdAt', 'recurringId', 'isManager'])
+        && data.keys().hasAll(['name', 'monthlyAmountFils', 'membersCount', 'totalAmountFils', 'myTurnMonth', 'startDate', 'members', 'status', 'createdAt'])
+        && isStr(data.name, 1, 100)
+        && isValidAmount(data.monthlyAmountFils)
+        && data.membersCount is int && data.membersCount >= 2 && data.membersCount <= 50
+        && isValidAmount(data.totalAmountFils)
+        && data.myTurnMonth is int && data.myTurnMonth >= 1 && data.myTurnMonth <= data.membersCount
+        && data.startDate is timestamp
+        && data.members is list && data.members.size() <= 50
+        && data.status in ['active', 'completed']
+        && (!('recurringId' in data) || isStr(data.recurringId, 1, 128))
+        && (!('isManager' in data) || data.isManager is bool)
+        && data.createdAt is timestamp;
     }
 
     // ---------------- Rules ----------------
@@ -147,6 +210,20 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create: if isOwner(uid) && isValidRecurring(request.resource.data);
         allow update: if isOwner(uid) && isValidRecurring(request.resource.data);
+      }
+
+      match /debts/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidDebt(request.resource.data);
+        allow update: if isOwner(uid) && isValidDebt(request.resource.data)
+          && fieldUnchanged('createdAt');
+      }
+
+      match /circles/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && isValidMoneyCircle(request.resource.data);
+        allow update: if isOwner(uid) && isValidMoneyCircle(request.resource.data)
+          && fieldUnchanged('createdAt');
       }
     }
 

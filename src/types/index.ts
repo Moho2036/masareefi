@@ -38,6 +38,8 @@ export interface Recurring {
   nextDate: Date
   endDate?: Date | null
   active: boolean
+  circleId?: string
+  skipMonth?: number
   createdAt?: Date
 }
 
@@ -47,5 +49,53 @@ export interface UserSettings {
   currency: string
   monthStartDay: number
   theme: ThemePreference
+  rolloverBalance?: boolean
   createdAt?: Date
 }
+
+export type DebtType = 'lent' | 'borrowed'
+
+export interface DebtPayment {
+  id: string
+  amountFils: number
+  date: Date
+  note?: string
+  createdAt: Date
+}
+
+export interface Debt {
+  id: string
+  personName: string
+  type: DebtType
+  amountFils: number
+  paidFils: number
+  startDate: Date
+  dueDate?: Date | null
+  note: string
+  settled: boolean
+  payments: DebtPayment[]
+  createdAt: Date
+}
+
+export interface CircleMember {
+  id: string
+  name: string
+  turnMonth: number
+  paidMonths: number[] // Array of month numbers (1..membersCount) they have paid
+}
+
+export interface MoneyCircle {
+  id: string
+  name: string
+  monthlyAmountFils: number
+  membersCount: number
+  totalAmountFils: number
+  myTurnMonth: number
+  startDate: Date
+  members: CircleMember[]
+  status: 'active' | 'completed'
+  recurringId?: string
+  isManager?: boolean
+  createdAt: Date
+}
+

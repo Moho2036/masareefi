@@ -181,7 +181,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         </div>
 
         {/* Quick-pick Emojis Grid */}
-        <div className="grid grid-cols-10 gap-1.5 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto mb-3">
+        <div className="grid grid-cols-10 gap-1.5 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto mb-2">
           {COMMON_EMOJIS.map((em) => (
             <button
               key={em}
@@ -195,6 +195,35 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               {em}
             </button>
           ))}
+        </div>
+
+        {/* Custom Emoji Input */}
+        <div className="flex items-center gap-2 mb-3">
+          <input
+            type="text"
+            value={icon}
+            onChange={(e) => {
+              const val = e.target.value.trim()
+              if (!val) {
+                setIcon('')
+                return
+              }
+              if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+                const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+                const segments = Array.from(segmenter.segment(val), (s) => s.segment)
+                setIcon(segments[segments.length - 1] || '')
+              } else {
+                const chars = Array.from(val)
+                setIcon(chars[chars.length - 1] || '')
+              }
+            }}
+            placeholder="أو اكتب/الصق إيموجي مخصص..."
+            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+            maxLength={30}
+          />
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+            إيموجي مخصص
+          </span>
         </div>
 
         {/* Color Palette */}

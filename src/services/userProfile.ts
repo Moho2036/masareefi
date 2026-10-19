@@ -11,17 +11,13 @@ import type { User } from 'firebase/auth'
 import { db } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
-import { addDefaultCategoriesToBatch, syncCategoriesForUser } from './seed'
+import { addDefaultCategoriesToBatch } from './seed'
 
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
   const snap = await getDoc(userRef)
 
   if (snap.exists()) {
-    // Non-blocking sync for newly introduced/renamed default categories
-    syncCategoriesForUser(user.uid).catch((err) =>
-      console.warn('Categories sync deferred:', err)
-    )
     return snap.data()
   }
 
@@ -57,7 +53,6 @@ export function subscribeUserSettings(
   const userRef = doc(db, 'users', uid).withConverter(userSettingsConverter)
   return onSnapshot(
     userRef,
-    { includeMetadataChanges: true },
     (snap) => {
       cb(snap.exists() ? snap.data() : null)
     },
@@ -79,7 +74,7 @@ export async function updateUserSettings(
     payload.displayName = partial.displayName.slice(0, 100)
   }
   if (partial.currency !== undefined) {
-    payload.currency = 'JOD'
+    payload.currency = (partial.currency || 'JOD').trim().slice(0, 20)
   }
   if (partial.monthStartDay !== undefined) {
     payload.monthStartDay = Math.min(28, Math.max(1, Math.round(partial.monthStartDay)))

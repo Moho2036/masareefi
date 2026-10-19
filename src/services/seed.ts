@@ -50,7 +50,7 @@ export function addDefaultCategoriesToBatch(batch: WriteBatch, uid: string): voi
   const categoriesRef = collection(db, 'users', uid, 'categories')
 
   for (const cat of DEFAULT_CATEGORIES) {
-    const docRef = doc(categoriesRef)
+    const docRef = doc(categoriesRef, `seed_${cat.type}_${cat.order}`)
     batch.set(docRef, {
       name: cat.name,
       type: cat.type,

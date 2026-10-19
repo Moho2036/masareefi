@@ -6,7 +6,7 @@ import {
   type SnapshotOptions,
   type DocumentData,
 } from 'firebase/firestore'
-import type { Category, Transaction, Recurring, UserSettings } from '../types'
+import type { Category, Transaction, Recurring, UserSettings, Debt, DebtPayment } from '../types'
 
 export const categoryConverter: FirestoreDataConverter<Category> = {
   toFirestore(cat: Category): DocumentData {
@@ -101,6 +101,12 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
       data.endDate =
         rec.endDate instanceof Date ? Timestamp.fromDate(rec.endDate) : rec.endDate
     }
+    if (rec.circleId) {
+      data.circleId = rec.circleId
+    }
+    if (rec.skipMonth !== undefined) {
+      data.skipMonth = Math.round(rec.skipMonth)
+    }
     return data
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Recurring {
@@ -131,15 +137,21 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
           ? data.endDate.toDate()
           : new Date(data.endDate)
     }
+    if (data.circleId) {
+      rec.circleId = data.circleId
+    }
+    if (data.skipMonth !== undefined) {
+      rec.skipMonth = Number(data.skipMonth)
+    }
     return rec
   },
 }
 
 export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
   toFirestore(settings: UserSettings): DocumentData {
-    return {
+    const data: DocumentData = {
       displayName: (settings.displayName || '').slice(0, 100),
-      currency: 'JOD',
+      currency: (settings.currency || 'JOD').trim().slice(0, 20),
       monthStartDay: Math.min(28, Math.max(1, Math.round(settings.monthStartDay || 1))),
       theme: settings.theme || 'system',
       createdAt:
@@ -147,6 +159,10 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
           ? Timestamp.fromDate(settings.createdAt)
           : (settings.createdAt ?? serverTimestamp()),
     }
+    if (typeof settings.rolloverBalance === 'boolean') {
+      data.rolloverBalance = settings.rolloverBalance
+    }
+    return data
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): UserSettings {
     const data = snapshot.data(options)
@@ -156,6 +172,7 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
       currency: data.currency ?? 'JOD',
       monthStartDay: data.monthStartDay ?? 1,
       theme: data.theme ?? 'system',
+      rolloverBalance: typeof data.rolloverBalance === 'boolean' ? data.rolloverBalance : false,
       createdAt:
         data.createdAt instanceof Timestamp
           ? data.createdAt.toDate()
@@ -165,3 +182,93 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
     }
   },
 }
+
+export const debtConverter: FirestoreDataConverter<Debt> = {
+  toFirestore(debt: Debt): DocumentData {
+    const data: DocumentData = {
+      personName: (debt.personName || '').trim().slice(0, 100),
+      type: debt.type,
+      amountFils: Math.round(Number(debt.amountFils)),
+      paidFils: Math.round(Number(debt.paidFils ?? 0)),
+      startDate:
+        debt.startDate instanceof Date ? Timestamp.fromDate(debt.startDate) : debt.startDate,
+      note: typeof debt.note === 'string' ? debt.note.slice(0, 500) : '',
+      settled: Boolean(debt.settled),
+      payments: (debt.payments || []).map((p) => {
+        const item: DocumentData = {
+          id: p.id,
+          amountFils: Math.round(Number(p.amountFils)),
+          date: p.date instanceof Date ? Timestamp.fromDate(p.date) : p.date,
+          createdAt:
+            p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt,
+        }
+        if (p.note) {
+          item.note = p.note.slice(0, 500)
+        }
+        return item
+      }),
+      createdAt:
+        debt.createdAt instanceof Date
+          ? Timestamp.fromDate(debt.createdAt)
+          : (debt.createdAt ?? serverTimestamp()),
+    }
+    if (debt.dueDate) {
+      data.dueDate =
+        debt.dueDate instanceof Date ? Timestamp.fromDate(debt.dueDate) : debt.dueDate
+    } else {
+      data.dueDate = null
+    }
+    return data
+  },
+  fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Debt {
+    const data = snapshot.data(options)
+    const rawPayments: Array<Record<string, unknown>> = Array.isArray(data.payments)
+      ? data.payments
+      : []
+    const payments: DebtPayment[] = rawPayments.map((p) => ({
+      id: String(p.id || ''),
+      amountFils: Number(p.amountFils || 0),
+      date:
+        p.date instanceof Timestamp
+          ? p.date.toDate()
+          : p.date
+            ? new Date(p.date as string | number)
+            : new Date(),
+      note: typeof p.note === 'string' ? p.note : undefined,
+      createdAt:
+        p.createdAt instanceof Timestamp
+          ? p.createdAt.toDate()
+          : p.createdAt
+            ? new Date(p.createdAt as string | number)
+            : new Date(),
+    }))
+
+    return {
+      id: snapshot.id,
+      personName: data.personName ?? '',
+      type: data.type,
+      amountFils: data.amountFils ?? 0,
+      paidFils: data.paidFils ?? 0,
+      startDate:
+        data.startDate instanceof Timestamp
+          ? data.startDate.toDate()
+          : new Date(data.startDate),
+      dueDate:
+        data.dueDate instanceof Timestamp
+          ? data.dueDate.toDate()
+          : data.dueDate
+            ? new Date(data.dueDate)
+            : null,
+      note: data.note ?? '',
+      settled: Boolean(data.settled),
+      payments,
+      createdAt:
+        data.createdAt instanceof Timestamp
+          ? data.createdAt.toDate()
+          : data.createdAt
+            ? new Date(data.createdAt)
+            : new Date(),
+    }
+  },
+}
+

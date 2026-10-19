@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react'
+import { Link } from 'react-router'
 import {
   ArrowLeftRight,
   Search,
@@ -6,11 +7,15 @@ import {
   Pencil,
   Trash2,
   Calendar,
+  HandCoins,
+  Copy,
+  X,
+  ExternalLink,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
-import { MonthSelector } from '../components/ui/MonthSelector'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { Select } from '../components/ui/Select'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -20,9 +25,16 @@ import { useTransactions } from '../hooks/useTransactions'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { useToast } from '../hooks/useToast'
+import { useCurrency } from '../hooks/useCurrency'
 import { deleteTransaction } from '../services/transactions'
 import { formatDayHeader } from '../lib/dates'
-import { formatJOD, formatSigned } from '../lib/money'
+import {
+  getCategoryUsageMap,
+  sortCategoriesByUsage,
+  buildUsageFromTransactions,
+  mergeUsageMaps,
+  saveCategoryUsageMap,
+} from '../lib/categoryUsage'
 import { filterTransactions, sumByType, groupByDay } from '../lib/aggregate'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType } from '../types'
@@ -32,14 +44,26 @@ export const TransactionsPage: React.FC = () => {
   const { range } = useSelectedMonth()
   const { data: rawTransactions, loading: txLoading } = useTransactions(range)
   const { data: categories } = useCategories()
-  const { openAdd, openEdit } = useTransactionModal()
+  const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
+  const { format, formatWithSign } = useCurrency()
 
   const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
   const [filterType, setFilterType] = useState<TxType | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const isFilterActive = Boolean(
+    query.trim() || filterType !== 'all' || selectedCategory !== 'all'
+  )
+
+  const handleResetFilters = () => {
+    setQuery('')
+    setFilterType('all')
+    setSelectedCategory('all')
+  }
 
   // Map categoryId to Category for O(1) lookups
   const categoryMap = useMemo(() => {
@@ -50,28 +74,35 @@ export const TransactionsPage: React.FC = () => {
     return map
   }, [categories])
 
-  // Options for Category Select
-  const categoryOptions = useMemo(() => {
-    const relevant = categories.filter((c) =>
-      filterType === 'all' ? true : c.type === filterType
-    )
-    return [
-      { value: 'all', label: 'كل التصنيفات' },
-      ...relevant.map((c) => ({
-        value: c.id,
-        label: `${c.icon} ${c.name}`,
-      })),
-    ]
-  }, [categories, filterType])
+  // Track category usage from transactions in memory (read-only calculation during render)
+  const usageMap = useMemo(() => {
+    const txMap = buildUsageFromTransactions(rawTransactions)
+    return mergeUsageMaps(txMap, getCategoryUsageMap())
+  }, [rawTransactions])
 
-  // Filtered transactions
+  // Save merged category usage in localStorage outside render in an effect
+  useEffect(() => {
+    if (rawTransactions.length > 0) {
+      saveCategoryUsageMap(usageMap)
+    }
+  }, [rawTransactions.length, usageMap])
+
+  // Relevant categories for horizontal chips (sorted by usage frequency)
+  const relevantCategories = useMemo(() => {
+    const filtered = categories.filter(
+      (c) => (filterType === 'all' ? true : c.type === filterType) && !c.archived
+    )
+    return sortCategoriesByUsage(filtered, usageMap)
+  }, [categories, filterType, usageMap])
+
+  // Filtered transactions (using deferredQuery to prevent keyboard lag on mobile)
   const filteredTransactions = useMemo(() => {
     return filterTransactions(rawTransactions, {
-      query,
+      query: deferredQuery,
       type: filterType,
       categoryId: selectedCategory,
     })
-  }, [rawTransactions, query, filterType, selectedCategory])
+  }, [rawTransactions, deferredQuery, filterType, selectedCategory])
 
   // Summary totals for filtered set
   const totals = useMemo(() => {
@@ -86,6 +117,11 @@ export const TransactionsPage: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!user || !txToDelete) return
+    if (txToDelete.id.startsWith('debt_init_') || txToDelete.id.startsWith('debt_pay_')) {
+      showToast('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+      setTxToDelete(null)
+      return
+    }
     setDeleting(true)
     try {
       await deleteTransaction(user.uid, txToDelete.id)
@@ -100,7 +136,7 @@ export const TransactionsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
@@ -111,223 +147,363 @@ export const TransactionsPage: React.FC = () => {
           variant="primary"
           icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
           onClick={() => openAdd('expense')}
-          className="self-start sm:self-auto font-semibold"
+          className="hidden lg:inline-flex self-start sm:self-auto font-semibold"
         >
           إضافة معاملة
         </Button>
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-        {/* Search Input */}
-        <div className="flex-1 relative">
-          <div className="absolute inset-y-0 start-0 ps-3.5 flex items-center pointer-events-none text-slate-400">
-            <Search className="w-4 h-4" />
-          </div>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث في العنوان أو الملاحظات..."
-            className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-          />
-        </div>
-
-        {/* Month Selector */}
-        <div className="shrink-0">
-          <MonthSelector />
-        </div>
-
-        {/* Type Toggle: الكل / مصاريف / مداخيل */}
-        <div className="shrink-0">
-          <SegmentedControl<TxType | 'all'>
-            value={filterType}
-            onChange={(val) => {
-              setFilterType(val)
-              setSelectedCategory('all')
-            }}
-            options={[
-              { value: 'all', label: 'الكل' },
-              { value: 'expense', label: 'مصاريف' },
-              { value: 'income', label: 'مداخيل' },
-            ]}
-          />
-        </div>
-
-        {/* Category Select */}
-        <div className="shrink-0 min-w-44">
-          <Select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            options={categoryOptions}
-            className="w-full"
-          />
-        </div>
-      </div>
-
-      {/* Summary Strip Card */}
-      <div className="grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-            ↑
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-400">إجمالي المداخيل</div>
-            <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
-              {formatJOD(totals.income)}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 border-s border-slate-100 dark:border-slate-700 ps-4">
-          <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center font-bold">
-            ↓
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-400">إجمالي المصاريف</div>
-            <div className="text-base sm:text-lg font-black text-red-500 dark:text-red-400">
-              {formatJOD(totals.expense)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Transactions List */}
-      {txLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-28 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
-            />
-          ))}
-        </div>
-      ) : dayGroups.length === 0 ? (
-        <EmptyState
-          icon={<ArrowLeftRight className="w-8 h-8" />}
-          title={
-            query || filterType !== 'all' || selectedCategory !== 'all'
-              ? 'لا توجد معاملات مطابقة للفلترة'
-              : 'لا توجد معاملات لهذا الشهر'
-          }
-          description="ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول."
-          action={
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-              onClick={() => openAdd('expense')}
-            >
-              إضافة أول معاملة
-            </Button>
-          }
-        />
-      ) : (
-        <div className="space-y-6">
-          {dayGroups.map((group) => (
-            <div key={group.dateKey} className="space-y-2">
-              {/* Day Header */}
-              <div className="flex items-center gap-2 px-1 text-xs font-bold text-slate-500 dark:text-slate-400">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{formatDayHeader(group.date, today)}</span>
+      {/* 2-Column Responsive Layout on Desktop (Filters/Totals in Sticky Sidebar, Transactions in Main) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Sidebar Column: Filter Bar & Monthly Totals */}
+        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20">
+          {/* Filter Bar */}
+          <div className="bg-white dark:bg-slate-800 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs space-y-2.5">
+            {/* Top Row: Search Input & Type Toggle */}
+            <div className="flex flex-col items-stretch gap-2">
+              {/* Search Input */}
+              <div className="relative">
+                <div className="absolute inset-y-0 start-0 ps-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="ابحث في العنوان أو الملاحظات..."
+                  className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
               </div>
 
-              {/* Transactions in this day */}
-              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs divide-y divide-slate-100 dark:divide-slate-700/50 overflow-hidden">
-                {group.transactions.map((tx) => {
-                  const cat = categoryMap.get(tx.categoryId)
-                  const icon = cat?.icon ?? '➕'
-                  const color = cat?.color ?? '#94A3B8'
-                  const name = cat?.name ?? 'غير مصنف'
-                  const isExpense = tx.type === 'expense'
+              {/* Type Toggle: الكل / مصاريف / مداخيل */}
+              <SegmentedControl<TxType | 'all'>
+                value={filterType}
+                onChange={(val) => {
+                  setFilterType(val)
+                  setSelectedCategory('all')
+                }}
+                options={[
+                  { value: 'all', label: 'الكل' },
+                  { value: 'expense', label: 'مصاريف' },
+                  { value: 'income', label: 'مداخيل' },
+                ]}
+              />
+            </div>
 
-                  return (
-                    <div
-                      key={tx.id}
-                      onClick={() => openEdit(tx)}
-                      className="group flex items-center justify-between p-3.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
-                    >
-                      {/* Right side: Emoji circle + Category Name + Note */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0"
-                          style={{ backgroundColor: `${color}20` }}
-                        >
-                          {icon}
-                        </div>
+            {/* Bottom Row: Horizontal Scrollable Category Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 select-none text-xs">
+              {/* All Categories Chip */}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                  selectedCategory === 'all'
+                    ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                    : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                )}
+              >
+                كل التصنيفات
+              </button>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-                              {tx.title || name}
-                            </span>
-                            {tx.recurringId && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold shrink-0">
-                                متكررة
-                              </span>
-                            )}
-                          </div>
+              {/* Individual Category Chips */}
+              {relevantCategories.map((cat) => {
+                const isSelected = selectedCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(isSelected ? 'all' : cat.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                      isSelected
+                        ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                        : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    <span className="text-sm shrink-0">{cat.icon}</span>
+                    <span className="font-semibold">{cat.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
-                          <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
-                            {tx.title ? (
-                              <>
-                                <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
-                                {tx.note ? <span>•</span> : null}
-                              </>
-                            ) : null}
-                            {tx.note ? <span>{tx.note}</span> : null}
-                          </div>
-                        </div>
+          {/* Active Filter & Search Summary Strip */}
+          {isFilterActive && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl text-xs shadow-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-200">
+                  <Search className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>النتائج:</span>
+                  <span className="px-1.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black">
+                    {filteredTransactions.length}
+                  </span>
+                </span>
+
+                <span className="text-emerald-300 dark:text-emerald-700">•</span>
+
+                <div className="flex items-center gap-1.5 flex-wrap font-medium text-slate-700 dark:text-slate-300">
+                  <span>المجموع:</span>
+                  {filterType === 'expense' ? (
+                    <span className="font-black text-red-600 dark:text-red-400">
+                      {format(totals.expense)}
+                    </span>
+                  ) : filterType === 'income' ? (
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">
+                      {format(totals.income)}
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-red-600 dark:text-red-400 font-bold">
+                        -{format(totals.expense)}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-600">/</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                        +{format(totals.income)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="self-end sm:self-auto text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-100 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>مسح</span>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Monthly Totals Strip Card */}
+          <div className="grid grid-cols-2 gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المداخيل</div>
+                <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 truncate">
+                  {format(totals.income)}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 border-s border-slate-100 dark:border-slate-700 ps-3">
+              <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+                <TrendingDown className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المصاريف</div>
+                <div className="text-sm sm:text-base font-black text-red-500 dark:text-red-400 truncate">
+                  {format(totals.expense)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Column: Transactions List */}
+        <main className="lg:col-span-8 space-y-4">
+          {txLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : dayGroups.length === 0 ? (
+            <EmptyState
+              icon={<ArrowLeftRight className="w-8 h-8" />}
+              title={
+                query || filterType !== 'all' || selectedCategory !== 'all'
+                  ? 'لا توجد معاملات مطابقة للفلترة'
+                  : 'لا توجد معاملات لهذا الشهر'
+              }
+              description="ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول."
+              action={
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+                  onClick={() => openAdd('expense')}
+                >
+                  إضافة أول معاملة
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-5">
+              {dayGroups.map((group) => {
+                const dayNetFils = group.transactions.reduce((acc, tx) => {
+                  return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
+                }, 0)
+
+                return (
+                  <div key={group.dateKey} className="space-y-2">
+                    {/* Day Header with clearly displayed net spend */}
+                    <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{formatDayHeader(group.date, today)}</span>
                       </div>
-
-                      {/* Left side: Amount Pill & Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* Amount Pill */}
-                        <div
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">صافي اليوم:</span>
+                        <span
                           className={cn(
-                            'font-bold text-xs sm:text-sm px-3 py-1.5 rounded-xl select-none',
-                            isExpense
-                              ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
-                              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                            'font-extrabold text-xs select-none',
+                            dayNetFils > 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : dayNetFils < 0
+                                ? 'text-red-500 dark:text-red-400'
+                                : 'text-slate-400'
                           )}
                         >
-                          {formatSigned(tx.amountFils, tx.type)}
-                        </div>
-
-                        {/* Action Buttons (visible on hover on desktop, always clickable) */}
-                        <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openEdit(tx)
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
-                            aria-label="تعديل المعاملة"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setTxToDelete(tx)
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-                            aria-label="حذف المعاملة"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                          {dayNetFils > 0
+                            ? `+ ${format(dayNetFils)}`
+                            : dayNetFils < 0
+                              ? `- ${format(Math.abs(dayNetFils))}`
+                              : format(0)}
+                        </span>
                       </div>
                     </div>
-                  )
-                })}
-              </div>
+
+                    {/* Transactions in this day */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs divide-y divide-slate-100 dark:divide-slate-700/50 overflow-hidden">
+                      {group.transactions.map((tx) => {
+                        const cat = categoryMap.get(tx.categoryId)
+                        const icon = cat?.icon ?? '➕'
+                        const color = cat?.color ?? '#94A3B8'
+                        const name = cat?.name ?? 'غير مصنف'
+                        const isExpense = tx.type === 'expense'
+
+                        return (
+                          <div
+                            key={tx.id}
+                            onClick={() => openEdit(tx)}
+                            className="group flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+                          >
+                            {/* Right side: Emoji circle + Category Name + Note */}
+                            <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
+                              <div
+                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-base sm:text-lg shrink-0"
+                                style={{ backgroundColor: `${color}20` }}
+                              >
+                                {icon}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                                    {tx.title || name}
+                                  </span>
+                                  {tx.id.startsWith('debt_') && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 font-bold shrink-0">
+                                      <HandCoins className="w-2.5 h-2.5" />
+                                      <span>دين</span>
+                                    </span>
+                                  )}
+                                  {tx.recurringId && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold shrink-0">
+                                      متكررة
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                                  {tx.title ? (
+                                    <>
+                                      <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                                      {tx.note ? <span>•</span> : null}
+                                    </>
+                                  ) : null}
+                                  {tx.note ? <span>{tx.note}</span> : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Left side: Amount Pill & Actions */}
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              {/* Amount Pill */}
+                              <div
+                                className={cn(
+                                  'font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-xl select-none',
+                                  isExpense
+                                    ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+                                    : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                )}
+                              >
+                                {formatWithSign(tx.amountFils, tx.type)}
+                              </div>
+
+                              {/* Action Buttons: hidden on mobile, smooth group hover on desktop */}
+                              <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openDuplicate(tx)
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                  aria-label="تكرار المعاملة"
+                                  title="تكرار المعاملة"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openEdit(tx)
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                  aria-label="تعديل المعاملة"
+                                  title="تعديل المعاملة"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                {tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_') ? (
+                                  <Link
+                                    to="/debts"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
+                                    aria-label="الانتقال إلى صفحة الديون"
+                                    title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Link>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setTxToDelete(tx)
+                                    }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                    aria-label="حذف المعاملة"
+                                    title="حذف المعاملة"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </main>
+      </div>
 
       {/* Delete Confirmation Modal */}
       <Modal

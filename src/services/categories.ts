@@ -2,10 +2,14 @@ import {
   collection,
   doc,
   query,
+  where,
+  limit,
+  getDocs,
   orderBy,
   onSnapshot,
   addDoc,
   updateDoc,
+  deleteDoc,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
@@ -22,7 +26,6 @@ export function subscribeCategories(
 
   return onSnapshot(
     q,
-    { includeMetadataChanges: true },
     (snapshot) => {
       const categories = snapshot.docs.map((d) => d.data())
       cb(categories)
@@ -82,4 +85,24 @@ export async function archiveCategory(
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
   await updateDoc(docRef, { archived })
+}
+
+export async function deleteCategory(uid: string, id: string): Promise<void> {
+  const txsCol = collection(db, 'users', uid, 'transactions')
+  const recCol = collection(db, 'users', uid, 'recurring')
+
+  const [snapTx, snapRec] = await Promise.all([
+    getDocs(query(txsCol, where('categoryId', '==', id), limit(1))),
+    getDocs(query(recCol, where('categoryId', '==', id), limit(1))),
+  ])
+
+  if (!snapTx.empty) {
+    throw new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بمعاملات مالية. يمكنك أرشفته بدلاً من ذلك.')
+  }
+  if (!snapRec.empty) {
+    throw new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بمعاملات متكررة. يمكنك أرشفته بدلاً من ذلك.')
+  }
+
+  const docRef = doc(db, 'users', uid, 'categories', id)
+  await deleteDoc(docRef)
 }

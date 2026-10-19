@@ -19,7 +19,7 @@ export default defineConfig({
         theme_color: '#10B981',
         background_color: '#F8FAFC',
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'any',
         dir: 'rtl',
         lang: 'ar',
         start_url: '/',
@@ -77,10 +77,26 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/recharts')) {
+            return 'recharts-vendor'
+          }
+          if (id.includes('node_modules/firebase')) {
+            return 'firebase-vendor'
+          }
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    exclude: [...configDefaults.exclude, 'tests/firestore.rules.test.ts'],
+    exclude: process.argv.some((a) => a.includes('firestore.rules'))
+      ? configDefaults.exclude
+      : [...configDefaults.exclude, 'tests/firestore.rules.test.ts'],
   },
 })

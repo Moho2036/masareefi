@@ -2,11 +2,22 @@ import { describe, it, expect } from 'vitest'
 import {
   getFinancialMonthRange,
   formatMonthLabel,
+  formatFinancialRangeLabel,
   formatDayHeader,
   parseLocalDateInput,
 } from './dates'
 
 describe('dates lib', () => {
+  describe('formatFinancialRangeLabel', () => {
+    it('formats custom financial month range into readable Arabic range', () => {
+      // e.g. start Sep 25, end Oct 25 -> "25 سبتمبر - 24 أكتوبر"
+      const range = {
+        start: new Date(2026, 8, 25),
+        end: new Date(2026, 9, 25),
+      }
+      expect(formatFinancialRangeLabel(range)).toBe('25 سبتمبر - 24 أكتوبر')
+    })
+  })
   describe('getFinancialMonthRange', () => {
     it('handles default monthStartDay = 1 (calendar month)', () => {
       const refDate = new Date(2026, 9, 10) // Oct 10, 2026

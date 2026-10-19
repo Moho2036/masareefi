@@ -10,8 +10,9 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { formatJOD, fromFils } from '../../lib/money'
+import { fromFils } from '../../lib/money'
 import { toWesternDigits } from '../../lib/dates'
+import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
 import type { DailyExpenseItem } from '../../lib/reports'
 
@@ -27,6 +28,7 @@ interface CustomTooltipProps {
 }
 
 const CustomDailyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
+  const { format: formatCurrency } = useCurrency()
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
     const dateFormatted = toWesternDigits(
@@ -39,7 +41,7 @@ const CustomDailyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
           {dateFormatted}
         </div>
         <div className="text-red-500 dark:text-red-400 font-black text-sm">
-          {formatJOD(item.amountFils)}
+          {formatCurrency(item.amountFils)}
         </div>
       </div>
     )
@@ -47,12 +49,24 @@ const CustomDailyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
   return null
 }
 
-export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = ({
+export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
   data,
   className,
   height = 240,
 }) => {
   const hasExpenses = data.some((d) => d.amountFils > 0)
+
+  // Format chart data with JOD value and concise Arabic date label
+  const chartData = React.useMemo(() => {
+    return data.map((item) => {
+      const itemDate = item.date instanceof Date ? item.date : new Date(item.date)
+      return {
+        ...item,
+        jod: fromFils(item.amountFils),
+        dateLabel: toWesternDigits(format(itemDate, 'd EEE', { locale: ar })),
+      }
+    })
+  }, [data])
 
   if (data.length === 0) {
     return (
@@ -66,12 +80,6 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = ({
       </div>
     )
   }
-
-  // Format chart data with JOD value for tooltips & scaling
-  const chartData = data.map((item) => ({
-    ...item,
-    jod: fromFils(item.amountFils),
-  }))
 
   return (
     <div className={cn('w-full relative', className)} style={{ height }}>
@@ -93,10 +101,10 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = ({
             vertical={false}
           />
           <XAxis
-            dataKey="day"
+            dataKey="dateLabel"
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11, fill: 'currentColor' }}
+            tick={{ fontSize: 10, fill: 'currentColor' }}
             className="text-slate-400 dark:text-slate-500"
             dy={8}
             interval="preserveStartEnd"
@@ -116,7 +124,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = ({
             strokeWidth={2.5}
             fillOpacity={1}
             fill="url(#expenseTrendGradient)"
-            animationDuration={800}
+            animationDuration={300}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -129,4 +137,6 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = ({
       )}
     </div>
   )
-}
+})
+
+DailyExpenseChart.displayName = 'DailyExpenseChart'

@@ -8,6 +8,8 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  getDocs,
+  limit,
   Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -31,7 +33,6 @@ export function subscribeTransactions(
 
   return onSnapshot(
     q,
-    { includeMetadataChanges: true },
     (snapshot) => {
       const items = snapshot.docs.map((d) => d.data())
       cb(items)
@@ -41,6 +42,21 @@ export function subscribeTransactions(
       onError?.(err)
     }
   )
+}
+
+export async function getRecentTransactions(
+  uid: string,
+  limitCount = 100
+): Promise<Transaction[]> {
+  try {
+    const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+    const q = query(colRef, orderBy('date', 'desc'), limit(limitCount))
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map((d) => d.data())
+  } catch (err) {
+    console.error('getRecentTransactions error:', err)
+    return []
+  }
 }
 
 export async function addTransaction(
@@ -107,3 +123,69 @@ export async function deleteTransaction(uid: string, id: string): Promise<void> 
   const docRef = doc(db, 'users', uid, 'transactions', id)
   await deleteDoc(docRef)
 }
+
+export async function getAllTransactions(uid: string): Promise<Transaction[]> {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(colRef, orderBy('date', 'desc'))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => d.data())
+}
+
+export function subscribePriorBalance(
+  uid: string,
+  beforeDate: Date,
+  cb: (balance: number) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(
+    colRef,
+    where('date', '<', Timestamp.fromDate(beforeDate)),
+    orderBy('date', 'desc')
+  )
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      let balance = 0
+      for (const d of snapshot.docs) {
+        const tx = d.data()
+        if (tx.type === 'income') {
+          balance += tx.amountFils || 0
+        } else if (tx.type === 'expense') {
+          balance -= tx.amountFils || 0
+        }
+      }
+      cb(balance)
+    },
+    (err) => {
+      console.error('subscribePriorBalance error:', err)
+      onError?.(err)
+    }
+  )
+}
+
+export async function getPriorBalance(uid: string, beforeDate: Date): Promise<number> {
+  try {
+    const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+    const q = query(
+      colRef,
+      where('date', '<', Timestamp.fromDate(beforeDate))
+    )
+    const snap = await getDocs(q)
+    let balance = 0
+    for (const d of snap.docs) {
+      const tx = d.data()
+      if (tx.type === 'income') {
+        balance += tx.amountFils || 0
+      } else if (tx.type === 'expense') {
+        balance -= tx.amountFils || 0
+      }
+    }
+    return balance
+  } catch (err) {
+    console.error('getPriorBalance error:', err)
+    return 0
+  }
+}
+

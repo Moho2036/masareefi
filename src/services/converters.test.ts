@@ -5,8 +5,9 @@ import {
   transactionConverter,
   recurringConverter,
   userSettingsConverter,
+  debtConverter,
 } from './converters'
-import type { Category, Transaction, Recurring, UserSettings } from '../types'
+import type { Category, Transaction, Recurring, UserSettings, Debt } from '../types'
 
 function makeMockSnapshot<T extends Record<string, unknown>>(
   id: string,
@@ -230,7 +231,7 @@ describe('converters', () => {
       const settings: UserSettings = {
         uid: 'user-xyz',
         displayName: 'محمد أحمد',
-        currency: 'USD', // should enforce 'JOD'
+        currency: 'USD',
         monthStartDay: 35, // should clamp to 28
         theme: 'dark',
         createdAt,
@@ -239,20 +240,30 @@ describe('converters', () => {
       const data = userSettingsConverter.toFirestore(settings) as Record<string, unknown>
 
       expect(data.displayName).toBe('محمد أحمد')
-      expect(data.currency).toBe('JOD')
+      expect(data.currency).toBe('USD')
       expect(data.monthStartDay).toBe(28)
       expect(data.theme).toBe('dark')
       expect(data.createdAt).toBeInstanceOf(Timestamp)
       expect((data.createdAt as Timestamp).toDate().getTime()).toBe(createdAt.getTime())
+
+      // Fallback when currency is empty
+      const emptyCurrencyData = userSettingsConverter.toFirestore({
+        ...settings,
+        currency: '' as unknown as string,
+        rolloverBalance: true,
+      }) as Record<string, unknown>
+      expect(emptyCurrencyData.currency).toBe('JOD')
+      expect(emptyCurrencyData.rolloverBalance).toBe(true)
     })
 
-    it('converts Firestore snapshot to UserSettings with uid', () => {
+    it('converts Firestore snapshot to UserSettings with uid and rolloverBalance', () => {
       const createdAt = new Date('2026-01-01T00:00:00Z')
       const snap = makeMockSnapshot('user-123', {
         displayName: 'سارة',
         currency: 'JOD',
         monthStartDay: 25,
         theme: 'light',
+        rolloverBalance: true,
         createdAt: Timestamp.fromDate(createdAt),
       })
 
@@ -263,7 +274,83 @@ describe('converters', () => {
       expect(settings.currency).toBe('JOD')
       expect(settings.monthStartDay).toBe(25)
       expect(settings.theme).toBe('light')
+      expect(settings.rolloverBalance).toBe(true)
       expect(settings.createdAt?.getTime()).toBe(createdAt.getTime())
     })
   })
+
+  describe('debtConverter', () => {
+    it('converts Debt to Firestore data correctly', () => {
+      const startDate = new Date('2026-09-15T00:00:00Z')
+      const dueDate = new Date('2026-11-01T00:00:00Z')
+      const createdAt = new Date('2026-09-15T12:00:00Z')
+      const paymentDate = new Date('2026-10-01T10:00:00Z')
+
+      const debt: Debt = {
+        id: 'debt-1',
+        personName: ' أحمد العبدلله ',
+        type: 'lent',
+        amountFils: 100000,
+        paidFils: 30000,
+        startDate,
+        dueDate,
+        note: 'سلفة',
+        settled: false,
+        payments: [
+          {
+            id: 'pay-1',
+            amountFils: 30000,
+            date: paymentDate,
+            note: 'كليك',
+            createdAt: paymentDate,
+          },
+        ],
+        createdAt,
+      }
+
+      const firestoreData = debtConverter.toFirestore(debt)
+
+      expect(firestoreData.personName).toBe('أحمد العبدلله')
+      expect(firestoreData.type).toBe('lent')
+      expect(firestoreData.amountFils).toBe(100000)
+      expect(firestoreData.paidFils).toBe(30000)
+      expect(firestoreData.settled).toBe(false)
+      expect(firestoreData.note).toBe('سلفة')
+      expect(firestoreData.startDate).toBeInstanceOf(Timestamp)
+      expect(firestoreData.dueDate).toBeInstanceOf(Timestamp)
+      expect(firestoreData.payments).toHaveLength(1)
+      expect((firestoreData.payments as Array<{ id: string }>)[0].id).toBe('pay-1')
+      expect((firestoreData as Record<string, unknown>).id).toBeUndefined()
+    })
+
+    it('converts Firestore snapshot to Debt correctly with null dueDate', () => {
+      const startDate = new Date('2026-09-15T00:00:00Z')
+      const createdAt = new Date('2026-09-15T12:00:00Z')
+
+      const snap = makeMockSnapshot('debt-2', {
+        personName: 'خالد',
+        type: 'borrowed',
+        amountFils: 50000,
+        paidFils: 50000,
+        startDate: Timestamp.fromDate(startDate),
+        dueDate: null,
+        note: '',
+        settled: true,
+        payments: [],
+        createdAt: Timestamp.fromDate(createdAt),
+      })
+
+      const debt = debtConverter.fromFirestore(snap)
+
+      expect(debt.id).toBe('debt-2')
+      expect(debt.personName).toBe('خالد')
+      expect(debt.type).toBe('borrowed')
+      expect(debt.amountFils).toBe(50000)
+      expect(debt.paidFils).toBe(50000)
+      expect(debt.settled).toBe(true)
+      expect(debt.dueDate).toBeNull()
+      expect(debt.payments).toEqual([])
+    })
+  })
 })
+

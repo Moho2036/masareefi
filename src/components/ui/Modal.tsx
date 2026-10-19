@@ -50,7 +50,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end lg:items-center justify-center"
+      className="fixed inset-0 z-50 flex items-end lg:items-center justify-center overflow-hidden"
       role="presentation"
     >
       {/* Backdrop */}
@@ -67,12 +67,16 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
         tabIndex={-1}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+        }}
         className={cn(
-          'relative z-10 w-full bg-white dark:bg-slate-800 shadow-2xl outline-none transition-all',
-          // Mobile: Bottom Sheet
-          'rounded-t-3xl max-h-[90vh] overflow-y-auto p-5 pb-8',
+          'relative z-10 w-full bg-white dark:bg-slate-800 shadow-2xl outline-none smooth-touch-scroll',
+          // Mobile: Bottom Sheet with native momentum touch scrolling
+          'rounded-t-3xl max-h-[88dvh] overflow-y-auto overscroll-contain touch-pan-y p-5 pb-10',
           // Desktop >= lg: Centered Dialog
-          'lg:rounded-2xl lg:max-w-md lg:p-6 lg:m-4 lg:max-h-[85vh]',
+          'lg:rounded-2xl lg:max-w-lg lg:p-6 lg:m-4 lg:max-h-[85vh]',
           className,
         )}
       >

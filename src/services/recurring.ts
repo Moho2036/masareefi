@@ -4,6 +4,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   writeBatch,
   onSnapshot,
   addDoc,
@@ -27,7 +28,6 @@ export function subscribeRecurring(
 
   return onSnapshot(
     colRef,
-    { includeMetadataChanges: true },
     (snapshot) => {
       const items = snapshot.docs.map((d) => d.data())
       cb(items)
@@ -108,6 +108,12 @@ export async function updateRecurring(
   if (rec.active !== undefined) {
     payload.active = Boolean(rec.active)
   }
+  if (rec.circleId !== undefined) {
+    payload.circleId = rec.circleId
+  }
+  if (rec.skipMonth !== undefined) {
+    payload.skipMonth = Math.round(rec.skipMonth)
+  }
 
   if (Object.keys(payload).length > 0) {
     await updateDoc(docRef, payload)
@@ -128,11 +134,14 @@ export async function processDueRecurring(
   uid: string,
   today: Date = new Date()
 ): Promise<number> {
+  const endOfToday = new Date(today.getTime())
+  endOfToday.setHours(23, 59, 59, 999)
+
   const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
   const q = query(
     colRef,
     where('active', '==', true),
-    where('nextDate', '<=', Timestamp.fromDate(today))
+    where('nextDate', '<=', Timestamp.fromDate(endOfToday))
   )
 
   const snap = await getDocs(q)
@@ -141,31 +150,36 @@ export async function processDueRecurring(
   }
 
   let createdCount = 0
+  let batchHasWrites = false
   const batch = writeBatch(db)
 
   for (const docSnap of snap.docs) {
     const rec = docSnap.data()
-    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, today)
+    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, endOfToday)
 
-    if (dates.length === 0) continue
+    if (dates.length > 0) {
+      for (const occDate of dates) {
+        const txId = getDeterministicTxId(rec.id, occDate)
+        const txRef = doc(db, 'users', uid, 'transactions', txId)
+        const txSnap = await getDoc(txRef)
 
-    for (const occDate of dates) {
-      const txId = getDeterministicTxId(rec.id, occDate)
-      const txRef = doc(db, 'users', uid, 'transactions', txId)
-      const newTxData: Record<string, unknown> = {
-        type: rec.type,
-        amountFils: rec.amountFils,
-        categoryId: rec.categoryId,
-        date: Timestamp.fromDate(occDate),
-        note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
-        recurringId: rec.id,
-        createdAt: serverTimestamp(),
+        if (!txSnap.exists()) {
+          const newTxData: Record<string, unknown> = {
+            type: rec.type,
+            amountFils: rec.amountFils,
+            categoryId: rec.categoryId,
+            date: Timestamp.fromDate(occDate),
+            note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+            recurringId: rec.id,
+            createdAt: serverTimestamp(),
+          }
+          if (rec.title) {
+            newTxData.title = rec.title.slice(0, 100)
+          }
+          batch.set(txRef, newTxData)
+          createdCount++
+        }
       }
-      if (rec.title) {
-        newTxData.title = rec.title.slice(0, 100)
-      }
-      batch.set(txRef, newTxData)
-      createdCount++
     }
 
     const recRef = doc(db, 'users', uid, 'recurring', rec.id)
@@ -176,9 +190,10 @@ export async function processDueRecurring(
       updatePayload.active = false
     }
     batch.update(recRef, updatePayload)
+    batchHasWrites = true
   }
 
-  if (createdCount > 0) {
+  if (batchHasWrites) {
     await batch.commit()
   }
 

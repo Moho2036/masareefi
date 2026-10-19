@@ -15,6 +15,7 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 - Cards: `rounded-2xl`, soft shadow, `p-5`. Buttons `rounded-xl`.
 - Dark mode: class strategy on `<html>` (`.dark`), setting = system | light | dark (default system). Use `@custom-variant dark (&:where(.dark, .dark *));`.
 - Desktop (≥ lg): sidebar on the RIGHT (start side). Mobile: bottom nav (الرئيسية، المعاملات، [+ FAB]، التقارير، المزيد).
+- Zero blocking spinners: Use skeleton loading (`AppShellSkeleton`, `DashboardSkeleton`, `HeroCardSkeleton`, `PageSkeleton`) instead of full-screen spinners or blank screens. Guard balance hero cards against flashing deficit (`danger`) states during initial data resolution.
 - All user-facing text in Arabic. Numbers in Western digits (0-9) for readability: use `Intl.NumberFormat('ar-JO', { numberingSystem: 'latn' })`.
 
 ## Money & dates
@@ -25,6 +26,9 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 - Follow the tree in `docs/PLAN.md`. All Firestore access lives in `src/services/*`; components never import `firebase/firestore` directly.
 - Pure logic (`src/lib/*`) must have Vitest unit tests next to it (`*.test.ts`).
 - No `any`. No unused code. Keep components small.
+
+## Documentation & Project Bible (Mandatory Auto-Update Rule)
+Whenever ANY feature, calculation, UI layout, component, or database field is added, modified, or removed in the codebase, you MUST immediately update `docs/PROJECT_BIBLE.md` in the same task so it always remains 100% synchronized with the actual code.
 
 ## Required checks before reporting done
 ```
