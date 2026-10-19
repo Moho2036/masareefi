@@ -5,6 +5,9 @@ import {
   sortCategoriesByUsage,
   buildUsageFromTransactions,
   mergeAndSaveUsage,
+  getCategoryUsageDetails,
+  getCategoryUsageCount,
+  isCategoryInUse,
 } from './categoryUsage'
 
 describe('categoryUsage utilities', () => {
@@ -77,5 +80,46 @@ describe('categoryUsage utilities', () => {
 
     const sorted = sortCategoriesByUsage(cats, {})
     expect(sorted.map((c) => c.id)).toEqual(['cat-a', 'cat-b'])
+  })
+
+  it('calculates category usage details taking transactions and recurring into account', () => {
+    const txs = [{ categoryId: 'cat-rent' }, { categoryId: 'cat-rent' }]
+    const recurring = [{ categoryId: 'cat-rent' }, { categoryId: 'cat-gym' }]
+
+    // cat-rent: 2 txs + 1 recurring = 3 total
+    const rentDetails = getCategoryUsageDetails('cat-rent', txs, recurring, {})
+    expect(rentDetails.txCount).toBe(2)
+    expect(rentDetails.recurringCount).toBe(1)
+    expect(rentDetails.totalCount).toBe(3)
+    expect(rentDetails.isInUse).toBe(true)
+    expect(getCategoryUsageCount('cat-rent', txs, recurring, {})).toBe(3)
+    expect(isCategoryInUse('cat-rent', txs, recurring, {})).toBe(true)
+
+    // cat-gym: 0 txs + 1 recurring = 1 total
+    const gymDetails = getCategoryUsageDetails('cat-gym', txs, recurring, {})
+    expect(gymDetails.txCount).toBe(0)
+    expect(gymDetails.recurringCount).toBe(1)
+    expect(gymDetails.totalCount).toBe(1)
+    expect(gymDetails.isInUse).toBe(true)
+    expect(getCategoryUsageCount('cat-gym', txs, recurring, {})).toBe(1)
+    expect(isCategoryInUse('cat-gym', txs, recurring, {})).toBe(true)
+
+    // cat-unused: 0 txs + 0 recurring = 0 total
+    const unusedDetails = getCategoryUsageDetails('cat-unused', txs, recurring, {})
+    expect(unusedDetails.txCount).toBe(0)
+    expect(unusedDetails.recurringCount).toBe(0)
+    expect(unusedDetails.totalCount).toBe(0)
+    expect(unusedDetails.isInUse).toBe(false)
+    expect(isCategoryInUse('cat-unused', txs, recurring, {})).toBe(false)
+  })
+
+  it('considers historical local storage usage if higher than active transactions', () => {
+    const txs = [{ categoryId: 'cat-past' }]
+    const localMap = { 'cat-past': 10 }
+    const details = getCategoryUsageDetails('cat-past', txs, [], localMap)
+
+    expect(details.txCount).toBe(10) // max of 1 and 10
+    expect(details.totalCount).toBe(10)
+    expect(details.isInUse).toBe(true)
   })
 })

@@ -84,6 +84,21 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(result[2]).toEqual({ day: 3, date: new Date(2026, 9, 3), amountFils: 0 })
       expect(result[3]).toEqual({ day: 4, date: new Date(2026, 9, 4), amountFils: 20000 })
     })
+
+    it('generates exact number of calendar days without DST skipping or infinite loop', () => {
+      // Month of October (31 days) where DST changes frequently occur
+      const start = new Date(2026, 9, 1, 0, 0, 0)
+      const end = new Date(2026, 10, 1, 0, 0, 0) // Exclusive end: Nov 1
+      const result = calculateDailyExpenses([], start, end)
+
+      expect(result).toHaveLength(31)
+      expect(result[0].day).toBe(1)
+      expect(result[30].day).toBe(31)
+      // Every subsequent entry has day = previous + 1
+      for (let i = 0; i < result.length; i++) {
+        expect(result[i].day).toBe(i + 1)
+      }
+    })
   })
 
   describe('calculateCategoryDistribution', () => {
@@ -240,6 +255,63 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(breakdown[2].income).toBe(0)
       expect(breakdown[2].expense).toBe(150000)
       expect(breakdown[2].balance).toBe(-150000)
+    })
+
+    it('groups transactions into fiscal cycles when monthStartDay > 1 (e.g. 25)', () => {
+      const txs: Transaction[] = [
+        // Transaction on 2026-01-10: day 10 < 25 -> belongs to Dec 2025 cycle (should be excluded from 2026)
+        {
+          id: '1',
+          type: 'income',
+          amountFils: 500000,
+          categoryId: 'cat-salary',
+          date: new Date(2026, 0, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+        // Transaction on 2026-01-25: day 25 >= 25 -> belongs to Jan 2026 cycle (month 0)
+        {
+          id: '2',
+          type: 'income',
+          amountFils: 800000,
+          categoryId: 'cat-salary',
+          date: new Date(2026, 0, 25),
+          note: '',
+          createdAt: new Date(),
+        },
+        // Transaction on 2026-02-05: day 5 < 25 -> belongs to Jan 2026 cycle (month 0)
+        {
+          id: '3',
+          type: 'expense',
+          amountFils: 200000,
+          categoryId: 'cat-rent',
+          date: new Date(2026, 1, 5),
+          note: '',
+          createdAt: new Date(),
+        },
+        // Transaction on 2027-01-10: belongs to Dec 2026 cycle (month 11)
+        {
+          id: '4',
+          type: 'expense',
+          amountFils: 150000,
+          categoryId: 'cat-food',
+          date: new Date(2027, 0, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const breakdown = calculateYearlyBreakdown(txs, 2026, 25)
+
+      // Month 0 (Jan cycle: Jan 25 - Feb 25): income 800,000, expense 200,000
+      expect(breakdown[0].income).toBe(800000)
+      expect(breakdown[0].expense).toBe(200000)
+      expect(breakdown[0].balance).toBe(600000)
+
+      // Month 11 (Dec cycle: Dec 25 - Jan 25): expense 150,000
+      expect(breakdown[11].income).toBe(0)
+      expect(breakdown[11].expense).toBe(150000)
+      expect(breakdown[11].balance).toBe(-150000)
     })
   })
 

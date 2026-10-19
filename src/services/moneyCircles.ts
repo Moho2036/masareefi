@@ -5,6 +5,9 @@ import {
   deleteDoc,
   updateDoc,
   getDoc,
+  getDocs,
+  query,
+  where,
   setDoc,
   onSnapshot,
   Timestamp,
@@ -59,12 +62,10 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
         circle.createdAt instanceof Date
           ? Timestamp.fromDate(circle.createdAt)
           : (circle.createdAt as unknown as Timestamp) || serverTimestamp(),
+      ...(circle.isManager !== undefined ? { isManager: Boolean(circle.isManager) } : {}),
     }
-    if (circle.recurringId) {
-      docData.recurringId = circle.recurringId
-    }
-    if (typeof circle.isManager === 'boolean') {
-      docData.isManager = circle.isManager
+    if (typeof circle.recurringId === 'string' && circle.recurringId.trim()) {
+      docData.recurringId = circle.recurringId.trim().slice(0, 128)
     }
     return docData
   },
@@ -86,7 +87,7 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
       })),
       status: data.status || 'active',
       ...(data.recurringId ? { recurringId: data.recurringId } : {}),
-      ...(typeof data.isManager === 'boolean' ? { isManager: data.isManager } : {}),
+      ...(data.isManager !== undefined ? { isManager: Boolean(data.isManager) } : {}),
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
     }
   },
@@ -150,6 +151,7 @@ export async function addMoneyCircle(
     members: circle.members || [],
     status: circle.status || 'active',
     ...(circle.recurringId ? { recurringId: circle.recurringId } : {}),
+    ...(circle.isManager !== undefined ? { isManager: Boolean(circle.isManager) } : {}),
     createdAt: new Date(),
   }
 
@@ -174,6 +176,7 @@ export async function updateMoneyCircle(
   if (partial.totalAmountFils !== undefined) updates.totalAmountFils = Math.round(partial.totalAmountFils)
   if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
   if (partial.recurringId !== undefined) updates.recurringId = partial.recurringId
+  if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
   if (partial.startDate !== undefined) {
     updates.startDate =
       partial.startDate instanceof Date
@@ -237,21 +240,46 @@ export async function deleteCirclePayout(uid: string, circleId: string): Promise
 
 export async function deleteMoneyCircle(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'circles', id)
-  await deleteDoc(docRef)
-  await deleteCirclePayout(uid, id)
+  const circleSnap = await getDoc(docRef)
+  const circleData = circleSnap.data()
+
+  const batch = writeBatch(db)
+  batch.delete(docRef)
+
+  // 1. Clean up associated recurring transaction if linked by recurringId
+  if (circleData?.recurringId) {
+    const recRef = doc(db, 'users', uid, 'recurring', circleData.recurringId)
+    batch.delete(recRef)
+  }
+
+  // 2. Query any recurring transaction linked via circleId === id
+  const recColRef = collection(db, 'users', uid, 'recurring')
+  const q = query(recColRef, where('circleId', '==', id))
+  const recSnap = await getDocs(q)
+  for (const recDoc of recSnap.docs) {
+    batch.delete(recDoc.ref)
+  }
+
+  // 3. Clean up associated payout transaction
+  const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
+  batch.delete(payoutTxRef)
+
+  await batch.commit()
 }
+
+export const deleteCircle = deleteMoneyCircle
 
 /**
  * Calculates which month (1-indexed) the circle is currently in based on start date.
  */
 export function getCurrentCircleMonth(circle: MoneyCircle, refDate = new Date()): number {
   const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+  const target = refDate instanceof Date ? refDate : new Date(refDate)
   const diffMonths =
-    (refDate.getFullYear() - start.getFullYear()) * 12 +
-    (refDate.getMonth() - start.getMonth()) +
-    1
+    (target.getFullYear() - start.getFullYear()) * 12 +
+    (target.getMonth() - start.getMonth())
 
-  return Math.max(1, Math.min(circle.membersCount, diffMonths))
+  return Math.max(1, Math.min(circle.membersCount, diffMonths + 1))
 }
 
 /**

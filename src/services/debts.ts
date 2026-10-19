@@ -7,7 +7,6 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  updateDoc,
   writeBatch,
   Timestamp,
   serverTimestamp,
@@ -201,6 +200,23 @@ export async function updateDebt(
   data: Partial<Omit<Debt, 'id' | 'createdAt'>>
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'debts', id)
+  const debtSnap = await getDoc(docRef)
+  if (debtSnap && typeof debtSnap.exists === 'function' && !debtSnap.exists()) {
+    throw new Error('الدين غير موجود')
+  }
+  const currentDebt = debtSnap.data()
+  const currentPaidFils = currentDebt?.paidFils ? Math.round(Number(currentDebt.paidFils)) : 0
+  const currentAmountFils = currentDebt?.amountFils ? Math.round(Number(currentDebt.amountFils)) : 0
+
+  const effectivePaidFils = data.paidFils !== undefined ? Math.round(Number(data.paidFils)) : currentPaidFils
+  const effectiveAmountFils = data.amountFils !== undefined ? Math.round(Number(data.amountFils)) : currentAmountFils
+
+  if (data.amountFils !== undefined) {
+    if (effectiveAmountFils < currentPaidFils) {
+      throw new Error('لا يمكن تعديل إجمالي الدين ليصبح أقل من المبلغ المسدد بالفعل')
+    }
+  }
+
   const updates: Record<string, unknown> = {}
 
   if (data.personName !== undefined) {
@@ -218,36 +234,28 @@ export async function updateDebt(
   if (data.note !== undefined) {
     updates.note = data.note.slice(0, 500)
   }
+  if (data.amountFils !== undefined) {
+    updates.amountFils = effectiveAmountFils
+  }
   if (data.paidFils !== undefined) {
-    updates.paidFils = Math.round(Number(data.paidFils))
+    updates.paidFils = effectivePaidFils
   }
   if (data.payments !== undefined) {
     updates.payments = data.payments.map(serializePayment)
   }
 
-  if (data.amountFils !== undefined || data.paidFils !== undefined) {
-    const snap = await getDoc(docRef)
-    const existing = snap.data()
-    const origAmount = existing?.amountFils ? Math.round(Number(existing.amountFils)) : 0
-    const origPaid = existing?.paidFils ? Math.round(Number(existing.paidFils)) : 0
+  // Always compute settled to satisfy firestore.rules:
+  // data.settled == (data.paidFils == data.amountFils)
+  const settled = effectivePaidFils === effectiveAmountFils
+  updates.settled = settled
 
-    const finalAmountFils = data.amountFils !== undefined ? Math.round(Number(data.amountFils)) : origAmount
-    const rawPaid = data.paidFils !== undefined ? Math.round(Number(data.paidFils)) : origPaid
-    const finalPaidFils = Math.max(0, Math.min(finalAmountFils, rawPaid))
-
-    updates.amountFils = finalAmountFils
-    updates.paidFils = finalPaidFils
-    updates.settled = finalPaidFils >= finalAmountFils
-  } else if (data.settled !== undefined) {
-    updates.settled = Boolean(data.settled)
-  }
-
-  await updateDoc(docRef, updates)
+  const batch = writeBatch(db)
+  batch.update(docRef, updates)
 
   // Synchronize with transactions/debt_init_${id} if it exists
   const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
   const initTxSnap = await getDoc(initTxRef)
-  if (initTxSnap.exists()) {
+  if (initTxSnap && typeof initTxSnap.exists === 'function' && initTxSnap.exists()) {
     const txUpdates: Record<string, unknown> = {}
     if (data.amountFils !== undefined) {
       txUpdates.amountFils = Math.round(Number(data.amountFils))
@@ -255,45 +263,62 @@ export async function updateDebt(
     if (data.startDate !== undefined) {
       txUpdates.date = data.startDate instanceof Date ? Timestamp.fromDate(data.startDate) : data.startDate
     }
-    if (data.personName !== undefined || data.type !== undefined) {
-      const debtSnap = await getDoc(docRef)
-      const currentDebt = debtSnap.data()
-      const name = (data.personName !== undefined ? data.personName.trim() : currentDebt?.personName) || ''
-      const debtType = data.type || currentDebt?.type || 'lent'
-      txUpdates.title = (debtType === 'lent' ? `إقراض: ${name}` : `اقتراض من: ${name}`).slice(0, 100)
-      if (data.type !== undefined) {
-        txUpdates.type = data.type === 'lent' ? 'expense' : 'income'
-      }
+    if (data.note !== undefined) {
+      txUpdates.note = data.note.slice(0, 500)
     }
+
+    const effectiveType = data.type !== undefined ? data.type : (currentDebt?.type || 'lent')
+    const name = (data.personName !== undefined ? data.personName.trim() : currentDebt?.personName) || ''
+
+    if (data.personName !== undefined || data.type !== undefined) {
+      txUpdates.title = (effectiveType === 'lent' ? `إقراض: ${name}` : `اقتراض من: ${name}`).slice(0, 100)
+    }
+
+    if (data.type !== undefined && data.type !== currentDebt?.type) {
+      const newTxType: TxType = effectiveType === 'lent' ? 'expense' : 'income'
+      const newCategoryId = await getOrCreateDebtCategory(uid, newTxType)
+      txUpdates.type = newTxType
+      txUpdates.categoryId = newCategoryId
+    }
+
     if (Object.keys(txUpdates).length > 0) {
-      await updateDoc(initTxRef, txUpdates)
+      batch.update(initTxRef, txUpdates)
     }
   }
 
   // Synchronize all associated payment transactions debt_pay_${payment.id} if personName or type changed
   if (data.personName !== undefined || data.type !== undefined) {
-    const debtSnap = await getDoc(docRef)
-    const currentDebt = debtSnap.data()
+    const effectiveType = data.type !== undefined ? data.type : (currentDebt?.type || 'lent')
     const name = (data.personName !== undefined ? data.personName.trim() : currentDebt?.personName) || ''
-    const debtType = data.type || currentDebt?.type || 'lent'
     const payments: DebtPayment[] = currentDebt?.payments || []
+
+    let newPayCatId: string | undefined
+    if (payments.length > 0 && data.type !== undefined && data.type !== currentDebt?.type) {
+      const payTxType: TxType = effectiveType === 'lent' ? 'income' : 'expense'
+      newPayCatId = await getOrCreateDebtCategory(uid, payTxType)
+    }
 
     for (const p of payments) {
       if (p.id) {
         const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
         const payTxSnap = await getDoc(payTxRef)
-        if (payTxSnap.exists()) {
+        if (payTxSnap && typeof payTxSnap.exists === 'function' && payTxSnap.exists()) {
           const payTxUpdates: Record<string, unknown> = {
-            title: (debtType === 'lent' ? `استرداد دفعة دين: ${name}` : `سداد دفعة دين: ${name}`).slice(0, 100),
+            title: (effectiveType === 'lent' ? `استرداد دفعة دين: ${name}` : `سداد دفعة دين: ${name}`).slice(0, 100),
           }
           if (data.type !== undefined) {
-            payTxUpdates.type = debtType === 'lent' ? 'income' : 'expense'
+            payTxUpdates.type = effectiveType === 'lent' ? 'income' : 'expense'
+            if (newPayCatId) {
+              payTxUpdates.categoryId = newPayCatId
+            }
           }
-          await updateDoc(payTxRef, payTxUpdates)
+          batch.update(payTxRef, payTxUpdates)
         }
       }
     }
   }
+
+  await batch.commit()
 }
 
 export async function deleteDebt(uid: string, id: string): Promise<void> {

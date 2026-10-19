@@ -10,6 +10,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   Timestamp,
   serverTimestamp,
   type Unsubscribe,
@@ -80,9 +81,6 @@ export async function updateRecurring(
   if (rec.categoryId !== undefined) {
     payload.categoryId = rec.categoryId
   }
-  if (rec.title !== undefined) {
-    payload.title = typeof rec.title === 'string' ? rec.title.trim().slice(0, 100) : ''
-  }
   if (rec.note !== undefined) {
     payload.note = typeof rec.note === 'string' ? rec.note.slice(0, 500) : ''
   }
@@ -97,22 +95,42 @@ export async function updateRecurring(
     payload.nextDate =
       rec.nextDate instanceof Date ? Timestamp.fromDate(rec.nextDate) : rec.nextDate
   }
-  if (rec.endDate !== undefined) {
-    payload.endDate =
-      rec.endDate === null
-        ? null
-        : rec.endDate instanceof Date
-          ? Timestamp.fromDate(rec.endDate)
-          : rec.endDate
-  }
   if (rec.active !== undefined) {
     payload.active = Boolean(rec.active)
   }
-  if (rec.circleId !== undefined) {
-    payload.circleId = rec.circleId
+
+  // Handle optional fields with deleteField() when unset, undefined, or null
+  if ('title' in rec) {
+    if (rec.title === undefined || rec.title === null || (typeof rec.title === 'string' && rec.title.trim() === '')) {
+      payload.title = deleteField()
+    } else {
+      payload.title = rec.title.trim().slice(0, 100)
+    }
   }
-  if (rec.skipMonth !== undefined) {
-    payload.skipMonth = Math.round(rec.skipMonth)
+
+  if ('endDate' in rec) {
+    if (rec.endDate === undefined || rec.endDate === null) {
+      payload.endDate = deleteField()
+    } else {
+      payload.endDate =
+        rec.endDate instanceof Date ? Timestamp.fromDate(rec.endDate) : rec.endDate
+    }
+  }
+
+  if ('circleId' in rec) {
+    if (rec.circleId === undefined || rec.circleId === null || rec.circleId === '') {
+      payload.circleId = deleteField()
+    } else {
+      payload.circleId = rec.circleId
+    }
+  }
+
+  if ('skipMonth' in rec) {
+    if (rec.skipMonth === undefined || rec.skipMonth === null) {
+      payload.skipMonth = deleteField()
+    } else {
+      payload.skipMonth = Math.round(rec.skipMonth)
+    }
   }
 
   if (Object.keys(payload).length > 0) {

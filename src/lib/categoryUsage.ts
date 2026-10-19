@@ -75,3 +75,72 @@ export function sortCategoriesByUsage<T extends { id: string; order: number }>(
     return a.order - b.order // Fallback to original natural order
   })
 }
+
+export interface CategoryUsageDetails {
+  txCount: number
+  recurringCount: number
+  totalCount: number
+  isInUse: boolean
+}
+
+/**
+ * Calculates detailed usage counts for a given category across:
+ * - Active or current transactions list
+ * - Recurring transactions rules
+ * - Persisted local historical usage counts (localStorage)
+ */
+export function getCategoryUsageDetails(
+  categoryId: string,
+  transactions: Array<{ categoryId?: string }> = [],
+  recurring: Array<{ categoryId?: string }> = [],
+  localMap: Record<string, number> = getCategoryUsageMap()
+): CategoryUsageDetails {
+  if (!categoryId) {
+    return { txCount: 0, recurringCount: 0, totalCount: 0, isInUse: false }
+  }
+
+  let txCount = 0
+  for (const tx of transactions) {
+    if (tx.categoryId === categoryId) txCount++
+  }
+
+  let recurringCount = 0
+  for (const rec of recurring) {
+    if (rec.categoryId === categoryId) recurringCount++
+  }
+
+  const localTxCount = localMap[categoryId] || 0
+  const effectiveTxCount = Math.max(txCount, localTxCount)
+  const totalCount = effectiveTxCount + recurringCount
+
+  return {
+    txCount: effectiveTxCount,
+    recurringCount,
+    totalCount,
+    isInUse: totalCount > 0,
+  }
+}
+
+/**
+ * Returns the total usage count of a category across transactions and recurring rules.
+ */
+export function getCategoryUsageCount(
+  categoryId: string,
+  transactions: Array<{ categoryId?: string }> = [],
+  recurring: Array<{ categoryId?: string }> = [],
+  localMap: Record<string, number> = getCategoryUsageMap()
+): number {
+  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).totalCount
+}
+
+/**
+ * Returns true if a category is currently linked to any transaction or recurring rule.
+ */
+export function isCategoryInUse(
+  categoryId: string,
+  transactions: Array<{ categoryId?: string }> = [],
+  recurring: Array<{ categoryId?: string }> = [],
+  localMap: Record<string, number> = getCategoryUsageMap()
+): boolean {
+  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).isInUse
+}

@@ -1,4 +1,5 @@
 import type { Transaction, Category, TxType } from '../types'
+import { getFiscalMonthInfo } from './dates'
 
 export interface DailyExpenseItem {
   day: number
@@ -47,10 +48,8 @@ export function calculateDailyExpenses(
   start: Date,
   end: Date
 ): DailyExpenseItem[] {
-  const current = new Date(start)
-  current.setHours(0, 0, 0, 0)
-  const endBoundary = new Date(end)
-  endBoundary.setHours(0, 0, 0, 0)
+  let current = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0)
+  const endBoundary = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 0, 0, 0, 0)
 
   if (current.getTime() >= endBoundary.getTime()) {
     return []
@@ -82,7 +81,7 @@ export function calculateDailyExpenses(
       amountFils,
     })
 
-    current.setDate(current.getDate() + 1)
+    current = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1, 0, 0, 0, 0)
   }
 
   return result
@@ -140,12 +139,16 @@ export function calculateCategoryDistribution(
 
 /**
  * Aggregates all transactions for a specific year into 12 months (indices 0..11).
+ * Respects monthStartDay: when monthStartDay > 1, transactions are placed into their
+ * corresponding fiscal month cycle (0..11) for that year.
  * Zero-fills months with no activity.
  */
 export function calculateYearlyBreakdown(
   txs: Transaction[],
-  year: number
+  year: number,
+  monthStartDay: number = 1
 ): MonthlyBreakdownItem[] {
+  const safeStartDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
   const monthlyData: { income: number; expense: number }[] = Array.from(
     { length: 12 },
     () => ({ income: 0, expense: 0 })
@@ -153,9 +156,18 @@ export function calculateYearlyBreakdown(
 
   for (const tx of txs) {
     const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
-    if (txDate.getFullYear() !== year) continue
 
-    const monthIndex = txDate.getMonth()
+    let txYear = txDate.getFullYear()
+    let monthIndex = txDate.getMonth()
+
+    if (safeStartDay > 1) {
+      const fiscal = getFiscalMonthInfo(txDate, safeStartDay)
+      txYear = fiscal.year
+      monthIndex = fiscal.monthIndex
+    }
+
+    if (txYear !== year) continue
+
     if (monthIndex >= 0 && monthIndex < 12) {
       if (tx.type === 'income') {
         monthlyData[monthIndex].income += tx.amountFils

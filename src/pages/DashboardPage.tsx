@@ -28,6 +28,7 @@ const DailyExpenseChart = React.lazy(() =>
   import('../components/charts/DailyExpenseChart').then((m) => ({ default: m.DailyExpenseChart }))
 )
 import { useAuth } from '../hooks/useAuth'
+import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactions } from '../hooks/useTransactions'
 import { useCategories } from '../hooks/useCategories'
@@ -81,6 +82,11 @@ export const DashboardPage: React.FC = () => {
 
   const monthStartDay = settings?.monthStartDay ?? 1
   const effectiveRollover = isRolloverEnabled ? rolloverBalance : 0
+
+  const appData = useAppData()
+  useEffect(() => {
+    appData?.setRolloverBalanceFils(effectiveRollover)
+  }, [appData, effectiveRollover])
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])

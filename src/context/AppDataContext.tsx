@@ -14,6 +14,8 @@ import { subscribeCategories } from '../services/categories'
 import { subscribeDebts } from '../services/debts'
 import { subscribeRecurring } from '../services/recurring'
 import { subscribeMoneyCircles } from '../services/moneyCircles'
+import { subscribePriorBalance } from '../services/transactions'
+import { getFinancialMonthRange } from '../lib/dates'
 import type { UserSettings, Category, Debt, Recurring, MoneyCircle } from '../types'
 
 export interface AppDataContextValue {
@@ -37,6 +39,9 @@ export interface AppDataContextValue {
   moneyCircles: MoneyCircle[]
   moneyCirclesLoading: boolean
   moneyCirclesError: Error | null
+
+  rolloverBalanceFils: number
+  setRolloverBalanceFils: (amount: number) => void
 }
 
 export const AppDataContext = createContext<AppDataContextValue | null>(null)
@@ -64,14 +69,36 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [moneyCirclesLoading, setMoneyCirclesLoading] = useState(true)
   const [moneyCirclesError, setMoneyCirclesError] = useState<Error | null>(null)
 
+  const [rolloverBalanceFils, setRolloverBalanceFils] = useState<number>(0)
+
+  const userId = user?.uid
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
+      setSettings(null)
+      setSettingsLoading(false)
+      setSettingsError(null)
+      setCategories([])
+      setCategoriesLoading(false)
+      setCategoriesError(null)
+      setDebts([])
+      setDebtsLoading(false)
+      setDebtsError(null)
+      setRecurring([])
+      setRecurringLoading(false)
+      setRecurringError(null)
+      setMoneyCircles([])
+      setMoneyCirclesLoading(false)
+      setMoneyCirclesError(null)
+      setRolloverBalanceFils(0)
       return
     }
 
-    // 1. Single listener for User Settings
+    const unsubscribers: (() => void)[] = []
+
+    // 1. Single real-time listener for User Settings
     const unsubSettings = subscribeUserSettings(
-      user.uid,
+      userId,
       (newSettings) => {
         setSettings(newSettings)
         setSettingsLoading(false)
@@ -81,10 +108,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setSettingsLoading(false)
       }
     )
+    unsubscribers.push(unsubSettings)
 
     // 2. Single listener for Categories
     const unsubCategories = subscribeCategories(
-      user.uid,
+      userId,
       (newCategories) => {
         setCategories(newCategories)
         setCategoriesLoading(false)
@@ -94,10 +122,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setCategoriesLoading(false)
       }
     )
+    unsubscribers.push(unsubCategories)
 
     // 3. Single listener for Debts
     const unsubDebts = subscribeDebts(
-      user.uid,
+      userId,
       (newDebts) => {
         setDebts(newDebts)
         setDebtsLoading(false)
@@ -107,10 +136,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDebtsLoading(false)
       }
     )
+    unsubscribers.push(unsubDebts)
 
     // 4. Single listener for Recurring rules
     const unsubRecurring = subscribeRecurring(
-      user.uid,
+      userId,
       (newRecurring) => {
         setRecurring(newRecurring)
         setRecurringLoading(false)
@@ -120,10 +150,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setRecurringLoading(false)
       }
     )
+    unsubscribers.push(unsubRecurring)
 
     // 5. Single listener for Money Circles
     const unsubCircles = subscribeMoneyCircles(
-      user.uid,
+      userId,
       (newCircles) => {
         setMoneyCircles(newCircles)
         setMoneyCirclesLoading(false)
@@ -133,22 +164,54 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setMoneyCirclesLoading(false)
       }
     )
+    unsubscribers.push(unsubCircles)
 
     return () => {
-      unsubSettings()
-      unsubCategories()
-      unsubDebts()
-      unsubRecurring()
-      unsubCircles()
+      unsubscribers.forEach((unsub) => unsub())
     }
-  }, [user])
+  }, [userId])
 
   const handleUpdateSettings = useCallback(
     async (partial: Partial<Omit<UserSettings, 'uid' | 'createdAt'>>): Promise<void> => {
-      if (!user) throw new Error('No authenticated user')
-      await updateUserSettings(user.uid, partial)
+      if (!userId) throw new Error('No authenticated user')
+      await updateUserSettings(userId, partial)
     },
-    [user]
+    [userId]
+  )
+
+  // Real-time rollover prior balance sync: calculates cumulative balance before financial cycle start
+  useEffect(() => {
+    if (!userId || !settings?.rolloverBalance) {
+      setRolloverBalanceFils(0)
+      return
+    }
+
+    const periodRange = getFinancialMonthRange(new Date(), settings.monthStartDay ?? 1)
+    const unsub = subscribePriorBalance(
+      userId,
+      periodRange.start,
+      (bal) => {
+        setRolloverBalanceFils(bal)
+      },
+      (err) => {
+        console.error('Failed to subscribe prior balance in AppDataContext:', err)
+      }
+    )
+
+    return () => {
+      unsub()
+    }
+  }, [userId, settings?.rolloverBalance, settings?.monthStartDay])
+
+  const handleSetRolloverBalanceFils = useCallback(
+    (amount: number) => {
+      if (!settings?.rolloverBalance) {
+        setRolloverBalanceFils(0)
+      } else {
+        setRolloverBalanceFils(amount)
+      }
+    },
+    [settings?.rolloverBalance]
   )
 
   const value = useMemo<AppDataContextValue>(() => {
@@ -174,6 +237,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         moneyCircles: [],
         moneyCirclesLoading: false,
         moneyCirclesError: null,
+
+        rolloverBalanceFils: 0,
+        setRolloverBalanceFils: handleSetRolloverBalanceFils,
       }
     }
 
@@ -198,6 +264,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       moneyCircles,
       moneyCirclesLoading,
       moneyCirclesError,
+
+      rolloverBalanceFils,
+      setRolloverBalanceFils: handleSetRolloverBalanceFils,
     }
   }, [
     user,
@@ -217,6 +286,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     moneyCircles,
     moneyCirclesLoading,
     moneyCirclesError,
+    rolloverBalanceFils,
+    handleSetRolloverBalanceFils,
   ])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>

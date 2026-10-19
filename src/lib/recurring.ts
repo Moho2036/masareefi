@@ -45,9 +45,8 @@ export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): 
   const occ = occurrenceDate instanceof Date ? occurrenceDate : new Date(occurrenceDate)
   const diffMonths =
     (occ.getFullYear() - start.getFullYear()) * 12 +
-    (occ.getMonth() - start.getMonth()) +
-    1
-  return diffMonths
+    (occ.getMonth() - start.getMonth())
+  return diffMonths + 1
 }
 
 /**
@@ -164,8 +163,24 @@ export function calculateMonthlyEquivalent(
   for (const item of items) {
     if (!item.active) continue
 
-    // If this month is the skipped turn month for this item, no installment is due
-    if (item.type === 'expense' && isOccurrenceSkipped(item, refDate)) {
+    // For money circles, check if this month's occurrence is exempt from installment payment.
+    // If referenceDate is the start of a custom financial cycle (e.g. Sep 25 for Oct),
+    // nextDate might fall in [refDate, addMonths(refDate, 1)) in the upcoming calendar month (e.g. Oct 1..Oct 25).
+    let isSkipped = isOccurrenceSkipped(item, refDate)
+    if (!isSkipped && item.nextDate) {
+      const nextDate = item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)
+      const cycleEnd = addMonths(refDate, 1)
+      if (nextDate >= refDate && nextDate < cycleEnd) {
+        if (
+          (nextDate.getFullYear() === refDate.getFullYear() && nextDate.getMonth() === refDate.getMonth()) ||
+          refDate.getDate() >= 20
+        ) {
+          isSkipped = isOccurrenceSkipped(item, nextDate)
+        }
+      }
+    }
+
+    if (item.type === 'expense' && isSkipped) {
       continue
     }
 

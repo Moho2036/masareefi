@@ -1,11 +1,10 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { addMonths } from 'date-fns'
 import {
   TrendingUp,
   TrendingDown,
   PiggyBank,
   Percent,
-  Calendar,
   ArrowUpRight,
   ArrowDownRight,
   CalendarDays,
@@ -17,6 +16,8 @@ import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
 import { CategoryPieChart } from '../components/charts/CategoryPieChart'
 import { MonthlyBarChart } from '../components/charts/MonthlyBarChart'
+import { useAuth } from '../hooks/useAuth'
+import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactions } from '../hooks/useTransactions'
 import { useCategories } from '../hooks/useCategories'
@@ -24,13 +25,14 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useDebts } from '../hooks/useDebts'
 import { useRecurring } from '../hooks/useRecurring'
 import { useCurrency } from '../hooks/useCurrency'
+import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
 import {
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
 } from '../lib/reports'
-import { getFinancialMonthRange } from '../lib/dates'
+import { getFinancialMonthRange, getMonthRange } from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
 import { cn } from '../lib/cn'
@@ -39,12 +41,41 @@ export const ReportsPage: React.FC = () => {
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly')
 
   // Monthly data hooks
+  const { user } = useAuth()
+  const appData = useAppData()
   const { selectedDate, range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()
   const { format } = useCurrency()
   const monthStartDay = settings?.monthStartDay ?? 1
+
+  const [localRollover, setLocalRollover] = useState<number>(0)
+  const isRolloverEnabled = Boolean(settings?.rolloverBalance)
+
+  useEffect(() => {
+    if (!user?.uid || !isRolloverEnabled) {
+      return
+    }
+    const unsub = subscribePriorBalance(
+      user.uid,
+      range.start,
+      (bal) => {
+        setLocalRollover(bal)
+        appData?.setRolloverBalanceFils(bal)
+      },
+      (err) => {
+        console.error('Failed to subscribe prior balance in ReportsPage:', err)
+      }
+    )
+    return () => {
+      unsub()
+    }
+  }, [user?.uid, isRolloverEnabled, range.start, appData])
+
+  const effectiveRollover = isRolloverEnabled
+    ? (appData?.rolloverBalanceFils ?? localRollover)
+    : 0
 
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
@@ -61,8 +92,9 @@ export const ReportsPage: React.FC = () => {
       debts,
       monthStartDay,
       periodRange: range,
+      rolloverBalanceFils: effectiveRollover,
     })
-  }, [monthTransactions, recurring, debts, monthStartDay, range])
+  }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover])
 
   // Previous month range for monthly comparison
   const prevMonthRange = useMemo(() => {
@@ -78,13 +110,11 @@ export const ReportsPage: React.FC = () => {
   const currentYear = useMemo(() => new Date().getFullYear(), [])
   const [selectedYear, setSelectedYear] = useState<number>(currentYear)
 
-  const yearRange = useMemo(
-    () => ({
-      start: new Date(selectedYear, 0, 1, 0, 0, 0, 0),
-      end: new Date(selectedYear + 1, 0, 1, 0, 0, 0, 0),
-    }),
-    [selectedYear]
-  )
+  const yearRange = useMemo(() => {
+    const start = getMonthRange(selectedYear, 0, monthStartDay).start
+    const end = getMonthRange(selectedYear, 11, monthStartDay).end
+    return { start, end }
+  }, [selectedYear, monthStartDay])
 
   const { data: yearTransactions, loading: yearLoading } = useTransactions(yearRange, {
     enabled: isYearly,
@@ -116,9 +146,13 @@ export const ReportsPage: React.FC = () => {
 
   // Yearly calculations
   const yearSums = useMemo(() => sumByType(yearTransactions), [yearTransactions])
+  const yearlySavingsRate = useMemo(
+    () => calculateSavingsRate(yearSums.income, yearSums.expense),
+    [yearSums.income, yearSums.expense]
+  )
   const yearlyBreakdown = useMemo(
-    () => calculateYearlyBreakdown(yearTransactions, selectedYear),
-    [yearTransactions, selectedYear]
+    () => calculateYearlyBreakdown(yearTransactions, selectedYear, monthStartDay),
+    [yearTransactions, selectedYear, monthStartDay]
   )
   const yearCategoryDist = useMemo(
     () => calculateCategoryDistribution(yearTransactions, categories, 'expense'),
@@ -435,21 +469,28 @@ export const ReportsPage: React.FC = () => {
               </div>
             </Card>
 
-            {/* Monthly Expense Average */}
+            {/* Annual Savings Rate */}
             <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  متوسط المصاريف الشهري
+                  نسبة الادخار السنوية
                 </span>
-                <div className="w-7 h-7 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-500 dark:text-red-400 flex items-center justify-center">
-                  <Calendar className="w-3.5 h-3.5" />
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <Percent className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100 select-none">
-                {format(monthlyAverage)}
+              <div
+                className={cn(
+                  'text-lg sm:text-2xl font-black select-none',
+                  yearlySavingsRate >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-500 dark:text-red-400'
+                )}
+              >
+                %{yearlySavingsRate}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                معدل الصرف لكل شهر
+                متوسط الصرف: {format(monthlyAverage)} / شهر
               </div>
             </Card>
           </div>

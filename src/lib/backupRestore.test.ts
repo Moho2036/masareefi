@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { validateBackup, restoreBackup, type MasareefiBackup } from './backupRestore'
+import { validateBackup, restoreBackup, downloadBackupFile, type MasareefiBackup } from './backupRestore'
+import { formatDateInput } from './dates'
 
 // Mock Firestore
 vi.mock('./firebase', () => ({
@@ -8,6 +9,7 @@ vi.mock('./firebase', () => ({
 
 const mockSet = vi.fn()
 const mockCommit = vi.fn().mockResolvedValue(undefined)
+const mockGetDoc = vi.fn()
 
 vi.mock('firebase/firestore', () => {
   const createMockDoc = (_db: unknown, ...parts: string[]) => {
@@ -21,7 +23,7 @@ vi.mock('firebase/firestore', () => {
   return {
     doc: vi.fn(createMockDoc),
     collection: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
-    getDoc: vi.fn(),
+    getDoc: (...args: unknown[]) => mockGetDoc(...args),
     getDocs: vi.fn(),
     writeBatch: vi.fn(() => ({
       set: mockSet,
@@ -183,12 +185,145 @@ describe('backupRestore module', () => {
     it('preserves document IDs and executes batch commits', async () => {
       mockSet.mockClear()
       mockCommit.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
 
       await restoreBackup('user-test-uid', sampleBackup)
 
       // Settings (1) + Category (1) + Transaction (1) + Debt (1) + Recurring (1) + Circle (1) = 6 ops
       expect(mockSet).toHaveBeenCalledTimes(6)
       expect(mockCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves existing database createdAt when restoring user settings', async () => {
+      mockSet.mockClear()
+      const existingCreatedAt = new Date('2025-01-01T00:00:00Z')
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ createdAt: existingCreatedAt }),
+      })
+
+      await restoreBackup('user-test-uid', sampleBackup)
+
+      const settingsCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid')
+      expect(settingsCall).toBeDefined()
+      expect(settingsCall![1].createdAt).toEqual(existingCreatedAt)
+    })
+
+    it('strips empty string optional fields and clamps debt values', async () => {
+      mockSet.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithEmptyFields: MasareefiBackup = {
+        version: 1,
+        app: 'masareefi',
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [
+            {
+              id: 'tx-strip',
+              type: 'expense',
+              amountFils: 2000,
+              categoryId: 'cat-1',
+              date: new Date(),
+              note: '',
+              title: '   ',
+              recurringId: '',
+              createdAt: new Date(),
+            },
+          ],
+          debts: [
+            {
+              id: 'debt-clamp',
+              personName: 'خالد',
+              type: 'lent',
+              amountFils: 50000,
+              paidFils: 60000, // exceeds amountFils!
+              startDate: new Date(),
+              dueDate: null,
+              note: '',
+              settled: false,
+              payments: [],
+              createdAt: new Date(),
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec-strip',
+              type: 'expense',
+              amountFils: 10000,
+              categoryId: 'cat-1',
+              note: '',
+              frequency: 'monthly',
+              startDate: new Date(),
+              nextDate: new Date(),
+              active: true,
+              title: '',
+              circleId: '',
+            },
+          ],
+          circles: [
+            {
+              id: 'circle-strip',
+              name: 'جمعية',
+              monthlyAmountFils: 50000,
+              membersCount: 4,
+              totalAmountFils: 200000,
+              myTurnMonth: 1,
+              startDate: new Date(),
+              members: [],
+              status: 'active',
+              recurringId: '',
+              createdAt: new Date(),
+            },
+          ],
+        },
+      }
+
+      await restoreBackup('user-test-uid', backupWithEmptyFields)
+
+      const txCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/transactions/tx-strip')
+      expect(txCall).toBeDefined()
+      expect(txCall![1].title).toBeUndefined()
+      expect(txCall![1].recurringId).toBeUndefined()
+
+      const debtCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/debts/debt-clamp')
+      expect(debtCall).toBeDefined()
+      expect(debtCall![1].paidFils).toBe(50000)
+      expect(debtCall![1].settled).toBe(true)
+
+      const recCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/recurring/rec-strip')
+      expect(recCall).toBeDefined()
+      expect(recCall![1].title).toBeUndefined()
+      expect(recCall![1].circleId).toBeUndefined()
+
+      const circleCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/circles/circle-strip')
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].recurringId).toBeUndefined()
+    })
+  })
+
+  describe('downloadBackupFile', () => {
+    it('generates filename matching local user date format', () => {
+      globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
+      globalThis.URL.revokeObjectURL = vi.fn()
+
+      let downloadedName = ''
+      const originalCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        const el = originalCreateElement(tagName)
+        if (tagName === 'a') {
+          el.click = vi.fn(() => {
+            downloadedName = (el as HTMLAnchorElement).download
+          })
+        }
+        return el
+      })
+
+      downloadBackupFile(sampleBackup)
+
+      const expectedDate = formatDateInput(new Date())
+      expect(downloadedName).toBe(`masareefi-backup-${expectedDate}.json`)
     })
   })
 })

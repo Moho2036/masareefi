@@ -279,7 +279,7 @@ describe('debts service with accounting link', () => {
   })
 
   describe('updateDebt with sync', () => {
-    it('updates initial transaction when it exists', async () => {
+    it('updates initial transaction when it exists atomically via batch', async () => {
       mockGetDoc.mockResolvedValue({
         exists: () => true,
         data: () => ({ personName: 'سامي', type: 'lent', paidFils: 0 }),
@@ -290,10 +290,96 @@ describe('debts service with accounting link', () => {
         personName: 'سامي الجديد',
       })
 
-      expect(mockUpdateDoc).toHaveBeenCalledTimes(2) // debt + transaction
-      expect(mockUpdateDoc.mock.calls[1][1]).toMatchObject({
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2) // debt + transaction
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+      expect(mockBatchUpdate.mock.calls[0][1]).toMatchObject({
+        amountFils: 75000,
+        personName: 'سامي الجديد',
+        settled: false,
+      })
+      expect(mockBatchUpdate.mock.calls[1][1]).toMatchObject({
         amountFils: 75000,
         title: 'إقراض: سامي الجديد',
+      })
+    })
+
+    it('synchronizes type change from lent to borrowed and resolves correct category', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ personName: 'سامي', type: 'lent', paidFils: 0 }),
+      })
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { data: () => ({ id: 'cat-borrowed-inc', name: 'أخرى', type: 'income', archived: false }) },
+        ],
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        type: 'borrowed',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2) // debt + initial tx
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+
+      // Debt doc update
+      expect(mockBatchUpdate.mock.calls[0][1]).toMatchObject({
+        type: 'borrowed',
+      })
+
+      // Initial tx update
+      expect(mockBatchUpdate.mock.calls[1][1]).toMatchObject({
+        type: 'income',
+        categoryId: 'cat-borrowed-inc',
+        title: 'اقتراض من: سامي',
+      })
+    })
+
+    it('throws error when newAmountFils is less than currentPaidFils', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ personName: 'سامي', type: 'lent', paidFils: 30000, amountFils: 50000 }),
+      })
+
+      await expect(
+        updateDebt('user-1', 'debt-999', {
+          amountFils: 20000,
+        })
+      ).rejects.toThrow('لا يمكن تعديل إجمالي الدين ليصبح أقل من المبلغ المسدد بالفعل')
+      expect(mockBatchUpdate).not.toHaveBeenCalled()
+      expect(mockBatchCommit).not.toHaveBeenCalled()
+    })
+
+    it('always computes and includes settled = true when paidFils equals amountFils', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ personName: 'سامي', type: 'lent', paidFils: 50000, amountFils: 60000 }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        amountFils: 50000,
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      expect(mockBatchUpdate.mock.calls[0][1]).toMatchObject({
+        amountFils: 50000,
+        settled: true,
+      })
+    })
+
+    it('includes settled field even when only updating non-amount fields like personName', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ personName: 'علي', type: 'lent', paidFils: 10000, amountFils: 50000 }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        personName: 'علي الجديد',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      expect(mockBatchUpdate.mock.calls[0][1]).toMatchObject({
+        personName: 'علي الجديد',
+        settled: false,
       })
     })
   })

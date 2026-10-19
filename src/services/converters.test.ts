@@ -275,7 +275,7 @@ describe('converters', () => {
       expect(settings.monthStartDay).toBe(25)
       expect(settings.theme).toBe('light')
       expect(settings.rolloverBalance).toBe(true)
-      expect(settings.createdAt?.getTime()).toBe(createdAt.getTime())
+      expect((settings.createdAt as Date)?.getTime()).toBe(createdAt.getTime())
     })
   })
 
@@ -350,6 +350,101 @@ describe('converters', () => {
       expect(debt.settled).toBe(true)
       expect(debt.dueDate).toBeNull()
       expect(debt.payments).toEqual([])
+    })
+
+    it('recalculates settled and clamps paidFils in toFirestore', () => {
+      const debt: Debt = {
+        id: 'debt-clamp',
+        personName: 'سعيد',
+        type: 'lent',
+        amountFils: 40000,
+        paidFils: 45000, // exceeds amountFils!
+        startDate: new Date(),
+        dueDate: null,
+        note: '',
+        settled: false, // mismatch!
+        payments: [],
+        createdAt: new Date(),
+      }
+
+      const firestoreData = debtConverter.toFirestore(debt)
+      expect(firestoreData.paidFils).toBe(40000) // clamped to amountFils
+      expect(firestoreData.settled).toBe(true) // recalculated: 40000 === 40000
+    })
+
+    it('enforces settled is false if paidFils is less than amountFils even if settled was true', () => {
+      const debt: Debt = {
+        id: 'debt-unsettled',
+        personName: 'سعيد',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 20000,
+        startDate: new Date(),
+        dueDate: null,
+        note: '',
+        settled: true, // incorrect settled!
+        payments: [],
+        createdAt: new Date(),
+      }
+
+      const firestoreData = debtConverter.toFirestore(debt)
+      expect(firestoreData.settled).toBe(false)
+    })
+  })
+
+  describe('userSettingsConverter Timestamp preservation', () => {
+    it('preserves exact Timestamp instance for createdAt', () => {
+      const ts = Timestamp.fromDate(new Date('2026-05-01T12:34:56.789Z'))
+      const settings: UserSettings = {
+        displayName: 'مروان',
+        currency: 'JOD',
+        monthStartDay: 1,
+        theme: 'light',
+        createdAt: ts,
+      }
+
+      const data = userSettingsConverter.toFirestore(settings)
+      expect(data.createdAt).toBe(ts)
+    })
+  })
+
+  describe('optional string fields omission in converters', () => {
+    it('omits empty string title and recurringId in transactionConverter', () => {
+      const tx: Transaction = {
+        id: 'tx-empty-fields',
+        type: 'expense',
+        amountFils: 1000,
+        categoryId: 'cat-1',
+        date: new Date(),
+        note: 'ملاحظة',
+        title: '   ',
+        recurringId: '',
+        createdAt: new Date(),
+      }
+
+      const data = transactionConverter.toFirestore(tx)
+      expect(data.title).toBeUndefined()
+      expect(data.recurringId).toBeUndefined()
+    })
+
+    it('omits empty string title and circleId in recurringConverter', () => {
+      const rec: Recurring = {
+        id: 'rec-empty-fields',
+        type: 'expense',
+        amountFils: 5000,
+        categoryId: 'cat-1',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date(),
+        nextDate: new Date(),
+        active: true,
+        title: '',
+        circleId: '  ',
+      }
+
+      const data = recurringConverter.toFirestore(rec)
+      expect(data.title).toBeUndefined()
+      expect(data.circleId).toBeUndefined()
     })
   })
 })

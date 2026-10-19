@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore'
+
 export type TxType = 'expense' | 'income'
 
 export type Frequency = 'weekly' | 'monthly' | 'yearly'
@@ -50,7 +52,7 @@ export interface UserSettings {
   monthStartDay: number
   theme: ThemePreference
   rolloverBalance?: boolean
-  createdAt?: Date
+  createdAt?: Date | Timestamp
 }
 
 export type DebtType = 'lent' | 'borrowed'

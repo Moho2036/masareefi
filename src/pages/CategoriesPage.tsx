@@ -23,17 +23,21 @@ import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { archiveCategory, deleteCategory } from '../services/categories'
 import { countByCategory } from '../lib/aggregate'
+import { useAppData } from '../context/AppDataContext'
 import {
   getCategoryUsageMap,
   buildUsageFromTransactions,
   mergeUsageMaps,
   saveCategoryUsageMap,
+  getCategoryUsageDetails,
 } from '../lib/categoryUsage'
 import type { Category, TxType } from '../types'
 
 export const CategoriesPage: React.FC = () => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
+  const appData = useAppData()
+  const recurring = appData?.recurring ?? []
   const { range } = useSelectedMonth()
   const { data: transactions } = useTransactions(range)
   const { showToast } = useToast()
@@ -45,8 +49,42 @@ export const CategoriesPage: React.FC = () => {
   const [catToDelete, setCatToDelete] = useState<Category | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Transaction count per category for current financial month
+  const txCounts = useMemo(() => {
+    return countByCategory(transactions)
+  }, [transactions])
+
+  // Track category usage frequencies in memory
+  const usageMap = useMemo(() => {
+    const txMap = buildUsageFromTransactions(transactions)
+    return mergeUsageMaps(txMap, getCategoryUsageMap())
+  }, [transactions])
+
+  // Recurring usage count per category
+  const recurringCounts = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const rec of recurring) {
+      if (rec.categoryId) {
+        map[rec.categoryId] = (map[rec.categoryId] || 0) + 1
+      }
+    }
+    return map
+  }, [recurring])
+
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
+    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap)
+    if (details.isInUse) {
+      showToast(
+        `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${
+          details.recurringCount > 0 ? `${details.recurringCount} معاملة متكررة و ` : ''
+        }${details.txCount} معاملة مالية. يمكنك أرشفته بدلاً من ذلك.`,
+        'info'
+      )
+      setCatToDelete(null)
+      return
+    }
+
     setIsDeleting(true)
     try {
       await deleteCategory(user.uid, catToDelete.id)
@@ -60,17 +98,6 @@ export const CategoriesPage: React.FC = () => {
     }
   }
 
-  // Transaction count per category for current financial month
-  const txCounts = useMemo(() => {
-    return countByCategory(transactions)
-  }, [transactions])
-
-  // Track category usage frequencies in memory
-  const usageMap = useMemo(() => {
-    const txMap = buildUsageFromTransactions(transactions)
-    return mergeUsageMaps(txMap, getCategoryUsageMap())
-  }, [transactions])
-
   // Save merged category usage in localStorage outside render in an effect
   useEffect(() => {
     if (transactions.length > 0) {
@@ -82,14 +109,16 @@ export const CategoriesPage: React.FC = () => {
   const activeCategories = useMemo(() => {
     const filtered = categories.filter((c) => c.type === categoryType && !c.archived)
     return [...filtered].sort((a, b) => {
-      const scoreA = (txCounts[a.id] || 0) * 1000 + (usageMap[a.id] || 0)
-      const scoreB = (txCounts[b.id] || 0) * 1000 + (usageMap[b.id] || 0)
+      const recA = recurringCounts[a.id] || 0
+      const recB = recurringCounts[b.id] || 0
+      const scoreA = (txCounts[a.id] || 0) * 1000 + (usageMap[a.id] || 0) + recA * 500
+      const scoreB = (txCounts[b.id] || 0) * 1000 + (usageMap[b.id] || 0) + recB * 500
       if (scoreB !== scoreA) {
         return scoreB - scoreA // Highest usage first
       }
       return a.order - b.order
     })
-  }, [categories, categoryType, txCounts, usageMap])
+  }, [categories, categoryType, txCounts, usageMap, recurringCounts])
 
   // Archived categories for the selected type
   const archivedCategories = useMemo(() => {
@@ -128,15 +157,31 @@ export const CategoriesPage: React.FC = () => {
     }
   }
 
-  const formatCount = (count: number, total = 0) => {
-    if (count === 0) {
-      if (total > 0) return `0 هذا الشهر (${total} إجمالاً)`
-      return 'لا توجد معاملات مسجلة'
+  const formatUsageText = (catId: string) => {
+    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap)
+    const currentMonthCount = txCounts[catId] || 0
+
+    if (!details.isInUse) {
+      return 'لا توجد معاملات مسجلة (غير مستخدم)'
     }
-    if (count === 1) return 'معاملة واحدة هذا الشهر'
-    if (count === 2) return 'معاملتان هذا الشهر'
-    if (count >= 3 && count <= 10) return `${count} معاملات هذا الشهر`
-    return `${count} معاملة هذا الشهر`
+
+    const parts: string[] = []
+    if (currentMonthCount > 0) {
+      if (currentMonthCount === 1) parts.push('معاملة واحدة هذا الشهر')
+      else if (currentMonthCount === 2) parts.push('معاملتان هذا الشهر')
+      else if (currentMonthCount <= 10) parts.push(`${currentMonthCount} معاملات هذا الشهر`)
+      else parts.push(`${currentMonthCount} معاملة هذا الشهر`)
+    } else if (details.txCount > 0) {
+      parts.push(`${details.txCount} معاملة سابقة`)
+    }
+
+    if (details.recurringCount > 0) {
+      if (details.recurringCount === 1) parts.push('معاملة متكررة مرتبطة')
+      else if (details.recurringCount === 2) parts.push('معاملتان متكررتان')
+      else parts.push(`${details.recurringCount} معاملات متكررة`)
+    }
+
+    return parts.join(' • ')
   }
 
   return (
@@ -201,7 +246,7 @@ export const CategoriesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeCategories.map((cat) => {
-            const count = txCounts[cat.id] || 0
+            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
 
             return (
               <div
@@ -222,7 +267,7 @@ export const CategoriesPage: React.FC = () => {
                       {cat.name}
                     </h3>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      {formatCount(count, usageMap[cat.id] || 0)}
+                      {formatUsageText(cat.id)}
                     </p>
                   </div>
                 </div>
@@ -246,13 +291,20 @@ export const CategoriesPage: React.FC = () => {
                   >
                     <Archive className="w-4 h-4" />
                   </button>
-                  {count === 0 && (
+                  {usageDetails.isInUse ? (
+                    <span
+                      className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-400 dark:text-slate-500 font-medium select-none"
+                      title="لا يمكن حذف التصنيف نهائياً لأنه مرتبط بمعاملات مالية أو متكررة. يمكنك أرشفته بدلاً من ذلك."
+                    >
+                      مستخدم
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => setCatToDelete(cat)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                       aria-label={`حذف تصنيف ${cat.name} نهائياً`}
-                      title="حذف نهائي (لا توجد معاملات مرتبطة)"
+                      title="حذف نهائي (غير مستخدم في أي معاملات)"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -286,7 +338,7 @@ export const CategoriesPage: React.FC = () => {
           {isArchivedExpanded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
               {archivedCategories.map((cat) => {
-                const count = txCounts[cat.id] || 0
+                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
                 return (
                   <div
                     key={cat.id}
@@ -309,7 +361,14 @@ export const CategoriesPage: React.FC = () => {
                       >
                         استعادة
                       </Button>
-                      {count === 0 && (
+                      {usageDetails.isInUse ? (
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-200/60 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium select-none"
+                          title="مرتبط بمعاملات مالية أو متكررة"
+                        >
+                          مستخدم
+                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => setCatToDelete(cat)}
@@ -345,32 +404,67 @@ export const CategoriesPage: React.FC = () => {
         }}
         title="تأكيد حذف التصنيف"
       >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <p className="text-sm font-semibold">
-              هل أنت متأكد من حذف تصنيف &quot;{catToDelete?.name}&quot; نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
-            </p>
+        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap).isInUse ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-bold mb-1">لا يمكن حذف هذا التصنيف نهائياً!</p>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                  تصنيف &quot;{catToDelete.name}&quot; مستخدم حالياً في سجلاتك المالية (
+                  {formatUsageText(catToDelete.id)}). للحفاظ على دقة الميزانيات والتقارير المحاسبية، يمكنك أرشفته بدلاً من حذفه.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setCatToDelete(null)}
+              >
+                إلغاء
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={async () => {
+                  const cat = catToDelete
+                  setCatToDelete(null)
+                  await handleArchive(cat)
+                }}
+              >
+                أرشفة التصنيف بدلاً من حذفه
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setCatToDelete(null)}
-              disabled={isDeleting}
-            >
-              إلغاء
-            </Button>
-            <Button
-              variant="danger"
-              size="md"
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'جاري الحذف...' : 'حذف نهائي'}
-            </Button>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p className="text-sm font-semibold">
+                هل أنت متأكد من حذف تصنيف &quot;{catToDelete?.name}&quot; نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setCatToDelete(null)}
+                disabled={isDeleting}
+              >
+                إلغاء
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'جاري الحذف...' : 'حذف نهائي'}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
     </div>
   )

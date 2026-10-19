@@ -360,6 +360,28 @@ describe('recurring pure logic', () => {
       const aprilResult = calculateMonthlyEquivalent([circleRec], new Date(2026, 3, 15))
       expect(aprilResult.monthlyExpense).toBe(0)
     })
+
+    it('waives monthly expense in calculateMonthlyEquivalent when referenceDate is start of custom cycle (e.g. Sep 25)', () => {
+      // Circle started Jan 1, 2026. Month 10 is October.
+      const circleRec: Recurring = {
+        id: 'r_circle_custom',
+        type: 'expense',
+        amountFils: 150000,
+        categoryId: 'c1',
+        note: 'جمعية قسط',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1),
+        nextDate: new Date(2026, 9, 1), // Oct 1, 2026 (Month 10)
+        active: true,
+        circleId: 'c1',
+        skipMonth: 10, // Month 10 is the user's turn
+      }
+
+      // Financial cycle for October with monthStartDay = 25 starts on Sep 25, 2026
+      const sep25RangeStart = new Date(2026, 8, 25, 0, 0, 0, 0)
+      const res = calculateMonthlyEquivalent([circleRec], sep25RangeStart)
+      expect(res.monthlyExpense).toBe(0)
+    })
   })
 })
 

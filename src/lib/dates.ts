@@ -116,3 +116,73 @@ export function parseLocalDateInput(dateStr: string): Date {
   return new Date(dateStr)
 }
 
+/**
+ * Formats a Date object into a local 'YYYY-MM-DD' string for HTML date inputs or local filenames.
+ */
+export function formatDateInput(date: Date = new Date()): string {
+  const d = date instanceof Date ? date : new Date(date)
+  return format(d, 'yyyy-MM-dd')
+}
+
+/**
+ * Resolves the fiscal month information (year, 0-indexed monthIndex, and YYYY-MM key)
+ * for a specific date based on monthStartDay (1-28).
+ * If day < monthStartDay, the date belongs to the fiscal cycle that started in the previous month.
+ */
+export function getFiscalMonthInfo(
+  date: Date,
+  monthStartDay: number = 1
+): { year: number; monthIndex: number; key: string } {
+  const safeStartDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
+  const d = date instanceof Date ? date : new Date(date)
+  const day = d.getDate()
+  let year = d.getFullYear()
+  let month = d.getMonth()
+
+  if (day < safeStartDay) {
+    month -= 1
+    if (month < 0) {
+      month = 11
+      year -= 1
+    }
+  }
+
+  const key = `${year}-${String(month + 1).padStart(2, '0')}`
+  return { year, monthIndex: month, key }
+}
+
+/**
+ * Returns the fiscal month key (e.g. "2026-10") for a date and monthStartDay.
+ */
+export function getFiscalMonthKey(date: Date, monthStartDay: number = 1): string {
+  return getFiscalMonthInfo(date, monthStartDay).key
+}
+
+/**
+ * Calculates the exact [start, end) date range for a specific fiscal month cycle (0..11)
+ * in a given calendar year based on monthStartDay (1-28).
+ *
+ * Example with year = 2026, monthIndex = 0 (January), monthStartDay = 25:
+ * -> start: Jan 25, 2026, end: Feb 25, 2026
+ *
+ * Example with year = 2026, monthIndex = 11 (December), monthStartDay = 25:
+ * -> start: Dec 25, 2026, end: Jan 25, 2027
+ */
+export function getMonthRange(
+  year: number,
+  monthIndex: number,
+  monthStartDay: number = 1
+): { start: Date; end: Date } {
+  const safeStartDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
+  const start = new Date(year, monthIndex, safeStartDay, 0, 0, 0, 0)
+
+  let endYear = year
+  let endMonth = monthIndex + 1
+  if (endMonth > 11) {
+    endMonth = 0
+    endYear = year + 1
+  }
+  const end = new Date(endYear, endMonth, safeStartDay, 0, 0, 0, 0)
+  return { start, end }
+}
+

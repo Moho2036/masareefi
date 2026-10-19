@@ -159,10 +159,18 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           format(initialStart, 'yyyy-MM-dd') !== format(parsedStartDate, 'yyyy-MM-dd')
         const frequencyChanged = initialRecurring.frequency !== frequency
 
-        const nextDate =
-          startDateChanged || frequencyChanged
-            ? calculateNextDateOnEdit(parsedStartDate, frequency)
-            : undefined
+        let nextDate: Date | undefined = undefined
+        if (startDateChanged) {
+          // User explicitly changed the start date; recalculate from the new start date
+          nextDate = calculateNextDateOnEdit(parsedStartDate, frequency)
+        } else if (frequencyChanged) {
+          // Frequency changed but start date didn't; reschedule from the current upcoming/last due date (nextDate)
+          const currentNext =
+            initialRecurring.nextDate instanceof Date
+              ? initialRecurring.nextDate
+              : new Date(initialRecurring.nextDate)
+          nextDate = calculateNextDateOnEdit(currentNext, frequency)
+        }
 
         await updateRecurring(user.uid, initialRecurring.id, {
           type,

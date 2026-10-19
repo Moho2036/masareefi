@@ -1,10 +1,57 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getCurrentCircleMonth,
   isUserTurnMonth,
   circleConverter,
+  deleteMoneyCircle,
+  deleteCircle,
 } from './moneyCircles'
 import type { MoneyCircle } from '../types'
+
+vi.mock('../lib/firebase', () => ({
+  db: {},
+}))
+
+const mockBatchSet = vi.fn()
+const mockBatchUpdate = vi.fn()
+const mockBatchDelete = vi.fn()
+const mockBatchCommit = vi.fn().mockResolvedValue(undefined)
+
+const mockBatch = {
+  set: mockBatchSet,
+  update: mockBatchUpdate,
+  delete: mockBatchDelete,
+  commit: mockBatchCommit,
+}
+
+const mockGetDoc = vi.fn()
+const mockGetDocs = vi.fn()
+
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn((_db, ...parts) => ({
+    path: parts.join('/'),
+    withConverter: vi.fn().mockReturnThis(),
+  })),
+  doc: vi.fn((_collOrDb, ...parts) => ({
+    id: parts[parts.length - 1] || 'mock-id',
+    path: parts.join('/'),
+    withConverter: vi.fn().mockReturnThis(),
+  })),
+  query: vi.fn((c) => c),
+  where: vi.fn(),
+  orderBy: vi.fn(),
+  onSnapshot: vi.fn(),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  updateDoc: vi.fn(),
+  setDoc: vi.fn(),
+  deleteDoc: vi.fn(),
+  writeBatch: () => mockBatch,
+  Timestamp: {
+    fromDate: (d: Date) => ({ seconds: Math.floor(d.getTime() / 1000), nanoseconds: 0 }),
+  },
+  serverTimestamp: () => ({ _methodName: 'serverTimestamp' }),
+}))
 
 describe('moneyCircles service', () => {
   const sampleCircle: MoneyCircle = {
@@ -44,6 +91,19 @@ describe('moneyCircles service', () => {
     it('clamps to 1 if before start date', () => {
       expect(getCurrentCircleMonth(sampleCircle, new Date(2025, 11, 20))).toBe(1)
     })
+
+    it('calculates correctly when circle starts on any day other than the 1st (e.g. 15th)', () => {
+      const midMonthCircle: MoneyCircle = {
+        ...sampleCircle,
+        startDate: new Date(2026, 0, 15), // Jan 15, 2026
+      }
+      // Month 1: Jan 2026
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 0, 20))).toBe(1)
+      // Month 2: Feb 2026 (even early Feb like Feb 1 or Feb 5)
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 1, 5))).toBe(2)
+      // Month 3: March 2026
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 2, 1))).toBe(3)
+    })
   })
 
   describe('isUserTurnMonth', () => {
@@ -69,6 +129,71 @@ describe('moneyCircles service', () => {
       expect(doc.myTurnMonth).toBe(4)
       expect(doc.members).toHaveLength(3)
       expect(doc.members[0].paidMonths).toEqual([1, 2])
+    })
+
+    it('preserves isManager when defined as boolean or truthy', () => {
+      const circleWithManager: MoneyCircle = {
+        ...sampleCircle,
+        isManager: true,
+      }
+      const doc = circleConverter.toFirestore(circleWithManager)
+      expect(doc.isManager).toBe(true)
+
+      const circleWithoutManager: MoneyCircle = {
+        ...sampleCircle,
+        isManager: false,
+      }
+      const docFalse = circleConverter.toFirestore(circleWithoutManager)
+      expect(docFalse.isManager).toBe(false)
+    })
+  })
+
+  describe('deleteMoneyCircle & deleteCircle', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('deletes circle doc, linked recurringId, circleId query results, and payout doc in a single batch', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ recurringId: 'rec-assoc-1' }),
+      })
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { ref: { path: 'users/uid-1/recurring/rec-query-1' } },
+        ],
+      })
+
+      await deleteMoneyCircle('uid-1', 'circle-1')
+
+      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
+      expect(deletedPaths).toContain('users/uid-1/circles/circle-1')
+      expect(deletedPaths).toContain('users/uid-1/recurring/rec-assoc-1')
+      expect(deletedPaths).toContain('users/uid-1/recurring/rec-query-1')
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-1')
+
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('works correctly when no recurringId or query docs exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({}),
+      })
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [],
+      })
+
+      await deleteCircle('uid-1', 'circle-2')
+
+      expect(mockBatchDelete).toHaveBeenCalledTimes(2)
+      const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
+      expect(deletedPaths).toContain('users/uid-1/circles/circle-2')
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-2')
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
 })

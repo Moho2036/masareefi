@@ -46,11 +46,11 @@ export const transactionConverter: FirestoreDataConverter<Transaction> = {
           ? Timestamp.fromDate(tx.createdAt)
           : (tx.createdAt ?? serverTimestamp()),
     }
-    if (tx.title) {
+    if (typeof tx.title === 'string' && tx.title.trim()) {
       data.title = tx.title.trim().slice(0, 100)
     }
-    if (tx.recurringId) {
-      data.recurringId = tx.recurringId
+    if (typeof tx.recurringId === 'string' && tx.recurringId.trim()) {
+      data.recurringId = tx.recurringId.trim().slice(0, 128)
     }
     return data
   },
@@ -94,17 +94,17 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
         rec.nextDate instanceof Date ? Timestamp.fromDate(rec.nextDate) : rec.nextDate,
       active: Boolean(rec.active),
     }
-    if (rec.title) {
+    if (typeof rec.title === 'string' && rec.title.trim()) {
       data.title = rec.title.trim().slice(0, 100)
     }
     if (rec.endDate) {
       data.endDate =
         rec.endDate instanceof Date ? Timestamp.fromDate(rec.endDate) : rec.endDate
     }
-    if (rec.circleId) {
-      data.circleId = rec.circleId
+    if (typeof rec.circleId === 'string' && rec.circleId.trim()) {
+      data.circleId = rec.circleId.trim().slice(0, 128)
     }
-    if (rec.skipMonth !== undefined) {
+    if (rec.skipMonth !== undefined && rec.skipMonth !== null) {
       data.skipMonth = Math.round(rec.skipMonth)
     }
     return data
@@ -155,9 +155,13 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
       monthStartDay: Math.min(28, Math.max(1, Math.round(settings.monthStartDay || 1))),
       theme: settings.theme || 'system',
       createdAt:
-        settings.createdAt instanceof Date
-          ? Timestamp.fromDate(settings.createdAt)
-          : (settings.createdAt ?? serverTimestamp()),
+        settings.createdAt instanceof Timestamp
+          ? settings.createdAt
+          : settings.createdAt instanceof Date
+            ? Timestamp.fromDate(settings.createdAt)
+            : settings.createdAt && typeof settings.createdAt === 'object' && ('seconds' in settings.createdAt || 'toDate' in settings.createdAt)
+              ? settings.createdAt
+              : (settings.createdAt ?? serverTimestamp()),
     }
     if (typeof settings.rolloverBalance === 'boolean') {
       data.rolloverBalance = settings.rolloverBalance
@@ -185,15 +189,20 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
 
 export const debtConverter: FirestoreDataConverter<Debt> = {
   toFirestore(debt: Debt): DocumentData {
+    const amountFils = Math.round(Number(debt.amountFils))
+    const rawPaid = Math.round(Number(debt.paidFils ?? 0))
+    const paidFils = Math.max(0, Math.min(amountFils, rawPaid))
+    const settled = paidFils === amountFils
+
     const data: DocumentData = {
       personName: (debt.personName || '').trim().slice(0, 100),
       type: debt.type,
-      amountFils: Math.round(Number(debt.amountFils)),
-      paidFils: Math.round(Number(debt.paidFils ?? 0)),
+      amountFils,
+      paidFils,
       startDate:
         debt.startDate instanceof Date ? Timestamp.fromDate(debt.startDate) : debt.startDate,
       note: typeof debt.note === 'string' ? debt.note.slice(0, 500) : '',
-      settled: Boolean(debt.settled),
+      settled,
       payments: (debt.payments || []).map((p) => {
         const item: DocumentData = {
           id: p.id,

@@ -5,6 +5,10 @@ import {
   formatFinancialRangeLabel,
   formatDayHeader,
   parseLocalDateInput,
+  formatDateInput,
+  getMonthRange,
+  getFiscalMonthInfo,
+  getFiscalMonthKey,
 } from './dates'
 
 describe('dates lib', () => {
@@ -131,6 +135,68 @@ describe('dates lib', () => {
       expect(lastDay.getMonth()).toBe(9)
       expect(lastDay.getDate()).toBe(31)
       expect(lastDay.getHours()).toBe(12)
+    })
+  })
+
+  describe('getMonthRange', () => {
+    it('returns exact [start, end) for calendar month when monthStartDay is 1', () => {
+      const jan = getMonthRange(2026, 0, 1)
+      expect(jan.start).toEqual(new Date(2026, 0, 1, 0, 0, 0, 0))
+      expect(jan.end).toEqual(new Date(2026, 1, 1, 0, 0, 0, 0))
+
+      const dec = getMonthRange(2026, 11, 1)
+      expect(dec.start).toEqual(new Date(2026, 11, 1, 0, 0, 0, 0))
+      expect(dec.end).toEqual(new Date(2027, 0, 1, 0, 0, 0, 0))
+    })
+
+    it('returns exact [start, end) for custom monthStartDay (e.g. 25)', () => {
+      const janCycle = getMonthRange(2026, 0, 25)
+      expect(janCycle.start).toEqual(new Date(2026, 0, 25, 0, 0, 0, 0))
+      expect(janCycle.end).toEqual(new Date(2026, 1, 25, 0, 0, 0, 0))
+
+      const decCycle = getMonthRange(2026, 11, 25)
+      expect(decCycle.start).toEqual(new Date(2026, 11, 25, 0, 0, 0, 0))
+      expect(decCycle.end).toEqual(new Date(2027, 0, 25, 0, 0, 0, 0))
+    })
+  })
+
+  describe('getFiscalMonthInfo and getFiscalMonthKey', () => {
+    it('identifies fiscal month for monthStartDay = 1', () => {
+      const info = getFiscalMonthInfo(new Date(2026, 9, 15), 1)
+      expect(info.year).toBe(2026)
+      expect(info.monthIndex).toBe(9)
+      expect(info.key).toBe('2026-10')
+      expect(getFiscalMonthKey(new Date(2026, 9, 15), 1)).toBe('2026-10')
+    })
+
+    it('identifies fiscal month when date is before custom monthStartDay (e.g. Oct 10 with startDay 25)', () => {
+      // Oct 10 with startDay 25 belongs to previous month's cycle (September, monthIndex 8)
+      const info = getFiscalMonthInfo(new Date(2026, 9, 10), 25)
+      expect(info.year).toBe(2026)
+      expect(info.monthIndex).toBe(8)
+      expect(info.key).toBe('2026-09')
+    })
+
+    it('identifies fiscal month when date is on/after custom monthStartDay (e.g. Oct 25 with startDay 25)', () => {
+      // Oct 25 belongs to October cycle (monthIndex 9)
+      const info = getFiscalMonthInfo(new Date(2026, 9, 25), 25)
+      expect(info.year).toBe(2026)
+      expect(info.monthIndex).toBe(9)
+      expect(info.key).toBe('2026-10')
+    })
+
+    it('handles year boundary rollover (Jan 5 with startDay 25 -> previous year Dec cycle)', () => {
+      const info = getFiscalMonthInfo(new Date(2026, 0, 5), 25)
+      expect(info.year).toBe(2025)
+      expect(info.monthIndex).toBe(11)
+      expect(info.key).toBe('2025-12')
+    })
+  })
+
+  describe('formatDateInput', () => {
+    it('formats a date into local YYYY-MM-DD string', () => {
+      const d = new Date(2026, 9, 19, 15, 30) // Oct 19, 2026
+      expect(formatDateInput(d)).toBe('2026-10-19')
     })
   })
 })
