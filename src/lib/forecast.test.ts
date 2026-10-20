@@ -340,4 +340,86 @@ describe('forecast lib', () => {
     expect(withRollover.freeBalance).toBe(290000)
     expect(withRollover.healthStatus).toBe('safe')
   })
+
+  it('accounts for upcoming recurring income and prevents false deficit warning', () => {
+    // Current date: Oct 5. No income transaction yet, only 50 JOD expense.
+    const earlyExpense: Transaction = {
+      id: 'tx-early',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-1',
+      date: new Date(2026, 9, 3),
+      note: 'مشتريات',
+      createdAt: new Date(),
+    }
+
+    // Salary expected on Oct 25 (500 JOD)
+    const upcomingSalary: Recurring = {
+      id: 'rec-salary',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-sal',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 25),
+      nextDate: new Date(2026, 9, 25),
+      active: true,
+      note: 'راتب شهري',
+    }
+
+    const res = calculateForecast({
+      transactions: [earlyExpense],
+      recurring: [upcomingSalary],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 5),
+    })
+
+    expect(res.upcomingRecurringIncome).toBe(500000)
+    // -50,000 + 500,000 = +450,000
+    expect(res.freeBalance).toBe(450000)
+    expect(res.isDeficitProjected).toBe(false)
+    expect(res.projectedNet).toBeGreaterThan(0)
+  })
+
+  it('ignores past overdue debts from prior months and only includes debts due in current cycle', () => {
+    // Debt 1: was due in August (prior month cycle)
+    const pastOverdueDebt: Debt = {
+      id: 'debt-old',
+      personName: 'خالد',
+      type: 'borrowed',
+      amountFils: 100000,
+      paidFils: 0,
+      startDate: new Date(2026, 7, 1),
+      dueDate: new Date(2026, 7, 20), // August 20, before Oct 1 start
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    // Debt 2: due on Oct 20 at noon (within current cycle)
+    const currentDebt: Debt = {
+      id: 'debt-curr',
+      personName: 'عمر',
+      type: 'borrowed',
+      amountFils: 60000,
+      paidFils: 0,
+      startDate: new Date(2026, 9, 1),
+      dueDate: new Date(2026, 9, 20, 12, 0, 0), // Oct 20 at 12:00
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [sampleIncome], // 600,000 income
+      debts: [pastOverdueDebt, currentDebt],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 10),
+    })
+
+    // Only currentDebt (60,000) should be included, NOT pastOverdueDebt (100,000)
+    expect(res.upcomingDebtObligations).toBe(60000)
+    expect(res.freeBalance).toBe(600000 - 60000)
+  })
 })

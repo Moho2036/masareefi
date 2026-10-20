@@ -141,6 +141,31 @@ describe('recurring pure logic', () => {
       expect(result.shouldDeactivate).toBe(true)
     })
 
+    it('preserves target day across short months (Jan 31 -> Feb 28 -> Mar 31)', () => {
+      const rec: Recurring = {
+        id: 'r31',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'c1',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-31'),
+        nextDate: new Date('2026-01-31'),
+        active: true,
+      }
+      const today = new Date('2026-04-15')
+      const result = calculateDueOccurrences(rec, today)
+
+      expect(result.dates).toHaveLength(3)
+      expect(result.dates.map((d) => d.toISOString().slice(0, 10))).toEqual([
+        '2026-01-31',
+        '2026-02-28',
+        '2026-03-31',
+      ])
+      // Next date after March 31 should be April 30 (Apr has 30 days)
+      expect(result.newNextDate.toISOString().slice(0, 10)).toBe('2026-04-30')
+    })
+
     it('processes due occurrence when user opens app in the morning (before 12:00 noon)', () => {
       // parseLocalDateInput sets nextDate to 12:00:00 local time
       const nextDateNoon = new Date(2026, 9, 15, 12, 0, 0)

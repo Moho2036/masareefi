@@ -17,6 +17,7 @@ vi.mock('../services/transactions', () => ({
 
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
+  processDueRecurring: vi.fn().mockResolvedValue(1),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -38,20 +39,22 @@ vi.mock('../hooks/useCategories', () => ({
   }),
 }))
 
+const mockShowToast = vi.fn()
 vi.mock('../hooks/useToast', () => ({
   useToast: () => ({
-    showToast: vi.fn(),
+    showToast: mockShowToast,
     toasts: [],
     dismissToast: vi.fn(),
   }),
 }))
 
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
+const mockSetSelectedDate = vi.fn()
 
 vi.mock('../hooks/useSelectedMonth', () => ({
   useSelectedMonth: () => ({
     selectedDate: new Date('2026-10-01'),
-    setSelectedDate: vi.fn(),
+    setSelectedDate: mockSetSelectedDate,
     range: mockRange,
   }),
 }))
@@ -171,12 +174,8 @@ describe('TransactionForm Component', () => {
           active: true,
         })
       )
-      expect(txServices.addTransaction).toHaveBeenCalledWith(
-        'user-123',
-        expect.objectContaining({
-          recurringId: 'mock-rec-id',
-        })
-      )
+      expect(recurringServices.processDueRecurring).toHaveBeenCalledWith('user-123')
+      expect(txServices.addTransaction).not.toHaveBeenCalled()
       expect(onClose).toHaveBeenCalled()
       expect(onSuccess).toHaveBeenCalled()
     })
@@ -284,6 +283,16 @@ describe('TransactionForm Component', () => {
     expect(screen.getByText('معاملة متزامنة مع سجل الديون')).toBeInTheDocument()
     expect(screen.getByText(/هذه المعاملة مرتبطة بسجل الديون/)).toBeInTheDocument()
     expect(screen.getByText('الانتقال إلى سجل الديون لتعديل أو حذف الدفعة')).toBeInTheDocument()
+
+    // Inputs should be read-only / disabled
+    const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(amountInput.disabled).toBe(true)
+    const dateInput = screen.getByLabelText('التاريخ') as HTMLInputElement
+    expect(dateInput.disabled).toBe(true)
+
+    // Primary action button should be disabled with restricted text
+    const submitBtn = screen.getByRole('button', { name: 'معاملة مقيدة بسجل الديون' }) as HTMLButtonElement
+    expect(submitBtn.disabled).toBe(true)
   })
 
   it('does NOT render linked debt warning banner for regular transactions', () => {
@@ -307,5 +316,71 @@ describe('TransactionForm Component', () => {
     )
 
     expect(screen.queryByText('معاملة متزامنة مع سجل الديون')).not.toBeInTheDocument()
+  })
+
+  it('renders linked circle payout warning banner and restricts modification for circle_payout_ transactions', () => {
+    const circlePayoutTx: Transaction = {
+      id: 'circle_payout_circle-789',
+      type: 'income',
+      amountFils: 450000,
+      categoryId: 'c-salary',
+      date: new Date('2026-10-01T00:00:00Z'),
+      title: 'استلام صافي جمعية الأقارب',
+      note: 'استلام صافي الجمعية',
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={circlePayoutTx}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('معاملة مرتبطة بإيداع جمعية مالية')).toBeInTheDocument()
+    expect(screen.getByText('الانتقال إلى صفحة الجمعيات')).toBeInTheDocument()
+
+    // Inputs should be read-only / disabled
+    const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(amountInput.disabled).toBe(true)
+
+    // Primary action button should be disabled with restricted text
+    const submitBtn = screen.getByRole('button', { name: 'معاملة مقيدة بإيداع جمعية' }) as HTMLButtonElement
+    expect(submitBtn.disabled).toBe(true)
+
+    // Delete button should not be present
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
+  })
+
+  it('shows clear Toast and updates selected month when saving a transaction outside the active month', async () => {
+    const onClose = vi.fn()
+    const onSuccess = vi.fn()
+
+    renderWithRouter(<TransactionForm onClose={onClose} onSuccess={onSuccess} />)
+
+    const amountInput = screen.getByPlaceholderText('0.000')
+    fireEvent.change(amountInput, { target: { value: '30' } })
+
+    const foodCatBtn = screen.getByRole('button', { name: /طعام وبقالة/ })
+    fireEvent.click(foodCatBtn)
+
+    // Set date to September 2026 (range is October 2026)
+    const dateInput = screen.getByLabelText('التاريخ')
+    fireEvent.change(dateInput, { target: { value: '2026-09-15' } })
+
+    const submitBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(txServices.addTransaction).toHaveBeenCalledTimes(1)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'تم حفظ المعاملة والانتقال إلى شهر المعاملة',
+        'success'
+      )
+      expect(mockSetSelectedDate).toHaveBeenCalled()
+      expect(onClose).toHaveBeenCalled()
+      expect(onSuccess).toHaveBeenCalled()
+    })
   })
 })

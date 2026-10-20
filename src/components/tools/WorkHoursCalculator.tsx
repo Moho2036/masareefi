@@ -9,7 +9,17 @@ import { Card } from '../ui/Card'
 import { Input } from '../ui/Input'
 import { useCurrency } from '../../hooks/useCurrency'
 import { toFils } from '../../lib/money'
+import { toWesternDigits } from '../../lib/dates'
 import { cn } from '../../lib/cn'
+
+function parseNumeric(val: string): number {
+  const western = toWesternDigits(val)
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/,/g, '.')
+    .trim()
+  const parsed = parseFloat(western)
+  return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed
+}
 
 const STORAGE_KEY = 'masareefi_work_hours_prefs'
 
@@ -77,10 +87,10 @@ export const WorkHoursCalculator: React.FC = () => {
   }, [salaryStr, dailyHoursStr, workDaysStr])
 
   // Calculations
-  const salary = parseFloat(salaryStr) || 0
-  const dailyHours = parseFloat(dailyHoursStr) || 8
-  const workDays = parseFloat(workDaysStr) || 22
-  const itemPrice = parseFloat(itemPriceStr) || 0
+  const salary = parseNumeric(salaryStr)
+  const dailyHours = parseNumeric(dailyHoursStr) || 8
+  const workDays = parseNumeric(workDaysStr) || 22
+  const itemPrice = parseNumeric(itemPriceStr)
 
   const totalMonthlyHours = useMemo(() => {
     return Math.max(1, dailyHours * workDays)
@@ -100,8 +110,9 @@ export const WorkHoursCalculator: React.FC = () => {
     return itemPriceFils / hourlyWageFils
   }, [hourlyWageFils, itemPrice])
 
-  const fullHours = Math.floor(requiredHours)
-  const remainingMinutes = Math.round((requiredHours - fullHours) * 60)
+  const totalMinutes = Math.round(requiredHours * 60)
+  const fullHours = Math.floor(totalMinutes / 60)
+  const remainingMinutes = totalMinutes % 60
   const equivalentWorkDays = (requiredHours / Math.max(1, dailyHours)).toFixed(1)
 
   // Item percentage of monthly salary
@@ -128,11 +139,10 @@ export const WorkHoursCalculator: React.FC = () => {
               <div>
                 <Input
                   label={`صافي راتبك الشهري (${config.symbol})`}
-                  type="number"
-                  min="0"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   value={salaryStr}
-                  onChange={(e) => setSalaryStr(e.target.value)}
+                  onChange={(e) => setSalaryStr(toWesternDigits(e.target.value))}
                   startIcon={<Briefcase className="w-4 h-4 text-slate-400" />}
                 />
               </div>
@@ -140,21 +150,19 @@ export const WorkHoursCalculator: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="ساعات الدوام / يوم"
-                  type="number"
-                  min="1"
-                  max="24"
+                  type="text"
+                  inputMode="decimal"
                   value={dailyHoursStr}
-                  onChange={(e) => setDailyHoursStr(e.target.value)}
+                  onChange={(e) => setDailyHoursStr(toWesternDigits(e.target.value))}
                   startIcon={<Clock className="w-4 h-4 text-slate-400" />}
                 />
 
                 <Input
                   label="أيام العمل / شهر"
-                  type="number"
-                  min="1"
-                  max="31"
+                  type="text"
+                  inputMode="numeric"
                   value={workDaysStr}
-                  onChange={(e) => setWorkDaysStr(e.target.value)}
+                  onChange={(e) => setWorkDaysStr(toWesternDigits(e.target.value))}
                 />
               </div>
 
@@ -180,12 +188,11 @@ export const WorkHoursCalculator: React.FC = () => {
 
               <Input
                 label={`سعر السلعة (${config.symbol})`}
-                type="number"
-                min="0"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 placeholder="0.00"
                 value={itemPriceStr}
-                onChange={(e) => setItemPriceStr(e.target.value)}
+                onChange={(e) => setItemPriceStr(toWesternDigits(e.target.value))}
               />
             </div>
           </Card>

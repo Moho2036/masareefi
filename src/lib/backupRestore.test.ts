@@ -8,6 +8,7 @@ vi.mock('./firebase', () => ({
 }))
 
 const mockSet = vi.fn()
+const mockUpdate = vi.fn()
 const mockDelete = vi.fn()
 const mockCommit = vi.fn().mockResolvedValue(undefined)
 const mockGetDoc = vi.fn()
@@ -32,6 +33,7 @@ vi.mock('firebase/firestore', () => {
     getDocs: (...args: unknown[]) => mockGetDocs(...args),
     writeBatch: vi.fn(() => ({
       set: mockSet,
+      update: mockUpdate,
       delete: mockDelete,
       commit: mockCommit,
     })),
@@ -200,19 +202,122 @@ describe('backupRestore module', () => {
       expect(mockCommit).toHaveBeenCalledTimes(1)
     })
 
-    it('preserves existing database createdAt when restoring user settings', async () => {
+    it('calls update without createdAt when user settings document already exists', async () => {
       mockSet.mockClear()
-      const existingCreatedAt = new Date('2025-01-01T00:00:00Z')
+      mockUpdate.mockClear()
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
-        data: () => ({ createdAt: existingCreatedAt }),
+        data: () => ({ createdAt: new Date('2025-01-01T00:00:00Z') }),
       })
 
       await restoreBackup('user-test-uid', sampleBackup)
 
-      const settingsCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid')
-      expect(settingsCall).toBeDefined()
-      expect(settingsCall![1].createdAt).toEqual(existingCreatedAt)
+      const updateCall = mockUpdate.mock.calls.find((call) => call[0].path === 'users/user-test-uid')
+      expect(updateCall).toBeDefined()
+      expect(updateCall![1].createdAt).toBeUndefined()
+      expect(updateCall![1].displayName).toBe('أحمد')
+    })
+
+    it('deletes orphaned transactions, debts, recurring, and circles not present in backup', async () => {
+      mockDelete.mockClear()
+      const orphanTxRef = { path: 'users/u1/transactions/orphan-tx' }
+      const orphanDebtRef = { path: 'users/u1/debts/orphan-debt' }
+      const orphanRecRef = { path: 'users/u1/recurring/orphan-rec' }
+      const orphanCircleRef = { path: 'users/u1/circles/orphan-circle' }
+
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: [] }) // categories
+        .mockResolvedValueOnce({ docs: [{ id: 'orphan-tx', ref: orphanTxRef, data: () => ({ id: 'orphan-tx' }) }] }) // transactions
+        .mockResolvedValueOnce({ docs: [{ id: 'orphan-debt', ref: orphanDebtRef, data: () => ({ id: 'orphan-debt' }) }] }) // debts
+        .mockResolvedValueOnce({ docs: [{ id: 'orphan-rec', ref: orphanRecRef, data: () => ({ id: 'orphan-rec' }) }] }) // recurring
+        .mockResolvedValueOnce({ docs: [{ id: 'orphan-circle', ref: orphanCircleRef, data: () => ({ id: 'orphan-circle' }) }] }) // circles
+
+      await restoreBackup('u1', sampleBackup)
+
+      expect(mockDelete).toHaveBeenCalledWith(orphanTxRef)
+      expect(mockDelete).toHaveBeenCalledWith(orphanDebtRef)
+      expect(mockDelete).toHaveBeenCalledWith(orphanRecRef)
+      expect(mockDelete).toHaveBeenCalledWith(orphanCircleRef)
+    })
+
+    it('filters out non-positive amounts from incoming backup records', async () => {
+      mockSet.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithZeroAmounts: MasareefiBackup = {
+        version: 1,
+        app: 'masareefi',
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [
+            {
+              id: 'tx-zero',
+              type: 'expense',
+              amountFils: 0,
+              categoryId: 'cat-1',
+              date: new Date(),
+              note: 'test',
+              createdAt: new Date(),
+            },
+          ],
+          debts: [
+            {
+              id: 'debt-zero',
+              personName: 'خالد',
+              type: 'lent',
+              amountFils: 0,
+              paidFils: 0,
+              startDate: new Date(),
+              note: '',
+              settled: true,
+              payments: [],
+              createdAt: new Date(),
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec-zero',
+              type: 'expense',
+              amountFils: -500,
+              categoryId: 'cat-1',
+              note: '',
+              frequency: 'monthly',
+              startDate: new Date(),
+              nextDate: new Date(),
+              active: true,
+            },
+          ],
+          circles: [
+            {
+              id: 'circle-zero',
+              name: 'جمعية',
+              monthlyAmountFils: 0,
+              membersCount: 4,
+              totalAmountFils: 0,
+              myTurnMonth: 1,
+              startDate: new Date(),
+              members: [],
+              status: 'active',
+              createdAt: new Date(),
+            },
+          ],
+        },
+      }
+
+      await restoreBackup('user-test-uid', backupWithZeroAmounts)
+
+      const txCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/transactions/tx-zero')
+      expect(txCall).toBeUndefined()
+
+      const debtCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/debts/debt-zero')
+      expect(debtCall).toBeUndefined()
+
+      const recCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/recurring/rec-zero')
+      expect(recCall).toBeUndefined()
+
+      const circleCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/circles/circle-zero')
+      expect(circleCall).toBeUndefined()
     })
 
     it('strips empty string optional fields and clamps debt values', async () => {
@@ -323,6 +428,98 @@ describe('backupRestore module', () => {
       await restoreBackup('u1', sampleBackup)
 
       expect(mockDelete).toHaveBeenCalledWith(seededRef)
+    })
+
+    it('safely handles category defaults and preserves existing type', async () => {
+      // Existing category in Firestore has type 'expense'
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'cat-food',
+            ref: { path: 'users/u1/categories/cat-food' },
+            data: () => ({ id: 'cat-food', name: 'طعام', type: 'expense' }),
+          },
+        ],
+      })
+
+      const customBackup: MasareefiBackup = {
+        ...sampleBackup,
+        data: {
+          ...sampleBackup.data,
+          categories: [
+            {
+              id: 'cat-food',
+              name: '  طعام جديد  ',
+              type: 'income', // incoming backup claims income, but doc in Firestore is expense
+              icon: '', // empty icon
+              color: 'invalid-color', // invalid hex
+              archived: false,
+              order: 0,
+            },
+          ],
+          circles: [
+            {
+              id: 'c1',
+              name: 'جمعية تجريبية',
+              monthlyAmountFils: 10000,
+              membersCount: 4,
+              totalAmountFils: 40000,
+              myTurnMonth: 10, // out of bounds (> membersCount)
+              startDate: new Date(),
+              members: [],
+              status: 'active',
+              createdAt: new Date(),
+            },
+          ],
+        },
+      }
+
+      await restoreBackup('u1', customBackup)
+
+      const catCall = mockSet.mock.calls.find((call) => call[0].path === 'users/u1/categories/cat-food')
+      expect(catCall).toBeDefined()
+      // Preserves existing type 'expense'
+      expect(catCall![1].type).toBe('expense')
+      // Icon defaults to 📁
+      expect(catCall![1].icon).toBe('📁')
+      // Color defaults to #10B981
+      expect(catCall![1].color).toBe('#10B981')
+
+      const circleCall = mockSet.mock.calls.find((call) => call[0].path === 'users/u1/circles/c1')
+      expect(circleCall).toBeDefined()
+      // Clamped to membersCount (4)
+      expect(circleCall![1].myTurnMonth).toBe(4)
+    })
+
+    it('does not delete existing category in use if no matching restored category exists', async () => {
+      // Existing category used by a transaction
+      const existingRef = { path: 'users/u1/categories/cat-old-important' }
+      mockGetDocs
+        .mockResolvedValueOnce({
+          // categories snap
+          docs: [
+            {
+              id: 'cat-old-important',
+              ref: existingRef,
+              data: () => ({ id: 'cat-old-important', name: 'تصنيف هام قديم', type: 'expense' }),
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          // transactions snap: has transaction with cat-old-important
+          docs: [
+            {
+              id: 'tx-existing',
+              ref: { path: 'users/u1/transactions/tx-existing' },
+              data: () => ({ id: 'tx-existing', categoryId: 'cat-old-important' }),
+            },
+          ],
+        })
+
+      await restoreBackup('u1', sampleBackup)
+
+      // existingRef should NOT be deleted because it is in use and no category named 'تصنيف هام قديم' is in sampleBackup
+      expect(mockDelete).not.toHaveBeenCalledWith(existingRef)
     })
   })
 

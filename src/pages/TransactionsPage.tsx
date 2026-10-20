@@ -13,6 +13,7 @@ import {
   ExternalLink,
   TrendingUp,
   TrendingDown,
+  Users,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -88,21 +89,29 @@ export const TransactionsPage: React.FC = () => {
   }, [rawTransactions.length, usageMap])
 
   // Relevant categories for horizontal chips (sorted by usage frequency)
+  // Shows unarchived categories PLUS any archived category that has transactions in the current month
   const relevantCategories = useMemo(() => {
-    const filtered = categories.filter(
-      (c) => (filterType === 'all' ? true : c.type === filterType) && !c.archived
-    )
+    const usedCategoryIds = new Set(rawTransactions.map((tx) => tx.categoryId))
+    const filtered = categories.filter((c) => {
+      const matchesType = filterType === 'all' ? true : c.type === filterType
+      if (!matchesType) return false
+      return !c.archived || usedCategoryIds.has(c.id)
+    })
     return sortCategoriesByUsage(filtered, usageMap)
-  }, [categories, filterType, usageMap])
+  }, [categories, filterType, usageMap, rawTransactions])
 
   // Filtered transactions (using deferredQuery to prevent keyboard lag on mobile)
   const filteredTransactions = useMemo(() => {
-    return filterTransactions(rawTransactions, {
-      query: deferredQuery,
-      type: filterType,
-      categoryId: selectedCategory,
-    })
-  }, [rawTransactions, deferredQuery, filterType, selectedCategory])
+    return filterTransactions(
+      rawTransactions,
+      {
+        query: deferredQuery,
+        type: filterType,
+        categoryId: selectedCategory,
+      },
+      categoryMap
+    )
+  }, [rawTransactions, deferredQuery, filterType, selectedCategory, categoryMap])
 
   // Summary totals for filtered set
   const totals = useMemo(() => {
@@ -110,7 +119,27 @@ export const TransactionsPage: React.FC = () => {
   }, [filteredTransactions])
 
   // Grouped by day
-  const today = useMemo(() => new Date(), [])
+  const [focusTick, setFocusTick] = useState(0)
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        setFocusTick((t) => t + 1)
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [])
+
+  const today = useMemo(() => {
+    // Recompute today whenever rawTransactions update or window regains focus
+    if (focusTick < 0 || !rawTransactions) return new Date()
+    return new Date()
+  }, [rawTransactions, focusTick])
   const dayGroups = useMemo(() => {
     return groupByDay(filteredTransactions)
   }, [filteredTransactions])
@@ -119,6 +148,11 @@ export const TransactionsPage: React.FC = () => {
     if (!user || !txToDelete) return
     if (txToDelete.id.startsWith('debt_init_') || txToDelete.id.startsWith('debt_pay_')) {
       showToast('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+      setTxToDelete(null)
+      return
+    }
+    if (txToDelete.id.startsWith('circle_payout_')) {
+      showToast('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.', 'error')
       setTxToDelete(null)
       return
     }
@@ -408,6 +442,12 @@ export const TransactionsPage: React.FC = () => {
                                       <span>دين</span>
                                     </span>
                                   )}
+                                  {tx.id.startsWith('circle_payout_') && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 font-bold shrink-0">
+                                      <Users className="w-2.5 h-2.5" />
+                                      <span>جمعية</span>
+                                    </span>
+                                  )}
                                   {tx.recurringId && (
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold shrink-0">
                                       متكررة
@@ -443,18 +483,24 @@ export const TransactionsPage: React.FC = () => {
 
                               {/* Action Buttons: hidden on mobile, smooth group hover on desktop */}
                               <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    openDuplicate(tx)
-                                  }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
-                                  aria-label="تكرار المعاملة"
-                                  title="تكرار المعاملة"
-                                >
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
+                                {!(
+                                  tx.id.startsWith('debt_init_') ||
+                                  tx.id.startsWith('debt_pay_') ||
+                                  tx.id.startsWith('circle_payout_')
+                                ) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openDuplicate(tx)
+                                    }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                    aria-label="تكرار المعاملة"
+                                    title="تكرار المعاملة"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -474,6 +520,16 @@ export const TransactionsPage: React.FC = () => {
                                     className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
                                     aria-label="الانتقال إلى صفحة الديون"
                                     title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Link>
+                                ) : tx.id.startsWith('circle_payout_') ? (
+                                  <Link
+                                    to="/tools?tool=circles"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                    aria-label="الانتقال إلى صفحة الجمعيات"
+                                    title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
                                   >
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </Link>

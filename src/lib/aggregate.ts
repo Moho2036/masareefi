@@ -25,9 +25,15 @@ export interface FilterTransactionsOptions {
   categoryId?: string
 }
 
+export type CategoryResolver =
+  | Map<string, { name?: string }>
+  | Record<string, { name?: string }>
+  | ((categoryId: string) => string | undefined)
+
 export function filterTransactions(
   txs: Transaction[],
-  filters: FilterTransactionsOptions = {}
+  filters: FilterTransactionsOptions = {},
+  categoryResolver?: CategoryResolver
 ): Transaction[] {
   const { query, type, categoryId } = filters
   const normalizedQuery = query ? normalizeArabic(query) : ''
@@ -42,7 +48,27 @@ export function filterTransactions(
     if (normalizedQuery) {
       const normalizedTitle = tx.title ? normalizeArabic(tx.title) : ''
       const normalizedNote = normalizeArabic(tx.note)
-      if (!normalizedTitle.includes(normalizedQuery) && !normalizedNote.includes(normalizedQuery)) {
+      let normalizedCatName = ''
+      if (categoryResolver && tx.categoryId) {
+        let catName = ''
+        if (typeof categoryResolver === 'function') {
+          catName = categoryResolver(tx.categoryId) || ''
+        } else if (categoryResolver instanceof Map) {
+          catName = categoryResolver.get(tx.categoryId)?.name || ''
+        } else if (typeof categoryResolver === 'object') {
+          catName = categoryResolver[tx.categoryId]?.name || ''
+        }
+        if (catName) {
+          normalizedCatName = normalizeArabic(catName)
+        }
+      }
+
+      const matches =
+        normalizedTitle.includes(normalizedQuery) ||
+        normalizedNote.includes(normalizedQuery) ||
+        (normalizedCatName ? normalizedCatName.includes(normalizedQuery) : false)
+
+      if (!matches) {
         return false
       }
     }

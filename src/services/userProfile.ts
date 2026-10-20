@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'uid' | 'createdAt'> = {
   currency: 'JOD',
   monthStartDay: 1,
   theme: 'system',
+  rolloverBalance: true,
 }
 
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
@@ -35,6 +36,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
     currency: DEFAULT_SETTINGS.currency,
     monthStartDay: DEFAULT_SETTINGS.monthStartDay,
     theme: DEFAULT_SETTINGS.theme,
+    rolloverBalance: true,
   }
 
   // Atomically create user profile document AND seed default categories in ONE writeBatch
@@ -45,6 +47,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
     currency: initialSettings.currency,
     monthStartDay: initialSettings.monthStartDay,
     theme: initialSettings.theme,
+    rolloverBalance: true,
     createdAt: serverTimestamp(),
   })
   addDefaultCategoriesToBatch(batch, user.uid)

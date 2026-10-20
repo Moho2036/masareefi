@@ -20,6 +20,39 @@ export function advanceDate(date: Date, freq: Frequency): Date {
 }
 
 /**
+ * Advances a date while preserving the original target day of month (e.g. 31st).
+ * If the target month has fewer days, clamps to the last day of that month,
+ * but restores to targetDay in subsequent months that have enough days.
+ */
+export function advanceDateWithTargetDay(
+  date: Date,
+  freq: Frequency,
+  targetDay: number
+): Date {
+  const d = new Date(date.getTime())
+  if (freq === 'weekly') {
+    return addDays(d, 7)
+  }
+  if (freq === 'monthly') {
+    const nextYear = d.getMonth() === 11 ? d.getFullYear() + 1 : d.getFullYear()
+    const nextMonth = (d.getMonth() + 1) % 12
+    const daysInNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate()
+    const safeDay = Math.min(targetDay, daysInNextMonth)
+    d.setFullYear(nextYear, nextMonth, safeDay)
+    return d
+  }
+  if (freq === 'yearly') {
+    const nextYear = d.getFullYear() + 1
+    const currentMonth = d.getMonth()
+    const daysInMonth = new Date(nextYear, currentMonth + 1, 0).getDate()
+    const safeDay = Math.min(targetDay, daysInMonth)
+    d.setFullYear(nextYear, currentMonth, safeDay)
+    return d
+  }
+  return advanceDate(d, freq)
+}
+
+/**
  * Generates an idempotent, deterministic transaction ID based on recurringId and date.
  * Format: `${recurringId}_${YYYY-MM-DD}`
  */
@@ -85,6 +118,9 @@ export function calculateDueOccurrences(
     endOfEndDate.setHours(23, 59, 59, 999)
   }
 
+  const startDate = recurring.startDate instanceof Date ? recurring.startDate : new Date(recurring.startDate)
+  const targetDay = startDate.getDate()
+
   // Safety safeguard against unbounded iterations
   let loopLimit = 500
 
@@ -96,7 +132,7 @@ export function calculateDueOccurrences(
     if (!isOccurrenceSkipped(recurring, curNextDate)) {
       dates.push(new Date(curNextDate.getTime()))
     }
-    curNextDate = advanceDate(curNextDate, recurring.frequency)
+    curNextDate = advanceDateWithTargetDay(curNextDate, recurring.frequency, targetDay)
   }
 
   const shouldDeactivate = Boolean(
@@ -132,10 +168,11 @@ export function calculateNextDateOnEdit(
   }
 
   let candidate = new Date(newStartDate.getTime())
+  const targetDay = startOfNewStart.getDate()
   let loopLimit = 1000
 
   while (candidate < startOfToday && loopLimit-- > 0) {
-    candidate = advanceDate(candidate, frequency)
+    candidate = advanceDateWithTargetDay(candidate, frequency, targetDay)
   }
 
   return candidate

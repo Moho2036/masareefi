@@ -59,12 +59,11 @@ export const DashboardPage: React.FC = () => {
   const { format, formatWithSign } = useCurrency()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
 
-  const [rolloverBalance, setRolloverBalance] = useState<number>(0)
-  const isRolloverEnabled = Boolean(settings?.rolloverBalance)
+  const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
+  const isRolloverEnabled = settings?.rolloverBalance ?? true
   const monthStartDay = settings?.monthStartDay ?? 1
 
   const appData = useAppData()
-  const setContextRollover = appData?.setRolloverBalanceFils
   const isCurrentFiscalMonth =
     getFiscalMonthKey(range.start, monthStartDay) ===
     getFiscalMonthKey(new Date(), monthStartDay)
@@ -73,25 +72,32 @@ export const DashboardPage: React.FC = () => {
     if (!user?.uid || !isRolloverEnabled) {
       return
     }
+    // If viewing the current fiscal month, AppDataContext is already subscribed to prior balance
+    if (isCurrentFiscalMonth) {
+      return
+    }
+    const currentKey = range.start.toISOString()
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
       (bal) => {
-        setRolloverBalance(bal)
-        if (isCurrentFiscalMonth) {
-          setContextRollover?.(bal)
-        }
+        setLocalRollover({ key: currentKey, amount: bal })
       },
       (err) => {
-        console.error('Failed to subscribe prior balance:', err)
+        console.error('Failed to subscribe prior balance in DashboardPage:', err)
       }
     )
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, setContextRollover])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth])
 
-  const effectiveRollover = isRolloverEnabled ? rolloverBalance : 0
+  const effectiveLocalRollover =
+    localRollover.key === range.start.toISOString() ? localRollover.amount : 0
+
+  const effectiveRollover = isRolloverEnabled
+    ? (isCurrentFiscalMonth ? (appData?.rolloverBalanceFils ?? 0) : effectiveLocalRollover)
+    : 0
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
@@ -156,7 +162,27 @@ export const DashboardPage: React.FC = () => {
       .slice(0, 5)
   }, [recurringList])
 
-  const today = useMemo(() => new Date(), [])
+  const [focusTick, setFocusTick] = useState(0)
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        setFocusTick((t) => t + 1)
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [])
+
+  const today = useMemo(() => {
+    // Recompute today whenever rawTransactions update or window regains focus
+    if (focusTick < 0 || !rawTransactions) return new Date()
+    return new Date()
+  }, [rawTransactions, focusTick])
 
   // Guard against initial loading state where rawTransactions is [] and txLoading is true,
   // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
@@ -170,9 +196,9 @@ export const DashboardPage: React.FC = () => {
     let status: 'safe' | 'warning' | 'danger'
     if (isInitialOrLoading) {
       status = 'safe'
-    } else if (displayBalance < 0 || forecast.freeBalance < 0) {
+    } else if (displayBalance < 0 || forecast.freeBalance < 0 || forecast.healthStatus === 'danger') {
       status = 'danger'
-    } else if (forecast.healthStatus === 'warning' || forecast.healthStatus === 'danger') {
+    } else if (forecast.healthStatus === 'warning') {
       status = 'warning'
     } else {
       status = 'safe'
@@ -472,18 +498,24 @@ export const DashboardPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0 ps-3">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openDuplicate(tx)
-                          }}
-                          className="hidden sm:inline-flex opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
-                          aria-label="تكرار المعاملة"
-                          title="تكرار المعاملة"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
+                        {!(
+                          tx.id.startsWith('debt_init_') ||
+                          tx.id.startsWith('debt_pay_') ||
+                          tx.id.startsWith('circle_payout_')
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openDuplicate(tx)
+                            }}
+                            className="hidden sm:inline-flex opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                            aria-label="تكرار المعاملة"
+                            title="تكرار المعاملة"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <div
                           className={cn(
                             'text-xs sm:text-sm font-extrabold select-none ps-0.5',

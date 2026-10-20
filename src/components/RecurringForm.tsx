@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { format } from 'date-fns'
+import { format, addMonths } from 'date-fns'
 import { Check } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
@@ -10,7 +10,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useToast } from '../hooks/useToast'
-import { addRecurring, updateRecurring } from '../services/recurring'
+import { addRecurring, updateRecurring, processDueRecurring } from '../services/recurring'
+import { updateMoneyCircle } from '../services/moneyCircles'
 import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
@@ -202,9 +203,19 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
         })
+
+        // Two-way sync with money circles
+        if (initialRecurring.circleId && initialRecurring.circleId !== circleId) {
+          await updateMoneyCircle(user.uid, initialRecurring.circleId, { recurringId: '' }).catch(() => {})
+        }
+        if (circleId) {
+          await updateMoneyCircle(user.uid, circleId, { recurringId: initialRecurring.id }).catch(() => {})
+        }
+
+        await processDueRecurring(user.uid)
         showToast('تم تعديل المعاملة المتكررة بنجاح', 'success')
       } else {
-        await addRecurring(user.uid, {
+        const recId = await addRecurring(user.uid, {
           type,
           amountFils,
           categoryId: activeCategoryId,
@@ -218,6 +229,13 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
         })
+
+        // Two-way sync with money circles
+        if (circleId) {
+          await updateMoneyCircle(user.uid, circleId, { recurringId: recId }).catch(() => {})
+        }
+
+        await processDueRecurring(user.uid)
         showToast('تمت إضافة المعاملة المتكررة بنجاح', 'success')
       }
 
@@ -283,7 +301,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
               setAmountStr(e.target.value)
               setError(null)
             }}
-            placeholder="0.000"
+            placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
             className="w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
             autoFocus={!isEditing}
           />
@@ -383,6 +401,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   setFrequency('monthly')
                   if (!title) setTitle(`قسط ${c.name}`)
                   if (!amountStr || parseFloat(amountStr) === 0) setAmountStr(String(fromFils(c.monthlyAmountFils)))
+                  const cStart = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
+                  setStartDateStr(format(cStart, 'yyyy-MM-dd'))
+                  const cEnd = addMonths(cStart, c.membersCount - 1)
+                  setEndDateStr(format(cEnd, 'yyyy-MM-dd'))
+                  setHasEndDate(true)
                 }
               } else {
                 setSkipMonth(undefined)

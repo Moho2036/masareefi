@@ -9,7 +9,6 @@ import {
   getDocs,
   query,
   where,
-  setDoc,
   onSnapshot,
   Timestamp,
   serverTimestamp,
@@ -201,6 +200,40 @@ export async function updateMoneyCircle(
   if (partial.status !== undefined) updates.status = partial.status
 
   await updateDoc(docRef, updates)
+
+  // Sync circle payout transaction if it exists
+  const payoutRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
+  try {
+    const payoutSnap = await getDoc(payoutRef)
+    if (payoutSnap?.exists?.()) {
+      const circleSnap = await getDoc(docRef)
+      if (circleSnap?.exists?.()) {
+        const circleData = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
+        const start = circleData.startDate instanceof Date ? circleData.startDate : new Date(circleData.startDate)
+        const now = new Date()
+        const diffMonths =
+          (now.getFullYear() - start.getFullYear()) * 12 +
+          (now.getMonth() - start.getMonth())
+        const currentMonthIndex = diffMonths + 1
+
+        // If circle hasn't started yet or turn month is in the future
+        if (diffMonths < 0 || currentMonthIndex < circleData.myTurnMonth) {
+          await deleteDoc(payoutRef).catch(() => {})
+        } else {
+          const netAmountFils = circleData.totalAmountFils - circleData.monthlyAmountFils
+          if (netAmountFils > 0) {
+            await updateDoc(payoutRef, {
+              amountFils: netAmountFils,
+              title: `استلام صافي جمعية ${circleData.name}`.slice(0, 100),
+              note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circleData.name})`.slice(0, 500),
+            }).catch(() => {})
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync circle payout transaction:', err)
+  }
 }
 
 export async function checkCirclePayoutExists(uid: string, circleId: string): Promise<boolean> {
@@ -227,7 +260,9 @@ export async function depositCircleNetPayout(
   }
 
   const now = new Date()
-  await setDoc(txRef, {
+  const batch = writeBatch(db)
+
+  batch.set(txRef, {
     type: 'income',
     amountFils: netAmountFils,
     categoryId,
@@ -236,6 +271,32 @@ export async function depositCircleNetPayout(
     date: Timestamp.fromDate(now),
     createdAt: Timestamp.fromDate(now),
   })
+
+  // Mark user member as having paid their installment for their turn month
+  if (circle.members && circle.myTurnMonth) {
+    const myTurn = circle.myTurnMonth
+    let membersChanged = false
+    const updatedMembers = circle.members.map((m) => {
+      if (m.turnMonth === myTurn) {
+        const currentPaid = m.paidMonths || []
+        if (!currentPaid.includes(myTurn)) {
+          membersChanged = true
+          return {
+            ...m,
+            paidMonths: [...currentPaid, myTurn],
+          }
+        }
+      }
+      return m
+    })
+
+    if (membersChanged) {
+      const circleRef = doc(db, 'users', uid, 'circles', circle.id)
+      batch.update(circleRef, { members: updatedMembers })
+    }
+  }
+
+  await batch.commit()
 
   return payoutTxId
 }

@@ -35,12 +35,18 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   const monthStartDay = settings?.monthStartDay ?? 1
 
   const goToPreviousMonth = useCallback(() => {
-    setSelectedDate((prev) => addMonths(prev, -1))
-  }, [])
+    setSelectedDate((prev) => {
+      const currentRange = getFinancialMonthRange(prev, monthStartDay)
+      return addMonths(currentRange.start, -1)
+    })
+  }, [monthStartDay])
 
   const goToNextMonth = useCallback(() => {
-    setSelectedDate((prev) => addMonths(prev, 1))
-  }, [])
+    setSelectedDate((prev) => {
+      const currentRange = getFinancialMonthRange(prev, monthStartDay)
+      return addMonths(currentRange.start, 1)
+    })
+  }, [monthStartDay])
 
   const goToCurrentMonth = useCallback(() => {
     setSelectedDate(new Date())
@@ -50,13 +56,13 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
     setRefreshKey((k) => k + 1)
   }, [])
 
-  const monthLabel = useMemo(() => {
-    return formatMonthLabel(selectedDate)
-  }, [selectedDate])
-
   const range = useMemo(() => {
     return getFinancialMonthRange(selectedDate, monthStartDay)
   }, [selectedDate, monthStartDay])
+
+  const monthLabel = useMemo(() => {
+    return formatMonthLabel(range.start)
+  }, [range.start])
 
   const rangeLabel = useMemo(() => {
     return formatFinancialRangeLabel(range)

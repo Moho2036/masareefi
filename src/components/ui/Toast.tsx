@@ -10,7 +10,7 @@ export const ToastContainer: React.FC = () => {
 
   return (
     <div
-      className="fixed bottom-22 inset-x-4 sm:inset-x-auto sm:start-6 lg:bottom-6 z-50 flex flex-col gap-2 sm:max-w-sm pointer-events-none"
+      className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 inset-x-4 sm:inset-x-auto sm:start-6 z-50 flex flex-col gap-2 sm:max-w-sm pointer-events-none"
       role="region"
       aria-label="الإشعارات"
     >

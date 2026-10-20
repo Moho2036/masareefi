@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -6,7 +6,7 @@ import { Input } from '../ui/Input'
 import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { addDebt, updateDebt } from '../../services/debts'
+import { addDebt, updateDebt, checkDebtInitialTransactionExists } from '../../services/debts'
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
@@ -53,8 +53,30 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   )
   const [note, setNote] = useState(() => initialDebt?.note ?? '')
   const [syncTransaction, setSyncTransaction] = useState(true)
+  const [checkingSync, setCheckingSync] = useState(isEditing)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!user || !initialDebt) return
+    let active = true
+    checkDebtInitialTransactionExists(user.uid, initialDebt.id)
+      .then((exists) => {
+        if (active) {
+          setSyncTransaction(exists)
+          setCheckingSync(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to check debt initial transaction:', err)
+        if (active) {
+          setCheckingSync(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [user, initialDebt])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,15 +115,20 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       }
 
       if (isEditing && initialDebt) {
-        await updateDebt(user.uid, initialDebt.id, {
-          personName: trimmedName,
-          type,
-          amountFils,
-          paidFils: initialDebt.paidFils ?? 0,
-          startDate,
-          dueDate,
-          note: note.trim(),
-        })
+        await updateDebt(
+          user.uid,
+          initialDebt.id,
+          {
+            personName: trimmedName,
+            type,
+            amountFils,
+            paidFils: initialDebt.paidFils ?? 0,
+            startDate,
+            dueDate,
+            note: note.trim(),
+          },
+          { syncTransaction }
+        )
         showToast('تم تحديث بيانات الدين بنجاح', 'success')
       } else {
         const defaultDebtNote = type === 'lent' ? 'دين مستحق (لي)' : 'دين مستحق (عليّ)'
@@ -269,25 +296,28 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         />
       </div>
 
-      {/* 7. Accounting Sync Toggle (new debts only) */}
-      {!isEditing && (
-        <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
-          <Toggle
-            checked={syncTransaction}
-            onChange={setSyncTransaction}
-            label={
-              type === 'lent'
-                ? 'خصم المبلغ من الرصيد الحالي تلقائياً'
-                : 'إضافة المبلغ للرصيد الحالي (استلمت المبلغ نقداً)'
-            }
-            description={
-              type === 'lent'
+      {/* 7. Accounting Sync Toggle */}
+      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+        <Toggle
+          checked={syncTransaction}
+          onChange={setSyncTransaction}
+          disabled={checkingSync || loading}
+          label={
+            type === 'lent'
+              ? 'خصم المبلغ من الرصيد الحالي تلقائياً'
+              : 'إضافة المبلغ للرصيد الحالي (استلمت المبلغ نقداً)'
+          }
+          description={
+            isEditing
+              ? syncTransaction
+                ? 'المعاملة مرتبطة بالرصيد. إيقاف المفتاح سيحذف المعاملة ويلغي تأثيرها على الرصيد.'
+                : 'المعاملة غير مرتبطة بالرصيد. تفعيل المفتاح سينشئ معاملة ويؤثر على الرصيد.'
+              : type === 'lent'
                 ? 'تسجيل المعاملة كمصروف لتحديث الرصيد الفعلي'
                 : 'تسجيل المعاملة كدخل لتحديث الرصيد الفعلي'
-            }
-          />
-        </div>
-      )}
+          }
+        />
+      </div>
 
       {/* Actions */}
       <div className="pt-2 flex items-center gap-3">

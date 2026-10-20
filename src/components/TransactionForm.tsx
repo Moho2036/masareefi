@@ -16,8 +16,7 @@ import {
   updateTransaction,
   deleteTransaction,
 } from '../services/transactions'
-import { addRecurring } from '../services/recurring'
-import { advanceDate } from '../lib/recurring'
+import { addRecurring, processDueRecurring } from '../services/recurring'
 import { toFils, fromFils } from '../lib/money'
 import { parseLocalDateInput } from '../lib/dates'
 import {
@@ -55,6 +54,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       (initialTransaction.id.startsWith('debt_init_') ||
         initialTransaction.id.startsWith('debt_pay_'))
   )
+  const isLinkedToCircle = Boolean(
+    initialTransaction?.id && initialTransaction.id.startsWith('circle_payout_')
+  )
+  const isLockedTransaction = isLinkedToDebt || isLinkedToCircle
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -147,12 +150,23 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
+    if (isEditing && initialTransaction && isLockedTransaction) {
+      setError(
+        isLinkedToCircle
+          ? 'هذه المعاملة مرتبطة بإيداع جمعية، يرجى إدارتها من صفحة الجمعيات.'
+          : 'هذه المعاملة مرتبطة بسجل الديون، يرجى التعديل من صفحة الديون.'
+      )
+      return
+    }
+
     setSubmitting(true)
     try {
       const trimmedTitle = title.trim().slice(0, 100)
+      const isOutsideMonth = parsedDate < range.start || parsedDate >= range.end
+
       if (isEditing && initialTransaction) {
-        const finalType = isLinkedToDebt ? initialTransaction.type : type
-        const finalAmountFils = isLinkedToDebt ? initialTransaction.amountFils : amountFils
+        const finalType = isLockedTransaction ? initialTransaction.type : type
+        const finalAmountFils = isLockedTransaction ? initialTransaction.amountFils : amountFils
         await updateTransaction(user.uid, initialTransaction.id, {
           type: finalType,
           amountFils: finalAmountFils,
@@ -162,24 +176,46 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           note: note.trim().slice(0, 500),
         })
         recordCategoryUsage(activeCategoryId)
-        showToast('تم تعديل المعاملة بنجاح', 'success')
-      } else {
-        let recurringId: string | undefined
-        if (isRecurring) {
-          const nextDate = advanceDate(parsedDate, recurringFrequency)
-          recurringId = await addRecurring(user.uid, {
-            type,
-            amountFils,
-            categoryId: activeCategoryId,
-            ...(trimmedTitle ? { title: trimmedTitle } : {}),
-            note: note.trim().slice(0, 500),
-            frequency: recurringFrequency,
-            startDate: parsedDate,
-            nextDate,
-            active: true,
-          })
+        showToast(
+          isOutsideMonth
+            ? 'تم تعديل المعاملة والانتقال إلى شهر المعاملة'
+            : 'تم تعديل المعاملة بنجاح',
+          'success'
+        )
+      } else if (isRecurring) {
+        const endOfToday = new Date()
+        endOfToday.setHours(23, 59, 59, 999)
+        const isFuture = parsedDate > endOfToday
+
+        await addRecurring(user.uid, {
+          type,
+          amountFils,
+          categoryId: activeCategoryId,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          note: note.trim().slice(0, 500),
+          frequency: recurringFrequency,
+          startDate: parsedDate,
+          nextDate: parsedDate,
+          active: true,
+        })
+
+        if (!isFuture) {
+          await processDueRecurring(user.uid)
         }
 
+        recordCategoryUsage(activeCategoryId)
+
+        showToast(
+          isFuture
+            ? (isOutsideMonth
+                ? 'تمت جدولة المعاملة المتكررة والانتقال إلى شهر المعاملة'
+                : 'تمت جدولة المعاملة المتكررة بنجاح')
+            : (isOutsideMonth
+                ? 'تمت إضافة المعاملة وتفعيل التكرار والانتقال إلى شهر المعاملة'
+                : 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'),
+          'success'
+        )
+      } else {
         await addTransaction(user.uid, {
           type,
           amountFils,
@@ -187,22 +223,23 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           date: parsedDate,
           ...(trimmedTitle ? { title: trimmedTitle } : {}),
           note: note.trim().slice(0, 500),
-          ...(recurringId ? { recurringId } : {}),
         })
 
         recordCategoryUsage(activeCategoryId)
 
         showToast(
           duplicateFrom
-            ? 'تم حفظ المعاملة المكررة بنجاح'
-            : isRecurring
-              ? 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
-              : 'تمت إضافة المعاملة بنجاح',
+            ? (isOutsideMonth
+                ? 'تم حفظ المعاملة المكررة والانتقال إلى شهر المعاملة'
+                : 'تم حفظ المعاملة المكررة بنجاح')
+            : (isOutsideMonth
+                ? 'تم حفظ المعاملة والانتقال إلى شهر المعاملة'
+                : 'تمت إضافة المعاملة بنجاح'),
           'success'
         )
       }
 
-      if (parsedDate < range.start || parsedDate >= range.end) {
+      if (isOutsideMonth) {
         setSelectedDate(parsedDate)
       }
 
@@ -241,13 +278,24 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
+    if (isEditing && initialTransaction && isLockedTransaction) {
+      setError(
+        isLinkedToCircle
+          ? 'هذه المعاملة مرتبطة بإيداع جمعية، يرجى إدارتها من صفحة الجمعيات.'
+          : 'هذه المعاملة مرتبطة بسجل الديون، يرجى التعديل من صفحة الديون.'
+      )
+      return
+    }
+
     setSubmitting(true)
     try {
       const trimmedTitle = title.trim().slice(0, 100)
-      let recurringId: string | undefined
       if (isRecurring) {
-        const nextDate = advanceDate(parsedDate, recurringFrequency)
-        recurringId = await addRecurring(user.uid, {
+        const endOfToday = new Date()
+        endOfToday.setHours(23, 59, 59, 999)
+        const isFuture = parsedDate > endOfToday
+
+        await addRecurring(user.uid, {
           type,
           amountFils,
           categoryId: activeCategoryId,
@@ -255,26 +303,35 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           note: note.trim().slice(0, 500),
           frequency: recurringFrequency,
           startDate: parsedDate,
-          nextDate,
+          nextDate: parsedDate,
           active: true,
+        })
+
+        if (!isFuture) {
+          await processDueRecurring(user.uid)
+        }
+      } else {
+        await addTransaction(user.uid, {
+          type,
+          amountFils,
+          categoryId: activeCategoryId,
+          date: parsedDate,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          note: note.trim().slice(0, 500),
         })
       }
 
-      await addTransaction(user.uid, {
-        type,
-        amountFils,
-        categoryId: activeCategoryId,
-        date: parsedDate,
-        ...(trimmedTitle ? { title: trimmedTitle } : {}),
-        note: note.trim().slice(0, 500),
-        ...(recurringId ? { recurringId } : {}),
-      })
-
+      const isOutsideMonth = parsedDate < range.start || parsedDate >= range.end
       recordCategoryUsage(activeCategoryId)
 
-      showToast('تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية', 'success')
+      showToast(
+        isOutsideMonth
+          ? 'تم حفظ المعاملة والانتقال إلى شهر المعاملة، وجاهز للمعاملة التالية'
+          : 'تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية',
+        'success'
+      )
 
-      if (parsedDate < range.start || parsedDate >= range.end) {
+      if (isOutsideMonth) {
         setSelectedDate(parsedDate)
       }
 
@@ -301,6 +358,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!user || !initialTransaction) return
     if (isLinkedToDebt) {
       setError('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
+      return
+    }
+    if (isLinkedToCircle) {
+      setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
       return
     }
     setDeleting(true)
@@ -345,11 +406,32 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
       )}
 
+      {/* Linked Circle Payout Warning Banner */}
+      {isLinkedToCircle && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-2">
+          <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+            <AlertCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>معاملة مرتبطة بإيداع جمعية مالية</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-emerald-700/90 dark:text-emerald-300/80 pe-1">
+            هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لإدارتها يرجى الانتقال إلى صفحة الجمعيات.
+          </p>
+          <Link
+            to="/tools?tool=circles"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-xs"
+          >
+            <span>الانتقال إلى صفحة الجمعيات</span>
+            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+          </Link>
+        </div>
+      )}
+
       {/* Type Toggle: مصروف / دخل */}
       <div>
         <SegmentedControl<TxType>
           value={type}
-          disabled={isLinkedToDebt}
+          disabled={isLockedTransaction}
           onChange={(newType) => {
             setType(newType)
             setCategoryId('')
@@ -374,7 +456,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             error && amountStr && toFils(amountStr) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
               : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20',
-            isLinkedToDebt && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
+            isLockedTransaction && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
           )}
         >
           <input
@@ -382,20 +464,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             id="tx-amount"
             type="text"
             inputMode="decimal"
-            readOnly={isLinkedToDebt}
-            disabled={isLinkedToDebt}
+            readOnly={isLockedTransaction}
+            disabled={isLockedTransaction}
             value={amountStr}
             onChange={(e) => {
-              if (isLinkedToDebt) return
+              if (isLockedTransaction) return
               setAmountStr(e.target.value)
               setError(null)
             }}
             placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
             className={cn(
               'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
-              isLinkedToDebt && 'cursor-not-allowed'
+              isLockedTransaction && 'cursor-not-allowed'
             )}
-            autoFocus={!isEditing && !isLinkedToDebt}
+            autoFocus={!isEditing && !isLockedTransaction}
           />
           <span className="text-base lg:text-lg font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
             {currencyConfig.symbol}
@@ -424,7 +506,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 <button
                   key={cat.id}
                   type="button"
+                  disabled={isLockedTransaction}
                   onClick={() => {
+                    if (isLockedTransaction) return
                     setCategoryId(cat.id)
                     setError(null)
                   }}
@@ -432,7 +516,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     'flex items-center gap-2 p-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all text-start cursor-pointer select-none min-w-0',
                     isSelected
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50',
+                    isLockedTransaction && 'opacity-60 cursor-not-allowed pointer-events-none'
                   )}
                 >
                   <span
@@ -464,7 +549,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              disabled={isLockedTransaction}
               onClick={() => {
+                if (isLockedTransaction) return
                 const today = new Date()
                 setDateStr(format(today, 'yyyy-MM-dd'))
               }}
@@ -472,14 +559,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
                 dateStr === format(new Date(), 'yyyy-MM-dd')
                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
+                isLockedTransaction && 'opacity-50 cursor-not-allowed pointer-events-none'
               )}
             >
               اليوم
             </button>
             <button
               type="button"
+              disabled={isLockedTransaction}
               onClick={() => {
+                if (isLockedTransaction) return
                 const yesterday = new Date()
                 yesterday.setDate(yesterday.getDate() - 1)
                 setDateStr(format(yesterday, 'yyyy-MM-dd'))
@@ -492,7 +582,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   return dateStr === format(y, 'yyyy-MM-dd')
                 })()
                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
+                isLockedTransaction && 'opacity-50 cursor-not-allowed pointer-events-none'
               )}
             >
               أمس
@@ -503,8 +594,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           id="tx-date"
           type="date"
           value={dateStr}
-          onChange={(e) => setDateStr(e.target.value)}
+          onChange={(e) => {
+            if (isLockedTransaction) return
+            setDateStr(e.target.value)
+          }}
           required
+          disabled={isLockedTransaction}
+          readOnly={isLockedTransaction}
         />
       </div>
 
@@ -515,21 +611,31 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           label="الوصف / العنوان (اختياري)"
           placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            if (isLockedTransaction) return
+            setTitle(e.target.value)
+          }}
           maxLength={100}
+          disabled={isLockedTransaction}
+          readOnly={isLockedTransaction}
         />
       </div>
 
       {/* Note Input (Collapsible) */}
-      {showNoteField ? (
+      {showNoteField || isLockedTransaction ? (
         <div>
           <Input
             type="text"
             label="ملاحظة تفصيلية (اختياري)"
             placeholder="مثال: غداء مع الأصدقاء"
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => {
+              if (isLockedTransaction) return
+              setNote(e.target.value)
+            }}
             maxLength={500}
+            disabled={isLockedTransaction}
+            readOnly={isLockedTransaction}
           />
         </div>
       ) : (
@@ -586,7 +692,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* Delete confirmation if editing */}
-      {isEditing && !isLinkedToDebt && showDeleteConfirm ? (
+      {isEditing && !isLockedTransaction && showDeleteConfirm ? (
         <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 space-y-2.5">
           <p className="text-xs font-bold text-red-800 dark:text-red-300">
             هل أنت متأكد من حذف هذه المعاملة نهائياً؟
@@ -621,16 +727,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <Button
             type="submit"
             variant="primary"
-            disabled={submitting}
+            disabled={submitting || isLockedTransaction}
             className="flex-1"
           >
             {submitting
               ? 'جاري الحفظ...'
-              : isEditing
-                ? 'تعديل المعاملة'
-                : duplicateFrom
-                  ? 'حفظ النسخة'
-                  : 'حفظ'}
+              : isLinkedToDebt
+                ? 'معاملة مقيدة بسجل الديون'
+                : isLinkedToCircle
+                  ? 'معاملة مقيدة بإيداع جمعية'
+                  : isEditing
+                    ? 'تعديل المعاملة'
+                    : duplicateFrom
+                      ? 'حفظ النسخة'
+                      : 'حفظ'}
           </Button>
 
           {!isEditing && (
@@ -655,7 +765,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </Button>
         </div>
 
-        {isEditing && !isLinkedToDebt && !showDeleteConfirm && (
+        {isEditing && !isLockedTransaction && !showDeleteConfirm && (
           <Button
             type="button"
             variant="ghost"

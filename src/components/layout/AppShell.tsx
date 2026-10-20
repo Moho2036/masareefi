@@ -203,7 +203,7 @@ export const AppShell: React.FC = () => {
                 size="sm"
                 icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
                 onClick={() => openAdd('expense')}
-                className="font-semibold text-xs sm:text-sm py-1.5 press-scale"
+                className="hidden lg:inline-flex font-semibold text-xs sm:text-sm py-1.5 press-scale"
               >
                 إضافة معاملة
               </Button>

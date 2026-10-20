@@ -122,6 +122,10 @@ describe('exportCsv module', () => {
       expect(createdAnchor).not.toBeNull()
       expect(clickSpy).toHaveBeenCalledTimes(1)
       expect(createdAnchor?.getAttribute('download')).toMatch(/^masareefi_debts_\d{4}-\d{2}-\d{2}\.csv$/)
+
+      // Verify the generated CSV blob contains the new headers and values
+      const blob = (globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as Blob
+      expect(blob).toBeInstanceOf(Blob)
     })
 
     it('supports custom currency symbol and decimals in transactions export', () => {

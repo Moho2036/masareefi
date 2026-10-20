@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { CategoriesPage } from './CategoriesPage'
 import * as categoriesService from '../services/categories'
+import * as txServices from '../services/transactions'
+import type { Transaction } from '../types'
+
+vi.mock('../services/transactions', () => ({
+  getAllTransactions: vi.fn().mockResolvedValue([]),
+}))
 
 vi.mock('../services/categories', () => ({
   deleteCategory: vi.fn().mockResolvedValue(undefined),
@@ -65,11 +71,12 @@ describe('CategoriesPage component category protection', () => {
     localStorage.clear()
   })
 
-  it('renders usage labels and prevents final deletion for categories in use', () => {
+  it('renders usage labels and prevents final deletion for categories in use', async () => {
     render(<CategoriesPage />)
 
-    // cat-used-tx has 1 transaction this month
-    expect(screen.getByText(/معاملة واحدة هذا الشهر/i)).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByText(/معاملة واحدة هذا الشهر/i)).toBeDefined()
+    })
 
     // cat-used-rec has recurring item
     expect(screen.getByText(/معاملة متكررة مرتبطة/i)).toBeDefined()
@@ -88,7 +95,7 @@ describe('CategoriesPage component category protection', () => {
   it('allows deleting an unused category through confirmation modal', async () => {
     render(<CategoriesPage />)
 
-    const deleteBtn = screen.getByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
     fireEvent.click(deleteBtn)
 
     // Modal appears
@@ -100,5 +107,24 @@ describe('CategoriesPage component category protection', () => {
     await waitFor(() => {
       expect(categoriesService.deleteCategory).toHaveBeenCalledWith('user-123', 'cat-unused')
     })
+  })
+
+  it('protects category used only in previous months from hard deletion', async () => {
+    // cat-unused has 0 transactions this month, but 2 transactions historically
+    const mockHistoricalTxs: Transaction[] = [
+      { id: 'old-tx-1', categoryId: 'cat-unused', type: 'expense', amountFils: 1000, date: new Date('2026-08-01'), createdAt: new Date('2026-08-01'), note: '' },
+      { id: 'old-tx-2', categoryId: 'cat-unused', type: 'expense', amountFils: 2000, date: new Date('2026-09-01'), createdAt: new Date('2026-09-01'), note: '' },
+    ]
+    vi.mocked(txServices.getAllTransactions).mockResolvedValueOnce(mockHistoricalTxs)
+
+    render(<CategoriesPage />)
+
+    // Once getAllTransactions resolves, cat-unused should show "2 معاملة سابقة"
+    await waitFor(() => {
+      expect(screen.getByText(/2 معاملة سابقة/i)).toBeDefined()
+    })
+
+    // Delete button should now be hidden and replaced with "مستخدم"
+    expect(screen.queryByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeNull()
   })
 })

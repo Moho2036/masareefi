@@ -4,6 +4,8 @@ import {
   getDocs,
   getDoc,
   writeBatch,
+  Timestamp,
+  serverTimestamp,
   type WriteBatch,
 } from 'firebase/firestore'
 import { formatDateInput } from './dates'
@@ -186,83 +188,212 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
   type BatchOp = (b: WriteBatch) => void
   const ops: BatchOp[] = []
 
+  const rawUserRef = doc(db, 'users', uid)
+
+  // Query existing docs in parallel to minimize round-trip latency
+  const [
+    existingUserSnap,
+    existingCatsSnap,
+    existingTxsSnap,
+    existingDebtsSnap,
+    existingRecSnap,
+    existingCirclesSnap,
+  ] = await Promise.all([
+    backup.data.settings ? getDoc(rawUserRef) : Promise.resolve(null),
+    getDocs(collection(db, 'users', uid, 'categories').withConverter(categoryConverter)),
+    getDocs(collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)),
+    getDocs(collection(db, 'users', uid, 'debts').withConverter(debtConverter)),
+    getDocs(collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)),
+    getDocs(collection(db, 'users', uid, 'circles').withConverter(circleConverter)),
+  ])
+
   // 1. Settings
   if (backup.data.settings) {
     const s = backup.data.settings
-    const userSettingsRef = doc(db, 'users', uid).withConverter(userSettingsConverter)
-    const existingSnap = await getDoc(userSettingsRef)
-    let finalCreatedAt: UserSettings['createdAt'] = undefined
+    const userExists = Boolean(
+      existingUserSnap &&
+      typeof existingUserSnap.exists === 'function' &&
+      existingUserSnap.exists()
+    )
 
-    if (existingSnap && typeof existingSnap.exists === 'function' && existingSnap.exists()) {
-      const existingData = existingSnap.data()
-      if (existingData?.createdAt) {
-        finalCreatedAt = existingData.createdAt
-      }
-    }
-
-    if (!finalCreatedAt) {
-      finalCreatedAt = s.createdAt ? parseDate(s.createdAt) : new Date()
-    }
-
-    const settingsData: UserSettings = {
+    const baseSettings = {
       displayName: (s.displayName || '').slice(0, 100),
       currency: (s.currency || 'JOD').trim().slice(0, 20),
       monthStartDay: Math.min(28, Math.max(1, Math.round(s.monthStartDay || 1))),
       theme: s.theme || 'system',
-      ...(typeof s.rolloverBalance === 'boolean' ? { rolloverBalance: s.rolloverBalance } : {}),
-      createdAt: finalCreatedAt,
+      rolloverBalance: typeof s.rolloverBalance === 'boolean' ? s.rolloverBalance : true,
     }
-    ops.push((b) => b.set(userSettingsRef, settingsData, { merge: true }))
+
+    if (userExists) {
+      // Document exists: use update without createdAt to preserve original nanosecond precision
+      // and satisfy firestore.rules strict fieldUnchanged('createdAt') rule
+      ops.push((b) => b.update(rawUserRef, baseSettings))
+    } else {
+      // Document does not exist: create document with createdAt
+      const finalCreatedAt = s.createdAt ? Timestamp.fromDate(parseDate(s.createdAt)) : serverTimestamp()
+      const setData = {
+        ...baseSettings,
+        createdAt: finalCreatedAt,
+      }
+      ops.push((b) => b.set(rawUserRef, setData))
+    }
   }
 
   // 2. Categories
-  const existingCatsSnap = await getDocs(
-    collection(db, 'users', uid, 'categories').withConverter(categoryConverter)
-  )
+  const existingCatsMap = new Map<string, Category>()
+  if (existingCatsSnap && existingCatsSnap.docs) {
+    for (const d of existingCatsSnap.docs) {
+      existingCatsMap.set(d.id, d.data())
+    }
+  }
+
+  // Query existing transactions to know which categories are currently linked to transactions
+  const existingTxs = existingTxsSnap?.docs ? existingTxsSnap.docs.map((d) => d.data()) : []
+
+  // Track all category IDs referenced in existing transactions and backup transactions
+  const usedCategoryIds = new Set<string>()
+  for (const tx of existingTxs) {
+    if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
+  }
+  for (const tx of backup.data.transactions) {
+    if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
+  }
+
   const incomingCategoryIds = new Set(backup.data.categories.map((c) => c.id).filter(Boolean))
   const incomingCategoryKeys = new Set(
     backup.data.categories.map((c) => `${c.type}:${(c.name || '').trim()}`)
   )
+
+  // Map from `${c.type}:${c.name.trim()}` to restored category ID for remapping
+  const restoredKeyToIdMap = new Map<string, string>()
+  for (const cat of backup.data.categories) {
+    if (cat.id && cat.name && cat.type) {
+      const key = `${cat.type}:${cat.name.trim()}`
+      if (!restoredKeyToIdMap.has(key)) {
+        restoredKeyToIdMap.set(key, cat.id)
+      }
+    }
+  }
+
+  // Remappings from deleted existingCat.id -> targetRestoredCat.id
+  const categoryIdRemap = new Map<string, string>()
 
   if (existingCatsSnap && existingCatsSnap.docs) {
     for (const existingDoc of existingCatsSnap.docs) {
       if (!incomingCategoryIds.has(existingDoc.id)) {
         const existingCat = existingDoc.data()
         const key = `${existingCat.type}:${(existingCat.name || '').trim()}`
-        if (incomingCategoryKeys.has(key)) {
+        const isUsed = usedCategoryIds.has(existingDoc.id)
+        const targetRestoredId = restoredKeyToIdMap.get(key)
+
+        if (isUsed) {
+          // If used, ONLY delete if we can remap its transactions to a restored category with the same name & type
+          if (targetRestoredId && targetRestoredId !== existingDoc.id) {
+            categoryIdRemap.set(existingDoc.id, targetRestoredId)
+            ops.push((b) => b.delete(existingDoc.ref))
+          }
+          // If no matching restored category with the same name & type exists, DO NOT DELETE!
+        } else if (incomingCategoryKeys.has(key)) {
+          // Unused and duplicate key in incoming backup: safe to delete
           ops.push((b) => b.delete(existingDoc.ref))
         }
       }
     }
   }
 
+  // 3. Stale documents cleanup for transactions, debts, recurring, and circles
+  const incomingTxIds = new Set(backup.data.transactions.map((t) => t.id).filter(Boolean))
+  if (existingTxsSnap && existingTxsSnap.docs) {
+    for (const d of existingTxsSnap.docs) {
+      if (!incomingTxIds.has(d.id)) {
+        ops.push((b) => b.delete(d.ref))
+      }
+    }
+  }
+
+  const incomingDebtIds = new Set(backup.data.debts.map((d) => d.id).filter(Boolean))
+  if (existingDebtsSnap && existingDebtsSnap.docs) {
+    for (const d of existingDebtsSnap.docs) {
+      if (!incomingDebtIds.has(d.id)) {
+        ops.push((b) => b.delete(d.ref))
+      }
+    }
+  }
+
+  const incomingRecIds = new Set(backup.data.recurring.map((r) => r.id).filter(Boolean))
+  if (existingRecSnap && existingRecSnap.docs) {
+    for (const d of existingRecSnap.docs) {
+      if (!incomingRecIds.has(d.id)) {
+        ops.push((b) => b.delete(d.ref))
+      }
+    }
+  }
+
+  const incomingCircleIds = new Set(backup.data.circles.map((c) => c.id).filter(Boolean))
+  if (existingCirclesSnap && existingCirclesSnap.docs) {
+    for (const d of existingCirclesSnap.docs) {
+      if (!incomingCircleIds.has(d.id)) {
+        ops.push((b) => b.delete(d.ref))
+      }
+    }
+  }
+
+  // Remap existing transactions in Firestore whose category was deleted & remapped
+  if (categoryIdRemap.size > 0 && existingTxsSnap && existingTxsSnap.docs) {
+    for (const txDoc of existingTxsSnap.docs) {
+      if (!incomingTxIds.has(txDoc.id)) continue
+      const tx = txDoc.data()
+      if (tx.categoryId && categoryIdRemap.has(tx.categoryId)) {
+        const newCatId = categoryIdRemap.get(tx.categoryId)!
+        ops.push((b) => b.update(txDoc.ref, { categoryId: newCatId }))
+      }
+    }
+  }
+
+  const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/
+
+  // Write Categories
   for (const cat of backup.data.categories) {
     if (!cat.id) continue
     const catRef = doc(db, 'users', uid, 'categories', cat.id).withConverter(categoryConverter)
+    const existingCat = existingCatsMap.get(cat.id)
+    // Prevent changing type if category already exists with this ID in Firestore (firestore.rules requires fieldUnchanged('type'))
+    const safeType = existingCat ? existingCat.type : (cat.type || 'expense')
+    const safeIcon = (typeof cat.icon === 'string' && cat.icon.trim() ? cat.icon.trim() : '📁').slice(0, 16)
+    const safeColor = typeof cat.color === 'string' && HEX_COLOR_REGEX.test(cat.color.trim())
+      ? cat.color.trim()
+      : '#10B981'
+
     const catData: Category = {
       id: cat.id,
-      name: (cat.name || '').trim().slice(0, 40),
-      type: cat.type || 'expense',
-      icon: (cat.icon || 'tag').slice(0, 16),
-      color: cat.color || '#10b981',
+      name: (cat.name || '').trim().slice(0, 40) || 'تصنيف',
+      type: safeType,
+      icon: safeIcon,
+      color: safeColor,
       archived: Boolean(cat.archived),
       order: Math.max(0, Math.round(cat.order ?? 0)),
     }
     ops.push((b) => b.set(catRef, catData))
   }
 
-  // 3. Transactions
+  // Write Transactions (validate amountFils > 0)
   for (const tx of backup.data.transactions) {
     if (!tx.id) continue
+    const amountFils = Math.round(Number(tx.amountFils || 0))
+    if (amountFils <= 0) continue
+
     const txRef = doc(db, 'users', uid, 'transactions', tx.id).withConverter(transactionConverter)
     const title = typeof tx.title === 'string' && tx.title.trim() ? tx.title.trim().slice(0, 100) : undefined
     const recurringId = typeof tx.recurringId === 'string' && tx.recurringId.trim() ? tx.recurringId.trim().slice(0, 128) : undefined
 
+    const rawCatId = tx.categoryId || ''
+    const finalCatId = categoryIdRemap.get(rawCatId) || rawCatId
+
     const txData: Transaction = {
       id: tx.id,
-      type: tx.type || 'expense',
-      amountFils: Math.round(Number(tx.amountFils || 0)),
-      categoryId: tx.categoryId || '',
+      type: tx.type === 'income' ? 'income' : 'expense',
+      amountFils,
+      categoryId: finalCatId,
       date: parseDate(tx.date),
       note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
       createdAt: tx.createdAt ? parseDate(tx.createdAt) : new Date(),
@@ -272,33 +403,40 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     ops.push((b) => b.set(txRef, txData))
   }
 
-  // 4. Debts
+  // Write Debts (validate amountFils > 0 and payments amountFils > 0)
   for (const d of backup.data.debts) {
     if (!d.id) continue
-    const debtRef = doc(db, 'users', uid, 'debts', d.id).withConverter(debtConverter)
     const amountFils = Math.round(Number(d.amountFils || 0))
+    if (amountFils <= 0) continue
+
+    const debtRef = doc(db, 'users', uid, 'debts', d.id).withConverter(debtConverter)
     const rawPaidFils = Math.round(Number(d.paidFils || 0))
     const paidFils = Math.max(0, Math.min(amountFils, rawPaidFils))
     const settled = paidFils === amountFils
 
-    const payments = (d.payments || []).map((p) => {
-      const item: { id: string; amountFils: number; date: Date; note: string; createdAt: Date } = {
-        id: p.id,
-        amountFils: Math.round(Number(p.amountFils || 0)),
-        date: parseDate(p.date),
-        createdAt: p.createdAt ? parseDate(p.createdAt) : new Date(),
-        note:
-          typeof p.note === 'string' && p.note.trim()
-            ? p.note.trim().slice(0, 500)
-            : 'دفعة سداد',
-      }
-      return item
-    })
+    const payments = (d.payments || [])
+      .map((p) => {
+        const pAmount = Math.round(Number(p.amountFils || 0))
+        if (pAmount <= 0) return null
+        const item: { id: string; amountFils: number; date: Date; note: string; createdAt: Date } = {
+          id: p.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          amountFils: pAmount,
+          date: parseDate(p.date),
+          createdAt: p.createdAt ? parseDate(p.createdAt) : new Date(),
+          note:
+            typeof p.note === 'string' && p.note.trim()
+              ? p.note.trim().slice(0, 500)
+              : 'دفعة سداد',
+        }
+        return item
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .slice(0, 100)
 
     const debtData: Debt = {
       id: d.id,
-      personName: (d.personName || '').trim().slice(0, 100),
-      type: d.type || 'lent',
+      personName: (d.personName || '').trim().slice(0, 100) || 'شخص',
+      type: d.type === 'borrowed' ? 'borrowed' : 'lent',
       amountFils,
       paidFils,
       startDate: parseDate(d.startDate),
@@ -311,18 +449,24 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     ops.push((b) => b.set(debtRef, debtData))
   }
 
-  // 5. Recurring
+  // Write Recurring (validate amountFils > 0)
   for (const r of backup.data.recurring) {
     if (!r.id) continue
+    const amountFils = Math.round(Number(r.amountFils || 0))
+    if (amountFils <= 0) continue
+
     const recRef = doc(db, 'users', uid, 'recurring', r.id).withConverter(recurringConverter)
     const title = typeof r.title === 'string' && r.title.trim() ? r.title.trim().slice(0, 100) : undefined
     const circleId = typeof r.circleId === 'string' && r.circleId.trim() ? r.circleId.trim().slice(0, 128) : undefined
 
+    const rawCatId = r.categoryId || ''
+    const finalCatId = categoryIdRemap.get(rawCatId) || rawCatId
+
     const recData: Recurring = {
       id: r.id,
-      type: r.type || 'expense',
-      amountFils: Math.round(Number(r.amountFils || 0)),
-      categoryId: r.categoryId || '',
+      type: r.type === 'income' ? 'income' : 'expense',
+      amountFils,
+      categoryId: finalCatId,
       note: typeof r.note === 'string' ? r.note.slice(0, 500) : '',
       frequency: r.frequency || 'monthly',
       startDate: parseDate(r.startDate),
@@ -337,11 +481,20 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     ops.push((b) => b.set(recRef, recData))
   }
 
-  // 6. Circles
+  // Write Circles (validate monthlyAmountFils > 0 and totalAmountFils = monthlyAmountFils * membersCount)
   for (const c of backup.data.circles) {
     if (!c.id) continue
+    const monthlyAmountFils = Math.round(Number(c.monthlyAmountFils || 0))
+    if (monthlyAmountFils <= 0) continue
+
+    const membersCount = Math.max(2, Math.min(50, Math.round(Number(c.membersCount || 2))))
+    const totalAmountFils = monthlyAmountFils * membersCount
+    if (totalAmountFils <= 0) continue
+
     const circleRef = doc(db, 'users', uid, 'circles', c.id).withConverter(circleConverter)
     const recurringId = typeof c.recurringId === 'string' && c.recurringId.trim() ? c.recurringId.trim().slice(0, 128) : undefined
+
+    const myTurnMonth = Math.max(1, Math.min(membersCount, Math.round(Number(c.myTurnMonth || 1))))
 
     const members = (c.members || []).map((m) => ({
       id: m.id,
@@ -352,14 +505,14 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
 
     const circleData: MoneyCircle = {
       id: c.id,
-      name: (c.name || '').trim().slice(0, 100),
-      monthlyAmountFils: Math.round(Number(c.monthlyAmountFils || 0)),
-      membersCount: Math.round(Number(c.membersCount || 2)),
-      totalAmountFils: Math.round(Number(c.totalAmountFils || 0)),
-      myTurnMonth: Math.round(Number(c.myTurnMonth || 1)),
+      name: (c.name || '').trim().slice(0, 100) || 'جمعية',
+      monthlyAmountFils,
+      membersCount,
+      totalAmountFils,
+      myTurnMonth,
       startDate: parseDate(c.startDate),
       members,
-      status: c.status || 'active',
+      status: c.status === 'completed' ? 'completed' : 'active',
       createdAt: c.createdAt ? parseDate(c.createdAt) : new Date(),
       ...(recurringId !== undefined ? { recurringId } : {}),
       ...(c.isManager !== undefined ? { isManager: Boolean(c.isManager) } : {}),

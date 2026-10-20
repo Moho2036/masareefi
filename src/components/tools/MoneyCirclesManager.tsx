@@ -25,7 +25,7 @@ import { useMoneyCircles } from '../../hooks/useMoneyCircles'
 import { useRecurring } from '../../hooks/useRecurring'
 import { useCategories } from '../../hooks/useCategories'
 import { useToast } from '../../hooks/useToast'
-import { addRecurring, updateRecurring, deleteRecurring } from '../../services/recurring'
+import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../../services/recurring'
 import { getOrCreateDebtCategory } from '../../services/debts'
 import {
   addMoneyCircle,
@@ -167,12 +167,14 @@ export const MoneyCirclesManager: React.FC = () => {
     setName('')
     setMonthlyAmountStr('100')
     setMembersCount(10)
-    setMyTurnMonth(4)
+    setMyTurnMonth(1)
     setAutoSchedule(true)
     setIsManager(false)
+    const now = new Date()
+    setStartDateStr(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
     const initialNames: string[] = []
     for (let i = 1; i <= 10; i++) {
-      initialNames.push(i === 4 ? 'أنت' : `عضو ${i}`)
+      initialNames.push(i === 1 ? 'أنت' : `عضو ${i}`)
     }
     setCustomMembers(initialNames)
     setFormError(null)
@@ -240,10 +242,8 @@ export const MoneyCirclesManager: React.FC = () => {
           await deleteRecurring(user.uid, linkedRecId).catch(() => {})
           effectiveRecurringId = ''
         } else if (autoSchedule) {
-          // Use calculateNextDateOnEdit directly without double advancement
-          const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
-
           if (linkedRecId) {
+            const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
             await updateRecurring(user.uid, linkedRecId, {
               type: 'expense',
               amountFils: monthlyAmountFils,
@@ -258,6 +258,7 @@ export const MoneyCirclesManager: React.FC = () => {
               circleId: editingCircle.id,
               skipMonth: myTurnMonth,
             })
+            await processDueRecurring(user.uid)
           } else if (defaultExpenseCategory) {
             effectiveRecurringId = await addRecurring(user.uid, {
               type: 'expense',
@@ -267,12 +268,13 @@ export const MoneyCirclesManager: React.FC = () => {
               note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
               frequency: 'monthly',
               startDate,
-              nextDate,
+              nextDate: startDate,
               endDate: addMonths(startDate, membersCount - 1),
               active: true,
               circleId: editingCircle.id,
               skipMonth: myTurnMonth,
             })
+            await processDueRecurring(user.uid)
           }
         }
 
@@ -301,6 +303,14 @@ export const MoneyCirclesManager: React.FC = () => {
           members,
           isManager,
           recurringId: effectiveRecurringId,
+        })
+
+        const exists = await checkCirclePayoutExists(user.uid, editingCircle.id)
+        setDepositedCircleIds((prev) => {
+          const next = new Set(prev)
+          if (exists) next.add(editingCircle.id)
+          else next.delete(editingCircle.id)
+          return next
         })
 
         showToast('تم تعديل الجمعية بنجاح', 'success')
@@ -332,8 +342,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
         if (autoSchedule && defaultExpenseCategory) {
           try {
-            // Fix for past start date: calculate next upcoming date
-            const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
+            const nextDate = startDate
             const recId = await addRecurring(user.uid, {
               type: 'expense',
               amountFils: monthlyAmountFils,
@@ -349,6 +358,7 @@ export const MoneyCirclesManager: React.FC = () => {
               skipMonth: myTurnMonth,
             })
             await updateMoneyCircle(user.uid, circleId, { recurringId: recId })
+            await processDueRecurring(user.uid)
           } catch (recErr) {
             console.error('Failed to auto-schedule recurring for circle:', recErr)
           }
@@ -369,8 +379,15 @@ export const MoneyCirclesManager: React.FC = () => {
 
   const handleScheduleCircle = async (circle: MoneyCircle) => {
     if (!user || !defaultExpenseCategory) return
+    const isAlreadyScheduled = Boolean(
+      circle.recurringId || recurringList.some((r) => r.circleId === circle.id)
+    )
+    if (isAlreadyScheduled) {
+      showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
+      return
+    }
     try {
-      const nextDate = calculateNextDateOnEdit(circle.startDate, 'monthly')
+      const nextDate = circle.startDate
       const recId = await addRecurring(user.uid, {
         type: 'expense',
         amountFils: circle.monthlyAmountFils,
@@ -386,6 +403,7 @@ export const MoneyCirclesManager: React.FC = () => {
         skipMonth: circle.myTurnMonth,
       })
       await updateMoneyCircle(user.uid, circle.id, { recurringId: recId })
+      await processDueRecurring(user.uid)
       showToast('تمت جدولة القسط بنجاح مع تخطي شهر استلامك!', 'success')
     } catch (err) {
       console.error('Failed to schedule circle:', err)
@@ -457,6 +475,17 @@ export const MoneyCirclesManager: React.FC = () => {
     }
   }
 
+  const handleCompleteCircle = async (circle: MoneyCircle) => {
+    if (!user) return
+    try {
+      await updateMoneyCircle(user.uid, circle.id, { status: 'completed' })
+      showToast('تم إنهاء الجمعية بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to complete circle:', err)
+      showToast('تعذر إنهاء الجمعية', 'error')
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Top action bar */}
@@ -500,15 +529,25 @@ export const MoneyCirclesManager: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {circles.map((circle) => {
+            const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+            const now = new Date()
+            const diffMonths =
+              (now.getFullYear() - start.getFullYear()) * 12 +
+              (now.getMonth() - start.getMonth())
+            const isStarted = diffMonths >= 0
+            const isCompleted = circle.status === 'completed' || diffMonths >= circle.membersCount
             const currentMonth = getCurrentCircleMonth(circle)
-            const isUserTurn = isUserTurnMonth(circle)
+            const isUserTurn = isStarted && !isCompleted && isUserTurnMonth(circle)
             const isExpanded = expandedCircleId === circle.id
             const viewingMonth = selectedCircleMonth[circle.id] || currentMonth
 
             // Check if user has already received / deposited net turn payout
             const hasUserDeposited = depositedCircleIds.has(circle.id)
-            const canDepositNet = currentMonth >= circle.myTurnMonth && !hasUserDeposited
+            const canDepositNet = isStarted && !isCompleted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
             const netAmountFils = circle.totalAmountFils - circle.monthlyAmountFils
+            const isScheduled = Boolean(
+              circle.recurringId || recurringList.some((r) => r.circleId === circle.id)
+            )
 
             // Calculate payments for viewing month
             const paidMembersCount = circle.members.filter((m) =>
@@ -550,7 +589,7 @@ export const MoneyCirclesManager: React.FC = () => {
                             أنت المدير
                           </span>
                         )}
-                        {circle.status === 'completed' && (
+                        {(circle.status === 'completed' || isCompleted) && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                             مكتملة
                           </span>
@@ -565,6 +604,19 @@ export const MoneyCirclesManager: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    {isCompleted && circle.status !== 'completed' && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCompleteCircle(circle)}
+                        className="text-xs text-slate-600 dark:text-slate-300"
+                        icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                      >
+                        إنهاء الجمعية
+                      </Button>
+                    )}
+
                     <div className="text-end me-2">
                       <div className="text-[11px] text-slate-400">إجمالي المقبوض</div>
                       <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
@@ -592,7 +644,33 @@ export const MoneyCirclesManager: React.FC = () => {
                 </div>
 
                 {/* Turn Announcement Banner */}
-                {isUserTurn ? (
+                {isCompleted ? (
+                  <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <span>اكتملت جميع دورات هذه الجمعية ({circle.membersCount} أشهر).</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-400">
+                      مكتملة ✓
+                    </span>
+                  </div>
+                ) : !isStarted ? (
+                  <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-emerald-500" />
+                      <span>
+                        الجمعية تبدأ في:{' '}
+                        <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                          {formatDate(start, 'yyyy/MM/dd')}
+                        </strong>{' '}
+                        (دورك: الشهر رقم {circle.myTurnMonth})
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      لم تبدأ بعد
+                    </span>
+                  </div>
+                ) : isUserTurn ? (
                   <div className="mt-3.5 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 text-xs font-bold">
                       <Crown className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -656,7 +734,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Recurring Schedule Status */}
                 <div className="mt-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/40 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs">
-                  {circle.recurringId ? (
+                  {isScheduled ? (
                     <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
                       <Zap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                       <span>مجدولة في المعاملات المتكررة (معفاة من الخصم في الشهر {circle.myTurnMonth})</span>
@@ -680,13 +758,34 @@ export const MoneyCirclesManager: React.FC = () => {
                 {/* Progress bar across months */}
                 <div className="mt-4 space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    <span>التقدم الزمني: الشهر {currentMonth} من {circle.membersCount}</span>
-                    <span>{Math.round((currentMonth / circle.membersCount) * 100)}%</span>
+                    <span>
+                      {isCompleted
+                        ? 'اكتملت جميع دورات الجمعية'
+                        : !isStarted
+                          ? `الجمعية تبدأ في ${formatDate(start, 'yyyy/MM/dd')}`
+                          : `التقدم الزمني: الشهر ${currentMonth} من ${circle.membersCount}`}
+                    </span>
+                    <span>
+                      {isCompleted
+                        ? '100%'
+                        : !isStarted
+                          ? '0%'
+                          : `${Math.round((currentMonth / circle.membersCount) * 100)}%`}
+                    </span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                      style={{ width: `${Math.round((currentMonth / circle.membersCount) * 100)}%` }}
+                      className={cn(
+                        'h-full rounded-full transition-all duration-500',
+                        isCompleted ? 'bg-slate-400 dark:bg-slate-500' : 'bg-emerald-500'
+                      )}
+                      style={{
+                        width: isCompleted
+                          ? '100%'
+                          : !isStarted
+                            ? '0%'
+                            : `${Math.round((currentMonth / circle.membersCount) * 100)}%`,
+                      }}
                     />
                   </div>
                 </div>

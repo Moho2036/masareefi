@@ -70,27 +70,20 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
       return
     }
 
-    const trimmedName = name.trim()
+    const trimmedName = name.trim().slice(0, 40)
     if (!trimmedName) {
       setError('يرجى إدخال اسم التصنيف')
       return
     }
-    if (trimmedName.length > 40) {
-      setError('اسم التصنيف يجب ألا يتجاوز 40 حرفاً')
-      return
-    }
 
-    if (!icon) {
-      setError('يرجى اختيار أيقونة')
-      return
-    }
+    const trimmedIcon = (icon.trim() || '📁').slice(0, 16)
 
     setSubmitting(true)
     try {
       if (isEditing && initialCategory) {
         await updateCategory(user.uid, initialCategory.id, {
           name: trimmedName,
-          icon,
+          icon: trimmedIcon,
           color,
         })
         showToast('تم تعديل التصنيف بنجاح', 'success')
@@ -104,7 +97,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         await addCategory(user.uid, {
           name: trimmedName,
           type,
-          icon,
+          icon: trimmedIcon,
           color,
           archived: false,
           order,
@@ -208,14 +201,28 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
                 setIcon('')
                 return
               }
-              if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-                const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-                const segments = Array.from(segmenter.segment(val), (s) => s.segment)
-                setIcon(segments[segments.length - 1] || '')
-              } else {
-                const chars = Array.from(val)
-                setIcon(chars[chars.length - 1] || '')
+              const segments: string[] =
+                typeof Intl !== 'undefined' && 'Segmenter' in Intl
+                  ? Array.from(
+                      new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(val),
+                      (s) => s.segment
+                    )
+                  : Array.from(val)
+
+              if (segments.length === 0) {
+                setIcon('')
+                return
               }
+
+              let chosen: string
+              if (segments.length > 1) {
+                const newSegment = segments.find((s) => s !== icon)
+                chosen = newSegment ?? segments[segments.length - 1]
+              } else {
+                chosen = segments[0]
+              }
+
+              setIcon(chosen.slice(0, 16))
             }}
             placeholder="أو اكتب/الصق إيموجي مخصص..."
             className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"

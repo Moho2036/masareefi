@@ -100,8 +100,10 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
     `المسدد (${symbol})`,
     `المتبقي (${symbol})`,
     'الحالة',
+    'عدد الدفعات',
     'تاريخ الدين',
     'تاريخ الاستحقاق',
+    'الملاحظة',
   ]
 
   const rows = debts.map((d) => {
@@ -111,8 +113,10 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
     const paidAmount = fromFils(d.paidFils).toFixed(decimals)
     const remainingAmount = fromFils(Math.max(0, d.amountFils - d.paidFils)).toFixed(decimals)
     const statusStr = d.settled ? 'مسدد بالكامل' : 'مفتوح'
+    const paymentsCount = String((d.payments || []).length)
     const startDateStr = format(d.startDate, 'yyyy-MM-dd')
     const dueDateStr = d.dueDate ? format(d.dueDate, 'yyyy-MM-dd') : 'غير محدد'
+    const noteStr = d.note || ''
 
     return [
       personName,
@@ -121,8 +125,10 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
       paidAmount,
       remainingAmount,
       statusStr,
+      paymentsCount,
       startDateStr,
       dueDateStr,
+      noteStr,
     ]
   })
 

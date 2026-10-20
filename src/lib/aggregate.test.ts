@@ -94,6 +94,45 @@ describe('aggregate helpers', () => {
       expect(result3).toHaveLength(1)
       expect(result3[0].id).toBe('2')
     })
+
+    it('matches transactions by category name when title is omitted or does not match', () => {
+      const categoryMap = new Map([
+        ['cat-fuel', { name: 'وقود ومحروقات' }],
+        ['cat-food', { name: 'طعام ومشروبات' }],
+      ])
+
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-fuel',
+          type: 'expense',
+          amountFils: 25000,
+          categoryId: 'cat-fuel',
+          date: new Date(),
+          note: 'محطة المناصير',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-food',
+          type: 'expense',
+          amountFils: 15000,
+          categoryId: 'cat-food',
+          date: new Date(),
+          title: 'غداء عمل',
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      // Search for "وقود" matches tx-fuel via categoryMap
+      const res = filterTransactions(transactions, { query: 'وقود' }, categoryMap)
+      expect(res).toHaveLength(1)
+      expect(res[0].id).toBe('tx-fuel')
+
+      // Search with function resolver
+      const resFn = filterTransactions(transactions, { query: 'طعام' }, (id) => categoryMap.get(id)?.name)
+      expect(resFn).toHaveLength(1)
+      expect(resFn[0].id).toBe('tx-food')
+    })
   })
 
   describe('sumByType', () => {

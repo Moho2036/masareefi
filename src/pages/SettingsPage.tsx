@@ -85,6 +85,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleSelectPreset = async (code: string) => {
     setIsCustomCurrency(false)
+    if (code === activeCurrency) return
     try {
       await updateSettings({ currency: code })
       showToast(`تم تغيير العملة إلى ${PRESET_CURRENCIES[code]?.name || code} بنجاح`, 'success')
@@ -96,7 +97,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveCustomCurrency = async () => {
     const trimmed = customCurrencyInput.trim()
-    if (!trimmed) return
+    if (!trimmed || trimmed === activeCurrency) return
     setSavingCurrency(true)
     try {
       await updateSettings({ currency: trimmed })
@@ -124,6 +125,7 @@ export const SettingsPage: React.FC = () => {
   }))
 
   const handleThemeChange = async (newTheme: ThemePreference) => {
+    if (newTheme === theme) return
     setTheme(newTheme)
     try {
       await updateSettings({ theme: newTheme })
@@ -134,9 +136,15 @@ export const SettingsPage: React.FC = () => {
 
   const handleStartDayChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
+    const parsed = parseInt(val, 10)
+    const currentSaved = settings?.monthStartDay ?? 1
+    if (parsed === currentSaved) {
+      setSelectedDay(val)
+      return
+    }
     setSelectedDay(val)
     try {
-      await updateSettings({ monthStartDay: parseInt(val, 10) })
+      await updateSettings({ monthStartDay: parsed })
     } catch (err) {
       console.error('Failed to persist month start day:', err)
     }
@@ -327,7 +335,7 @@ export const SettingsPage: React.FC = () => {
             </div>
             <Toggle
               id="rollover-toggle"
-              checked={Boolean(settings?.rolloverBalance)}
+              checked={settings?.rolloverBalance ?? true}
               onChange={handleToggleRollover}
             />
           </div>

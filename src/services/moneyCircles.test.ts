@@ -5,6 +5,7 @@ import {
   circleConverter,
   deleteMoneyCircle,
   deleteCircle,
+  updateMoneyCircle,
 } from './moneyCircles'
 import type { MoneyCircle } from '../types'
 
@@ -26,6 +27,8 @@ const mockBatch = {
 
 const mockGetDoc = vi.fn()
 const mockGetDocs = vi.fn()
+const mockUpdateDoc = vi.fn().mockResolvedValue(undefined)
+const mockDeleteDoc = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db, ...parts) => ({
@@ -43,9 +46,10 @@ vi.mock('firebase/firestore', () => ({
   onSnapshot: vi.fn(),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
-  updateDoc: vi.fn(),
+  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   setDoc: vi.fn(),
-  deleteDoc: vi.fn(),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  deleteField: () => ({ _method: 'deleteField' }),
   writeBatch: () => mockBatch,
   Timestamp: {
     fromDate: (d: Date) => ({ seconds: Math.floor(d.getTime() / 1000), nanoseconds: 0 }),
@@ -214,6 +218,111 @@ describe('moneyCircles service', () => {
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
       expect(deletedPaths).toContain('users/uid-1/circles/circle-2')
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-2')
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('updateMoneyCircle payout sync', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('updates payout transaction when amount or name changes for current/past turn', async () => {
+      // 1. payout doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+      // 2. circle doc exists with turn in past or current (startDate 2026-01-01, turnMonth 1)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية جديدة',
+          monthlyAmountFils: 150000,
+          membersCount: 10,
+          totalAmountFils: 1500000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await updateMoneyCircle('uid-1', 'circle-1', {
+        name: 'جمعية جديدة',
+        monthlyAmountFils: 150000,
+        totalAmountFils: 1500000,
+      })
+
+      // First call to updateDoc is for circle, second call is for payout
+      expect(mockUpdateDoc).toHaveBeenCalledTimes(2)
+      const payoutUpdatePayload = mockUpdateDoc.mock.calls[1][1]
+      expect(payoutUpdatePayload.amountFils).toBe(1350000) // 1500000 - 150000
+      expect(payoutUpdatePayload.title).toContain('جمعية جديدة')
+    })
+
+    it('deletes payout transaction if user moves turnMonth to future', async () => {
+      // 1. payout doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+      // 2. circle doc exists with turn in future (turnMonth 10 while circle started recently)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 10,
+          startDate: { toDate: () => new Date(2026, 9, 1) }, // Oct 2026
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await updateMoneyCircle('uid-1', 'circle-1', {
+        myTurnMonth: 10,
+      })
+
+      expect(mockDeleteDoc).toHaveBeenCalledTimes(1)
+      expect(mockDeleteDoc.mock.calls[0][0].path).toBe('users/uid-1/transactions/circle_payout_circle-1')
+    })
+
+    it('depositCircleNetPayout sets payout transaction and adds myTurnMonth to member paidMonths', async () => {
+      const { depositCircleNetPayout } = await import('./moneyCircles')
+
+      // Payout does not exist yet
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      const testCircle: MoneyCircle = {
+        id: 'c-test-1',
+        name: 'جمعية العائلة',
+        monthlyAmountFils: 100000,
+        membersCount: 5,
+        totalAmountFils: 500000,
+        myTurnMonth: 2,
+        startDate: new Date(2026, 8, 1),
+        members: [
+          { id: 'm1', name: 'أحمد', turnMonth: 1, paidMonths: [1] },
+          { id: 'm2', name: 'أنا', turnMonth: 2, paidMonths: [] },
+          { id: 'm3', name: 'سعيد', turnMonth: 3, paidMonths: [] },
+        ],
+        status: 'active',
+        createdAt: new Date(),
+      }
+
+      await depositCircleNetPayout('uid-1', testCircle, 'cat-income')
+
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      expect(mockBatchSet.mock.calls[0][1].amountFils).toBe(400000) // 500,000 - 100,000
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      const updatedMembers = mockBatchUpdate.mock.calls[0][1].members
+      expect(updatedMembers[1].paidMonths).toEqual([2])
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })

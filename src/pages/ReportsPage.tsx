@@ -32,7 +32,12 @@ import {
   calculateYearlyBreakdown,
   calculateSavingsRate,
 } from '../lib/reports'
-import { getFinancialMonthRange, getMonthRange, getFiscalMonthKey } from '../lib/dates'
+import {
+  getFinancialMonthRange,
+  getMonthRange,
+  getFiscalMonthKey,
+  getFiscalMonthInfo,
+} from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
 import { cn } from '../lib/cn'
@@ -43,17 +48,16 @@ export const ReportsPage: React.FC = () => {
   // Monthly data hooks
   const { user } = useAuth()
   const appData = useAppData()
-  const { selectedDate, range } = useSelectedMonth()
+  const { range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()
   const { format } = useCurrency()
   const monthStartDay = settings?.monthStartDay ?? 1
 
-  const [localRollover, setLocalRollover] = useState<number>(0)
-  const isRolloverEnabled = Boolean(settings?.rolloverBalance)
+  const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
+  const isRolloverEnabled = settings?.rolloverBalance ?? true
 
-  const setContextRollover = appData?.setRolloverBalanceFils
   const isCurrentFiscalMonth =
     getFiscalMonthKey(range.start, monthStartDay) ===
     getFiscalMonthKey(new Date(), monthStartDay)
@@ -62,14 +66,16 @@ export const ReportsPage: React.FC = () => {
     if (!user?.uid || !isRolloverEnabled) {
       return
     }
+    // If viewing the current fiscal month, AppDataContext is already subscribed to prior balance
+    if (isCurrentFiscalMonth) {
+      return
+    }
+    const currentKey = range.start.toISOString()
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
       (bal) => {
-        setLocalRollover(bal)
-        if (isCurrentFiscalMonth) {
-          setContextRollover?.(bal)
-        }
+        setLocalRollover({ key: currentKey, amount: bal })
       },
       (err) => {
         console.error('Failed to subscribe prior balance in ReportsPage:', err)
@@ -78,10 +84,13 @@ export const ReportsPage: React.FC = () => {
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, setContextRollover])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth])
+
+  const effectiveLocalRollover =
+    localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
   const effectiveRollover = isRolloverEnabled
-    ? localRollover
+    ? (isCurrentFiscalMonth ? (appData?.rolloverBalanceFils ?? 0) : effectiveLocalRollover)
     : 0
 
   const isMonthly = reportPeriod === 'monthly'
@@ -105,17 +114,22 @@ export const ReportsPage: React.FC = () => {
 
   // Previous month range for monthly comparison
   const prevMonthRange = useMemo(() => {
-    const prevDate = addMonths(selectedDate, -1)
+    const prevDate = addMonths(range.start, -1)
     return getFinancialMonthRange(prevDate, monthStartDay)
-  }, [selectedDate, monthStartDay])
+  }, [range.start, monthStartDay])
 
   const { data: prevMonthTransactions } = useTransactions(prevMonthRange, {
     enabled: isMonthly,
   })
 
   // Yearly data hooks
-  const currentYear = useMemo(() => new Date().getFullYear(), [])
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear)
+  const currentYear = useMemo(
+    () => getFiscalMonthInfo(new Date(), monthStartDay).year,
+    [monthStartDay]
+  )
+  const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
+  const selectedYear = userSelectedYear ?? currentYear
+  const setSelectedYear = (year: number) => setUserSelectedYear(year)
 
   const yearRange = useMemo(() => {
     const start = getMonthRange(selectedYear, 0, monthStartDay).start
@@ -170,16 +184,19 @@ export const ReportsPage: React.FC = () => {
     [yearSums.expense]
   )
 
-  const yearOptions = useMemo(
-    () => [
-      { value: String(currentYear), label: `سنة ${currentYear}` },
-      { value: String(currentYear - 1), label: `سنة ${currentYear - 1}` },
-      { value: String(currentYear - 2), label: `سنة ${currentYear - 2}` },
-      { value: String(currentYear - 3), label: `سنة ${currentYear - 3}` },
-      { value: String(currentYear - 4), label: `سنة ${currentYear - 4}` },
-    ],
-    [currentYear]
-  )
+  const yearOptions = useMemo(() => {
+    const calendarYear = new Date().getFullYear()
+    const maxYear = Math.max(calendarYear, currentYear, userSelectedYear ?? 0)
+    const baseYears = [maxYear, maxYear - 1, maxYear - 2, maxYear - 3, maxYear - 4]
+    if (userSelectedYear && !baseYears.includes(userSelectedYear)) {
+      baseYears.push(userSelectedYear)
+      baseYears.sort((a, b) => b - a)
+    }
+    return baseYears.map((y) => ({
+      value: String(y),
+      label: `سنة ${y}`,
+    }))
+  }, [currentYear, userSelectedYear])
 
   return (
     <div className="space-y-6 animate-slide-up">

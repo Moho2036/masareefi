@@ -229,6 +229,26 @@ describe('debts service with accounting link', () => {
         })
       ).rejects.toThrow('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
     })
+
+    it('rejects payment when maximum 100 payments reached', async () => {
+      const debtWith100Payments: Debt = {
+        ...sampleDebt,
+        payments: Array.from({ length: 100 }, (_, i) => ({
+          id: `pay-${i}`,
+          amountFils: 100,
+          date: new Date(),
+          createdAt: new Date(),
+        })),
+        paidFils: 10000,
+      }
+
+      await expect(
+        addDebtPayment('user-1', debtWith100Payments, {
+          amountFils: 1000,
+          date: new Date(),
+        })
+      ).rejects.toThrow('تم الوصول للحد الأقصى لعدد الدفعات (100 دفعة) لهذا الدين')
+    })
   })
 
   describe('deleteDebtPayment with sync', () => {
@@ -381,6 +401,113 @@ describe('debts service with accounting link', () => {
         personName: 'علي الجديد',
         settled: false,
       })
+    })
+
+    it('does not query payment transactions if neither personName nor type changed', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          personName: 'علي',
+          type: 'lent',
+          paidFils: 10000,
+          amountFils: 50000,
+          payments: [{ id: 'p1' }, { id: 'p2' }],
+        }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        note: 'ملاحظة محدثة',
+      })
+
+      // mockGetDoc called only for debt doc and initTx doc, NOT for payments
+      expect(mockGetDoc).toHaveBeenCalledTimes(2)
+    })
+
+    it('synchronizes payment transactions in parallel when personName changes', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              personName: 'علي',
+              type: 'lent',
+              paidFils: 10000,
+              amountFils: 50000,
+              payments: [{ id: 'p1' }, { id: 'p2' }],
+            }),
+          }
+        }
+        return {
+          exists: () => true,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        personName: 'علي المعدل',
+      })
+
+      // debt + initTx + 2 payment transactions = 4 getDoc calls
+      expect(mockGetDoc).toHaveBeenCalledTimes(4)
+      // Updates: 1 debt + 1 initTx + 2 payment transactions = 4 update calls
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(4)
+    })
+
+    it('deletes initial transaction when syncTransaction is false and initTx exists', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({ personName: 'زيد', type: 'lent', paidFils: 0, amountFils: 50000 }),
+          }
+        }
+        return {
+          exists: () => true,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-123', {
+        personName: 'زيد',
+      }, { syncTransaction: false })
+
+      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+      expect(mockBatchCommit).toHaveBeenCalled()
+    })
+
+    it('creates initial transaction when syncTransaction is true and initTx does NOT exist', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { data: () => ({ id: 'cat-debt', name: 'سداد الديون والأقساط', type: 'expense', archived: false }) },
+        ],
+      })
+
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({ personName: 'زيد', type: 'lent', paidFils: 0, amountFils: 50000 }),
+          }
+        }
+        // initTx does not exist
+        return {
+          exists: () => false,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-123', {
+        personName: 'زيد',
+        amountFils: 50000,
+      }, { syncTransaction: true })
+
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      expect(mockBatchSet.mock.calls[0][1]).toMatchObject({
+        type: 'expense',
+        amountFils: 50000,
+        title: 'إقراض: زيد',
+      })
+      expect(mockBatchCommit).toHaveBeenCalled()
     })
   })
 })

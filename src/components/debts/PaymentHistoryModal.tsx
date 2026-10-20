@@ -10,6 +10,7 @@ import { deleteDebtPayment } from '../../services/debts'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
 import { toWesternDigits } from '../../lib/dates'
+import { cn } from '../../lib/cn'
 import type { Debt } from '../../types'
 
 export interface PaymentHistoryModalProps {
@@ -40,6 +41,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   const remainingFils = getDebtRemainingFils(debt)
   const payments = debt.payments || []
+  const isLent = debt.type === 'lent'
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!user) return
@@ -75,7 +77,14 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المسدد حتى الآن</span>
-            <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">
+            <span
+              className={cn(
+                'text-xs sm:text-sm font-black',
+                isLent
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-amber-600 dark:text-amber-400'
+              )}
+            >
               {formatCurrency(debt.paidFils || 0)}
             </span>
           </div>
@@ -110,8 +119,15 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                        + {formatCurrency(p.amountFils)}
+                      <div
+                        className={cn(
+                          'text-sm font-black',
+                          isLent
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-amber-600 dark:text-amber-400'
+                        )}
+                      >
+                        {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
                       </div>
                       <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
                         {formattedDate}

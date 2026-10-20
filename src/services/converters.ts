@@ -10,10 +10,12 @@ import type { Category, Transaction, Recurring, UserSettings, Debt, DebtPayment 
 
 export const categoryConverter: FirestoreDataConverter<Category> = {
   toFirestore(cat: Category): DocumentData {
+    const name = (typeof cat.name === 'string' ? cat.name.trim() : '').slice(0, 40)
+    const icon = (typeof cat.icon === 'string' ? cat.icon.trim() : '📁').slice(0, 16)
     return {
-      name: cat.name,
+      name: name || 'تصنيف',
       type: cat.type,
-      icon: cat.icon,
+      icon: icon || '📁',
       color: cat.color,
       archived: Boolean(cat.archived),
       order: Math.max(0, Math.round(cat.order ?? 0)),
@@ -186,7 +188,7 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
       currency: data.currency ?? 'JOD',
       monthStartDay: data.monthStartDay ?? 1,
       theme: data.theme ?? 'system',
-      rolloverBalance: typeof data.rolloverBalance === 'boolean' ? data.rolloverBalance : false,
+      rolloverBalance: typeof data.rolloverBalance === 'boolean' ? data.rolloverBalance : true,
       createdAt:
         data.createdAt instanceof Timestamp
           ? data.createdAt.toDate()

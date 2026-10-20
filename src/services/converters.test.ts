@@ -45,6 +45,23 @@ describe('converters', () => {
       expect((firestoreData as Record<string, unknown>).id).toBeUndefined()
     })
 
+    it('trims and slices name and icon to comply with firestore rules', () => {
+      const oversizedCat: Category = {
+        id: 'cat-long',
+        name: '   ' + 'أ'.repeat(50) + '   ',
+        type: 'expense',
+        icon: '👨‍👩‍👧‍👦'.repeat(10), // long multi-codepoint emoji string
+        color: '#10B981',
+        archived: false,
+        order: 1,
+      }
+
+      const firestoreData = categoryConverter.toFirestore(oversizedCat)
+
+      expect(firestoreData.name.length).toBeLessThanOrEqual(40)
+      expect(firestoreData.icon.length).toBeLessThanOrEqual(16)
+    })
+
     it('converts Firestore snapshot to Category with id', () => {
       const snap = makeMockSnapshot('cat-abc', {
         name: 'راتب',

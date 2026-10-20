@@ -7,6 +7,11 @@ import type { Recurring } from '../types'
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
   updateRecurring: vi.fn().mockResolvedValue(undefined),
+  processDueRecurring: vi.fn().mockResolvedValue(0),
+}))
+
+vi.mock('../services/moneyCircles', () => ({
+  updateMoneyCircle: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({

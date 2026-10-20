@@ -200,9 +200,15 @@ export async function processDueRecurring(
     return 0
   }
 
-  let createdCount = 0
-  let batchHasWrites = false
-  const batch = writeBatch(db)
+  interface PendingTx {
+    txId: string
+    txRef: ReturnType<typeof doc>
+    occDate: Date
+    rec: Recurring
+  }
+
+  const pendingTxs: PendingTx[] = []
+  const recurringUpdates: { recRef: ReturnType<typeof doc>; payload: Record<string, unknown> }[] = []
 
   for (const docSnap of snap.docs) {
     const rec = docSnap.data()
@@ -212,24 +218,7 @@ export async function processDueRecurring(
       for (const occDate of dates) {
         const txId = getDeterministicTxId(rec.id, occDate)
         const txRef = doc(db, 'users', uid, 'transactions', txId)
-        const txSnap = await getDoc(txRef)
-
-        if (!txSnap.exists()) {
-          const newTxData: Record<string, unknown> = {
-            type: rec.type,
-            amountFils: rec.amountFils,
-            categoryId: rec.categoryId,
-            date: Timestamp.fromDate(occDate),
-            note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
-            recurringId: rec.id,
-            createdAt: serverTimestamp(),
-          }
-          if (rec.title) {
-            newTxData.title = rec.title.slice(0, 100)
-          }
-          batch.set(txRef, newTxData)
-          createdCount++
-        }
+        pendingTxs.push({ txId, txRef, occDate, rec })
       }
     }
 
@@ -240,11 +229,49 @@ export async function processDueRecurring(
     if (shouldDeactivate) {
       updatePayload.active = false
     }
-    batch.update(recRef, updatePayload)
-    batchHasWrites = true
+    recurringUpdates.push({ recRef, payload: updatePayload })
   }
 
-  if (batchHasWrites) {
+  // Fetch verification documents concurrently via Promise.all
+  const txSnaps = await Promise.all(pendingTxs.map((item) => getDoc(item.txRef)))
+
+  let createdCount = 0
+  type BatchOp = (b: ReturnType<typeof writeBatch>) => void
+  const operations: BatchOp[] = []
+
+  for (let i = 0; i < pendingTxs.length; i++) {
+    const txSnap = txSnaps[i]
+    if (!txSnap.exists()) {
+      const { txRef, occDate, rec } = pendingTxs[i]
+      const newTxData: Record<string, unknown> = {
+        type: rec.type,
+        amountFils: rec.amountFils,
+        categoryId: rec.categoryId,
+        date: Timestamp.fromDate(occDate),
+        note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+        recurringId: rec.id,
+        createdAt: serverTimestamp(),
+      }
+      if (rec.title) {
+        newTxData.title = rec.title.slice(0, 100)
+      }
+      operations.push((b) => b.set(txRef, newTxData))
+      createdCount++
+    }
+  }
+
+  for (const { recRef, payload } of recurringUpdates) {
+    operations.push((b) => b.update(recRef, payload))
+  }
+
+  // Chunk write operations in writeBatch to max 400 per batch to respect Firestore limit (500)
+  const CHUNK_SIZE = 400
+  for (let i = 0; i < operations.length; i += CHUNK_SIZE) {
+    const chunk = operations.slice(i, i + CHUNK_SIZE)
+    const batch = writeBatch(db)
+    for (const op of chunk) {
+      op(batch)
+    }
     await batch.commit()
   }
 

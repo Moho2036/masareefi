@@ -75,11 +75,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
   const pathname = location.pathname
   const [isMoreOpen, setIsMoreOpen] = useState(false)
 
-  const [prevPathname, setPrevPathname] = useState(pathname)
+  const [prevLocationKey, setPrevLocationKey] = useState(location.pathname + location.search)
 
-  // Auto-close drawer when route changes
-  if (pathname !== prevPathname) {
-    setPrevPathname(pathname)
+  // Auto-close drawer when route or query changes
+  if (location.pathname + location.search !== prevLocationKey) {
+    setPrevLocationKey(location.pathname + location.search)
     setIsMoreOpen(false)
   }
 
@@ -161,7 +161,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
               <div className="space-y-2">
                 {smartTools.map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname.startsWith(item.to.split('?')[0])
+                  const [itemPath, itemQuery] = item.to.split('?')
+                  const itemTool = itemQuery ? new URLSearchParams(itemQuery).get('tool') : null
+                  const currentSearchParams = new URLSearchParams(location.search)
+                  const currentTool = currentSearchParams.get('tool') || currentSearchParams.get('tab')
+                  const isActive = pathname === itemPath && currentTool === itemTool
                   return (
                     <Link
                       key={item.title}

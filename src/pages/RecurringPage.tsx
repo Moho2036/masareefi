@@ -27,7 +27,7 @@ import { useRecurring } from '../hooks/useRecurring'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
-import { addRecurring, updateRecurring, deleteRecurring } from '../services/recurring'
+import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../services/recurring'
 import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle } from '../services/moneyCircles'
 import { calculateMonthlyEquivalent, isOccurrenceSkipped } from '../lib/recurring'
 import { toWesternDigits } from '../lib/dates'
@@ -47,7 +47,17 @@ export const RecurringPage: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<Recurring | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const activeCircles = useMemo(() => circles.filter((c) => c.status === 'active'), [circles])
+  const activeCircles = useMemo(() => {
+    const now = new Date()
+    return circles.filter((c) => {
+      if (c.status === 'completed') return false
+      const start = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
+      const diffMonths =
+        (now.getFullYear() - start.getFullYear()) * 12 +
+        (now.getMonth() - start.getMonth())
+      return diffMonths < c.membersCount
+    })
+  }, [circles])
 
   // Map categoryId to Category
   const categoryMap = useMemo(() => {
@@ -65,6 +75,13 @@ export const RecurringPage: React.FC = () => {
 
   const handleScheduleCircle = async (circle: (typeof circles)[0]) => {
     if (!user) return
+    const isAlreadyScheduled = Boolean(
+      circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
+    )
+    if (isAlreadyScheduled) {
+      showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
+      return
+    }
     const defaultExpenseCategory = categories.find((c) => c.type === 'expense' && !c.archived)
     if (!defaultExpenseCategory) {
       showToast('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
@@ -86,6 +103,7 @@ export const RecurringPage: React.FC = () => {
         skipMonth: circle.myTurnMonth,
       })
       await updateMoneyCircle(user.uid, circle.id, { recurringId: recId })
+      await processDueRecurring(user.uid)
       showToast('تمت جدولة القسط في المعاملات المتكررة بنجاح مع تخطي شهر استلامك!', 'success')
     } catch (err) {
       console.error('Failed to schedule circle:', err)
@@ -98,6 +116,9 @@ export const RecurringPage: React.FC = () => {
     const newActive = !item.active
     try {
       await updateRecurring(user.uid, item.id, { active: newActive })
+      if (newActive) {
+        await processDueRecurring(user.uid)
+      }
       showToast(
         newActive
           ? 'تم تفعيل المعاملة المتكررة'
@@ -206,8 +227,17 @@ export const RecurringPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {activeCircles.map((circle) => {
-              const isUserTurn = isUserTurnMonth(circle)
+              const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+              const now = new Date()
+              const diffMonths =
+                (now.getFullYear() - start.getFullYear()) * 12 +
+                (now.getMonth() - start.getMonth())
+              const isStarted = diffMonths >= 0
+              const isUserTurn = isStarted && isUserTurnMonth(circle)
               const currentMonth = getCurrentCircleMonth(circle)
+              const isScheduled = Boolean(
+                circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
+              )
               return (
                 <div
                   key={circle.id}
@@ -226,6 +256,10 @@ export const RecurringPage: React.FC = () => {
                       <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white">
                         <Crown className="w-3 h-3" />
                         <span>دورك في الاستلام!</span>
+                      </span>
+                    ) : !isStarted ? (
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        تبدأ في {formatDate(start, 'yyyy/MM/dd')}
                       </span>
                     ) : (
                       <span className="text-[11px] font-semibold text-slate-400">
@@ -260,7 +294,7 @@ export const RecurringPage: React.FC = () => {
 
                   {/* Recurring Schedule Link / Status */}
                   <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                    {circle.recurringId ? (
+                    {isScheduled ? (
                       <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
                         <span>مجدولة بالمعاملات</span>

@@ -163,13 +163,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [userId]
   )
 
+  const isRolloverEnabled = settings?.rolloverBalance ?? true
+  const monthStartDay = settings?.monthStartDay ?? 1
+  const hasSettings = settings !== null
+
   // Real-time rollover prior balance sync: calculates cumulative balance before financial cycle start
   useEffect(() => {
-    if (!userId || !settings?.rolloverBalance) {
+    if (!userId || !hasSettings || !isRolloverEnabled) {
       return
     }
 
-    const periodRange = getFinancialMonthRange(new Date(), settings.monthStartDay ?? 1)
+    const periodRange = getFinancialMonthRange(new Date(), monthStartDay)
     const unsub = subscribePriorBalance(
       userId,
       periodRange.start,
@@ -184,17 +188,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       unsub()
     }
-  }, [userId, settings?.rolloverBalance, settings?.monthStartDay])
+  }, [userId, hasSettings, isRolloverEnabled, monthStartDay])
 
   const handleSetRolloverBalanceFils = useCallback(
     (amount: number) => {
-      if (!settings?.rolloverBalance) {
+      if (!isRolloverEnabled) {
         setRolloverBalanceFils(0)
       } else {
         setRolloverBalanceFils(amount)
       }
     },
-    [settings?.rolloverBalance]
+    [isRolloverEnabled]
   )
 
   const value = useMemo<AppDataContextValue>(() => {
@@ -227,7 +231,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
 
     const effectiveRolloverBalanceFils =
-      user && settings?.rolloverBalance ? rolloverBalanceFils : 0
+      user && isRolloverEnabled ? rolloverBalanceFils : 0
 
     return {
       settings,
@@ -257,6 +261,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [
     user,
     settings,
+    isRolloverEnabled,
     settingsLoading,
     settingsError,
     handleUpdateSettings,
