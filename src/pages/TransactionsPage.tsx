@@ -204,7 +204,7 @@ export const TransactionsPage: React.FC = () => {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="ابحث في العنوان أو الملاحظات..."
+                  placeholder="ابحث في العنوان، الملاحظات، الفئة، أو المبلغ..."
                   className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                 />
               </div>
@@ -481,8 +481,8 @@ export const TransactionsPage: React.FC = () => {
                                 {formatWithSign(tx.amountFils, tx.type)}
                               </div>
 
-                              {/* Action Buttons: hidden on mobile, smooth group hover on desktop */}
-                              <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                              {/* Action Buttons: visible on mobile, smooth group hover on desktop */}
+                              <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 {!(
                                   tx.id.startsWith('debt_init_') ||
                                   tx.id.startsWith('debt_pay_') ||

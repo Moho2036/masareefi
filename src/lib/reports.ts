@@ -200,3 +200,23 @@ export function calculateSavingsRate(income: number, expense: number): number {
   const clamped = Math.max(-100, Math.min(100, rawRate))
   return Math.round(clamped * 10) / 10
 }
+
+/**
+ * Calculates the monthly average expense for a yearly report.
+ * - For the current fiscal year (selectedYear === currentYear): divides by the number of elapsed months so far (from 1 to currentMonthIndex + 1).
+ * - For past/other years: divides by the number of months with actual activity (or 12 if none, with minimum 1).
+ */
+export function calculateYearlyMonthlyAverage(
+  yearExpenseFils: number,
+  selectedYear: number,
+  currentYear: number,
+  currentMonthIndex: number,
+  activeMonthsCount: number
+): number {
+  const divisor =
+    selectedYear === currentYear
+      ? Math.max(1, Math.min(12, currentMonthIndex + 1))
+      : Math.max(1, activeMonthsCount > 0 ? activeMonthsCount : 12)
+
+  return Math.round(yearExpenseFils / divisor)
+}

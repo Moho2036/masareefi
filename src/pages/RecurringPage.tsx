@@ -28,8 +28,8 @@ import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
 import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../services/recurring'
-import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle } from '../services/moneyCircles'
-import { calculateMonthlyEquivalent, isOccurrenceSkipped } from '../lib/recurring'
+import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle, getCircleCycleIndex } from '../services/moneyCircles'
+import { calculateMonthlyEquivalent, isOccurrenceSkipped, calculateNextDateOnEdit } from '../lib/recurring'
 import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Recurring, Frequency } from '../types'
@@ -51,10 +51,7 @@ export const RecurringPage: React.FC = () => {
     const now = new Date()
     return circles.filter((c) => {
       if (c.status === 'completed') return false
-      const start = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
-      const diffMonths =
-        (now.getFullYear() - start.getFullYear()) * 12 +
-        (now.getMonth() - start.getMonth())
+      const diffMonths = getCircleCycleIndex(c.startDate, now)
       return diffMonths < c.membersCount
     })
   }, [circles])
@@ -88,6 +85,7 @@ export const RecurringPage: React.FC = () => {
       return
     }
     try {
+      const nextDate = calculateNextDateOnEdit(circle.startDate, 'monthly')
       const recId = await addRecurring(user.uid, {
         type: 'expense',
         amountFils: circle.monthlyAmountFils,
@@ -96,7 +94,7 @@ export const RecurringPage: React.FC = () => {
         note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`,
         frequency: 'monthly',
         startDate: circle.startDate,
-        nextDate: circle.startDate,
+        nextDate,
         endDate: addMonths(circle.startDate, circle.membersCount - 1),
         active: true,
         circleId: circle.id,
@@ -227,14 +225,12 @@ export const RecurringPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {activeCircles.map((circle) => {
-              const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
               const now = new Date()
-              const diffMonths =
-                (now.getFullYear() - start.getFullYear()) * 12 +
-                (now.getMonth() - start.getMonth())
+              const start = new Date(circle.startDate)
+              const diffMonths = getCircleCycleIndex(circle.startDate, now)
               const isStarted = diffMonths >= 0
-              const isUserTurn = isStarted && isUserTurnMonth(circle)
-              const currentMonth = getCurrentCircleMonth(circle)
+              const isUserTurn = isStarted && isUserTurnMonth(circle, now)
+              const currentMonth = getCurrentCircleMonth(circle, now)
               const isScheduled = Boolean(
                 circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
               )

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { Zap } from 'lucide-react'
+import { Zap, AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -46,6 +46,8 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
   const remainingFils = getDebtRemainingFils(debt)
   const isLent = debt.type === 'lent'
+  const paymentsCount = (debt.payments || []).length
+  const isMaxPaymentsReached = paymentsCount >= 100
 
   const handleFillFullRemaining = () => {
     setAmountStr(String(fromFils(remainingFils)))
@@ -56,7 +58,12 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
     e.preventDefault()
     if (!user) return
 
-    const amountFils = toFils(amountStr)
+    if (isMaxPaymentsReached) {
+      setError('وصل هذا الدين إلى الحد الأقصى لعدد الدفعات (100 دفعة). يمكنك تسوية المبلغ المتبقي بدفعة واحدة عبر تعديل إجمالي الدين.')
+      return
+    }
+
+    const amountFils = toFils(amountStr, config.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -72,6 +79,14 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
     try {
       const date = parseLocalDateInput(dateStr)
+      const debtStartDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
+      const debtStartDay = new Date(debtStartDate.getFullYear(), debtStartDate.getMonth(), debtStartDate.getDate(), 0, 0, 0, 0)
+      const paymentDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+      if (paymentDay < debtStartDay) {
+        setError('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+        return
+      }
+
       const fallbackNote = isLent ? 'استرداد دفعة دين' : 'سداد دفعة دين'
       await addDebtPayment(
         user.uid,
@@ -97,6 +112,18 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {isMaxPaymentsReached && (
+        <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-semibold space-y-1">
+          <div className="font-bold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>تم الوصول للحد الأقصى للدفعات (100 دفعة)</span>
+          </div>
+          <p>
+            تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين. لا يمكن تسجيل دفعات إضافية لهذا السجل، ويمكنك تسوية المبلغ المتبقي بدفعة واحدة عبر تعديل إجمالي مبلغ الدين في شاشة التعديل.
+          </p>
+        </div>
+      )}
+
       {error && (
         <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60 rounded-xl text-xs font-semibold">
           {error}
@@ -187,6 +214,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         <input
           type="date"
           value={dateStr}
+          min={format(debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate), 'yyyy-MM-dd')}
           onChange={(e) => setDateStr(e.target.value)}
           className="w-full rounded-xl border bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm outline-none border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium"
           required
@@ -228,9 +256,9 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
           type="submit"
           variant="primary"
           className="flex-1 font-bold"
-          disabled={loading}
+          disabled={loading || isMaxPaymentsReached}
         >
-          {loading ? 'جارٍ التسجيل...' : 'تأكيد تسجيل الدفعة'}
+          {loading ? 'جارٍ التسجيل...' : isMaxPaymentsReached ? 'الحد الأقصى مكتمل (100 دفعة)' : 'تأكيد تسجيل الدفعة'}
         </Button>
         <Button
           type="button"

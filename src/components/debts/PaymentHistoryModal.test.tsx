@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PaymentHistoryModal } from './PaymentHistoryModal'
+import * as debtServices from '../../services/debts'
 import type { Debt } from '../../types'
+
+vi.mock('../../services/debts', () => ({
+  deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
+  updateDebtPayment: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'user-1' } }),
@@ -14,6 +20,7 @@ vi.mock('../../hooks/useToast', () => ({
 vi.mock('../../hooks/useCurrency', () => ({
   useCurrency: () => ({
     format: (fils: number) => `${fils / 1000} د.أ`,
+    config: { symbol: 'د.أ', code: 'JOD', decimals: 3 },
   }),
 }))
 
@@ -86,5 +93,103 @@ describe('PaymentHistoryModal', () => {
     const paymentAmount = screen.getByText('- 30 د.أ')
     expect(paymentAmount).toBeDefined()
     expect(paymentAmount.className).toContain('text-amber-600')
+  })
+
+  it('allows editing an existing payment and calls updateDebtPayment', async () => {
+    const lentDebt: Debt = {
+      id: 'd1',
+      personName: 'خالد',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'p1',
+          amountFils: 50000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة قديمة',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={lentDebt}
+      />
+    )
+
+    // Click edit button
+    const editBtn = screen.getByTitle('تعديل هذه الدفعة')
+    fireEvent.click(editBtn)
+
+    // The inline inputs should appear
+    expect(screen.getByDisplayValue('50')).toBeInTheDocument()
+    const amountInput = screen.getByDisplayValue('50')
+    fireEvent.change(amountInput, { target: { value: '60' } })
+
+    // Save edit
+    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(debtServices.updateDebtPayment).toHaveBeenCalledWith(
+        'user-1',
+        lentDebt,
+        'p1',
+        expect.objectContaining({
+          amountFils: 60000,
+        })
+      )
+    })
+  })
+
+  it('validates that edited payment date cannot precede debt start date', async () => {
+    const lentDebt: Debt = {
+      id: 'd1',
+      personName: 'خالد',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date('2026-01-05'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'p1',
+          amountFils: 50000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={lentDebt}
+      />
+    )
+
+    const editBtn = screen.getByTitle('تعديل هذه الدفعة')
+    fireEvent.click(editBtn)
+
+    const dateInput = screen.getByDisplayValue('2026-01-10')
+    fireEvent.change(dateInput, { target: { value: '2026-01-01' } }) // before 2026-01-05
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    fireEvent.click(saveBtn)
+
+    expect(screen.getByText('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')).toBeInTheDocument()
+    expect(debtServices.updateDebtPayment).not.toHaveBeenCalled()
   })
 })

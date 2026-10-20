@@ -133,6 +133,44 @@ describe('aggregate helpers', () => {
       expect(resFn).toHaveLength(1)
       expect(resFn[0].id).toBe('tx-food')
     })
+
+    it('matches transactions by amount in Western or Arabic digits', () => {
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-25',
+          type: 'expense',
+          amountFils: 25000, // 25 JOD
+          categoryId: 'cat-1',
+          date: new Date(),
+          note: 'تسوق',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-150',
+          type: 'income',
+          amountFils: 150000, // 150 JOD
+          categoryId: 'cat-2',
+          date: new Date(),
+          note: 'مكافأة',
+          createdAt: new Date(),
+        },
+      ]
+
+      // Search with English digits "25"
+      const resEn = filterTransactions(transactions, { query: '25' })
+      expect(resEn).toHaveLength(1)
+      expect(resEn[0].id).toBe('tx-25')
+
+      // Search with Arabic digits "٢٥"
+      const resAr = filterTransactions(transactions, { query: '٢٥' })
+      expect(resAr).toHaveLength(1)
+      expect(resAr[0].id).toBe('tx-25')
+
+      // Search with Arabic digits "١٥٠"
+      const resAr150 = filterTransactions(transactions, { query: '١٥٠' })
+      expect(resAr150).toHaveLength(1)
+      expect(resAr150[0].id).toBe('tx-150')
+    })
   })
 
   describe('sumByType', () => {

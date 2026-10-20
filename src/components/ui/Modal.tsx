@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState, useId } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../../lib/cn'
 
@@ -8,6 +8,54 @@ export interface ModalProps {
   title?: string
   children: React.ReactNode
   className?: string
+  closeOnBackdropClick?: boolean
+  closeOnOverlayClick?: boolean
+  enableHistoryBack?: boolean
+}
+
+let scrollLockCount = 0
+let savedScrollY = 0
+let savedBodyStyle: {
+  overflow: string
+  position: string
+  top: string
+  width: string
+} | null = null
+
+function lockBodyScroll() {
+  if (typeof document === 'undefined') return
+  scrollLockCount++
+  if (scrollLockCount === 1) {
+    savedScrollY = window.scrollY || window.pageYOffset || 0
+    savedBodyStyle = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    }
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${savedScrollY}px`
+    document.body.style.width = '100%'
+  }
+}
+
+function unlockBodyScroll() {
+  if (typeof document === 'undefined') return
+  scrollLockCount = Math.max(0, scrollLockCount - 1)
+  if (scrollLockCount === 0 && savedBodyStyle) {
+    document.body.style.overflow = savedBodyStyle.overflow
+    document.body.style.position = savedBodyStyle.position
+    document.body.style.top = savedBodyStyle.top
+    document.body.style.width = savedBodyStyle.width
+    if (
+      typeof window.scrollTo === 'function' &&
+      !window.scrollTo.toString().includes('notImplementedMethod')
+    ) {
+      window.scrollTo(0, savedScrollY)
+    }
+    savedBodyStyle = null
+  }
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,8 +64,62 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   className,
+  closeOnBackdropClick,
+  closeOnOverlayClick,
+  enableHistoryBack = true,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const [isNudging, setIsNudging] = useState(false)
+  const mouseDownTargetRef = useRef<EventTarget | null>(null)
+  const modalId = useId()
+
+  const allowBackdropClose =
+    closeOnBackdropClick !== undefined
+      ? closeOnBackdropClick
+      : closeOnOverlayClick !== undefined
+        ? closeOnOverlayClick
+        : true
+
+  const isPushedRef = useRef(false)
+  const isClosingFromPopStateRef = useRef(false)
+
+  // Hardware Back Button / popstate handling
+  useEffect(() => {
+    if (!isOpen || enableHistoryBack === false) return
+
+    isClosingFromPopStateRef.current = false
+
+    try {
+      window.history.pushState({ modalOpen: true, modalId }, '')
+      isPushedRef.current = true
+    } catch {
+      isPushedRef.current = false
+    }
+
+    const handlePopState = () => {
+      if (isPushedRef.current) {
+        isPushedRef.current = false
+        isClosingFromPopStateRef.current = true
+        onClose()
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      if (isPushedRef.current && !isClosingFromPopStateRef.current) {
+        isPushedRef.current = false
+        try {
+          if (window.history.state?.modalId === modalId) {
+            window.history.back()
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [isOpen, onClose, enableHistoryBack, modalId])
 
   // Handle ESC key press
   useEffect(() => {
@@ -36,17 +138,35 @@ export const Modal: React.FC<ModalProps> = ({
   // Prevent background scrolling when open & focus dialog
   useEffect(() => {
     if (isOpen) {
-      const originalOverflow = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
+      lockBodyScroll()
       dialogRef.current?.focus()
 
       return () => {
-        document.body.style.overflow = originalOverflow
+        unlockBodyScroll()
       }
     }
   }, [isOpen])
 
   if (!isOpen) return null
+
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mouseDownTargetRef.current = e.target
+  }
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    // Only respond if both mousedown and click originated directly on the backdrop element
+    if (e.target !== e.currentTarget || mouseDownTargetRef.current !== e.currentTarget) {
+      return
+    }
+
+    if (allowBackdropClose) {
+      onClose()
+    } else {
+      // Gentle feedback indicating the modal requires explicit close
+      setIsNudging(true)
+      setTimeout(() => setIsNudging(false), 200)
+    }
+  }
 
   return (
     <div
@@ -56,8 +176,10 @@ export const Modal: React.FC<ModalProps> = ({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-fade-in"
-        onClick={onClose}
+        onMouseDown={handleBackdropMouseDown}
+        onClick={handleBackdropClick}
         aria-hidden="true"
+        data-testid="modal-backdrop"
       />
 
       {/* Dialog container: bottom sheet on < lg, centered dialog on >= lg */}
@@ -72,7 +194,8 @@ export const Modal: React.FC<ModalProps> = ({
           overscrollBehavior: 'contain',
         }}
         className={cn(
-          'relative z-10 w-full bg-white dark:bg-slate-800 shadow-2xl outline-none smooth-touch-scroll',
+          'relative z-10 w-full bg-white dark:bg-slate-800 shadow-2xl outline-none smooth-touch-scroll transition-transform duration-150',
+          isNudging && 'scale-[1.015]',
           // Mobile: Bottom Sheet with native momentum touch scrolling
           'rounded-t-3xl max-h-[88dvh] overflow-y-auto overscroll-contain touch-pan-y p-5 pb-10',
           // Desktop >= lg: Centered Dialog

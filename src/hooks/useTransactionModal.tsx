@@ -78,6 +78,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
         isOpen={isOpen}
         onClose={closeModal}
         title={modalTitle}
+        closeOnBackdropClick={false}
       >
         {isOpen && (
           <TransactionForm
@@ -85,6 +86,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
             duplicateFrom={duplicateTransaction}
             initialType={defaultType}
             onClose={closeModal}
+            onDuplicate={openDuplicate}
           />
         )}
       </Modal>

@@ -36,7 +36,7 @@ describe('exportCsv module', () => {
   })
 
   describe('buildCsv', () => {
-    it('prepends UTF-8 BOM character and formats rows with CRLF', () => {
+    it('prepends UTF-8 BOM character, sep=, directive, and formats rows with CRLF', () => {
       const headers = ['الاسم', 'المبلغ']
       const rows = [
         ['أحمد', 15.5],
@@ -44,8 +44,15 @@ describe('exportCsv module', () => {
       ]
       const result = buildCsv(headers, rows)
 
-      expect(result.startsWith('\uFEFF')).toBe(true)
-      expect(result).toBe('\uFEFFالاسم,المبلغ\r\nأحمد,15.5\r\nسارة,20')
+      expect(result.startsWith('\uFEFFsep=,\r\n')).toBe(true)
+      expect(result).toBe('\uFEFFsep=,\r\nالاسم,المبلغ\r\nأحمد,15.5\r\nسارة,20')
+    })
+
+    it('can omit sep=, directive if includeSepDirective is false', () => {
+      const headers = ['الاسم', 'المبلغ']
+      const rows = [['أحمد', 15.5]]
+      const result = buildCsv(headers, rows, { includeSepDirective: false })
+      expect(result).toBe('\uFEFFالاسم,المبلغ\r\nأحمد,15.5')
     })
   })
 

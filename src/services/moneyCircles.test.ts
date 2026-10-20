@@ -96,17 +96,30 @@ describe('moneyCircles service', () => {
       expect(getCurrentCircleMonth(sampleCircle, new Date(2025, 11, 20))).toBe(1)
     })
 
-    it('calculates correctly when circle starts on any day other than the 1st (e.g. 15th)', () => {
+    it('calculates correctly based on actual monthly cycles when circle starts on a day other than the 1st (e.g. 15th)', () => {
       const midMonthCircle: MoneyCircle = {
         ...sampleCircle,
         startDate: new Date(2026, 0, 15), // Jan 15, 2026
       }
-      // Month 1: Jan 2026
+      // Jan 20, 2026 -> Still in cycle 1 (Jan 15 - Feb 14)
       expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 0, 20))).toBe(1)
-      // Month 2: Feb 2026 (even early Feb like Feb 1 or Feb 5)
-      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 1, 5))).toBe(2)
-      // Month 3: March 2026
-      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 2, 1))).toBe(3)
+      // Feb 5, 2026 -> Still in cycle 1 (before Feb 15)
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 1, 5))).toBe(1)
+      // Feb 15, 2026 -> Entered cycle 2 (Feb 15 - Mar 14)
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 1, 15))).toBe(2)
+      // Mar 1, 2026 -> Still in cycle 2 (before Mar 15)
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 2, 1))).toBe(2)
+      // Mar 15, 2026 -> Entered cycle 3
+      expect(getCurrentCircleMonth(midMonthCircle, new Date(2026, 2, 15))).toBe(3)
+    })
+
+    it('respects user monthStartDay when circle was created on the 1st of the month', () => {
+      // sampleCircle started Jan 1, 2026. With monthStartDay = 25:
+      // Cycle 1 starts Jan 25, 2026
+      // Feb 20, 2026 is still before Feb 25 -> month 1
+      expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 1, 20), 25)).toBe(1)
+      // Feb 25, 2026 -> enters month 2
+      expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 1, 25), 25)).toBe(2)
     })
   })
 
@@ -121,6 +134,22 @@ describe('moneyCircles service', () => {
       expect(isUserTurnMonth(sampleCircle, new Date(2026, 2, 10))).toBe(false)
       // May 2026 is month 5
       expect(isUserTurnMonth(sampleCircle, new Date(2026, 4, 10))).toBe(false)
+    })
+
+    it('respects circle cycle day for user turn month', () => {
+      const midMonthCircle: MoneyCircle = {
+        ...sampleCircle,
+        myTurnMonth: 2,
+        startDate: new Date(2026, 0, 15), // Jan 15, 2026 -> Turn 2 is Feb 15 to Mar 14
+      }
+      // Feb 5 -> month 1 (not turn 2 yet)
+      expect(isUserTurnMonth(midMonthCircle, new Date(2026, 1, 5))).toBe(false)
+      // Feb 15 -> month 2 (user's turn!)
+      expect(isUserTurnMonth(midMonthCircle, new Date(2026, 1, 15))).toBe(true)
+      // Mar 1 -> still in month 2 (user's turn!)
+      expect(isUserTurnMonth(midMonthCircle, new Date(2026, 2, 1))).toBe(true)
+      // Mar 15 -> entered month 3 (past turn 2)
+      expect(isUserTurnMonth(midMonthCircle, new Date(2026, 2, 15))).toBe(false)
     })
 
     it('returns false when circle start date is in the future even if myTurnMonth is 1', () => {
@@ -178,34 +207,49 @@ describe('moneyCircles service', () => {
       vi.clearAllMocks()
     })
 
-    it('deletes circle doc, linked recurringId, circleId query results, and payout doc in a single batch', async () => {
+    it('deletes circle doc, linked recurring rules, payout doc, and installment transactions when deleteTransactions is true', async () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
         data: () => ({ recurringId: 'rec-assoc-1' }),
       })
 
+      // Query recurring linked via circleId
       mockGetDocs.mockResolvedValueOnce({
         docs: [
-          { ref: { path: 'users/uid-1/recurring/rec-query-1' } },
+          { id: 'rec-query-1', ref: { path: 'users/uid-1/recurring/rec-query-1' } },
+        ],
+      })
+      // Query transactions linked via rec-assoc-1
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { ref: { path: 'users/uid-1/transactions/tx-rec-1' } },
+        ],
+      })
+      // Query transactions linked via rec-query-1
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { ref: { path: 'users/uid-1/transactions/tx-rec-2' } },
         ],
       })
 
-      await deleteMoneyCircle('uid-1', 'circle-1')
+      await deleteMoneyCircle('uid-1', 'circle-1', { deleteTransactions: true })
 
-      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      expect(mockBatchDelete).toHaveBeenCalledTimes(6)
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
       expect(deletedPaths).toContain('users/uid-1/circles/circle-1')
       expect(deletedPaths).toContain('users/uid-1/recurring/rec-assoc-1')
       expect(deletedPaths).toContain('users/uid-1/recurring/rec-query-1')
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-1')
+      expect(deletedPaths).toContain('users/uid-1/transactions/tx-rec-1')
+      expect(deletedPaths).toContain('users/uid-1/transactions/tx-rec-2')
 
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
-    it('works correctly when no recurringId or query docs exist', async () => {
+    it('preserves payout and installment transactions when deleteTransactions is false or omitted', async () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
-        data: () => ({}),
+        data: () => ({ recurringId: 'rec-assoc-1' }),
       })
 
       mockGetDocs.mockResolvedValueOnce({
@@ -217,7 +261,8 @@ describe('moneyCircles service', () => {
       expect(mockBatchDelete).toHaveBeenCalledTimes(2)
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
       expect(deletedPaths).toContain('users/uid-1/circles/circle-2')
-      expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-2')
+      expect(deletedPaths).toContain('users/uid-1/recurring/rec-assoc-1')
+      expect(deletedPaths).not.toContain('users/uid-1/transactions/circle_payout_circle-2')
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
@@ -324,6 +369,36 @@ describe('moneyCircles service', () => {
       const updatedMembers = mockBatchUpdate.mock.calls[0][1].members
       expect(updatedMembers[1].paidMonths).toEqual([2])
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('sets transaction date to expected turn month when depositing for a past turn', async () => {
+      const { depositCircleNetPayout } = await import('./moneyCircles')
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      const pastCircle: MoneyCircle = {
+        id: 'c-past-1',
+        name: 'جمعية قديمة',
+        monthlyAmountFils: 50000,
+        membersCount: 4,
+        totalAmountFils: 200000,
+        myTurnMonth: 1, // Turn 1 was in Jan 2025
+        startDate: new Date(2025, 0, 1),
+        members: [
+          { id: 'm1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+        ],
+        status: 'active',
+        createdAt: new Date(),
+      }
+
+      await depositCircleNetPayout('uid-1', pastCircle, 'cat-income')
+
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      const txData = mockBatchSet.mock.calls[0][1]
+      const expectedSeconds = Math.floor(new Date(2025, 0, 1).getTime() / 1000)
+      expect(txData.date.seconds).toBe(expectedSeconds)
     })
   })
 })

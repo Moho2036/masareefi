@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { format, addMonths } from 'date-fns'
 import { Check } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -9,13 +9,14 @@ import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
+import { useRecurring } from '../hooks/useRecurring'
 import { useToast } from '../hooks/useToast'
 import { addRecurring, updateRecurring, processDueRecurring } from '../services/recurring'
 import { updateMoneyCircle } from '../services/moneyCircles'
 import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
-import { calculateNextDateOnEdit, advanceDate } from '../lib/recurring'
+import { calculateNextDateOnEdit, advanceDateWithTargetDay } from '../lib/recurring'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -94,7 +95,26 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [submitting, setSubmitting] = useState(false)
 
   const { data: circles } = useMoneyCircles()
-  const activeCircles = circles.filter((c) => c.status === 'active')
+  const { data: recurringList } = useRecurring()
+
+  const availableCircles = useMemo(() => {
+    return circles.filter((c) => {
+      if (c.status !== 'active') return false
+      // If editing and this circle is already linked to this recurring item, keep it
+      if (
+        initialRecurring?.circleId === c.id ||
+        (initialRecurring?.id && c.recurringId === initialRecurring.id)
+      ) {
+        return true
+      }
+      // Exclude circles that already have a recurringId or are linked to another recurring item
+      if (c.recurringId) return false
+      if (recurringList.some((r) => r.circleId === c.id && r.id !== initialRecurring?.id)) {
+        return false
+      }
+      return true
+    })
+  }, [circles, recurringList, initialRecurring])
 
   const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
@@ -118,7 +138,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr)
+    const amountFils = toFils(amountStr, currencyConfig.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -183,7 +203,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             const wasTodayProcessed = currentNext > todayEnd || currentNext > candidate
 
             if (isCandidateToday && wasTodayProcessed) {
-              candidate = advanceDate(candidate, frequency)
+              candidate = advanceDateWithTargetDay(candidate, frequency, parsedStartDate.getDate())
             }
           }
 
@@ -287,7 +307,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         <div
           className={cn(
             'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
-            error && amountStr && toFils(amountStr) <= 0
+            error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
               : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20'
           )}
@@ -384,7 +404,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       </div>
 
       {/* Money Circle Link / Skip Month */}
-      {type === 'expense' && activeCircles.length > 0 && (
+      {type === 'expense' && availableCircles.length > 0 && (
         <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
             ربط مع جمعية نشطة (تخطي الخصم في شهر الاستلام):
@@ -395,7 +415,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
               const selectedId = e.target.value
               setCircleId(selectedId)
               if (selectedId) {
-                const c = activeCircles.find((circ) => circ.id === selectedId)
+                const c = availableCircles.find((circ) => circ.id === selectedId)
                 if (c) {
                   setSkipMonth(c.myTurnMonth)
                   setFrequency('monthly')
@@ -414,7 +434,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
           >
             <option value="">-- ليست مرتبطة بجمعية --</option>
-            {activeCircles.map((c) => (
+            {availableCircles.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} (قسط: {formatCurrency(c.monthlyAmountFils)} - شهر استلامك: {c.myTurnMonth})
               </option>
@@ -515,6 +535,7 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialRecurring ? 'تعديل المعاملة المتكررة' : 'إضافة معاملة متكررة'}
+      closeOnBackdropClick={false}
     >
       <RecurringFormContent
         key={initialRecurring ? `edit-${initialRecurring.id}` : `new-${defaultType}`}

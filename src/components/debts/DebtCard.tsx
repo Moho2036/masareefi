@@ -175,19 +175,31 @@ export const DebtCard: React.FC<DebtCardProps> = ({
       {/* Bottom Row: Actions */}
       <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs">
         {!debt.settled ? (
-          <button
-            type="button"
-            onClick={() => onOpenPaymentModal(debt)}
-            className={cn(
-              'px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95',
-              isLent
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-red-600 hover:bg-red-700 text-white'
-            )}
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>تسجيل {isLent ? 'دفعة استرداد' : 'دفعة سداد'}</span>
-          </button>
+          (debt.payments?.length ?? 0) >= 100 ? (
+            <button
+              type="button"
+              onClick={() => onOpenPaymentModal(debt)}
+              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60"
+              title="وصل إلى الحد الأقصى للدفعات (100 دفعة)"
+            >
+              <AlertCircle className="w-4 h-4 stroke-[2.5] text-amber-600 dark:text-amber-400" />
+              <span>الحد الأقصى للدفعات (100)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenPaymentModal(debt)}
+              className={cn(
+                'px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95',
+                isLent
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              )}
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>تسجيل {isLent ? 'دفعة استرداد' : 'دفعة سداد'}</span>
+            </button>
+          )
         ) : (
           <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 py-1.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
             <CheckCircle2 className="w-4 h-4" />

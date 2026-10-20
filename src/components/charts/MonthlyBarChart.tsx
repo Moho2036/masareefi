@@ -8,8 +8,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { fromFils } from '../../lib/money'
-import { toWesternDigits } from '../../lib/dates'
+import { fromFils, formatCompactNumber } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
 import type { MonthlyBreakdownItem } from '../../lib/reports'
@@ -111,7 +110,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             barGap={4}
           >
             <CartesianGrid
@@ -129,11 +128,12 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               dy={8}
             />
             <YAxis
+              width={55}
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-slate-400 dark:text-slate-500"
-              tickFormatter={(val) => toWesternDigits(String(Math.round(val)))}
+              tickFormatter={formatCompactNumber}
             />
             <Tooltip content={<CustomBarTooltip />} />
             <Bar

@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './useAuth'
-import { SelectedMonthContext } from './useSelectedMonth'
 import { subscribeTransactions } from '../services/transactions'
 import type { Transaction } from '../types'
 
@@ -21,18 +20,15 @@ export function useTransactions(
 ): UseTransactionsResult {
   const enabled = options?.enabled ?? true
   const { user } = useAuth()
-  const monthContext = useContext(SelectedMonthContext)
-  const refreshKey = monthContext?.refreshKey ?? 0
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const [refreshTick, setRefreshTick] = useState(0)
 
   const startTime = range.start.getTime()
   const endTime = range.end.getTime()
 
   const refresh = useCallback(() => {
-    setRefreshTick((t) => t + 1)
+    // Real-time onSnapshot maintains instant synchronization
   }, [])
 
   useEffect(() => {
@@ -58,7 +54,7 @@ export function useTransactions(
     )
 
     return () => unsubscribe()
-  }, [user, enabled, startTime, endTime, refreshTick, refreshKey])
+  }, [user, enabled, startTime, endTime])
 
   if (!user || !enabled || startTime >= endTime) {
     return { data: [], loading: false, error: null, refresh }

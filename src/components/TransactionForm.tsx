@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
-import { Check, Trash2, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Check, Trash2, AlertCircle, ArrowLeft, Copy } from 'lucide-react'
 import { Link } from 'react-router'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
@@ -33,6 +33,7 @@ export interface TransactionFormProps {
   initialType?: TxType
   onClose: () => void
   onSuccess?: () => void
+  onDuplicate?: (tx: Transaction) => void
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -41,6 +42,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   initialType = 'expense',
   onClose,
   onSuccess,
+  onDuplicate,
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
@@ -133,7 +135,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr)
+    const amountFils = isLockedTransaction && initialTransaction
+      ? initialTransaction.amountFils
+      : toFils(amountStr, currencyConfig.decimals)
+
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -150,15 +155,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
-    if (isEditing && initialTransaction && isLockedTransaction) {
-      setError(
-        isLinkedToCircle
-          ? 'هذه المعاملة مرتبطة بإيداع جمعية، يرجى إدارتها من صفحة الجمعيات.'
-          : 'هذه المعاملة مرتبطة بسجل الديون، يرجى التعديل من صفحة الديون.'
-      )
-      return
-    }
-
     setSubmitting(true)
     try {
       const trimmedTitle = title.trim().slice(0, 100)
@@ -167,17 +163,22 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       if (isEditing && initialTransaction) {
         const finalType = isLockedTransaction ? initialTransaction.type : type
         const finalAmountFils = isLockedTransaction ? initialTransaction.amountFils : amountFils
+        const finalDate = isLockedTransaction
+          ? (initialTransaction.date instanceof Date ? initialTransaction.date : new Date(initialTransaction.date))
+          : parsedDate
+        const finalTitle = isLockedTransaction ? initialTransaction.title : trimmedTitle
+
         await updateTransaction(user.uid, initialTransaction.id, {
           type: finalType,
           amountFils: finalAmountFils,
           categoryId: activeCategoryId,
-          date: parsedDate,
-          title: trimmedTitle,
+          date: finalDate,
+          ...(finalTitle ? { title: finalTitle } : {}),
           note: note.trim().slice(0, 500),
         })
         recordCategoryUsage(activeCategoryId)
         showToast(
-          isOutsideMonth
+          isOutsideMonth && !isLockedTransaction
             ? 'تم تعديل المعاملة والانتقال إلى شهر المعاملة'
             : 'تم تعديل المعاملة بنجاح',
           'success'
@@ -261,7 +262,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr)
+    const amountFils = toFils(amountStr, currencyConfig.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -275,15 +276,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     const parsedDate = parseLocalDateInput(dateStr)
     if (isNaN(parsedDate.getTime())) {
       setError('يرجى اختيار تاريخ صالح')
-      return
-    }
-
-    if (isEditing && initialTransaction && isLockedTransaction) {
-      setError(
-        isLinkedToCircle
-          ? 'هذه المعاملة مرتبطة بإيداع جمعية، يرجى إدارتها من صفحة الجمعيات.'
-          : 'هذه المعاملة مرتبطة بسجل الديون، يرجى التعديل من صفحة الديون.'
-      )
       return
     }
 
@@ -378,6 +370,36 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }
 
+  const handleDuplicateCurrent = async () => {
+    if (!initialTransaction) return
+    if (onDuplicate) {
+      onDuplicate(initialTransaction)
+      return
+    }
+    if (!user) return
+    setSubmitting(true)
+    try {
+      const parsedFils = toFils(amountStr, currencyConfig.decimals)
+      const finalFils = parsedFils > 0 ? parsedFils : initialTransaction.amountFils
+      await addTransaction(user.uid, {
+        type,
+        amountFils: finalFils,
+        categoryId: activeCategoryId,
+        date: new Date(),
+        title: title.trim() || undefined,
+        note: note.trim().slice(0, 500),
+      })
+      showToast('تم تكرار المعاملة بنجاح', 'success')
+      onSuccess?.()
+      onClose()
+    } catch (err) {
+      console.error('Failed to duplicate transaction:', err)
+      showToast('تعذر تكرار المعاملة', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const typeOptions: { value: TxType; label: string }[] = [
     { value: 'expense', label: 'مصروف' },
     { value: 'income', label: 'دخل' },
@@ -393,7 +415,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <span>معاملة متزامنة مع سجل الديون</span>
           </div>
           <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
-            هذه المعاملة مرتبطة بسجل الديون، لتعديل المبلغ أو حذفها يرجى إدارة الدفعة من صفحة الديون.
+            هذه المعاملة مرتبطة بسجل الديون، لتعديل المبلغ أو حذفها يرجى إدارة الدفعة من صفحة الديون. يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
           </p>
           <Link
             to="/debts"
@@ -414,7 +436,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <span>معاملة مرتبطة بإيداع جمعية مالية</span>
           </div>
           <p className="text-[11px] leading-relaxed text-emerald-700/90 dark:text-emerald-300/80 pe-1">
-            هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لإدارتها يرجى الانتقال إلى صفحة الجمعيات.
+            هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لتعديل المبلغ أو حذفها يرجى الانتقال إلى صفحة الجمعيات، أو يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
           </p>
           <Link
             to="/tools?tool=circles"
@@ -506,9 +528,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 <button
                   key={cat.id}
                   type="button"
-                  disabled={isLockedTransaction}
                   onClick={() => {
-                    if (isLockedTransaction) return
                     setCategoryId(cat.id)
                     setError(null)
                   }}
@@ -516,8 +536,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     'flex items-center gap-2 p-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all text-start cursor-pointer select-none min-w-0',
                     isSelected
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50',
-                    isLockedTransaction && 'opacity-60 cursor-not-allowed pointer-events-none'
+                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   )}
                 >
                   <span
@@ -629,13 +648,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             label="ملاحظة تفصيلية (اختياري)"
             placeholder="مثال: غداء مع الأصدقاء"
             value={note}
-            onChange={(e) => {
-              if (isLockedTransaction) return
-              setNote(e.target.value)
-            }}
+            onChange={(e) => setNote(e.target.value)}
             maxLength={500}
-            disabled={isLockedTransaction}
-            readOnly={isLockedTransaction}
           />
         </div>
       ) : (
@@ -727,20 +741,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <Button
             type="submit"
             variant="primary"
-            disabled={submitting || isLockedTransaction}
+            disabled={submitting}
             className="flex-1"
           >
             {submitting
               ? 'جاري الحفظ...'
-              : isLinkedToDebt
-                ? 'معاملة مقيدة بسجل الديون'
-                : isLinkedToCircle
-                  ? 'معاملة مقيدة بإيداع جمعية'
-                  : isEditing
-                    ? 'تعديل المعاملة'
-                    : duplicateFrom
-                      ? 'حفظ النسخة'
-                      : 'حفظ'}
+              : isEditing
+                ? 'تعديل المعاملة'
+                : duplicateFrom
+                  ? 'حفظ النسخة'
+                  : 'حفظ'}
           </Button>
 
           {!isEditing && (
@@ -752,6 +762,19 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               className="text-xs sm:text-sm font-semibold whitespace-nowrap"
             >
               حفظ وإضافة أخرى
+            </Button>
+          )}
+
+          {isEditing && !isLockedTransaction && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDuplicateCurrent}
+              disabled={submitting || deleting}
+              icon={<Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+              className="text-xs sm:text-sm font-semibold whitespace-nowrap"
+            >
+              تكرار هذه المعاملة
             </Button>
           )}
 

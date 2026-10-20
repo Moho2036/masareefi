@@ -8,9 +8,12 @@ import {
   Download,
   Upload,
   Database,
-  AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   FileSpreadsheet,
+  Smartphone,
+  Share2,
+  PlusSquare,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Card } from '../components/ui/Card'
@@ -36,6 +39,7 @@ import {
   validateBackup,
   restoreBackup,
   type BackupValidationResult,
+  type RestoreMode,
 } from '../lib/backupRestore'
 import { PRESET_CURRENCIES, getCurrencyConfig } from '../lib/money'
 import { cn } from '../lib/cn'
@@ -47,7 +51,7 @@ export const SettingsPage: React.FC = () => {
   const { data: settings, updateSettings } = useUserSettings()
   const { data: categories } = useCategories()
   const { showToast } = useToast()
-  const { isInstallable, isInstalled, promptInstall } = usePWAInstall()
+  const { isInstallable, isInstalled, isIOS, promptInstall } = usePWAInstall()
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -56,6 +60,7 @@ export const SettingsPage: React.FC = () => {
   const [exportingJson, setExportingJson] = useState(false)
   const [restoringJson, setRestoringJson] = useState(false)
   const [restoreValidation, setRestoreValidation] = useState<BackupValidationResult | null>(null)
+  const [restoreMode, setRestoreMode] = useState<RestoreMode>('merge')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const activeCurrency = settings?.currency || 'JOD'
@@ -255,6 +260,7 @@ export const SettingsPage: React.FC = () => {
         showToast(res.error || 'ملف غير صالح', 'error')
         return
       }
+      setRestoreMode('merge')
       setRestoreValidation(res)
     }
     reader.onerror = () => {
@@ -267,8 +273,13 @@ export const SettingsPage: React.FC = () => {
     if (!user || !restoreValidation?.data) return
     setRestoringJson(true)
     try {
-      await restoreBackup(user.uid, restoreValidation.data)
-      showToast('تمت استعادة النسخة الاحتياطية بنجاح!', 'success')
+      await restoreBackup(user.uid, restoreValidation.data, restoreMode)
+      showToast(
+        restoreMode === 'merge'
+          ? 'تم دمج النسخة الاحتياطية بنجاح!'
+          : 'تمت استعادة النسخة الاحتياطية واستبدال البيانات بنجاح!',
+        'success'
+      )
       setRestoreValidation(null)
     } catch (err) {
       console.error('Failed to restore backup:', err)
@@ -439,41 +450,76 @@ export const SettingsPage: React.FC = () => {
         title="تثبيت التطبيق (PWA)"
         subtitle="يمكنك تثبيت تطبيق مصاريفي على هاتفك أو حاسوبك للعمل بدون إنترنت وسرعة فائقة"
       >
-        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <Download className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                {isInstalled ? 'التطبيق مثبت حالياً' : 'تطبيق ويب تقدمي (PWA)'}
+        <div className="pt-2 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5" />
               </div>
-              <div className="text-xs text-slate-400">
-                {isInstalled
-                  ? 'يعمل التطبيق كبرنامج مستقل مع دعم كامل للعمل بلا اتصال'
-                  : 'يعمل بكامل ميزاته مباشرة من الشاشة الرئيسية دون الحاجة للمتجر'}
+              <div>
+                <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  {isInstalled ? 'التطبيق مثبت حالياً' : 'تطبيق ويب تقدمي (PWA)'}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {isInstalled
+                    ? 'يعمل التطبيق كبرنامج مستقل مع دعم كامل للعمل بلا اتصال'
+                    : 'يعمل بكامل ميزاته مباشرة من الشاشة الرئيسية دون الحاجة للمتجر'}
+                </div>
               </div>
             </div>
+
+            {isInstalled ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>مثبت على الجهاز</span>
+              </div>
+            ) : isInstallable ? (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Download className="w-4 h-4" />}
+                onClick={promptInstall}
+              >
+                تثبيت التطبيق على جهازك
+              </Button>
+            ) : isIOS ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 text-xs font-bold shrink-0">
+                <Smartphone className="w-4 h-4" />
+                <span>أجهزة آبل iOS</span>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-400 font-medium">
+                متاح للتثبيت من متصفحك عبر زر المشاركة أو القائمة
+              </span>
+            )}
           </div>
 
-          {isInstalled ? (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>مثبت على الجهاز</span>
+          {/* iOS Safari Installation Instructions */}
+          {isIOS && !isInstalled && (
+            <div className="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/50 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-sky-800 dark:text-sky-300">
+                <Share2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                <span>خطوات تثبيت التطبيق على الآيفون والآيباد (iOS Safari):</span>
+              </div>
+              <ol className="space-y-2 text-xs text-slate-700 dark:text-slate-300 list-decimal list-inside pr-1">
+                <li className="leading-relaxed">
+                  اضغط على زر{' '}
+                  <span className="font-bold text-slate-900 dark:text-white inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                    المشاركة (Share <Share2 className="w-3 h-3 inline text-sky-500" />)
+                  </span>{' '}
+                  في شريط أدوات متصفح سفاري (Safari).
+                </li>
+                <li className="leading-relaxed">
+                  مرر للأسفل في القائمة واختر{' '}
+                  <span className="font-bold text-slate-900 dark:text-white inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                    "إضافة إلى الشاشة الرئيسية" (Add to Home Screen <PlusSquare className="w-3 h-3 inline text-emerald-500" />)
+                  </span>.
+                </li>
+                <li className="leading-relaxed">
+                  اضغط على <span className="font-bold text-slate-900 dark:text-white">"إضافة" (Add)</span> في الزاوية العلوية ليظهر التطبيق كأيقونة مستقلة على شاشتك.
+                </li>
+              </ol>
             </div>
-          ) : isInstallable ? (
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Download className="w-4 h-4" />}
-              onClick={promptInstall}
-            >
-              تثبيت التطبيق على جهازك
-            </Button>
-          ) : (
-            <span className="text-xs text-slate-400 font-medium">
-              متاح للتثبيت من متصفحك عبر زر المشاركة أو القائمة
-            </span>
           )}
         </div>
       </Card>
@@ -612,7 +658,7 @@ export const SettingsPage: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            تم فحص ملف النسخة الاحتياطية بنجاح. فيما يلي ملخص البيانات التي سيتم استعادتها وحفظها في حسابك:
+            تم فحص ملف النسخة الاحتياطية بنجاح. يرجى مراجعة ملخص البيانات واختيار طريقة الاستعادة المناسبة:
           </p>
 
           {restoreValidation?.summary && (
@@ -662,12 +708,89 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
-          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-            <p className="leading-relaxed">
-              تتم الاستعادة مع الحفاظ على المعرفات الأصلية لمنع تكرار السجلات في حال استعادة نفس النسخة أكثر من مرة.
-            </p>
+          {/* Mode Selection */}
+          <div className="space-y-2 pt-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+              طريقة الاستعادة:
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRestoreMode('merge')}
+                className={cn(
+                  'p-3.5 rounded-xl border text-start transition-all cursor-pointer flex flex-col justify-between gap-2.5',
+                  restoreMode === 'merge'
+                    ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold">دمج مع البيانات الحالية (آمن - مستحسن)</span>
+                  <div
+                    className={cn(
+                      'w-4 h-4 rounded-full border flex items-center justify-center shrink-0',
+                      restoreMode === 'merge'
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
+                    )}
+                  >
+                    {restoreMode === 'merge' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  يضيف ويحدث السجلات الموجودة في النسخة الاحتياطية دون حذف المعاملات أو الديون الأحدث التي أضافها المستخدم في حسابه.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRestoreMode('replace')}
+                className={cn(
+                  'p-3.5 rounded-xl border text-start transition-all cursor-pointer flex flex-col justify-between gap-2.5',
+                  restoreMode === 'replace'
+                    ? 'border-red-500 bg-red-50/70 dark:bg-red-950/40 text-red-950 dark:text-red-100 ring-2 ring-red-500/20'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold">استبدال كامل للبيانات</span>
+                  <div
+                    className={cn(
+                      'w-4 h-4 rounded-full border flex items-center justify-center shrink-0',
+                      restoreMode === 'replace'
+                        ? 'border-red-600 bg-red-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
+                    )}
+                  >
+                    {restoreMode === 'replace' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  يمسح السجلات غير الموجودة في النسخة الاحتياطية ويعيد الحساب تماماً كما كان وقت النسخة.
+                </p>
+              </button>
+            </div>
           </div>
+
+          {/* Warning / Notice Banner */}
+          {restoreMode === 'replace' ? (
+            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-start gap-2.5 text-xs text-red-800 dark:text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+              <div className="space-y-1">
+                <span className="font-bold block">تحذير هام (استبدال كامل):</span>
+                <p className="leading-relaxed text-red-700 dark:text-red-300">
+                  سيتم حذف كافة المعاملات والديون والجمعيات والمتكررات والتصنيفات غير المستخدمة المسجلة حالياً في حسابك والتي لم تكن موجودة في ملف النسخة الاحتياطية، واستبدالها ببيانات النسخة فقط. لن تتمكن من التراجع عن هذا الإجراء!
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 flex items-start gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              <p className="leading-relaxed">
+                الوضع الآمن: ستتم إضافة السجلات وتحديثها مع الاحتفاظ الكامل ببياناتك ومعاملاتك الحالية التي أضفتها لاحقاً دون حذف أي شيء.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
@@ -679,12 +802,16 @@ export const SettingsPage: React.FC = () => {
               إلغاء
             </Button>
             <Button
-              variant="primary"
+              variant={restoreMode === 'replace' ? 'danger' : 'primary'}
               size="md"
               onClick={handleConfirmRestore}
               disabled={restoringJson}
             >
-              {restoringJson ? 'جاري الاستعادة...' : 'تأكيد واستعادة البيانات'}
+              {restoringJson
+                ? 'جاري الاستعادة...'
+                : restoreMode === 'replace'
+                ? 'استبدال كافة البيانات'
+                : 'تأكيد ودمج البيانات'}
             </Button>
           </div>
         </div>

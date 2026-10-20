@@ -187,6 +187,67 @@ describe('backupRestore module', () => {
       expect(res.summary?.transactionsCount).toBe(0)
       expect(res.summary?.hasSettings).toBe(false)
     })
+
+    it('filters out records with non-positive amounts or missing IDs from summary counts', () => {
+      const backupWithInvalidItems = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [
+            { id: 'cat-valid', name: 'طعام', type: 'expense' },
+            { id: '', name: 'تصنيف بدون معرف', type: 'expense' },
+          ],
+          transactions: [
+            { id: 'tx-valid', amountFils: 5000, categoryId: 'cat-valid', type: 'expense', date: new Date() },
+            { id: 'tx-zero', amountFils: 0, categoryId: 'cat-valid', type: 'expense', date: new Date() },
+            { id: '', amountFils: 2000, categoryId: 'cat-valid', type: 'expense', date: new Date() },
+          ],
+          debts: [
+            { id: 'd-valid', personName: 'خالد', amountFils: 10000, type: 'borrowed', startDate: new Date() },
+            { id: 'd-zero', personName: 'سعيد', amountFils: 0, type: 'borrowed', startDate: new Date() },
+          ],
+          recurring: [
+            { id: 'r-valid', amountFils: 15000, type: 'expense', categoryId: 'cat-valid', frequency: 'monthly', startDate: new Date(), nextDate: new Date() },
+            { id: 'r-negative', amountFils: -500, type: 'expense', categoryId: 'cat-valid', frequency: 'monthly', startDate: new Date(), nextDate: new Date() },
+          ],
+          circles: [
+            { id: 'c-valid', name: 'جمعية', monthlyAmountFils: 20000, membersCount: 5, totalAmountFils: 100000, myTurnMonth: 1, startDate: new Date() },
+            { id: 'c-zero', name: 'جمعية صفرية', monthlyAmountFils: 0, membersCount: 5, totalAmountFils: 0, myTurnMonth: 1, startDate: new Date() },
+          ],
+        },
+      }
+
+      const res = validateBackup(JSON.stringify(backupWithInvalidItems))
+      expect(res.valid).toBe(true)
+      expect(res.summary?.categoriesCount).toBe(1)
+      expect(res.summary?.transactionsCount).toBe(1)
+      expect(res.summary?.debtsCount).toBe(1)
+      expect(res.summary?.recurringCount).toBe(1)
+      expect(res.summary?.circlesCount).toBe(1)
+    })
+
+    it('creates a fallback category when transactions reference a missing categoryId', () => {
+      const backupWithOrphanTx = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [
+            { id: 'cat-existing', name: 'طعام', type: 'expense' },
+          ],
+          transactions: [
+            { id: 'tx-orphan', amountFils: 5000, categoryId: 'cat-missing-1', type: 'expense', date: new Date() },
+          ],
+        },
+      }
+
+      const res = validateBackup(JSON.stringify(backupWithOrphanTx))
+      expect(res.valid).toBe(true)
+      // Original 1 category + 1 generated fallback category = 2 categories
+      expect(res.summary?.categoriesCount).toBe(2)
+      expect(res.data?.data.categories.some((c) => c.id === 'cat-missing-1')).toBe(true)
+    })
   })
 
   describe('restoreBackup', () => {
@@ -218,22 +279,41 @@ describe('backupRestore module', () => {
       expect(updateCall![1].displayName).toBe('أحمد')
     })
 
-    it('deletes orphaned transactions, debts, recurring, and circles not present in backup', async () => {
+    it('preserves existing transactions and debts in merge mode (default)', async () => {
       mockDelete.mockClear()
+      const existingTxRef = { path: 'users/u1/transactions/existing-tx' }
+      const existingDebtRef = { path: 'users/u1/debts/existing-debt' }
+
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: [] }) // categories
+        .mockResolvedValueOnce({ docs: [{ id: 'existing-tx', ref: existingTxRef, data: () => ({ id: 'existing-tx' }) }] }) // transactions
+        .mockResolvedValueOnce({ docs: [{ id: 'existing-debt', ref: existingDebtRef, data: () => ({ id: 'existing-debt' }) }] }) // debts
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+
+      await restoreBackup('u1', sampleBackup, 'merge')
+
+      expect(mockDelete).not.toHaveBeenCalled()
+    })
+
+    it('deletes orphaned transactions, debts, recurring, circles, and unused categories not present in backup in replace mode', async () => {
+      mockDelete.mockClear()
+      const orphanCatRef = { path: 'users/u1/categories/orphan-cat' }
       const orphanTxRef = { path: 'users/u1/transactions/orphan-tx' }
       const orphanDebtRef = { path: 'users/u1/debts/orphan-debt' }
       const orphanRecRef = { path: 'users/u1/recurring/orphan-rec' }
       const orphanCircleRef = { path: 'users/u1/circles/orphan-circle' }
 
       mockGetDocs
-        .mockResolvedValueOnce({ docs: [] }) // categories
+        .mockResolvedValueOnce({ docs: [{ id: 'orphan-cat', ref: orphanCatRef, data: () => ({ id: 'orphan-cat', name: 'تصنيف مهمل', type: 'expense' }) }] }) // categories
         .mockResolvedValueOnce({ docs: [{ id: 'orphan-tx', ref: orphanTxRef, data: () => ({ id: 'orphan-tx' }) }] }) // transactions
         .mockResolvedValueOnce({ docs: [{ id: 'orphan-debt', ref: orphanDebtRef, data: () => ({ id: 'orphan-debt' }) }] }) // debts
         .mockResolvedValueOnce({ docs: [{ id: 'orphan-rec', ref: orphanRecRef, data: () => ({ id: 'orphan-rec' }) }] }) // recurring
         .mockResolvedValueOnce({ docs: [{ id: 'orphan-circle', ref: orphanCircleRef, data: () => ({ id: 'orphan-circle' }) }] }) // circles
 
-      await restoreBackup('u1', sampleBackup)
+      await restoreBackup('u1', sampleBackup, 'replace')
 
+      expect(mockDelete).toHaveBeenCalledWith(orphanCatRef)
       expect(mockDelete).toHaveBeenCalledWith(orphanTxRef)
       expect(mockDelete).toHaveBeenCalledWith(orphanDebtRef)
       expect(mockDelete).toHaveBeenCalledWith(orphanRecRef)
@@ -413,7 +493,7 @@ describe('backupRestore module', () => {
       expect(circleCall![1].recurringId).toBeUndefined()
     })
 
-    it('deletes newly seeded duplicate categories that match incoming backup categories by type and name', async () => {
+    it('deletes newly seeded duplicate categories that match incoming backup categories by type and name in replace mode', async () => {
       const seededRef = { path: 'users/u1/categories/seeded-food-id' }
       mockGetDocs.mockResolvedValueOnce({
         docs: [
@@ -425,7 +505,7 @@ describe('backupRestore module', () => {
         ],
       })
 
-      await restoreBackup('u1', sampleBackup)
+      await restoreBackup('u1', sampleBackup, 'replace')
 
       expect(mockDelete).toHaveBeenCalledWith(seededRef)
     })
@@ -491,8 +571,8 @@ describe('backupRestore module', () => {
       expect(circleCall![1].myTurnMonth).toBe(4)
     })
 
-    it('does not delete existing category in use if no matching restored category exists', async () => {
-      // Existing category used by a transaction
+    it('does not delete existing category in use if no matching restored category exists in replace mode', async () => {
+      // Existing category used by a backup transaction
       const existingRef = { path: 'users/u1/categories/cat-old-important' }
       mockGetDocs
         .mockResolvedValueOnce({
@@ -505,20 +585,33 @@ describe('backupRestore module', () => {
             },
           ],
         })
-        .mockResolvedValueOnce({
-          // transactions snap: has transaction with cat-old-important
-          docs: [
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+
+      const backupUsingExistingCat: MasareefiBackup = {
+        ...sampleBackup,
+        data: {
+          ...sampleBackup.data,
+          categories: [], // incoming backup does not define cat-old-important
+          transactions: [
             {
-              id: 'tx-existing',
-              ref: { path: 'users/u1/transactions/tx-existing' },
-              data: () => ({ id: 'tx-existing', categoryId: 'cat-old-important' }),
+              id: 'tx-with-old-cat',
+              type: 'expense',
+              amountFils: 5000,
+              categoryId: 'cat-old-important',
+              date: new Date('2026-10-10T12:00:00Z'),
+              note: 'غداء',
+              createdAt: new Date('2026-10-10T12:00:00Z'),
             },
           ],
-        })
+        },
+      }
 
-      await restoreBackup('u1', sampleBackup)
+      await restoreBackup('u1', backupUsingExistingCat, 'replace')
 
-      // existingRef should NOT be deleted because it is in use and no category named 'تصنيف هام قديم' is in sampleBackup
+      // existingRef should NOT be deleted because it is used by backup transactions and no category named 'تصنيف هام قديم' is in categories
       expect(mockDelete).not.toHaveBeenCalledWith(existingRef)
     })
   })

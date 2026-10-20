@@ -20,6 +20,12 @@ import {
 } from '../services/converters'
 import { circleConverter } from '../services/moneyCircles'
 
+export type RestoreMode = 'merge' | 'replace'
+
+export interface RestoreOptions {
+  mode?: RestoreMode
+}
+
 export interface MasareefiBackup {
   version: 1
   app: 'masareefi'
@@ -108,13 +114,90 @@ export function downloadBackupFile(backup: MasareefiBackup): void {
   URL.revokeObjectURL(url)
 }
 
-function parseDate(val: unknown): Date {
-  if (val instanceof Date) return val
+export function parseDate(val: unknown): Date {
+  if (val instanceof Date && !isNaN(val.getTime())) return val
   if (typeof val === 'string' || typeof val === 'number') {
     const d = new Date(val)
     if (!isNaN(d.getTime())) return d
   }
+  if (
+    val &&
+    typeof val === 'object' &&
+    'toDate' in val &&
+    typeof (val as { toDate: () => Date }).toDate === 'function'
+  ) {
+    const d = (val as { toDate: () => Date }).toDate()
+    if (d instanceof Date && !isNaN(d.getTime())) return d
+  }
+  if (
+    val &&
+    typeof val === 'object' &&
+    'seconds' in val &&
+    typeof (val as { seconds: number }).seconds === 'number'
+  ) {
+    const d = new Date((val as { seconds: number }).seconds * 1000)
+    if (!isNaN(d.getTime())) return d
+  }
   return new Date()
+}
+
+/**
+ * Ensures that every transaction and recurring rule has a corresponding valid Category.
+ * If a categoryId is missing or points to a non-existent category, a fallback category
+ * is generated and added to the categories list so no orphan transactions are created.
+ */
+export function resolveOrphanCategories(
+  categories: Category[],
+  transactions: Transaction[],
+  recurring: Recurring[]
+): Category[] {
+  const existingCatMap = new Map<string, Category>()
+  for (const c of categories) {
+    if (c && typeof c === 'object' && c.id) {
+      existingCatMap.set(c.id, c)
+    }
+  }
+
+  const updatedCategories = [...existingCatMap.values()]
+
+  const ensureCategory = (catId: string, txType: 'expense' | 'income') => {
+    if (existingCatMap.has(catId)) return catId
+
+    const fallbackCat: Category = {
+      id: catId,
+      name: txType === 'income' ? 'دخل عام (مسترد)' : 'مصاريف عامة (مستردة)',
+      type: txType,
+      icon: txType === 'income' ? '💰' : '📁',
+      color: txType === 'income' ? '#10B981' : '#64748B',
+      archived: false,
+      order: 999,
+    }
+    existingCatMap.set(catId, fallbackCat)
+    updatedCategories.push(fallbackCat)
+    return catId
+  }
+
+  for (const tx of transactions) {
+    if (tx && tx.id) {
+      const type = tx.type === 'income' ? 'income' : 'expense'
+      const rawCatId = typeof tx.categoryId === 'string' ? tx.categoryId.trim() : ''
+      const targetCatId = rawCatId || `cat_fallback_${type}`
+      tx.categoryId = targetCatId
+      ensureCategory(targetCatId, type)
+    }
+  }
+
+  for (const rec of recurring) {
+    if (rec && rec.id) {
+      const type = rec.type === 'income' ? 'income' : 'expense'
+      const rawCatId = typeof rec.categoryId === 'string' ? rec.categoryId.trim() : ''
+      const targetCatId = rawCatId || `cat_fallback_${type}`
+      rec.categoryId = targetCatId
+      ensureCategory(targetCatId, type)
+    }
+  }
+
+  return updatedCategories
 }
 
 /**
@@ -143,6 +226,28 @@ export function validateBackup(jsonText: string): BackupValidationResult {
     const circles = Array.isArray(data.circles) ? (data.circles as MoneyCircle[]) : []
     const settings = data.settings && typeof data.settings === 'object' ? (data.settings as UserSettings) : undefined
 
+    // Filter valid records (matching criteria in restoreBackup)
+    const validCategories = categories.filter((c) => Boolean(c && typeof c === 'object' && c.id))
+    const validTransactions = transactions.filter(
+      (t) => Boolean(t && typeof t === 'object' && t.id && Math.round(Number(t.amountFils || 0)) > 0)
+    )
+    const validDebts = debts.filter(
+      (d) => Boolean(d && typeof d === 'object' && d.id && Math.round(Number(d.amountFils || 0)) > 0)
+    )
+    const validRecurring = recurring.filter(
+      (r) => Boolean(r && typeof r === 'object' && r.id && Math.round(Number(r.amountFils || 0)) > 0)
+    )
+    const validCircles = circles.filter(
+      (c) => Boolean(c && typeof c === 'object' && c.id && Math.round(Number(c.monthlyAmountFils || 0)) > 0)
+    )
+
+    // Resolve orphan categories so every transaction and recurring item is backed by a valid category
+    const resolvedCategories = resolveOrphanCategories(
+      validCategories,
+      validTransactions,
+      validRecurring
+    )
+
     const exportedAt = typeof parsed.exportedAt === 'string' ? parsed.exportedAt : new Date().toISOString()
 
     const backup: MasareefiBackup = {
@@ -151,11 +256,11 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       exportedAt,
       data: {
         settings,
-        categories,
-        transactions,
-        debts,
-        recurring,
-        circles,
+        categories: resolvedCategories,
+        transactions: validTransactions,
+        debts: validDebts,
+        recurring: validRecurring,
+        circles: validCircles,
       },
     }
 
@@ -163,11 +268,11 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       valid: true,
       summary: {
         exportedAt,
-        transactionsCount: transactions.length,
-        categoriesCount: categories.length,
-        debtsCount: debts.length,
-        recurringCount: recurring.length,
-        circlesCount: circles.length,
+        transactionsCount: validTransactions.length,
+        categoriesCount: resolvedCategories.length,
+        debtsCount: validDebts.length,
+        recurringCount: validRecurring.length,
+        circlesCount: validCircles.length,
         hasSettings: Boolean(settings),
       },
       data: backup,
@@ -184,7 +289,30 @@ export function validateBackup(jsonText: string): BackupValidationResult {
  * Restores a full backup into the user's Firestore collections.
  * Uses chunked writeBatch (max 400 docs per batch) and preserves original document IDs.
  */
-export async function restoreBackup(uid: string, backup: MasareefiBackup): Promise<void> {
+export async function restoreBackup(
+  uid: string,
+  backup: MasareefiBackup,
+  optionsOrMode: RestoreMode | RestoreOptions = 'merge'
+): Promise<void> {
+  if (!backup || !backup.data || typeof backup.data !== 'object') {
+    throw new Error('بيانات النسخة الاحتياطية غير صالحة أو مفقودة')
+  }
+
+  // Pre-validation and orphan category resolution:
+  // Ensures every transaction/recurring rule maps to an existing category
+  // before starting any deletion or writing in Firestore.
+  const resolvedCategories = resolveOrphanCategories(
+    backup.data.categories || [],
+    backup.data.transactions || [],
+    backup.data.recurring || []
+  )
+  backup.data.categories = resolvedCategories
+
+  const mode: RestoreMode =
+    typeof optionsOrMode === 'string'
+      ? optionsOrMode
+      : optionsOrMode?.mode || 'merge'
+
   type BatchOp = (b: WriteBatch) => void
   const ops: BatchOp[] = []
 
@@ -247,105 +375,104 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     }
   }
 
-  // Query existing transactions to know which categories are currently linked to transactions
-  const existingTxs = existingTxsSnap?.docs ? existingTxsSnap.docs.map((d) => d.data()) : []
-
-  // Track all category IDs referenced in existing transactions and backup transactions
-  const usedCategoryIds = new Set<string>()
-  for (const tx of existingTxs) {
-    if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
-  }
-  for (const tx of backup.data.transactions) {
-    if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
-  }
-
-  const incomingCategoryIds = new Set(backup.data.categories.map((c) => c.id).filter(Boolean))
-  const incomingCategoryKeys = new Set(
-    backup.data.categories.map((c) => `${c.type}:${(c.name || '').trim()}`)
-  )
-
-  // Map from `${c.type}:${c.name.trim()}` to restored category ID for remapping
-  const restoredKeyToIdMap = new Map<string, string>()
-  for (const cat of backup.data.categories) {
-    if (cat.id && cat.name && cat.type) {
-      const key = `${cat.type}:${cat.name.trim()}`
-      if (!restoredKeyToIdMap.has(key)) {
-        restoredKeyToIdMap.set(key, cat.id)
-      }
-    }
-  }
-
   // Remappings from deleted existingCat.id -> targetRestoredCat.id
   const categoryIdRemap = new Map<string, string>()
 
-  if (existingCatsSnap && existingCatsSnap.docs) {
-    for (const existingDoc of existingCatsSnap.docs) {
-      if (!incomingCategoryIds.has(existingDoc.id)) {
-        const existingCat = existingDoc.data()
-        const key = `${existingCat.type}:${(existingCat.name || '').trim()}`
-        const isUsed = usedCategoryIds.has(existingDoc.id)
-        const targetRestoredId = restoredKeyToIdMap.get(key)
+  if (mode === 'replace') {
+    // In replace mode, existing transactions/recurring not in backup will be deleted.
+    // So the used category IDs are only those in the backup data.
+    const usedCategoryIds = new Set<string>()
+    for (const tx of backup.data.transactions) {
+      if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
+    }
+    for (const rec of backup.data.recurring) {
+      if (rec.categoryId) usedCategoryIds.add(rec.categoryId)
+    }
 
-        if (isUsed) {
-          // If used, ONLY delete if we can remap its transactions to a restored category with the same name & type
-          if (targetRestoredId && targetRestoredId !== existingDoc.id) {
-            categoryIdRemap.set(existingDoc.id, targetRestoredId)
+    const incomingCategoryIds = new Set(backup.data.categories.map((c) => c.id).filter(Boolean))
+
+    // Map from `${c.type}:${c.name.trim()}` to restored category ID for remapping
+    const restoredKeyToIdMap = new Map<string, string>()
+    for (const cat of backup.data.categories) {
+      if (cat.id && cat.name && cat.type) {
+        const key = `${cat.type}:${cat.name.trim()}`
+        if (!restoredKeyToIdMap.has(key)) {
+          restoredKeyToIdMap.set(key, cat.id)
+        }
+      }
+    }
+
+    if (existingCatsSnap && existingCatsSnap.docs) {
+      for (const existingDoc of existingCatsSnap.docs) {
+        if (!incomingCategoryIds.has(existingDoc.id)) {
+          const existingCat = existingDoc.data()
+          const key = `${existingCat.type}:${(existingCat.name || '').trim()}`
+          const isUsed = usedCategoryIds.has(existingDoc.id)
+          const targetRestoredId = restoredKeyToIdMap.get(key)
+
+          if (isUsed) {
+            // If used by backup records, ONLY delete if we can remap to a restored category with the same name & type
+            if (targetRestoredId && targetRestoredId !== existingDoc.id) {
+              categoryIdRemap.set(existingDoc.id, targetRestoredId)
+              ops.push((b) => b.delete(existingDoc.ref))
+            }
+            // If no matching restored category with the same name & type exists, DO NOT DELETE!
+          } else {
+            // In replace mode, delete unused categories not in backup
             ops.push((b) => b.delete(existingDoc.ref))
           }
-          // If no matching restored category with the same name & type exists, DO NOT DELETE!
-        } else if (incomingCategoryKeys.has(key)) {
-          // Unused and duplicate key in incoming backup: safe to delete
-          ops.push((b) => b.delete(existingDoc.ref))
         }
       }
     }
   }
 
-  // 3. Stale documents cleanup for transactions, debts, recurring, and circles
-  const incomingTxIds = new Set(backup.data.transactions.map((t) => t.id).filter(Boolean))
-  if (existingTxsSnap && existingTxsSnap.docs) {
-    for (const d of existingTxsSnap.docs) {
-      if (!incomingTxIds.has(d.id)) {
-        ops.push((b) => b.delete(d.ref))
+  // 3. Stale documents cleanup for transactions, debts, recurring, and circles (in replace mode only)
+  if (mode === 'replace') {
+    const incomingTxIds = new Set(backup.data.transactions.map((t) => t.id).filter(Boolean))
+    if (existingTxsSnap && existingTxsSnap.docs) {
+      for (const d of existingTxsSnap.docs) {
+        if (!incomingTxIds.has(d.id)) {
+          ops.push((b) => b.delete(d.ref))
+        }
       }
     }
-  }
 
-  const incomingDebtIds = new Set(backup.data.debts.map((d) => d.id).filter(Boolean))
-  if (existingDebtsSnap && existingDebtsSnap.docs) {
-    for (const d of existingDebtsSnap.docs) {
-      if (!incomingDebtIds.has(d.id)) {
-        ops.push((b) => b.delete(d.ref))
+    const incomingDebtIds = new Set(backup.data.debts.map((d) => d.id).filter(Boolean))
+    if (existingDebtsSnap && existingDebtsSnap.docs) {
+      for (const d of existingDebtsSnap.docs) {
+        if (!incomingDebtIds.has(d.id)) {
+          ops.push((b) => b.delete(d.ref))
+        }
       }
     }
-  }
 
-  const incomingRecIds = new Set(backup.data.recurring.map((r) => r.id).filter(Boolean))
-  if (existingRecSnap && existingRecSnap.docs) {
-    for (const d of existingRecSnap.docs) {
-      if (!incomingRecIds.has(d.id)) {
-        ops.push((b) => b.delete(d.ref))
+    const incomingRecIds = new Set(backup.data.recurring.map((r) => r.id).filter(Boolean))
+    if (existingRecSnap && existingRecSnap.docs) {
+      for (const d of existingRecSnap.docs) {
+        if (!incomingRecIds.has(d.id)) {
+          ops.push((b) => b.delete(d.ref))
+        }
       }
     }
-  }
 
-  const incomingCircleIds = new Set(backup.data.circles.map((c) => c.id).filter(Boolean))
-  if (existingCirclesSnap && existingCirclesSnap.docs) {
-    for (const d of existingCirclesSnap.docs) {
-      if (!incomingCircleIds.has(d.id)) {
-        ops.push((b) => b.delete(d.ref))
+    const incomingCircleIds = new Set(backup.data.circles.map((c) => c.id).filter(Boolean))
+    if (existingCirclesSnap && existingCirclesSnap.docs) {
+      for (const d of existingCirclesSnap.docs) {
+        if (!incomingCircleIds.has(d.id)) {
+          ops.push((b) => b.delete(d.ref))
+        }
       }
     }
-  }
 
-  // Remap existing transactions in Firestore whose category was deleted & remapped
-  if (categoryIdRemap.size > 0 && existingTxsSnap && existingTxsSnap.docs) {
-    for (const txDoc of existingTxsSnap.docs) {
-      if (!incomingTxIds.has(txDoc.id)) continue
-      const tx = txDoc.data()
-      if (tx.categoryId && categoryIdRemap.has(tx.categoryId)) {
-        const newCatId = categoryIdRemap.get(tx.categoryId)!
-        ops.push((b) => b.update(txDoc.ref, { categoryId: newCatId }))
+    // Remap existing transactions in Firestore whose category was deleted & remapped
+    if (categoryIdRemap.size > 0 && existingTxsSnap && existingTxsSnap.docs) {
+      for (const txDoc of existingTxsSnap.docs) {
+        if (!incomingTxIds.has(txDoc.id)) continue
+        const tx = txDoc.data()
+        if (tx.categoryId && categoryIdRemap.has(tx.categoryId)) {
+          const newCatId = categoryIdRemap.get(tx.categoryId)!
+          ops.push((b) => b.update(txDoc.ref, { categoryId: newCatId }))
+        }
       }
     }
   }

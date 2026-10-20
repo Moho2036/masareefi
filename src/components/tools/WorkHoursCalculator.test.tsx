@@ -47,4 +47,22 @@ describe('WorkHoursCalculator component', () => {
 
     expect(screen.queryByText(/60 دقيقة/)).toBeNull()
   })
+
+  it('renders quick comparison benchmark buttons with currency symbol and updates price on click', () => {
+    render(<WorkHoursCalculator />)
+
+    // Default currency is JOD (د.أ), coffee: 3.5, dinner: 25, shoes: 75
+    const coffeeBtn = screen.getByRole('button', { name: /قهوة \(3\.5 د\.أ\)/i })
+    expect(coffeeBtn).toBeDefined()
+
+    const dinnerBtn = screen.getByRole('button', { name: /عشاء \(25 د\.أ\)/i })
+    expect(dinnerBtn).toBeDefined()
+
+    const shoesBtn = screen.getByRole('button', { name: /حذاء \(75 د\.أ\)/i })
+    expect(shoesBtn).toBeDefined()
+
+    fireEvent.click(coffeeBtn)
+    const priceInput = screen.getByLabelText(/سعر السلعة/) as HTMLInputElement
+    expect(priceInput.value).toBe('3.5')
+  })
 })

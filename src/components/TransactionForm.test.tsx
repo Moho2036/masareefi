@@ -284,15 +284,56 @@ describe('TransactionForm Component', () => {
     expect(screen.getByText(/هذه المعاملة مرتبطة بسجل الديون/)).toBeInTheDocument()
     expect(screen.getByText('الانتقال إلى سجل الديون لتعديل أو حذف الدفعة')).toBeInTheDocument()
 
-    // Inputs should be read-only / disabled
+    // Amount and date inputs should be read-only / disabled
     const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
     expect(amountInput.disabled).toBe(true)
     const dateInput = screen.getByLabelText('التاريخ') as HTMLInputElement
     expect(dateInput.disabled).toBe(true)
 
-    // Primary action button should be disabled with restricted text
-    const submitBtn = screen.getByRole('button', { name: 'معاملة مقيدة بسجل الديون' }) as HTMLButtonElement
-    expect(submitBtn.disabled).toBe(true)
+    // Primary action button should be enabled allowing category/note edit
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' }) as HTMLButtonElement
+    expect(submitBtn.disabled).toBe(false)
+  })
+
+  it('allows updating category and note for a debt-linked transaction', async () => {
+    const debtLinkedTx: Transaction = {
+      id: 'debt_init_debt123',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'c-fuel',
+      date: new Date('2026-10-10T00:00:00Z'),
+      title: 'سلفة أبو أحمد',
+      note: 'ملاحظة أولى',
+      createdAt: new Date('2026-10-10T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={debtLinkedTx}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    )
+
+    // Click another category button, e.g. "طعام وبقالة" (c-food)
+    const foodCatBtn = screen.getByText('طعام وبقالة').closest('button')!
+    fireEvent.click(foodCatBtn)
+
+    // Submit modification
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(txServices.updateTransaction).toHaveBeenCalledWith(
+        'user-123',
+        'debt_init_debt123',
+        expect.objectContaining({
+          categoryId: 'c-food',
+          type: 'expense',
+          amountFils: 50000,
+        })
+      )
+    })
   })
 
   it('does NOT render linked debt warning banner for regular transactions', () => {
@@ -345,9 +386,9 @@ describe('TransactionForm Component', () => {
     const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
     expect(amountInput.disabled).toBe(true)
 
-    // Primary action button should be disabled with restricted text
-    const submitBtn = screen.getByRole('button', { name: 'معاملة مقيدة بإيداع جمعية' }) as HTMLButtonElement
-    expect(submitBtn.disabled).toBe(true)
+    // Primary action button should be enabled allowing category/note edit
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' }) as HTMLButtonElement
+    expect(submitBtn.disabled).toBe(false)
 
     // Delete button should not be present
     expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
@@ -382,5 +423,35 @@ describe('TransactionForm Component', () => {
       expect(onClose).toHaveBeenCalled()
       expect(onSuccess).toHaveBeenCalled()
     })
+  })
+
+  it('renders duplicate button when editing non-locked transaction and triggers duplication', async () => {
+    const onClose = vi.fn()
+    const onDuplicate = vi.fn()
+
+    const initialTx: Transaction = {
+      id: 'tx-normal',
+      type: 'expense',
+      amountFils: 25000,
+      categoryId: 'c-food',
+      date: new Date('2026-10-10'),
+      note: 'ملاحظة تجريبية',
+      title: 'وجبة عشاء',
+      createdAt: new Date('2026-10-10'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        onClose={onClose}
+        initialTransaction={initialTx}
+        onDuplicate={onDuplicate}
+      />
+    )
+
+    const duplicateBtn = screen.getByRole('button', { name: /تكرار هذه المعاملة/i })
+    expect(duplicateBtn).toBeInTheDocument()
+
+    fireEvent.click(duplicateBtn)
+    expect(onDuplicate).toHaveBeenCalledWith(initialTx)
   })
 })

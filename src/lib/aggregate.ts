@@ -1,3 +1,5 @@
+import { fromFils } from './money'
+import { toWesternDigits } from './dates'
 import type { Transaction, TxType } from '../types'
 
 /**
@@ -36,7 +38,8 @@ export function filterTransactions(
   categoryResolver?: CategoryResolver
 ): Transaction[] {
   const { query, type, categoryId } = filters
-  const normalizedQuery = query ? normalizeArabic(query) : ''
+  const rawQuery = query ? query.trim() : ''
+  const normalizedQuery = rawQuery ? normalizeArabic(toWesternDigits(rawQuery)) : ''
 
   return txs.filter((tx) => {
     if (type && type !== 'all' && tx.type !== type) {
@@ -46,8 +49,8 @@ export function filterTransactions(
       return false
     }
     if (normalizedQuery) {
-      const normalizedTitle = tx.title ? normalizeArabic(tx.title) : ''
-      const normalizedNote = normalizeArabic(tx.note)
+      const normalizedTitle = tx.title ? normalizeArabic(toWesternDigits(tx.title)) : ''
+      const normalizedNote = normalizeArabic(toWesternDigits(tx.note))
       let normalizedCatName = ''
       if (categoryResolver && tx.categoryId) {
         let catName = ''
@@ -59,14 +62,27 @@ export function filterTransactions(
           catName = categoryResolver[tx.categoryId]?.name || ''
         }
         if (catName) {
-          normalizedCatName = normalizeArabic(catName)
+          normalizedCatName = normalizeArabic(toWesternDigits(catName))
         }
+      }
+
+      // Check amount matching (in standard currency units e.g. 25, 25.5, or fils e.g. 25000)
+      let matchesAmount = false
+      if (normalizedQuery) {
+        const units = fromFils(tx.amountFils)
+        const unitsStr = String(units)
+        const filsStr = String(tx.amountFils)
+        matchesAmount =
+          unitsStr.includes(normalizedQuery) ||
+          filsStr.includes(normalizedQuery) ||
+          unitsStr.replace('.', ',').includes(normalizedQuery)
       }
 
       const matches =
         normalizedTitle.includes(normalizedQuery) ||
         normalizedNote.includes(normalizedQuery) ||
-        (normalizedCatName ? normalizedCatName.includes(normalizedQuery) : false)
+        (normalizedCatName ? normalizedCatName.includes(normalizedQuery) : false) ||
+        matchesAmount
 
       if (!matches) {
         return false

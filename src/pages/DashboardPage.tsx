@@ -19,7 +19,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { QuickFeatureHub } from '../components/dashboard/QuickFeatureHub'
-import { HeroCardSkeleton } from '../components/skeletons/HeroCardSkeleton'
+import { HeroCardSkeleton } from '../components/skeletons/DashboardSkeleton'
 
 const CategoryPieChart = React.lazy(() =>
   import('../components/charts/CategoryPieChart').then((m) => ({ default: m.CategoryPieChart }))
@@ -43,8 +43,8 @@ import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/re
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
 import { isOccurrenceSkipped } from '../lib/recurring'
-import { toWesternDigits, formatDayHeader, getFiscalMonthKey } from '../lib/dates'
-import { format as formatDate } from 'date-fns'
+import { toWesternDigits, formatDayHeader, getFiscalMonthKey, formatMonthLabel } from '../lib/dates'
+import { format as formatDate, addMonths } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { cn } from '../lib/cn'
 
@@ -98,6 +98,10 @@ export const DashboardPage: React.FC = () => {
   const effectiveRollover = isRolloverEnabled
     ? (isCurrentFiscalMonth ? (appData?.rolloverBalanceFils ?? 0) : effectiveLocalRollover)
     : 0
+
+  const prevMonthLabel = useMemo(() => {
+    return formatMonthLabel(addMonths(range.start, -1))
+  }, [range.start])
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
@@ -316,7 +320,9 @@ export const DashboardPage: React.FC = () => {
                 </span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/15 backdrop-blur-xs border border-white/20">
-                <span className="text-white/80 text-[11px] sm:text-xs">الرصيد المرحّل:</span>
+                <span className="text-white/80 text-[11px] sm:text-xs">
+                  الرصيد المرحّل (من شهر {prevMonthLabel}):
+                </span>
                 <span className="font-black text-white">
                   {effectiveRollover > 0
                     ? `+ ${format(effectiveRollover)}`
@@ -509,7 +515,7 @@ export const DashboardPage: React.FC = () => {
                               e.stopPropagation()
                               openDuplicate(tx)
                             }}
-                            className="hidden sm:inline-flex opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                            className="inline-flex sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
                             aria-label="تكرار المعاملة"
                             title="تكرار المعاملة"
                           >

@@ -22,7 +22,6 @@ import { useTransactions } from '../hooks/useTransactions'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { archiveCategory, deleteCategory } from '../services/categories'
-import { getAllTransactions } from '../services/transactions'
 import { countByCategory } from '../lib/aggregate'
 import { useAppData } from '../context/AppDataContext'
 import {
@@ -32,7 +31,7 @@ import {
   saveCategoryUsageMap,
   getCategoryUsageDetails,
 } from '../lib/categoryUsage'
-import type { Category, TxType, Transaction } from '../types'
+import type { Category, TxType } from '../types'
 
 export const CategoriesPage: React.FC = () => {
   const { user } = useAuth()
@@ -49,53 +48,22 @@ export const CategoriesPage: React.FC = () => {
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false)
   const [catToDelete, setCatToDelete] = useState<Category | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
-
-  useEffect(() => {
-    if (!user?.uid) return
-    let isMounted = true
-    getAllTransactions(user.uid)
-      .then((txs) => {
-        if (isMounted) {
-          setAllTransactions(txs)
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load all transactions for category check:', err)
-      })
-    return () => {
-      isMounted = false
-    }
-  }, [user?.uid])
-
-  // Combine historical allTransactions with current month transactions
-  const combinedTransactions = useMemo(() => {
-    const historicalTxs = user ? allTransactions : []
-    if (historicalTxs.length === 0) return transactions
-    const map = new Map<string, Transaction>()
-    for (const tx of historicalTxs) {
-      map.set(tx.id, tx)
-    }
-    for (const tx of transactions) {
-      map.set(tx.id, tx)
-    }
-    return Array.from(map.values())
-  }, [user, allTransactions, transactions])
 
   // Transaction count per category for current financial month
   const currentMonthTxCounts = useMemo(() => {
     return countByCategory(transactions)
   }, [transactions])
 
-  // Track category usage frequencies in memory
+  // Track category usage frequencies from localStorage + current month transactions
+  const localUsageMap = useMemo(() => getCategoryUsageMap(), [])
   const usageMap = useMemo(() => {
-    const txMap = buildUsageFromTransactions(combinedTransactions)
-    return mergeUsageMaps(txMap, getCategoryUsageMap())
-  }, [combinedTransactions])
+    const txMap = buildUsageFromTransactions(transactions)
+    return mergeUsageMaps(txMap, localUsageMap)
+  }, [transactions, localUsageMap])
 
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
-    const details = getCategoryUsageDetails(catToDelete.id, combinedTransactions, recurring, {})
+    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap)
     if (details.isInUse) {
       showToast(
         `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${
@@ -172,7 +140,7 @@ export const CategoriesPage: React.FC = () => {
   }
 
   const formatUsageText = (catId: string) => {
-    const details = getCategoryUsageDetails(catId, combinedTransactions, recurring, {})
+    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap)
     const currentMonthCount = currentMonthTxCounts[catId] || 0
 
     if (!details.isInUse) {
@@ -260,7 +228,7 @@ export const CategoriesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeCategories.map((cat) => {
-            const usageDetails = getCategoryUsageDetails(cat.id, combinedTransactions, recurring, {})
+            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
 
             return (
               <div
@@ -352,7 +320,7 @@ export const CategoriesPage: React.FC = () => {
           {isArchivedExpanded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
               {archivedCategories.map((cat) => {
-                const usageDetails = getCategoryUsageDetails(cat.id, combinedTransactions, recurring, {})
+                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
                 return (
                   <div
                     key={cat.id}
@@ -418,7 +386,7 @@ export const CategoriesPage: React.FC = () => {
         }}
         title="تأكيد حذف التصنيف"
       >
-        {catToDelete && getCategoryUsageDetails(catToDelete.id, combinedTransactions, recurring, {}).isInUse ? (
+        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap).isInUse ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />

@@ -1,5 +1,5 @@
 import { getFinancialMonthRange } from './dates'
-import { isOccurrenceSkipped, advanceDate } from './recurring'
+import { isOccurrenceSkipped, advanceDateWithTargetDay, getDeterministicTxId } from './recurring'
 import type { Recurring, Debt, Transaction } from '../types'
 
 export interface ForecastParams {
@@ -22,6 +22,8 @@ export interface ForecastResult {
   elapsedDays: number
   remainingDays: number
   isCurrentMonth: boolean
+  isPastMonth: boolean
+  isFutureMonth: boolean
 
   // Amounts in Fils
   currentIncome: number
@@ -66,6 +68,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const rangeEnd = toStartOfDay(end)
 
   const isCurrentMonth = now >= rangeStart && now < rangeEnd
+  const isPastMonth = now >= rangeEnd
+  const isFutureMonth = now < rangeStart
 
   // Total days in the financial cycle
   const totalDays = Math.max(
@@ -85,8 +89,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       1,
       Math.round((rangeEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     )
-  } else if (now < rangeStart) {
-    // Future month
+  } else if (isFutureMonth) {
+    // Future month (cycle has not started yet - full cycle remains)
     elapsedDays = 1
     remainingDays = totalDays
   } else {
@@ -123,13 +127,21 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const monthNet = currentIncome - currentExpense
   const availableBalance = rolloverBalance + monthNet
 
-  // 2. Upcoming recurring expenses and income in this cycle (accumulate all occurrences within [now, end))
+  // 2. Upcoming recurring expenses and income in this cycle (accumulate all occurrences within [rangeStart, rangeEnd))
   let upcomingRecurringExpenses = 0
   let upcomingRecurringIncome = 0
-  if (params.recurring && isCurrentMonth) {
+  if (params.recurring && (isCurrentMonth || isFutureMonth)) {
+    const existingTxIds = new Set(
+      params.transactions
+        .map((t) => t.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    )
+
     for (const rec of params.recurring) {
       if (!rec.active) continue
       let curr = rec.nextDate instanceof Date ? new Date(rec.nextDate.getTime()) : new Date(rec.nextDate)
+      const recStart = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
+      const targetDay = recStart.getDate()
       const recEnd = rec.endDate
         ? rec.endDate instanceof Date
           ? new Date(rec.endDate.getTime())
@@ -139,8 +151,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       // Iterate through all occurrences within this financial month
       while (toStartOfDay(curr) < rangeEnd) {
         if (recEnd && toStartOfDay(curr) > toStartOfDay(recEnd)) break
-        if (toStartOfDay(curr) >= now) {
-          if (!isOccurrenceSkipped(rec, curr)) {
+        const occStart = toStartOfDay(curr)
+        if (occStart >= rangeStart && occStart < rangeEnd) {
+          const isRecorded = existingTxIds.has(getDeterministicTxId(rec.id, curr))
+          if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
             if (rec.type === 'expense') {
               upcomingRecurringExpenses += rec.amountFils || 0
             } else if (rec.type === 'income') {
@@ -148,7 +162,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
             }
           }
         }
-        const next = advanceDate(curr, rec.frequency)
+        const next = advanceDateWithTargetDay(curr, rec.frequency, targetDay)
         if (next.getTime() <= curr.getTime()) break
         curr = next
       }
@@ -157,7 +171,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
 
   // 3. Upcoming debts owed by user ('borrowed') due within this cycle [rangeStart, rangeEnd)
   let upcomingDebtObligations = 0
-  if (params.debts && isCurrentMonth) {
+  if (params.debts && (isCurrentMonth || isFutureMonth)) {
     for (const debt of params.debts) {
       if (debt.type !== 'borrowed' || debt.settled) continue
       const remainingUnpaid = Math.max(0, debt.amountFils - (debt.paidFils || 0))
@@ -166,7 +180,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       if (debt.dueDate) {
         const dueDate = debt.dueDate instanceof Date ? debt.dueDate : new Date(debt.dueDate)
         const dueDay = toStartOfDay(dueDate)
-        if (dueDay >= rangeStart && dueDay < rangeEnd) {
+        if (dueDay < rangeEnd) {
           upcomingDebtObligations += remainingUnpaid
         }
       }
@@ -184,7 +198,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const actualDailySpendFils = Math.round(discretionaryExpense / elapsedDays)
 
   // 5. Month-End Forecast
-  const projectedDiscretionary = actualDailySpendFils * remainingDays
+  const projectedDiscretionary = isPastMonth ? 0 : actualDailySpendFils * remainingDays
   const projectedExpense =
     currentExpense +
     projectedDiscretionary +
@@ -193,9 +207,17 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const projectedIncome = currentIncome + upcomingRecurringIncome
   const projectedNet = rolloverBalance + projectedIncome - projectedExpense
 
-  const isDeficitProjected = isCurrentMonth && projectedNet < 0
-  const deficitAmount = isDeficitProjected ? Math.abs(projectedNet) : 0
-  const surplusAmount = !isDeficitProjected && projectedNet > 0 ? projectedNet : 0
+  const isDeficitProjected = (isCurrentMonth || isFutureMonth) && projectedNet < 0
+  const deficitAmount = isDeficitProjected
+    ? Math.abs(projectedNet)
+    : isPastMonth && monthNet < 0
+      ? Math.abs(monthNet)
+      : 0
+  const surplusAmount = isDeficitProjected
+    ? 0
+    : isPastMonth
+      ? (monthNet > 0 ? monthNet : 0)
+      : (projectedNet > 0 ? projectedNet : 0)
 
   // Recommended daily reduction if a deficit is projected
   const recommendedDailyReductionFils = isDeficitProjected && remainingDays > 0
@@ -214,7 +236,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
         now.getMonth(),
         now.getDate() + daysUntilDepletion
       )
-      if (depletionDate < rangeEnd && depletionDate.getMonth() === now.getMonth()) {
+      if (depletionDate < rangeEnd) {
         estimatedDeficitDay = depletionDate.getDate()
       }
     }
@@ -222,8 +244,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
 
   // 6. Health Status
   let healthStatus: FinancialHealthStatus
-  if (!isCurrentMonth) {
-    healthStatus = availableBalance < 0 ? 'danger' : 'safe'
+  if (isPastMonth) {
+    healthStatus = monthNet < 0 ? 'danger' : 'safe'
   } else if (
     freeBalance < 0 ||
     isDeficitProjected ||
@@ -244,6 +266,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     elapsedDays,
     remainingDays,
     isCurrentMonth,
+    isPastMonth,
+    isFutureMonth,
 
     currentIncome,
     currentExpense,

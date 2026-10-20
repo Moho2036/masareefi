@@ -271,6 +271,13 @@ export async function updateDebt(
     if (initTxExists) {
       batch.delete(initTxRef)
     }
+    const payments: DebtPayment[] = currentDebt?.payments || []
+    for (const p of payments) {
+      if (p.id) {
+        const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
+        batch.delete(payTxRef)
+      }
+    }
   } else if (initTxExists) {
     const txUpdates: Record<string, unknown> = {}
     if (data.amountFils !== undefined) {
@@ -416,6 +423,14 @@ export async function addDebtPayment(
     throw new Error('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
   }
 
+  const debtStartDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
+  const paymentDate = payment.date instanceof Date ? payment.date : new Date(payment.date)
+  const debtStartDay = new Date(debtStartDate.getFullYear(), debtStartDate.getMonth(), debtStartDate.getDate(), 0, 0, 0, 0)
+  const paymentDay = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate(), 0, 0, 0, 0)
+  if (paymentDay < debtStartDay) {
+    throw new Error('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+  }
+
   const paymentId = generatePaymentId()
   const defaultPaymentNote = debt.type === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
   const finalPaymentNote = (payment.note?.trim() || defaultPaymentNote).slice(0, 500)
@@ -494,6 +509,81 @@ export async function deleteDebtPayment(
   // Synchronize: Delete payment transaction if it exists
   const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${paymentId}`)
   batch.delete(payTxRef)
+
+  await batch.commit()
+}
+
+export async function updateDebtPayment(
+  uid: string,
+  debt: Debt,
+  paymentId: string,
+  updatedData: { amountFils: number; date: Date; note?: string }
+): Promise<void> {
+  const payments = debt.payments || []
+  const existingPayment = payments.find((p) => p.id === paymentId)
+  if (!existingPayment) {
+    throw new Error('الدفعة غير موجودة')
+  }
+
+  const amount = Math.round(Number(updatedData.amountFils))
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new Error('مبلغ الدفعة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const otherPaymentsTotal = payments
+    .filter((p) => p.id !== paymentId)
+    .reduce((sum, p) => sum + p.amountFils, 0)
+
+  const remainingAllowed = Math.max(0, debt.amountFils - otherPaymentsTotal)
+  if (amount > remainingAllowed) {
+    throw new Error('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
+  }
+
+  const debtStartDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
+  const paymentDate = updatedData.date instanceof Date ? updatedData.date : new Date(updatedData.date)
+  const debtStartDay = new Date(debtStartDate.getFullYear(), debtStartDate.getMonth(), debtStartDate.getDate(), 0, 0, 0, 0)
+  const paymentDay = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate(), 0, 0, 0, 0)
+  if (paymentDay < debtStartDay) {
+    throw new Error('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+  }
+
+  const defaultPaymentNote = debt.type === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
+  const finalPaymentNote = (updatedData.note?.trim() || defaultPaymentNote).slice(0, 500)
+
+  const updatedPayments = payments.map((p) => {
+    if (p.id !== paymentId) return p
+    return {
+      ...p,
+      amountFils: amount,
+      date: updatedData.date,
+      note: finalPaymentNote,
+    }
+  })
+
+  const newPaidFils = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
+  const newSettled = newPaidFils >= debt.amountFils
+
+  const batch = writeBatch(db)
+  const debtRef = doc(db, 'users', uid, 'debts', debt.id)
+
+  const serializedPayments = updatedPayments.map(serializePayment)
+
+  batch.update(debtRef, {
+    paidFils: newPaidFils,
+    settled: newSettled,
+    payments: serializedPayments,
+  })
+
+  // Synchronize payment transaction if it exists in transactions
+  const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${paymentId}`)
+  const payTxSnap = await getDoc(payTxRef)
+  if (payTxSnap && typeof payTxSnap.exists === 'function' && payTxSnap.exists()) {
+    batch.update(payTxRef, {
+      amountFils: amount,
+      date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
+      note: finalPaymentNote,
+    })
+  }
 
   await batch.commit()
 }

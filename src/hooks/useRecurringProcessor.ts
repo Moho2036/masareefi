@@ -2,26 +2,33 @@ import { useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { useToast } from './useToast'
 import { processDueRecurring } from '../services/recurring'
+import { formatDateInput } from '../lib/dates'
 
 export function useRecurringProcessor(): void {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const processedForUid = useRef<string | null>(null)
+  const lastProcessedKey = useRef<string | null>(null)
+  const isProcessing = useRef(false)
+  const userId = user?.uid
 
   useEffect(() => {
-    if (!user) {
-      processedForUid.current = null
+    if (!userId) {
+      lastProcessedKey.current = null
       return
     }
 
-    if (processedForUid.current === user.uid) {
-      return
-    }
+    const runProcessor = async () => {
+      if (isProcessing.current) return
 
-    processedForUid.current = user.uid
+      const todayKey = `${userId}_${formatDateInput(new Date())}`
+      if (lastProcessedKey.current === todayKey) {
+        return
+      }
 
-    processDueRecurring(user.uid)
-      .then((count) => {
+      isProcessing.current = true
+      try {
+        const count = await processDueRecurring(userId)
+        lastProcessedKey.current = todayKey
         if (count > 0) {
           const countLabel =
             count === 1
@@ -33,9 +40,32 @@ export function useRecurringProcessor(): void {
                   : `${count} معاملة متكررة`
           showToast(`تم تسجيل ${countLabel} تلقائياً`, 'info')
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Failed to process due recurring transactions:', err)
-      })
-  }, [user, showToast])
+      } finally {
+        isProcessing.current = false
+      }
+    }
+
+    // Run on initial mount / user change
+    void runProcessor()
+
+    // Run when the app becomes visible or focused on a new day
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void runProcessor()
+      }
+    }
+    const handleFocus = () => {
+      void runProcessor()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [userId, showToast])
 }

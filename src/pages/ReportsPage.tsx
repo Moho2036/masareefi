@@ -31,6 +31,7 @@ import {
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
+  calculateYearlyMonthlyAverage,
 } from '../lib/reports'
 import {
   getFinancialMonthRange,
@@ -96,9 +97,44 @@ export const ReportsPage: React.FC = () => {
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
 
-  const { data: monthTransactions, loading: monthLoading } = useTransactions(range, {
+  // Previous month range for monthly comparison
+  const prevMonthRange = useMemo(() => {
+    const prevDate = addMonths(range.start, -1)
+    return getFinancialMonthRange(prevDate, monthStartDay)
+  }, [range.start, monthStartDay])
+
+  // Combined range to fetch both current and previous month in a single Firestore subscription
+  const twoMonthsRange = useMemo(() => {
+    return {
+      start: prevMonthRange.start,
+      end: range.end,
+    }
+  }, [prevMonthRange.start, range.end])
+
+  const { data: twoMonthsTransactions, loading: monthLoading } = useTransactions(twoMonthsRange, {
     enabled: isMonthly,
   })
+
+  // Extract current month and previous month transactions in-memory
+  const monthStartMs = range.start.getTime()
+  const monthEndMs = range.end.getTime()
+  const prevStartMs = prevMonthRange.start.getTime()
+  const prevEndMs = prevMonthRange.end.getTime()
+
+  const monthTransactions = useMemo(() => {
+    return twoMonthsTransactions.filter((tx) => {
+      const t = tx.date instanceof Date ? tx.date.getTime() : new Date(tx.date).getTime()
+      return t >= monthStartMs && t < monthEndMs
+    })
+  }, [twoMonthsTransactions, monthStartMs, monthEndMs])
+
+  const prevMonthTransactions = useMemo(() => {
+    return twoMonthsTransactions.filter((tx) => {
+      const t = tx.date instanceof Date ? tx.date.getTime() : new Date(tx.date).getTime()
+      return t >= prevStartMs && t < prevEndMs
+    })
+  }, [twoMonthsTransactions, prevStartMs, prevEndMs])
+
   const { data: categories } = useCategories()
 
   const forecast = useMemo(() => {
@@ -112,21 +148,12 @@ export const ReportsPage: React.FC = () => {
     })
   }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover])
 
-  // Previous month range for monthly comparison
-  const prevMonthRange = useMemo(() => {
-    const prevDate = addMonths(range.start, -1)
-    return getFinancialMonthRange(prevDate, monthStartDay)
-  }, [range.start, monthStartDay])
-
-  const { data: prevMonthTransactions } = useTransactions(prevMonthRange, {
-    enabled: isMonthly,
-  })
-
   // Yearly data hooks
-  const currentYear = useMemo(
-    () => getFiscalMonthInfo(new Date(), monthStartDay).year,
+  const currentFiscalInfo = useMemo(
+    () => getFiscalMonthInfo(new Date(), monthStartDay),
     [monthStartDay]
   )
+  const currentYear = currentFiscalInfo.year
   const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
   const selectedYear = userSelectedYear ?? currentYear
   const setSelectedYear = (year: number) => setUserSelectedYear(year)
@@ -179,10 +206,24 @@ export const ReportsPage: React.FC = () => {
     () => calculateCategoryDistribution(yearTransactions, categories, 'expense'),
     [yearTransactions, categories]
   )
-  const monthlyAverage = useMemo(
-    () => Math.round(yearSums.expense / 12),
-    [yearSums.expense]
-  )
+  const monthlyAverage = useMemo(() => {
+    const activeMonths = yearlyBreakdown.filter(
+      (m) => m.expense > 0 || m.income > 0
+    ).length
+    return calculateYearlyMonthlyAverage(
+      yearSums.expense,
+      selectedYear,
+      currentYear,
+      currentFiscalInfo.monthIndex,
+      activeMonths
+    )
+  }, [
+    yearSums.expense,
+    selectedYear,
+    currentYear,
+    currentFiscalInfo.monthIndex,
+    yearlyBreakdown,
+  ])
 
   const yearOptions = useMemo(() => {
     const calendarYear = new Date().getFullYear()
@@ -521,17 +562,29 @@ export const ReportsPage: React.FC = () => {
 
           {/* Large Grouped Bar Chart */}
           <Card className="p-5">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-emerald-500" />
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   المداخيل والمصاريف لكل شهر
                 </h2>
               </div>
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                سنة {selectedYear}
-              </span>
+              <div className="flex items-center gap-2">
+                {monthStartDay > 1 && (
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                    يبدأ الشهر المالي يوم {monthStartDay}
+                  </span>
+                )}
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                  سنة {selectedYear}
+                </span>
+              </div>
             </div>
+            {monthStartDay > 1 && (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+                الأشهر المعروضة تحتسب وفق يوم بداية الشهر المالي المخصص (من يوم {monthStartDay} في كل شهر).
+              </p>
+            )}
             <MonthlyBarChart data={yearlyBreakdown} className="pt-2" />
           </Card>
 
@@ -596,9 +649,16 @@ export const ReportsPage: React.FC = () => {
             {/* Monthly Breakdown Table */}
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
-                  تفاصيل الشهور
-                </h2>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                    تفاصيل الشهور
+                  </h2>
+                  {monthStartDay > 1 && (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      الدورة المالية تبدأ يوم {monthStartDay}
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                   12 شهراً
                 </span>

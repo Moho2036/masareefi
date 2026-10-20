@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RecurringForm } from './RecurringForm'
 import * as recurringServices from '../services/recurring'
-import type { Recurring } from '../types'
+import type { Recurring, MoneyCircle } from '../types'
 
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
@@ -32,9 +32,20 @@ vi.mock('../hooks/useCategories', () => ({
   }),
 }))
 
+let mockCirclesData: MoneyCircle[] = []
+let mockRecurringData: Recurring[] = []
+
 vi.mock('../hooks/useMoneyCircles', () => ({
   useMoneyCircles: () => ({
-    data: [],
+    data: mockCirclesData,
+    loading: false,
+    error: null,
+  }),
+}))
+
+vi.mock('../hooks/useRecurring', () => ({
+  useRecurring: () => ({
+    data: mockRecurringData,
     loading: false,
     error: null,
   }),
@@ -56,6 +67,8 @@ vi.mock('../hooks/useCurrency', () => ({
 describe('RecurringForm component nextDate calculation on edit', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockCirclesData = []
+    mockRecurringData = []
   })
 
   const sampleRecurring: Recurring = {
@@ -191,5 +204,106 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
     expect((payload.nextDate as Date).getTime()).toBeGreaterThan(startOfToday.getTime())
+  })
+
+  it('filters out money circles that are already linked to other recurring transactions', () => {
+    mockCirclesData = [
+      {
+        id: 'circle-free',
+        name: 'جمعية متاحة',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 1,
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+        recurringId: undefined,
+      },
+      {
+        id: 'circle-taken',
+        name: 'جمعية مرتبطة مسبقاً',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 2,
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+        recurringId: 'rec-other',
+      },
+    ]
+    mockRecurringData = [
+      {
+        id: 'rec-other',
+        circleId: 'circle-taken',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c-rent',
+        title: 'قسط',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-11-01'),
+        active: true,
+      },
+    ]
+
+    render(<RecurringForm isOpen={true} onClose={vi.fn()} defaultType="expense" />)
+
+    expect(screen.getByText(/جمعية متاحة/i)).toBeInTheDocument()
+    expect(screen.queryByText(/جمعية مرتبطة مسبقاً/i)).not.toBeInTheDocument()
+  })
+
+  it('preserves currently linked money circle in select options when editing', () => {
+    mockCirclesData = [
+      {
+        id: 'circle-my-own',
+        name: 'جمعيتي الحالية',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 3,
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+        recurringId: 'rec-1',
+      },
+    ]
+    mockRecurringData = [
+      {
+        id: 'rec-1',
+        circleId: 'circle-my-own',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c-rent',
+        title: 'قسط',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-11-01'),
+        active: true,
+      },
+    ]
+
+    const editingRecurring: Recurring = {
+      ...sampleRecurring,
+      id: 'rec-1',
+      circleId: 'circle-my-own',
+      skipMonth: 3,
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={editingRecurring}
+      />
+    )
+
+    expect(screen.getByText(/جمعيتي الحالية/i)).toBeInTheDocument()
   })
 })

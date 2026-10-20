@@ -2,12 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { CategoriesPage } from './CategoriesPage'
 import * as categoriesService from '../services/categories'
-import * as txServices from '../services/transactions'
-import type { Transaction } from '../types'
-
-vi.mock('../services/transactions', () => ({
-  getAllTransactions: vi.fn().mockResolvedValue([]),
-}))
 
 vi.mock('../services/categories', () => ({
   deleteCategory: vi.fn().mockResolvedValue(undefined),
@@ -109,22 +103,38 @@ describe('CategoriesPage component category protection', () => {
     })
   })
 
-  it('protects category used only in previous months from hard deletion', async () => {
-    // cat-unused has 0 transactions this month, but 2 transactions historically
-    const mockHistoricalTxs: Transaction[] = [
-      { id: 'old-tx-1', categoryId: 'cat-unused', type: 'expense', amountFils: 1000, date: new Date('2026-08-01'), createdAt: new Date('2026-08-01'), note: '' },
-      { id: 'old-tx-2', categoryId: 'cat-unused', type: 'expense', amountFils: 2000, date: new Date('2026-09-01'), createdAt: new Date('2026-09-01'), note: '' },
-    ]
-    vi.mocked(txServices.getAllTransactions).mockResolvedValueOnce(mockHistoricalTxs)
+  it('protects category with saved usage history from hard deletion', async () => {
+    // cat-unused has 0 transactions in current month, but 2 in saved usage history (localStorage)
+    localStorage.setItem('masareefi_category_usage', JSON.stringify({ 'cat-unused': 2 }))
 
     render(<CategoriesPage />)
 
-    // Once getAllTransactions resolves, cat-unused should show "2 معاملة سابقة"
     await waitFor(() => {
       expect(screen.getByText(/2 معاملة سابقة/i)).toBeDefined()
     })
 
     // Delete button should now be hidden and replaced with "مستخدم"
     expect(screen.queryByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeNull()
+  })
+
+  it('displays error toast when backend rejects deleteCategory due to existing records in Firestore', async () => {
+    vi.mocked(categoriesService.deleteCategory).mockRejectedValueOnce(
+      new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بمعاملات مالية. يمكنك أرشفته بدلاً من ذلك.')
+    )
+
+    render(<CategoriesPage />)
+
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    fireEvent.click(deleteBtn)
+
+    const confirmBtn = screen.getByRole('button', { name: 'حذف نهائي' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بمعاملات مالية'),
+        'error'
+      )
+    })
   })
 })

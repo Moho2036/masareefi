@@ -88,7 +88,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr)
+    const amountFils = toFils(amountStr, config.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -115,6 +115,8 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       }
 
       if (isEditing && initialDebt) {
+        const paidFils = initialDebt.paidFils ?? 0
+        const settled = amountFils === paidFils
         await updateDebt(
           user.uid,
           initialDebt.id,
@@ -122,7 +124,8 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             personName: trimmedName,
             type,
             amountFils,
-            paidFils: initialDebt.paidFils ?? 0,
+            paidFils,
+            settled,
             startDate,
             dueDate,
             note: note.trim(),
@@ -296,6 +299,11 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         />
       </div>
 
+      {/* Informational Note */}
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed px-1">
+        ملاحظة: دفتر الديون مخصص لتتبع الحقوق والالتزامات بشكل مستقل ولا يخصم أو يضيف تلقائياً إلى رصيد المعاملات الشهرية إلا إذا قمت بتفعيل خيار الربط بالرصيد أدناه.
+      </p>
+
       {/* 7. Accounting Sync Toggle */}
       <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
         <Toggle
@@ -353,6 +361,7 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialDebt ? 'تعديل بيانات الدين' : 'إضافة دين جديد'}
+      closeOnBackdropClick={false}
     >
       {isOpen && (
         <DebtFormContent

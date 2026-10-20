@@ -1,3 +1,4 @@
+import { addMonths } from 'date-fns'
 import {
   collection,
   doc,
@@ -209,11 +210,8 @@ export async function updateMoneyCircle(
       const circleSnap = await getDoc(docRef)
       if (circleSnap?.exists?.()) {
         const circleData = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
-        const start = circleData.startDate instanceof Date ? circleData.startDate : new Date(circleData.startDate)
         const now = new Date()
-        const diffMonths =
-          (now.getFullYear() - start.getFullYear()) * 12 +
-          (now.getMonth() - start.getMonth())
+        const diffMonths = getCircleCycleIndex(circleData.startDate, now)
         const currentMonthIndex = diffMonths + 1
 
         // If circle hasn't started yet or turn month is in the future
@@ -260,6 +258,15 @@ export async function depositCircleNetPayout(
   }
 
   const now = new Date()
+  const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+  const expectedTurnDate = addMonths(start, Math.max(0, circle.myTurnMonth - 1))
+
+  const isSameMonth =
+    now.getFullYear() === expectedTurnDate.getFullYear() &&
+    now.getMonth() === expectedTurnDate.getMonth()
+
+  const txDate = isSameMonth ? now : expectedTurnDate
+
   const batch = writeBatch(db)
 
   batch.set(txRef, {
@@ -268,7 +275,7 @@ export async function depositCircleNetPayout(
     categoryId,
     title: `استلام صافي جمعية ${circle.name}`.slice(0, 100),
     note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circle.name})`.slice(0, 500),
-    date: Timestamp.fromDate(now),
+    date: Timestamp.fromDate(txDate),
     createdAt: Timestamp.fromDate(now),
   })
 
@@ -306,7 +313,11 @@ export async function deleteCirclePayout(uid: string, circleId: string): Promise
   await deleteDoc(txRef).catch(() => {})
 }
 
-export async function deleteMoneyCircle(uid: string, id: string): Promise<void> {
+export async function deleteMoneyCircle(
+  uid: string,
+  id: string,
+  options?: { deleteTransactions?: boolean }
+): Promise<void> {
   const docRef = doc(db, 'users', uid, 'circles', id)
   const circleSnap = await getDoc(docRef)
   const circleData = circleSnap.data()
@@ -314,10 +325,13 @@ export async function deleteMoneyCircle(uid: string, id: string): Promise<void> 
   const batch = writeBatch(db)
   batch.delete(docRef)
 
+  const recIds = new Set<string>()
+
   // 1. Clean up associated recurring transaction if linked by recurringId
   if (circleData?.recurringId) {
     const recRef = doc(db, 'users', uid, 'recurring', circleData.recurringId)
     batch.delete(recRef)
+    recIds.add(circleData.recurringId)
   }
 
   // 2. Query any recurring transaction linked via circleId === id
@@ -326,11 +340,27 @@ export async function deleteMoneyCircle(uid: string, id: string): Promise<void> 
   const recSnap = await getDocs(q)
   for (const recDoc of recSnap.docs) {
     batch.delete(recDoc.ref)
+    recIds.add(recDoc.id)
   }
 
-  // 3. Clean up associated payout transaction
-  const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
-  batch.delete(payoutTxRef)
+  // 3. Clean up associated transactions if deleteTransactions is true
+  if (options?.deleteTransactions) {
+    // Delete payout transaction
+    const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
+    batch.delete(payoutTxRef)
+
+    // Delete installment transactions created by the recurring schedules of this circle
+    for (const recId of recIds) {
+      const txColRef = collection(db, 'users', uid, 'transactions')
+      const txQuery = query(txColRef, where('recurringId', '==', recId))
+      const txSnap = await getDocs(txQuery)
+      if (txSnap?.docs) {
+        for (const txDoc of txSnap.docs) {
+          batch.delete(txDoc.ref)
+        }
+      }
+    }
+  }
 
   await batch.commit()
 }
@@ -338,31 +368,65 @@ export async function deleteMoneyCircle(uid: string, id: string): Promise<void> 
 export const deleteCircle = deleteMoneyCircle
 
 /**
- * Calculates which month (1-indexed) the circle is currently in based on start date.
+ * Calculates the 0-based elapsed monthly cycles from startDate to refDate based on actual monthly cycles.
+ * e.g., if start is Jan 20:
+ * Jan 20 to Feb 19 -> 0
+ * Feb 20 to Mar 19 -> 1
+ * Before Jan 20 -> -1
  */
-export function getCurrentCircleMonth(circle: MoneyCircle, refDate = new Date()): number {
-  const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+export function getCircleCycleIndex(
+  startDate: Date,
+  refDate: Date = new Date(),
+  monthStartDay?: number
+): number {
+  const rawStart = startDate instanceof Date ? startDate : new Date(startDate)
   const target = refDate instanceof Date ? refDate : new Date(refDate)
-  const diffMonths =
-    (target.getFullYear() - start.getFullYear()) * 12 +
-    (target.getMonth() - start.getMonth())
 
+  let start = rawStart
+  if (monthStartDay !== undefined && monthStartDay > 1 && rawStart.getDate() === 1) {
+    start = new Date(
+      rawStart.getFullYear(),
+      rawStart.getMonth(),
+      Math.min(28, Math.max(1, Math.round(monthStartDay)))
+    )
+  }
+
+  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0)
+  const t = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 12, 0, 0)
+
+  let approxMonths = (t.getFullYear() - s.getFullYear()) * 12 + (t.getMonth() - s.getMonth())
+  while (addMonths(s, approxMonths) > t) {
+    approxMonths--
+  }
+  while (addMonths(s, approxMonths + 1) <= t) {
+    approxMonths++
+  }
+  return approxMonths
+}
+
+/**
+ * Calculates which month (1-indexed) the circle is currently in based on actual monthly cycles from startDate.
+ */
+export function getCurrentCircleMonth(
+  circle: MoneyCircle,
+  refDate = new Date(),
+  monthStartDay?: number
+): number {
+  const diffMonths = getCircleCycleIndex(circle.startDate, refDate, monthStartDay)
   return Math.max(1, Math.min(circle.membersCount, diffMonths + 1))
 }
 
 /**
- * Checks if the current month is the user's turn to receive the payout.
+ * Checks if the reference date falls within the user's turn month to receive the payout.
  */
-export function isUserTurnMonth(circle: MoneyCircle, refDate = new Date()): boolean {
-  const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
-  const target = refDate instanceof Date ? refDate : new Date(refDate)
-  const diffMonths =
-    (target.getFullYear() - start.getFullYear()) * 12 +
-    (target.getMonth() - start.getMonth())
-
+export function isUserTurnMonth(
+  circle: MoneyCircle,
+  refDate = new Date(),
+  monthStartDay?: number
+): boolean {
+  const diffMonths = getCircleCycleIndex(circle.startDate, refDate, monthStartDay)
   if (diffMonths < 0 || diffMonths + 1 > circle.membersCount) {
     return false
   }
-
   return diffMonths + 1 === circle.myTurnMonth
 }

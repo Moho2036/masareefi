@@ -4,6 +4,7 @@ import {
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
+  calculateYearlyMonthlyAverage,
   ARABIC_MONTH_NAMES,
 } from './reports'
 import type { Transaction, Category } from '../types'
@@ -336,6 +337,37 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
 
       // Income: 1000 JOD, Expense: 5000 JOD -> clamped at -100%
       expect(calculateSavingsRate(1000000, 5000000)).toBe(-100)
+    })
+  })
+
+  describe('calculateYearlyMonthlyAverage', () => {
+    it('divides by elapsed months in current year based on currentMonthIndex', () => {
+      // In April (monthIndex 3), 4 months have elapsed
+      const avgApril = calculateYearlyMonthlyAverage(120000, 2026, 2026, 3, 4)
+      expect(avgApril).toBe(30000)
+
+      // In January (monthIndex 0), 1 month has elapsed
+      const avgJan = calculateYearlyMonthlyAverage(50000, 2026, 2026, 0, 1)
+      expect(avgJan).toBe(50000)
+
+      // In December (monthIndex 11), 12 months have elapsed
+      const avgDec = calculateYearlyMonthlyAverage(120000, 2026, 2026, 11, 12)
+      expect(avgDec).toBe(10000)
+    })
+
+    it('divides past years by number of active months with activity', () => {
+      // User only had activity in 3 months during 2025
+      const avgPastPartial = calculateYearlyMonthlyAverage(90000, 2025, 2026, 3, 3)
+      expect(avgPastPartial).toBe(30000)
+
+      // Full year activity (12 months)
+      const avgPastFull = calculateYearlyMonthlyAverage(120000, 2025, 2026, 3, 12)
+      expect(avgPastFull).toBe(10000)
+    })
+
+    it('falls back safely to 12 if no active months in past years', () => {
+      const avgEmpty = calculateYearlyMonthlyAverage(0, 2025, 2026, 3, 0)
+      expect(avgEmpty).toBe(0)
     })
   })
 })

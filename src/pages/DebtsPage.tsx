@@ -7,6 +7,7 @@ import {
   TrendingDown,
   Scale,
   AlertCircle,
+  Info,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -118,8 +119,13 @@ export const DebtsPage: React.FC = () => {
         }
       />
 
-
-      {/* 2. Top Summary KPI Cards */}
+      {/* Subtle Explanatory Note */}
+      <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-500 dark:text-slate-400">
+        <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <span>
+          دفتر الديون مخصص لتتبع الحقوق والالتزامات بشكل مستقل ولا يخصم أو يضيف تلقائياً إلى رصيد المعاملات الشهرية.
+        </span>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Card: مستحقات لي */}
         <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between">

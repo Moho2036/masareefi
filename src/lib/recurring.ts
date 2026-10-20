@@ -200,6 +200,19 @@ export function calculateMonthlyEquivalent(
   for (const item of items) {
     if (!item.active) continue
 
+    // Skip expired recurring items where endDate has passed before refDate
+    if (item.endDate) {
+      const endOfEndDate = new Date(
+        item.endDate instanceof Date ? item.endDate.getTime() : new Date(item.endDate).getTime()
+      )
+      endOfEndDate.setHours(23, 59, 59, 999)
+      const startOfRef = new Date(refDate.getTime())
+      startOfRef.setHours(0, 0, 0, 0)
+      if (endOfEndDate < startOfRef) {
+        continue
+      }
+    }
+
     // For money circles, check if this month's occurrence is exempt from installment payment.
     // If referenceDate is the start of a custom financial cycle (e.g. Sep 25 for Oct),
     // nextDate might fall in [refDate, addMonths(refDate, 1)) in the upcoming calendar month (e.g. Oct 1..Oct 25).

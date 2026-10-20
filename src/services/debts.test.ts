@@ -5,6 +5,7 @@ import {
   updateDebt,
   deleteDebt,
   addDebtPayment,
+  updateDebtPayment,
   deleteDebtPayment,
 } from './debts'
 import type { Debt } from '../types'
@@ -175,7 +176,7 @@ describe('debts service with accounting link', () => {
       type: 'lent',
       amountFils: 50000,
       paidFils: 10000,
-      startDate: new Date(),
+      startDate: new Date('2026-10-01'),
       dueDate: null,
       note: '',
       settled: false,
@@ -219,6 +220,20 @@ describe('debts service with accounting link', () => {
         categoryId: 'cat-inc',
         title: 'استرداد دفعة دين: محمود',
       })
+    })
+
+    it('rejects payment with date earlier than debt start date', async () => {
+      const debtWithFutureStart: Debt = {
+        ...sampleDebt,
+        startDate: new Date('2026-10-15'),
+      }
+
+      await expect(
+        addDebtPayment('user-1', debtWithFutureStart, {
+          amountFils: 5000,
+          date: new Date('2026-10-10'),
+        })
+      ).rejects.toThrow('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
     })
 
     it('rejects payment larger than remaining balance', async () => {
@@ -279,6 +294,73 @@ describe('debts service with accounting link', () => {
       expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
       expect(mockBatchDelete).toHaveBeenCalledTimes(1)
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('updateDebtPayment with sync', () => {
+    const sampleDebtWithPayments: Debt = {
+      id: 'debt-100',
+      personName: 'محمود',
+      type: 'lent',
+      amountFils: 50000,
+      paidFils: 20000,
+      startDate: new Date('2026-10-01'),
+      dueDate: null,
+      note: '',
+      settled: false,
+      payments: [
+        {
+          id: 'pay-1',
+          amountFils: 20000,
+          date: new Date('2026-10-05'),
+          createdAt: new Date('2026-10-05'),
+        },
+      ],
+      createdAt: new Date('2026-10-01'),
+    }
+
+    it('updates payment and synchronizes linked transaction when it exists', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ id: 'debt_pay_pay-1', amountFils: 20000 }),
+      })
+
+      await updateDebtPayment('user-1', sampleDebtWithPayments, 'pay-1', {
+        amountFils: 30000,
+        date: new Date('2026-10-06'),
+        note: 'دفعة معدلة',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2) // debt + payment tx
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.paidFils).toBe(30000)
+      expect(debtPayload.settled).toBe(false)
+      expect(debtPayload.payments[0].amountFils).toBe(30000)
+      expect(debtPayload.payments[0].note).toBe('دفعة معدلة')
+
+      const txPayload = mockBatchUpdate.mock.calls[1][1]
+      expect(txPayload.amountFils).toBe(30000)
+      expect(txPayload.note).toBe('دفعة معدلة')
+    })
+
+    it('rejects update when payment date precedes debt start date', async () => {
+      await expect(
+        updateDebtPayment('user-1', sampleDebtWithPayments, 'pay-1', {
+          amountFils: 20000,
+          date: new Date('2026-09-25'), // before 2026-10-01
+        })
+      ).rejects.toThrow('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+    })
+
+    it('rejects update when amount exceeds remaining allowed', async () => {
+      await expect(
+        updateDebtPayment('user-1', sampleDebtWithPayments, 'pay-1', {
+          amountFils: 60000, // total debt is 50000
+          date: new Date('2026-10-06'),
+        })
+      ).rejects.toThrow('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
     })
   })
 
@@ -472,6 +554,35 @@ describe('debts service with accounting link', () => {
       }, { syncTransaction: false })
 
       expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+      expect(mockBatchCommit).toHaveBeenCalled()
+    })
+
+    it('deletes initial transaction AND all payment transactions when syncTransaction is explicitly false', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              personName: 'زيد',
+              type: 'lent',
+              paidFils: 20000,
+              amountFils: 50000,
+              payments: [{ id: 'pay-1' }, { id: 'pay-2' }],
+            }),
+          }
+        }
+        return {
+          exists: () => true,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-123', {
+        personName: 'زيد',
+      }, { syncTransaction: false })
+
+      // 1 initTx + 2 payTx = 3 delete calls
+      expect(mockBatchDelete).toHaveBeenCalledTimes(3)
       expect(mockBatchCommit).toHaveBeenCalled()
     })
 

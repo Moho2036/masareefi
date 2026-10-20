@@ -245,6 +245,52 @@ describe('recurring pure logic', () => {
       expect(result.monthlyIncome).toBe(850000)
       expect(result.monthlyExpense).toBe(110000) // 100000 + 10000
     })
+
+    it('excludes expired recurring transactions whose endDate has passed before refDate', () => {
+      const refDate = new Date(2026, 9, 20) // Oct 20, 2026
+      const items: Recurring[] = [
+        {
+          id: '1',
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'c1',
+          note: 'Active gym',
+          frequency: 'monthly',
+          startDate: new Date(2026, 0, 1),
+          nextDate: new Date(2026, 9, 1),
+          active: true,
+          endDate: new Date(2026, 11, 31), // Dec 31, 2026 (future)
+        },
+        {
+          id: '2',
+          type: 'expense',
+          amountFils: 30000,
+          categoryId: 'c2',
+          note: 'Expired subscription',
+          frequency: 'monthly',
+          startDate: new Date(2026, 0, 1),
+          nextDate: new Date(2026, 7, 1),
+          active: true, // still flagged active in DB, but endDate has passed!
+          endDate: new Date(2026, 8, 30), // Sep 30, 2026 (past relative to Oct 20)
+        },
+        {
+          id: '3',
+          type: 'income',
+          amountFils: 200000,
+          categoryId: 'c3',
+          note: 'Expired contract',
+          frequency: 'monthly',
+          startDate: new Date(2026, 0, 1),
+          nextDate: new Date(2026, 5, 1),
+          active: true,
+          endDate: new Date(2026, 5, 30), // June 30, 2026 (past)
+        },
+      ]
+
+      const result = calculateMonthlyEquivalent(items, refDate)
+      expect(result.monthlyExpense).toBe(50000) // Only the active gym (50,000)
+      expect(result.monthlyIncome).toBe(0) // Expired contract excluded
+    })
   })
 
   describe('calculateNextDateOnEdit', () => {

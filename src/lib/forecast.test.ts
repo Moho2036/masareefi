@@ -179,30 +179,54 @@ describe('forecast lib', () => {
     })
 
     expect(res.isCurrentMonth).toBe(false)
+    expect(res.isPastMonth).toBe(true)
+    expect(res.isFutureMonth).toBe(false)
     expect(res.remainingDays).toBe(0)
     expect(res.dailySafeFils).toBe(0)
     expect(res.upcomingRecurringExpenses).toBe(0)
     expect(res.upcomingDebtObligations).toBe(0)
     expect(res.isDeficitProjected).toBe(false)
+    expect(res.monthNet).toBe(-300000)
+    expect(res.deficitAmount).toBe(300000)
   })
 
-  it('correctly handles future month when periodRange is passed', () => {
+  it('correctly handles future month when periodRange is passed and divides across totalDays', () => {
     // Current date is Oct 15, 2026, but periodRange is November 2026 (future)
     const novRange = {
       start: new Date(2026, 10, 1),
       end: new Date(2026, 11, 1),
     }
 
+    // Expected future recurring income of 600 JOD in November
+    const recurringIncome: Recurring = {
+      id: 'rec-future-sal',
+      type: 'income',
+      amountFils: 600000,
+      categoryId: 'cat-sal',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 25),
+      nextDate: new Date(2026, 10, 25), // Nov 25
+      active: true,
+      note: 'راتب قادم',
+    }
+
     const res = calculateForecast({
       transactions: [],
+      recurring: [recurringIncome],
       monthStartDay: 1,
       referenceDate: midMonthDate, // Oct 15, 2026
       periodRange: novRange,
     })
 
     expect(res.isCurrentMonth).toBe(false)
+    expect(res.isPastMonth).toBe(false)
+    expect(res.isFutureMonth).toBe(true)
     expect(res.remainingDays).toBe(res.totalDays)
-    expect(res.upcomingRecurringExpenses).toBe(0)
+    expect(res.upcomingRecurringIncome).toBe(600000)
+    expect(res.freeBalance).toBe(600000)
+    // Daily budget should divide free balance across all days of the future month
+    expect(res.dailySafeFils).toBe(Math.floor(600000 / res.totalDays))
+    expect(res.dailySafeFils).toBe(20000)
   })
 
   it('returns safe status in current month when transactions and obligations are empty', () => {
@@ -380,8 +404,8 @@ describe('forecast lib', () => {
     expect(res.projectedNet).toBeGreaterThan(0)
   })
 
-  it('ignores past overdue debts from prior months and only includes debts due in current cycle', () => {
-    // Debt 1: was due in August (prior month cycle)
+  it('includes past overdue debts from prior months that remain unpaid alongside current cycle debts', () => {
+    // Debt 1: was due in August (prior month cycle) and remains unpaid
     const pastOverdueDebt: Debt = {
       id: 'debt-old',
       personName: 'خالد',
@@ -418,8 +442,137 @@ describe('forecast lib', () => {
       referenceDate: new Date(2026, 9, 10),
     })
 
-    // Only currentDebt (60,000) should be included, NOT pastOverdueDebt (100,000)
-    expect(res.upcomingDebtObligations).toBe(60000)
-    expect(res.freeBalance).toBe(600000 - 60000)
+    // Both currentDebt (60,000) and pastOverdueDebt (100,000) must be reserved
+    expect(res.upcomingDebtObligations).toBe(160000)
+    expect(res.freeBalance).toBe(600000 - 160000)
+  })
+
+  it('includes unrecorded recurring bills due in current cycle before now, and excludes them once recorded', () => {
+    const unrecordedBill: Recurring = {
+      id: 'rec-wifi',
+      type: 'expense',
+      amountFils: 25000,
+      categoryId: 'cat-sub',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 5),
+      nextDate: new Date(2026, 9, 5), // Due on Oct 5 (before now = Oct 15)
+      active: true,
+      note: 'إنترنت',
+    }
+
+    // Case A: Not yet recorded in transactions
+    const resUnrecorded = calculateForecast({
+      transactions: [],
+      recurring: [unrecordedBill],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15), // Oct 15
+    })
+    expect(resUnrecorded.upcomingRecurringExpenses).toBe(25000)
+
+    // Case B: Already recorded in transactions with deterministic ID
+    const recordedTx: Transaction = {
+      id: 'rec-wifi_2026-10-05',
+      type: 'expense',
+      amountFils: 25000,
+      categoryId: 'cat-sub',
+      date: new Date(2026, 9, 5),
+      note: 'إنترنت',
+      recurringId: 'rec-wifi',
+      createdAt: new Date(),
+    }
+    const resRecorded = calculateForecast({
+      transactions: [recordedTx],
+      recurring: [unrecordedBill],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15),
+    })
+    // Already in transactions, so not counted again as upcoming
+    expect(resRecorded.upcomingRecurringExpenses).toBe(0)
+    expect(resRecorded.currentExpense).toBe(25000)
+  })
+
+  it('calculates estimatedDeficitDay across calendar month boundary within the same fiscal cycle', () => {
+    // Fiscal month starts on 25th: Sep 25, 2026 to Oct 25, 2026
+    const refDate = new Date(2026, 8, 27) // Sep 27, 2026
+    // Elapsed days: Sep 25, 26, 27 -> 3 days
+    // Discretionary spending: 60,000 fils -> 20,000 fils/day pace
+    // Remaining days: 28 days
+    // Projected expense: 60,000 + 20,000 * 28 = 620,000
+    // Income: 100,000 -> Deficit projected!
+    // Free balance: 100,000 - 60,000 = 40,000
+    // Depletion in 40,000 / 20,000 = 2 days -> Sep 27 + 2 days = Sep 29
+    // If pace is 5,000 fils/day:
+    // Discretionary: 15,000 fils in 3 days = 5,000/day
+    // Free balance: 35,000 fils -> Depletes in 7 days -> Sep 27 + 7 days = Oct 4!
+    const smallIncome: Transaction = {
+      id: 'tx-inc',
+      type: 'income',
+      amountFils: 50000,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 8, 25),
+      note: 'دخل',
+      createdAt: new Date(),
+    }
+    const smallExpense: Transaction = {
+      id: 'tx-exp',
+      type: 'expense',
+      amountFils: 15000, // 5000/day over 3 elapsed days
+      categoryId: 'cat-exp',
+      date: new Date(2026, 8, 26),
+      note: 'تسوق',
+      createdAt: new Date(),
+    }
+    const bigFutureObligation: Recurring = {
+      id: 'rec-future',
+      type: 'expense',
+      amountFils: 40000,
+      categoryId: 'cat-exp',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 25),
+      nextDate: new Date(2026, 9, 20),
+      active: true,
+      note: 'التزام قادم',
+    }
+
+    const res = calculateForecast({
+      transactions: [smallIncome, smallExpense],
+      recurring: [bigFutureObligation],
+      monthStartDay: 25,
+      referenceDate: refDate,
+    })
+
+    // Projected net is negative (deficit projected)
+    expect(res.isDeficitProjected).toBe(true)
+    // Depletion day should be defined even though it lands in October (the next calendar month, but within cycle)
+    expect(res.estimatedDeficitDay).toBeDefined()
+    expect(typeof res.estimatedDeficitDay).toBe('number')
+  })
+
+  it('preserves target day (e.g. 31st) when advancing recurring occurrences across short months', () => {
+    // Start date Jan 31, 2026, frequency monthly
+    // In March 2026, advancing from Feb 28 should restore to March 31
+    const recDay31: Recurring = {
+      id: 'rec-31',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-sub',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 31), // Jan 31
+      nextDate: new Date(2026, 1, 28), // Feb 28
+      active: true,
+      note: 'اشتراك شهري يوم 31',
+    }
+
+    // Forecasting for March (March 1 - April 1)
+    const marchRef = new Date(2026, 2, 5)
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [recDay31],
+      monthStartDay: 1,
+      referenceDate: marchRef,
+    })
+
+    // Feb 28 was prior to March 1. It advances to March 31, which is >= March 5 and < April 1.
+    expect(res.upcomingRecurringExpenses).toBe(50000)
   })
 })

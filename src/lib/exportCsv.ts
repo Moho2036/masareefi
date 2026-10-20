@@ -23,12 +23,18 @@ export function escapeCsvCell(value: unknown): string {
 
 /**
  * Builds a valid CSV string with UTF-8 BOM (\uFEFF) at the start
- * so Microsoft Excel renders Arabic characters accurately.
+ * and sep=, directive so Microsoft Excel renders Arabic characters and columns accurately.
  */
-export function buildCsv(headers: string[], rows: (string | number)[][]): string {
+export function buildCsv(
+  headers: string[],
+  rows: (string | number)[][],
+  options: { includeSepDirective?: boolean } = {}
+): string {
+  const includeSepDirective = options.includeSepDirective ?? true
   const headerLine = headers.map(escapeCsvCell).join(',')
   const rowLines = rows.map((row) => row.map(escapeCsvCell).join(','))
-  return '\uFEFF' + [headerLine, ...rowLines].join('\r\n')
+  const prefix = includeSepDirective ? '\uFEFFsep=,\r\n' : '\uFEFF'
+  return prefix + [headerLine, ...rowLines].join('\r\n')
 }
 
 /**
@@ -68,7 +74,7 @@ export function exportTransactionsToCsv(
   const symbol = options?.symbol ?? 'د.أ'
   const decimals = options?.decimals ?? 3
 
-  const headers = ['التاريخ', 'النوع', 'التصنيف', 'العنوان', 'الملاحظة', `المبلغ (${symbol})`]
+  const headers = ['التاريخ', 'النوع', 'التصنيف', 'العنوان', 'الملاحظة', `المبلغ (${symbol})`, 'العملة']
 
   const rows = transactions.map((tx) => {
     const dateStr = format(tx.date, 'yyyy-MM-dd')
@@ -78,7 +84,7 @@ export function exportTransactionsToCsv(
     const noteStr = tx.note || ''
     const amountStr = fromFils(tx.amountFils).toFixed(decimals)
 
-    return [dateStr, typeStr, categoryStr, titleStr, noteStr, amountStr]
+    return [dateStr, typeStr, categoryStr, titleStr, noteStr, amountStr, symbol]
   })
 
   const csv = buildCsv(headers, rows)
@@ -99,6 +105,7 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
     `المبلغ الأصلي (${symbol})`,
     `المسدد (${symbol})`,
     `المتبقي (${symbol})`,
+    'العملة',
     'الحالة',
     'عدد الدفعات',
     'تاريخ الدين',
@@ -124,6 +131,7 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
       originalAmount,
       paidAmount,
       remainingAmount,
+      symbol,
       statusStr,
       paymentsCount,
       startDateStr,

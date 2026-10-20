@@ -23,8 +23,40 @@ function parseNumeric(val: string): number {
 
 const STORAGE_KEY = 'masareefi_work_hours_prefs'
 
+interface BenchmarkExample {
+  coffee: number
+  dinner: number
+  shoes: number
+  defaultSalary: string
+  defaultItemPrice: string
+}
+
+function getCurrencyBenchmarks(currencyCode: string): BenchmarkExample {
+  switch (currencyCode) {
+    case 'SAR':
+    case 'AED':
+    case 'QAR':
+      return { coffee: 15, dinner: 100, shoes: 300, defaultSalary: '5000', defaultItemPrice: '1500' }
+    case 'EGP':
+      return { coffee: 80, dinner: 500, shoes: 1800, defaultSalary: '15000', defaultItemPrice: '6000' }
+    case 'USD':
+    case 'EUR':
+    case 'GBP':
+      return { coffee: 5, dinner: 35, shoes: 100, defaultSalary: '3000', defaultItemPrice: '500' }
+    case 'KWD':
+      return { coffee: 1.5, dinner: 10, shoes: 30, defaultSalary: '500', defaultItemPrice: '250' }
+    case 'BHD':
+    case 'OMR':
+      return { coffee: 2, dinner: 15, shoes: 40, defaultSalary: '500', defaultItemPrice: '250' }
+    case 'JOD':
+    default:
+      return { coffee: 3.5, dinner: 25, shoes: 75, defaultSalary: '500', defaultItemPrice: '250' }
+  }
+}
+
 export const WorkHoursCalculator: React.FC = () => {
   const { format, config } = useCurrency()
+  const benchmarks = useMemo(() => getCurrencyBenchmarks(config.code), [config.code])
 
   // Salary & Work schedule preferences initialized from localStorage
   const [salaryStr, setSalaryStr] = useState<string>(() => {
@@ -37,7 +69,7 @@ export const WorkHoursCalculator: React.FC = () => {
     } catch {
       // ignore
     }
-    return '500'
+    return benchmarks.defaultSalary
   })
 
   const [dailyHoursStr, setDailyHoursStr] = useState<string>(() => {
@@ -68,7 +100,18 @@ export const WorkHoursCalculator: React.FC = () => {
 
   // Item to buy
   const [itemName, setItemName] = useState<string>('هاتف ذكي')
-  const [itemPriceStr, setItemPriceStr] = useState<string>('250')
+  const [itemPriceStr, setItemPriceStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.itemPrice) return String(parsed.itemPrice)
+      }
+    } catch {
+      // ignore
+    }
+    return benchmarks.defaultItemPrice
+  })
 
   // Auto-save preferences to localStorage without stale-state race conditions
   useEffect(() => {
@@ -79,12 +122,13 @@ export const WorkHoursCalculator: React.FC = () => {
           salary: salaryStr,
           dailyHours: dailyHoursStr,
           workDays: workDaysStr,
+          itemPrice: itemPriceStr,
         })
       )
     } catch {
       // ignore
     }
-  }, [salaryStr, dailyHoursStr, workDaysStr])
+  }, [salaryStr, dailyHoursStr, workDaysStr, itemPriceStr])
 
   // Calculations
   const salary = parseNumeric(salaryStr)
@@ -301,31 +345,31 @@ export const WorkHoursCalculator: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setItemName('كوب قهوة')
-                    setItemPriceStr('3.5')
+                    setItemPriceStr(String(benchmarks.coffee))
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
-                  قهوة (3.5)
+                  قهوة ({benchmarks.coffee} {config.symbol})
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setItemName('عشاء مطعم')
-                    setItemPriceStr('25')
+                    setItemPriceStr(String(benchmarks.dinner))
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
-                  عشاء (25)
+                  عشاء ({benchmarks.dinner} {config.symbol})
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setItemName('حذاء رياضي')
-                    setItemPriceStr('75')
+                    setItemPriceStr(String(benchmarks.shoes))
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
-                  حذاء (75)
+                  حذاء ({benchmarks.shoes} {config.symbol})
                 </button>
               </div>
             </div>
