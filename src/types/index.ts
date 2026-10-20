@@ -62,6 +62,7 @@ export interface DebtPayment {
   amountFils: number
   date: Date
   note?: string
+  transactionId?: string
   createdAt: Date
 }
 

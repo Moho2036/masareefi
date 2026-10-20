@@ -54,81 +54,154 @@ function getCurrencyBenchmarks(currencyCode: string): BenchmarkExample {
   }
 }
 
+interface StoredWorkHoursPrefs {
+  currencyCode?: string
+  salary?: string
+  isCustomSalary?: boolean
+  itemPrice?: string
+  isCustomItemPrice?: boolean
+  dailyHours?: string
+  workDays?: string
+  itemName?: string
+}
+
+function loadStoredPrefs(currencyCode: string): {
+  salary: string
+  isCustomSalary: boolean
+  itemPrice: string
+  isCustomItemPrice: boolean
+  dailyHours: string
+  workDays: string
+  itemName: string
+  hasInteracted: boolean
+} {
+  const benchmarks = getCurrencyBenchmarks(currencyCode)
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed: StoredWorkHoursPrefs = JSON.parse(raw)
+      const storedCurr = parsed.currencyCode || 'JOD'
+      const prevBenchmarks = getCurrencyBenchmarks(storedCurr)
+
+      let isCustomSalary = Boolean(parsed.isCustomSalary)
+      if (parsed.isCustomSalary === undefined) {
+        if (parsed.salary && parsed.salary !== prevBenchmarks.defaultSalary && parsed.salary !== '500') {
+          isCustomSalary = true
+        } else {
+          isCustomSalary = false
+        }
+      }
+
+      let isCustomItemPrice = Boolean(parsed.isCustomItemPrice)
+      if (parsed.isCustomItemPrice === undefined) {
+        if (parsed.itemPrice && parsed.itemPrice !== prevBenchmarks.defaultItemPrice && parsed.itemPrice !== '250') {
+          isCustomItemPrice = true
+        } else {
+          isCustomItemPrice = false
+        }
+      }
+
+      const salary = (currencyCode !== storedCurr && !isCustomSalary)
+        ? benchmarks.defaultSalary
+        : isCustomSalary
+          ? String(parsed.salary || benchmarks.defaultSalary)
+          : benchmarks.defaultSalary
+
+      const itemPrice = (currencyCode !== storedCurr && !isCustomItemPrice)
+        ? benchmarks.defaultItemPrice
+        : isCustomItemPrice
+          ? String(parsed.itemPrice || benchmarks.defaultItemPrice)
+          : benchmarks.defaultItemPrice
+
+      return {
+        salary,
+        isCustomSalary,
+        itemPrice,
+        isCustomItemPrice,
+        dailyHours: parsed.dailyHours ? String(parsed.dailyHours) : '8',
+        workDays: parsed.workDays ? String(parsed.workDays) : '22',
+        itemName: parsed.itemName ? String(parsed.itemName) : 'هاتف ذكي',
+        hasInteracted: Boolean(isCustomSalary || isCustomItemPrice || parsed.dailyHours || parsed.workDays),
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    salary: benchmarks.defaultSalary,
+    isCustomSalary: false,
+    itemPrice: benchmarks.defaultItemPrice,
+    isCustomItemPrice: false,
+    dailyHours: '8',
+    workDays: '22',
+    itemName: 'هاتف ذكي',
+    hasInteracted: false,
+  }
+}
+
 export const WorkHoursCalculator: React.FC = () => {
   const { format, config } = useCurrency()
   const benchmarks = useMemo(() => getCurrencyBenchmarks(config.code), [config.code])
 
-  // Salary & Work schedule preferences initialized from localStorage
-  const [salaryStr, setSalaryStr] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.salary) return String(parsed.salary)
-      }
-    } catch {
-      // ignore
-    }
-    return benchmarks.defaultSalary
-  })
+  const initialPrefs = useMemo(() => loadStoredPrefs(config.code), [config.code])
 
-  const [dailyHoursStr, setDailyHoursStr] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.dailyHours) return String(parsed.dailyHours)
-      }
-    } catch {
-      // ignore
-    }
-    return '8'
-  })
+  const [salaryStr, setSalaryStr] = useState<string>(initialPrefs.salary)
+  const [isCustomSalary, setIsCustomSalary] = useState<boolean>(initialPrefs.isCustomSalary)
 
-  const [workDaysStr, setWorkDaysStr] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.workDays) return String(parsed.workDays)
-      }
-    } catch {
-      // ignore
-    }
-    return '22'
-  })
+  const [dailyHoursStr, setDailyHoursStr] = useState<string>(initialPrefs.dailyHours)
+  const [workDaysStr, setWorkDaysStr] = useState<string>(initialPrefs.workDays)
 
-  // Item to buy
-  const [itemName, setItemName] = useState<string>('هاتف ذكي')
-  const [itemPriceStr, setItemPriceStr] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.itemPrice) return String(parsed.itemPrice)
-      }
-    } catch {
-      // ignore
-    }
-    return benchmarks.defaultItemPrice
-  })
+  const [itemName, setItemName] = useState<string>(initialPrefs.itemName)
+  const [itemPriceStr, setItemPriceStr] = useState<string>(initialPrefs.itemPrice)
+  const [isCustomItemPrice, setIsCustomItemPrice] = useState<boolean>(initialPrefs.isCustomItemPrice)
 
-  // Auto-save preferences to localStorage without stale-state race conditions
+  const [hasInteracted, setHasInteracted] = useState<boolean>(initialPrefs.hasInteracted)
+
+  // When currency changes, if user hasn't customized salary or price, update to new currency defaults
+  const [prevCurrencyCode, setPrevCurrencyCode] = useState(config.code)
+  if (config.code !== prevCurrencyCode) {
+    setPrevCurrencyCode(config.code)
+    if (!isCustomSalary) {
+      setSalaryStr(benchmarks.defaultSalary)
+    }
+    if (!isCustomItemPrice) {
+      setItemPriceStr(benchmarks.defaultItemPrice)
+    }
+  }
+
+  // Only auto-save preferences to localStorage when user has actually interacted or customized values
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          salary: salaryStr,
-          dailyHours: dailyHoursStr,
-          workDays: workDaysStr,
-          itemPrice: itemPriceStr,
-        })
-      )
-    } catch {
-      // ignore
+    if (hasInteracted || isCustomSalary || isCustomItemPrice) {
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            currencyCode: config.code,
+            salary: salaryStr,
+            isCustomSalary,
+            itemPrice: itemPriceStr,
+            isCustomItemPrice,
+            dailyHours: dailyHoursStr,
+            workDays: workDaysStr,
+            itemName,
+          })
+        )
+      } catch {
+        // ignore
+      }
     }
-  }, [salaryStr, dailyHoursStr, workDaysStr, itemPriceStr])
+  }, [
+    config.code,
+    salaryStr,
+    isCustomSalary,
+    itemPriceStr,
+    isCustomItemPrice,
+    dailyHoursStr,
+    workDaysStr,
+    itemName,
+    hasInteracted,
+  ])
 
   // Calculations
   const salary = parseNumeric(salaryStr)
@@ -186,7 +259,11 @@ export const WorkHoursCalculator: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={salaryStr}
-                  onChange={(e) => setSalaryStr(toWesternDigits(e.target.value))}
+                  onChange={(e) => {
+                    setSalaryStr(toWesternDigits(e.target.value))
+                    setIsCustomSalary(true)
+                    setHasInteracted(true)
+                  }}
                   startIcon={<Briefcase className="w-4 h-4 text-slate-400" />}
                 />
               </div>
@@ -197,7 +274,10 @@ export const WorkHoursCalculator: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={dailyHoursStr}
-                  onChange={(e) => setDailyHoursStr(toWesternDigits(e.target.value))}
+                  onChange={(e) => {
+                    setDailyHoursStr(toWesternDigits(e.target.value))
+                    setHasInteracted(true)
+                  }}
                   startIcon={<Clock className="w-4 h-4 text-slate-400" />}
                 />
 
@@ -206,7 +286,10 @@ export const WorkHoursCalculator: React.FC = () => {
                   type="text"
                   inputMode="numeric"
                   value={workDaysStr}
-                  onChange={(e) => setWorkDaysStr(toWesternDigits(e.target.value))}
+                  onChange={(e) => {
+                    setWorkDaysStr(toWesternDigits(e.target.value))
+                    setHasInteracted(true)
+                  }}
                 />
               </div>
 
@@ -226,7 +309,10 @@ export const WorkHoursCalculator: React.FC = () => {
                 label="اسم السلعة أو الخدمة"
                 placeholder="مثال: ساعة يد، وجبة فاخرة، جوال"
                 value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
+                onChange={(e) => {
+                  setItemName(e.target.value)
+                  setHasInteracted(true)
+                }}
                 startIcon={<ShoppingBag className="w-4 h-4 text-slate-400" />}
               />
 
@@ -236,7 +322,11 @@ export const WorkHoursCalculator: React.FC = () => {
                 inputMode="decimal"
                 placeholder="0.00"
                 value={itemPriceStr}
-                onChange={(e) => setItemPriceStr(toWesternDigits(e.target.value))}
+                onChange={(e) => {
+                  setItemPriceStr(toWesternDigits(e.target.value))
+                  setIsCustomItemPrice(true)
+                  setHasInteracted(true)
+                }}
               />
             </div>
           </Card>
@@ -346,6 +436,8 @@ export const WorkHoursCalculator: React.FC = () => {
                   onClick={() => {
                     setItemName('كوب قهوة')
                     setItemPriceStr(String(benchmarks.coffee))
+                    setIsCustomItemPrice(true)
+                    setHasInteracted(true)
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
@@ -356,6 +448,8 @@ export const WorkHoursCalculator: React.FC = () => {
                   onClick={() => {
                     setItemName('عشاء مطعم')
                     setItemPriceStr(String(benchmarks.dinner))
+                    setIsCustomItemPrice(true)
+                    setHasInteracted(true)
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
@@ -366,6 +460,8 @@ export const WorkHoursCalculator: React.FC = () => {
                   onClick={() => {
                     setItemName('حذاء رياضي')
                     setItemPriceStr(String(benchmarks.shoes))
+                    setIsCustomItemPrice(true)
+                    setHasInteracted(true)
                   }}
                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >

@@ -5,6 +5,7 @@ import {
   calculateYearlyBreakdown,
   calculateSavingsRate,
   calculateYearlyMonthlyAverage,
+  calculateAnnualSummary,
   ARABIC_MONTH_NAMES,
 } from './reports'
 import type { Transaction, Category } from '../types'
@@ -368,6 +369,98 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
     it('falls back safely to 12 if no active months in past years', () => {
       const avgEmpty = calculateYearlyMonthlyAverage(0, 2025, 2026, 3, 0)
       expect(avgEmpty).toBe(0)
+    })
+  })
+
+  describe('calculateAnnualSummary', () => {
+    const createEmptyBreakdown = () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        monthIndex: i,
+        monthName: ARABIC_MONTH_NAMES[i],
+        income: 0,
+        expense: 0,
+        balance: 0,
+      }))
+
+    it('returns zero summary for empty or null breakdown', () => {
+      const res = calculateAnnualSummary([], 2026, 2026, 4)
+      expect(res.averageMonthlyExpenseFils).toBe(0)
+      expect(res.activeMonthsCount).toBe(0)
+      expect(res.isCurrentMonthOnly).toBe(false)
+    })
+
+    it('divides past year only by months that have actual expenses (> 0) and ignores income-only months', () => {
+      const breakdown = createEmptyBreakdown()
+      // Month 0 (Jan): 100 JOD expense
+      breakdown[0].expense = 100000
+      breakdown[0].income = 500000
+      // Month 1 (Feb): 200 JOD expense
+      breakdown[1].expense = 200000
+      breakdown[1].income = 500000
+      // Month 2 (March): 0 expense, but 500 JOD salary income! (must NOT be counted in divisor!)
+      breakdown[2].expense = 0
+      breakdown[2].income = 500000
+
+      // Past year 2025 (current year is 2026)
+      const res = calculateAnnualSummary(breakdown, 2025, 2026, 3)
+
+      // Total expense = 300,000. Active expense months count = 2 (NOT 3!)
+      expect(res.activeMonthsCount).toBe(2)
+      expect(res.averageMonthlyExpenseFils).toBe(150000) // 300,000 / 2 = 150,000
+      expect(res.isCurrentMonthOnly).toBe(false)
+      expect(res.note).toBeUndefined()
+    })
+
+    it('in current year, averages over completed past months with expenses and ignores future months', () => {
+      const breakdown = createEmptyBreakdown()
+      // Current month is April (index 3)
+      // Jan (index 0): 100 JOD expense
+      breakdown[0].expense = 100000
+      // Feb (index 1): 200 JOD expense
+      breakdown[1].expense = 200000
+      // March (index 2): 0 expense, 500 JOD income (must not dilute divisor)
+      breakdown[2].expense = 0
+      breakdown[2].income = 500000
+      // April (index 3, incomplete current month): 30 JOD expense
+      breakdown[3].expense = 30000
+      // May (index 4, future month): 999 JOD future projection/accident (must be strictly ignored)
+      breakdown[4].expense = 999000
+
+      const res = calculateAnnualSummary(breakdown, 2026, 2026, 3)
+
+      // Only Jan (100k) and Feb (200k) are completed past months with expenses
+      // Total completed expense = 300k / 2 = 150k
+      expect(res.activeMonthsCount).toBe(2)
+      expect(res.averageMonthlyExpenseFils).toBe(150000)
+      expect(res.isCurrentMonthOnly).toBe(false)
+      expect(res.note).toBeUndefined()
+    })
+
+    it('in current year, if only current month has expenses, displays it with explanatory note', () => {
+      const breakdown = createEmptyBreakdown()
+      // Current month is January (index 0) or user joined in April (index 3) with no prior expenses
+      // April (index 3): 75 JOD expense
+      breakdown[3].expense = 75000
+
+      const res = calculateAnnualSummary(breakdown, 2026, 2026, 3)
+
+      expect(res.activeMonthsCount).toBe(1)
+      expect(res.averageMonthlyExpenseFils).toBe(75000)
+      expect(res.isCurrentMonthOnly).toBe(true)
+      expect(res.note).toBe('بيانات الشهر الجاري فقط — لم يكتمل شهر كامل بعد')
+    })
+
+    it('returns zero if no expenses occurred in the current year so far', () => {
+      const breakdown = createEmptyBreakdown()
+      // Income only in Jan and Feb
+      breakdown[0].income = 500000
+      breakdown[1].income = 500000
+
+      const res = calculateAnnualSummary(breakdown, 2026, 2026, 2)
+
+      expect(res.activeMonthsCount).toBe(0)
+      expect(res.averageMonthlyExpenseFils).toBe(0)
+      expect(res.isCurrentMonthOnly).toBe(false)
     })
   })
 })

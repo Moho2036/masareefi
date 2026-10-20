@@ -33,6 +33,7 @@ vi.mock('../hooks/useCategories', () => ({
       { id: 'c-food', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#F59E0B', archived: false, order: 0 },
       { id: 'c-fuel', name: 'وقود ومواصلات', type: 'expense', icon: '⛽', color: '#3B82F6', archived: false, order: 1 },
       { id: 'c-salary', name: 'راتب', type: 'income', icon: '💼', color: '#10B981', archived: false, order: 2 },
+      { id: 'c-archived-gym', name: 'جيم ورياضة', type: 'expense', icon: '🏋️', color: '#EF4444', archived: true, order: 3 },
     ],
     loading: false,
     error: null,
@@ -453,5 +454,27 @@ describe('TransactionForm Component', () => {
 
     fireEvent.click(duplicateBtn)
     expect(onDuplicate).toHaveBeenCalledWith(initialTx)
+  })
+
+  it('preserves archived category when editing transaction originally categorized under it and labels it (مؤرشف)', () => {
+    const initialTx: Transaction = {
+      id: 'tx-archived-cat',
+      type: 'expense',
+      amountFils: 30000,
+      categoryId: 'c-archived-gym',
+      date: new Date('2026-10-10'),
+      note: 'اشتراك شهري',
+      title: 'اشتراك الجيم',
+      createdAt: new Date('2026-10-10'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        onClose={vi.fn()}
+        initialTransaction={initialTx}
+      />
+    )
+
+    expect(screen.getByText(/جيم ورياضة \(مؤرشف\)/i)).toBeInTheDocument()
   })
 })

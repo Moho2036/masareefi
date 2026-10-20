@@ -69,6 +69,7 @@ export const DebtsPage: React.FC = () => {
   }, [debts, typeFilter, statusFilter, deferredSearch])
 
   const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null)
+  const [deleteTransactions, setDeleteTransactions] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
   // Handlers
@@ -84,15 +85,17 @@ export const DebtsPage: React.FC = () => {
 
   const handleDelete = (debt: Debt) => {
     setDebtToDelete(debt)
+    setDeleteTransactions(false)
   }
 
   const handleConfirmDelete = async () => {
     if (!user || !debtToDelete) return
     setIsDeleting(true)
     try {
-      await deleteDebt(user.uid, debtToDelete.id)
+      await deleteDebt(user.uid, debtToDelete.id, { deleteTransactions })
       showToast('تم حذف الدين بنجاح', 'info')
       setDebtToDelete(null)
+      setDeleteTransactions(false)
     } catch (err) {
       console.error('Failed to delete debt:', err)
       showToast('تعذر حذف الدين', 'error')
@@ -376,7 +379,10 @@ export const DebtsPage: React.FC = () => {
       {/* Delete Debt Confirmation Modal */}
       <Modal
         isOpen={Boolean(debtToDelete)}
-        onClose={() => setDebtToDelete(null)}
+        onClose={() => {
+          setDebtToDelete(null)
+          setDeleteTransactions(false)
+        }}
         title="تأكيد حذف الدين"
       >
         <div className="space-y-4">
@@ -386,11 +392,31 @@ export const DebtsPage: React.FC = () => {
               هل أنت متأكد من حذف سجل الدين الخاص بـ &quot;{debtToDelete?.personName}&quot;؟ سيتم حذف كافة بياناته ودفعاته بشكل نهائي.
             </p>
           </div>
+
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3">
+            <label
+              htmlFor="delete-debt-txs"
+              className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+            >
+              حذف معاملات السداد المسجلة سابقاً لهذا الدين من سجل المعاملات
+            </label>
+            <input
+              id="delete-debt-txs"
+              type="checkbox"
+              checked={deleteTransactions}
+              onChange={(e) => setDeleteTransactions(e.target.checked)}
+              className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
+            />
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button
               variant="outline"
               size="md"
-              onClick={() => setDebtToDelete(null)}
+              onClick={() => {
+                setDebtToDelete(null)
+                setDeleteTransactions(false)
+              }}
               disabled={isDeleting}
             >
               إلغاء

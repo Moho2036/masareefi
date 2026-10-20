@@ -201,22 +201,111 @@ export function calculateSavingsRate(income: number, expense: number): number {
   return Math.round(clamped * 10) / 10
 }
 
+export interface AnnualSummaryResult {
+  averageMonthlyExpenseFils: number
+  activeMonthsCount: number
+  isCurrentMonthOnly: boolean
+  note?: string
+}
+
+/**
+ * Calculates a mathematically sound annual summary of expenses and monthly average.
+ *
+ * Rules:
+ * 1. Only months with actual expenses (expense > 0) are factored into the expense divisor.
+ *    Months with income only and 0 expense are NEVER included in the expense divisor.
+ * 2. When selectedYear === currentYear:
+ *    - Future months (> currentMonthIndex) are strictly excluded.
+ *    - If there are completed past months (< currentMonthIndex) with expenses,
+ *      the average is computed over those completed months to reflect true completed spending pace.
+ *    - If NO completed past months have expenses, but the current (incomplete) month has expenses,
+ *      its expense is shown with note: "بيانات الشهر الجاري فقط — لم يكتمل شهر كامل بعد".
+ * 3. When selectedYear < currentYear (completed past year):
+ *    - Divides total expenses by the number of months with actual expenses (> 0).
+ *    - If no months had expenses, average is 0.
+ * 4. When selectedYear > currentYear (future year):
+ *    - Divides total expenses by months with actual expenses, or 0 if none.
+ */
+export function calculateAnnualSummary(
+  breakdown: MonthlyBreakdownItem[],
+  selectedYear: number,
+  currentYear: number,
+  currentMonthIndex: number
+): AnnualSummaryResult {
+  if (!breakdown || breakdown.length === 0) {
+    return {
+      averageMonthlyExpenseFils: 0,
+      activeMonthsCount: 0,
+      isCurrentMonthOnly: false,
+    }
+  }
+
+  // Current year handling
+  if (selectedYear === currentYear) {
+    // Only consider months up to currentMonthIndex (exclude future months)
+    const completedPastExpenseMonths = breakdown.filter(
+      (m) => m.monthIndex < currentMonthIndex && m.expense > 0
+    )
+    const currentMonthItem = breakdown.find((m) => m.monthIndex === currentMonthIndex)
+    const hasCurrentMonthExpense = Boolean(currentMonthItem && currentMonthItem.expense > 0)
+
+    if (completedPastExpenseMonths.length > 0) {
+      const totalExpense = completedPastExpenseMonths.reduce((acc, m) => acc + m.expense, 0)
+      const count = completedPastExpenseMonths.length
+      return {
+        averageMonthlyExpenseFils: Math.round(totalExpense / count),
+        activeMonthsCount: count,
+        isCurrentMonthOnly: false,
+      }
+    }
+
+    if (hasCurrentMonthExpense && currentMonthItem) {
+      return {
+        averageMonthlyExpenseFils: currentMonthItem.expense,
+        activeMonthsCount: 1,
+        isCurrentMonthOnly: true,
+        note: 'بيانات الشهر الجاري فقط — لم يكتمل شهر كامل بعد',
+      }
+    }
+
+    return {
+      averageMonthlyExpenseFils: 0,
+      activeMonthsCount: 0,
+      isCurrentMonthOnly: false,
+    }
+  }
+
+  // Past years or other years
+  const activeExpenseMonths = breakdown.filter((m) => m.expense > 0)
+  if (activeExpenseMonths.length === 0) {
+    return {
+      averageMonthlyExpenseFils: 0,
+      activeMonthsCount: 0,
+      isCurrentMonthOnly: false,
+    }
+  }
+
+  const totalExpense = activeExpenseMonths.reduce((acc, m) => acc + m.expense, 0)
+  const count = activeExpenseMonths.length
+  return {
+    averageMonthlyExpenseFils: Math.round(totalExpense / count),
+    activeMonthsCount: count,
+    isCurrentMonthOnly: false,
+  }
+}
+
 /**
  * Calculates the monthly average expense for a yearly report.
- * - For the current fiscal year (selectedYear === currentYear): divides by the number of elapsed months so far (from 1 to currentMonthIndex + 1).
- * - For past/other years: divides by the number of months with actual activity (or 12 if none, with minimum 1).
+ * Divides yearExpenseFils by activeMonthsCount (minimum 1 when expenses exist).
  */
 export function calculateYearlyMonthlyAverage(
   yearExpenseFils: number,
-  selectedYear: number,
-  currentYear: number,
-  currentMonthIndex: number,
+  _selectedYear: number,
+  _currentYear: number,
+  _currentMonthIndex: number,
   activeMonthsCount: number
 ): number {
-  const divisor =
-    selectedYear === currentYear
-      ? Math.max(1, Math.min(12, currentMonthIndex + 1))
-      : Math.max(1, activeMonthsCount > 0 ? activeMonthsCount : 12)
-
+  if (yearExpenseFils <= 0 || activeMonthsCount <= 0) return 0
+  const divisor = Math.max(1, activeMonthsCount)
   return Math.round(yearExpenseFils / divisor)
 }

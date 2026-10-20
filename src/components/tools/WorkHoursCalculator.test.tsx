@@ -65,4 +65,22 @@ describe('WorkHoursCalculator component', () => {
     const priceInput = screen.getByLabelText(/سعر السلعة/) as HTMLInputElement
     expect(priceInput.value).toBe('3.5')
   })
+
+  it('does NOT write default values to localStorage on initial mount', () => {
+    render(<WorkHoursCalculator />)
+    expect(localStorage.getItem('masareefi_work_hours_prefs')).toBeNull()
+  })
+
+  it('saves to localStorage only when user modifies an input', () => {
+    render(<WorkHoursCalculator />)
+
+    const salaryInput = screen.getByLabelText(/صافي راتبك الشهري/)
+    fireEvent.change(salaryInput, { target: { value: '800' } })
+
+    const stored = localStorage.getItem('masareefi_work_hours_prefs')
+    expect(stored).not.toBeNull()
+    const parsed = JSON.parse(stored!)
+    expect(parsed.salary).toBe('800')
+    expect(parsed.isCustomSalary).toBe(true)
+  })
 })

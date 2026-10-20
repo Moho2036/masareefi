@@ -14,6 +14,7 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
+  Download,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -29,6 +30,7 @@ import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
 import { deleteTransaction } from '../services/transactions'
 import { formatDayHeader } from '../lib/dates'
+import { exportTransactionsToCsv } from '../lib/exportCsv'
 import {
   getCategoryUsageMap,
   sortCategoriesByUsage,
@@ -47,7 +49,7 @@ export const TransactionsPage: React.FC = () => {
   const { data: categories } = useCategories()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
-  const { format, formatWithSign } = useCurrency()
+  const { format, formatWithSign, config: currencyConfig } = useCurrency()
 
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -55,6 +57,16 @@ export const TransactionsPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [prevFilterKey, setPrevFilterKey] = useState('')
+  const PAGE_SIZE = 30
+
+  // Automatically reset to page 1 during render whenever month range or search/filter parameters change
+  const currentFilterKey = `${range.start.getTime()}_${deferredQuery}_${filterType}_${selectedCategory}`
+  if (prevFilterKey !== currentFilterKey) {
+    setPrevFilterKey(currentFilterKey)
+    setCurrentPage(1)
+  }
 
   const isFilterActive = Boolean(
     query.trim() || filterType !== 'all' || selectedCategory !== 'all'
@@ -140,9 +152,30 @@ export const TransactionsPage: React.FC = () => {
     if (focusTick < 0 || !rawTransactions) return new Date()
     return new Date()
   }, [rawTransactions, focusTick])
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE
+    return filteredTransactions.slice(start, start + PAGE_SIZE)
+  }, [filteredTransactions, safeCurrentPage])
+
   const dayGroups = useMemo(() => {
-    return groupByDay(filteredTransactions)
-  }, [filteredTransactions])
+    return groupByDay(paginatedTransactions)
+  }, [paginatedTransactions])
+
+  const handleExportCsv = () => {
+    if (filteredTransactions.length === 0) {
+      showToast('لا توجد معاملات لتصديرها', 'info')
+      return
+    }
+    exportTransactionsToCsv(filteredTransactions, categories, {
+      symbol: currencyConfig.symbol,
+      decimals: currencyConfig.decimals,
+    })
+    showToast('تم تصدير المعاملات المحددة بنجاح', 'success')
+  }
 
   const handleDeleteConfirm = async () => {
     if (!user || !txToDelete) return
@@ -177,14 +210,25 @@ export const TransactionsPage: React.FC = () => {
           title="المعاملات"
           subtitle="سجل كامل بجميع المصاريف والمداخيل وتفاصيلها"
         />
-        <Button
-          variant="primary"
-          icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-          onClick={() => openAdd('expense')}
-          className="hidden lg:inline-flex self-start sm:self-auto font-semibold"
-        >
-          إضافة معاملة
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            variant="outline"
+            icon={<Download className="w-4 h-4" />}
+            onClick={handleExportCsv}
+            disabled={filteredTransactions.length === 0}
+            className="font-semibold text-xs sm:text-sm"
+          >
+            تصدير CSV
+          </Button>
+          <Button
+            variant="primary"
+            icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+            onClick={() => openAdd('expense')}
+            className="hidden lg:inline-flex font-semibold"
+          >
+            إضافة معاملة
+          </Button>
+        </div>
       </div>
 
       {/* 2-Column Responsive Layout on Desktop (Filters/Totals in Sticky Sidebar, Transactions in Main) */}
@@ -556,6 +600,39 @@ export const TransactionsPage: React.FC = () => {
                   </div>
                 )
               })}
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs text-xs font-semibold">
+                  <div className="text-slate-500 dark:text-slate-400">
+                    صفحة <span className="font-bold text-slate-800 dark:text-slate-200">{safeCurrentPage}</span> من{' '}
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{totalPages}</span>
+                    <span className="ms-1.5 text-[11px] text-slate-400">
+                      ({filteredTransactions.length} معاملة)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safeCurrentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="text-xs"
+                    >
+                      السابق
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safeCurrentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="text-xs"
+                    >
+                      التالي
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>

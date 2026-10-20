@@ -35,6 +35,7 @@ import {
   getCurrentCircleMonth,
   isUserTurnMonth,
   checkCirclePayoutExists,
+  checkCircleHasTransactions,
   depositCircleNetPayout,
   getCircleCycleIndex,
 } from '../../services/moneyCircles'
@@ -145,19 +146,43 @@ export const MoneyCirclesManager: React.FC = () => {
   const [isManager, setIsManager] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [hasLinkedTx, setHasLinkedTx] = useState(false)
 
   // Warning when modifying monthly amount of a circle with previously recorded payments
-  const hasRecordedPayments = Boolean(
+  const existingRecForEditing = editingCircle
+    ? recurringList.find(
+        (r) =>
+          r.circleId === editingCircle.id ||
+          (editingCircle.recurringId && r.id === editingCircle.recurringId)
+      )
+    : undefined
+
+  const hasRecurringProgressed = Boolean(
+    existingRecForEditing &&
+      new Date(existingRecForEditing.nextDate).getTime() >
+        new Date(existingRecForEditing.startDate).getTime()
+  )
+
+  const editingCircleAny = editingCircle as unknown as {
+    depositedMonths?: number[]
+    paidManualMonths?: number[]
+  } | null
+
+  const hasRecordedCirclePayments = Boolean(
     editingCircle &&
       ((editingCircle.members || []).some((m) => (m.paidMonths || []).length > 0) ||
-        depositedCircleIds.has(editingCircle.id))
+        (editingCircleAny?.depositedMonths ?? []).length > 0 ||
+        (editingCircleAny?.paidManualMonths ?? []).length > 0 ||
+        depositedCircleIds.has(editingCircle.id) ||
+        hasRecurringProgressed ||
+        hasLinkedTx)
   )
   const currentEnteredFils = toFils(parseFloat(monthlyAmountStr) || 0, config.decimals)
   const isMonthlyAmountChanged = Boolean(
     editingCircle && currentEnteredFils !== editingCircle.monthlyAmountFils
   )
   const showAmountChangeWarning = Boolean(
-    editingCircle && isMonthlyAmountChanged && hasRecordedPayments
+    editingCircle && isMonthlyAmountChanged && hasRecordedCirclePayments
   )
 
   // Track expanded circles
@@ -253,6 +278,14 @@ export const MoneyCirclesManager: React.FC = () => {
     const linkedRecId =
       circle.recurringId || recurringList.find((r) => r.circleId === circle.id)?.id
     setAutoSchedule(Boolean(linkedRecId))
+    setHasLinkedTx(false)
+    if (user?.uid) {
+      checkCircleHasTransactions(user.uid, circle.id, linkedRecId)
+        .then((has) => {
+          setHasLinkedTx(has)
+        })
+        .catch(() => {})
+    }
     setFormError(null)
     setIsAddModalOpen(true)
   }
@@ -301,8 +334,23 @@ export const MoneyCirclesManager: React.FC = () => {
           }
           effectiveRecurringId = ''
         } else if (autoSchedule) {
+          const oldStartDate =
+            editingCircle.startDate instanceof Date
+              ? editingCircle.startDate
+              : new Date(editingCircle.startDate)
+          const isStartDateChanged = oldStartDate.getTime() !== startDate.getTime()
+
           if (effectiveRecurringId) {
-            const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
+            // When start date changes upon editing, recalculate nextDate dynamically.
+            // Otherwise preserve existing nextDate if available.
+            const nextDate = isStartDateChanged
+              ? calculateNextDateOnEdit(startDate, 'monthly')
+              : existingRec?.nextDate instanceof Date
+                ? existingRec.nextDate
+                : existingRec?.nextDate
+                  ? new Date(existingRec.nextDate)
+                  : calculateNextDateOnEdit(startDate, 'monthly')
+
             const recCategory = existingRec?.categoryId || defaultExpenseCategory?.id
             const updatePayload: Parameters<typeof updateRecurring>[2] = {
               type: 'expense',
@@ -344,15 +392,23 @@ export const MoneyCirclesManager: React.FC = () => {
 
         const members: CircleMember[] = []
         for (let i = 1; i <= membersCount; i++) {
-          const existingMember = editingCircle.members?.find((m) => m.turnMonth === i)
           const defaultName = i === myTurnMonth ? 'أنت' : `عضو ${i}`
           const enteredName = isManager ? (customMembers[i - 1] || '').trim() : ''
           const memberName = enteredName || defaultName
+
+          const existingMember =
+            editingCircle.members?.find((m) => m.name === memberName) ||
+            editingCircle.members?.find((m) => m.turnMonth === i)
+
+          const rawPaid = existingMember?.paidMonths || []
+          // Ensure member's payout month (i) is stripped and any month exceeding membersCount is removed
+          const cleanedPaid = rawPaid.filter((mNum) => mNum <= membersCount && mNum !== i)
+
           members.push({
             id: existingMember?.id || `mem_${i}`,
             name: memberName,
             turnMonth: i,
-            paidMonths: existingMember?.paidMonths || [],
+            paidMonths: cleanedPaid,
           })
         }
 
@@ -501,6 +557,10 @@ export const MoneyCirclesManager: React.FC = () => {
     monthNum: number
   ) => {
     if (!user) return
+    const targetMember = circle.members.find((m) => m.id === memberId)
+    // The receiver for monthNum is exempt and cannot be toggled
+    if (targetMember && targetMember.turnMonth === monthNum) return
+
     const updatedMembers = circle.members.map((m) => {
       if (m.id !== memberId) return m
       const hasPaid = m.paidMonths.includes(monthNum)
@@ -611,10 +671,11 @@ export const MoneyCirclesManager: React.FC = () => {
               circle.recurringId || scheduledCircleIds.has(circle.id)
             )
 
-            // Calculate payments for viewing month
-            const paidMembersCount = circle.members.filter((m) =>
-              m.paidMonths.includes(viewingMonth)
+            // Calculate payments for viewing month: non-receivers who paid + 1 (the exempt receiver)
+            const nonReceiverPaidCount = circle.members.filter(
+              (m) => m.turnMonth !== viewingMonth && m.paidMonths.includes(viewingMonth)
             ).length
+            const paidMembersCount = Math.min(circle.membersCount, nonReceiverPaidCount + 1)
 
             return (
               <Card
@@ -971,30 +1032,37 @@ export const MoneyCirclesManager: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Toggle Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleMemberPayment(circle, member.id, viewingMonth)}
-                              className={cn(
-                                'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1',
-                                hasPaid
-                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                  : isOverdue
-                                    ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                              )}
-                            >
-                              {hasPaid ? (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>تم الدفع</span>
-                                </>
-                              ) : isOverdue ? (
-                                <span>متأخر</span>
-                              ) : (
-                                <span>لم يدفع</span>
-                              )}
-                            </button>
+                            {/* Toggle Button or Exempt Receiver Badge */}
+                            {isReceiverThisMonth ? (
+                              <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1 shrink-0">
+                                <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>مستلم الدورة (معفى)</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleMemberPayment(circle, member.id, viewingMonth)}
+                                className={cn(
+                                  'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1',
+                                  hasPaid
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    : isOverdue
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                )}
+                              >
+                                {hasPaid ? (
+                                  <>
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>تم الدفع</span>
+                                  </>
+                                ) : isOverdue ? (
+                                  <span>متأخر</span>
+                                ) : (
+                                  <span>لم يدفع</span>
+                                )}
+                              </button>
+                            )}
                           </div>
                         )
                       })}

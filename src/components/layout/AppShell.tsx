@@ -56,6 +56,8 @@ export const AppShell: React.FC = () => {
 
   const { data: settings } = useUserSettings()
   const monthStartDay = settings?.monthStartDay ?? 1
+  const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || 'مستخدم مصاريفي'
+  const avatarInitial = displayName.charAt(0) || 'م'
 
   const isCurrentMonth = useMemo(() => {
     return (
@@ -116,18 +118,18 @@ export const AppShell: React.FC = () => {
             {user?.photoURL ? (
               <img
                 src={user.photoURL}
-                alt={user.displayName || ''}
+                alt={displayName}
                 className="w-9 h-9 rounded-full object-cover border border-emerald-200 dark:border-emerald-800"
                 referrerPolicy="no-referrer"
               />
             ) : (
               <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm border border-emerald-200 dark:border-emerald-800">
-                {user?.displayName ? user.displayName.charAt(0) : 'م'}
+                {avatarInitial}
               </div>
             )}
             <div className="truncate">
               <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                {user?.displayName || 'مستخدم مصاريفي'}
+                {displayName}
               </div>
               <div className="text-[11px] text-slate-400 truncate" dir="ltr">
                 {user?.email || ''}
@@ -158,7 +160,7 @@ export const AppShell: React.FC = () => {
               {user?.photoURL ? (
                 <img
                   src={user.photoURL}
-                  alt={user.displayName || ''}
+                  alt={displayName}
                   className="w-8 h-8 rounded-full object-cover border border-emerald-300 dark:border-emerald-700 shadow-xs"
                   referrerPolicy="no-referrer"
                 />

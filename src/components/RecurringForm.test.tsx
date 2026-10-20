@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RecurringForm } from './RecurringForm'
 import * as recurringServices from '../services/recurring'
+import * as circleServices from '../services/moneyCircles'
 import type { Recurring, MoneyCircle } from '../types'
 
 vi.mock('../services/recurring', () => ({
@@ -26,6 +27,7 @@ vi.mock('../hooks/useCategories', () => ({
     data: [
       { id: 'c-rent', name: 'إيجار وسكن', type: 'expense', icon: '🏠', color: '#6366F1', archived: false, order: 0 },
       { id: 'c-salary', name: 'راتب', type: 'income', icon: '💼', color: '#10B981', archived: false, order: 1 },
+      { id: 'c-archived', name: 'اشتراك ملغى', type: 'expense', icon: '📦', color: '#94A3B8', archived: true, order: 2 },
     ],
     loading: false,
     error: null,
@@ -257,7 +259,7 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     expect(screen.queryByText(/جمعية مرتبطة مسبقاً/i)).not.toBeInTheDocument()
   })
 
-  it('preserves currently linked money circle in select options when editing', () => {
+  it('preserves currently linked money circle in select options and shows info banner when editing', () => {
     mockCirclesData = [
       {
         id: 'circle-my-own',
@@ -304,6 +306,79 @@ describe('RecurringForm component nextDate calculation on edit', () => {
       />
     )
 
-    expect(screen.getByText(/جمعيتي الحالية/i)).toBeInTheDocument()
+    // Select dropdown option exists
+    expect(screen.getByRole('option', { name: /جمعيتي الحالية/i })).toBeInTheDocument()
+    // Info banner is displayed
+    expect(
+      screen.getByText(/هذه المعاملة مرتبطة بالجمعية \(جمعيتي الحالية\) وتعديل القسط سيُحدث قسط الجمعية تلقائياً/i)
+    ).toBeInTheDocument()
+  })
+
+  it('synchronizes circle amounts when editing recurring transaction amount', async () => {
+    mockCirclesData = [
+      {
+        id: 'circle-my-own',
+        name: 'جمعيتي الحالية',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 3,
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+        recurringId: 'rec-1',
+      },
+    ]
+
+    const editingRecurring: Recurring = {
+      ...sampleRecurring,
+      id: 'rec-1',
+      circleId: 'circle-my-own',
+      amountFils: 100000,
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={editingRecurring}
+      />
+    )
+
+    const amountInput = screen.getByLabelText(/المبلغ/i)
+    fireEvent.change(amountInput, { target: { value: '150' } })
+
+    const submitBtn = screen.getByRole('button', { name: /تعديل المعاملة/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-my-own',
+        {
+          monthlyAmountFils: 150000,
+          totalAmountFils: 750000,
+        }
+      )
+    })
+  })
+
+  it('preserves archived category when editing recurring transaction linked to it and labels it (مؤرشف)', () => {
+    const editingRecurring: Recurring = {
+      ...sampleRecurring,
+      id: 'rec-archived',
+      categoryId: 'c-archived',
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={editingRecurring}
+      />
+    )
+
+    expect(screen.getByText(/اشتراك ملغى \(مؤرشف\)/i)).toBeInTheDocument()
   })
 })

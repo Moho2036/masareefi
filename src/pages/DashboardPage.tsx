@@ -13,6 +13,8 @@ import {
   Scale,
   ShieldCheck,
   Copy,
+  AlertTriangle,
+  AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -192,6 +194,17 @@ export const DashboardPage: React.FC = () => {
   // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
   const isInitialOrLoading = txLoading && rawTransactions.length === 0
 
+  // Financial health and liquidity pool calculations (taking positive/negative rollover into account)
+  const effectiveAvailableIncome = sums.income + (isRolloverEnabled ? effectiveRollover : 0)
+  const isZeroState =
+    sums.income === 0 &&
+    sums.expense === 0 &&
+    (!isRolloverEnabled || effectiveRollover === 0)
+  const isSpendingWithoutIncome = effectiveAvailableIncome <= 0 && sums.expense > 0
+  const consumptionRatio =
+    effectiveAvailableIncome > 0 ? sums.expense / effectiveAvailableIncome : 0
+  const isHighConsumption = effectiveAvailableIncome > 0 && consumptionRatio >= 0.8
+
   // Dynamic Hero Card Palette based on financial health:
   // safe (excellent) -> Emerald / Green (lighter, vibrant, distinct)
   // warning (medium) -> Amber / Yellow (warm, bright, clear)
@@ -200,9 +213,14 @@ export const DashboardPage: React.FC = () => {
     let status: 'safe' | 'warning' | 'danger'
     if (isInitialOrLoading) {
       status = 'safe'
-    } else if (displayBalance < 0 || forecast.freeBalance < 0 || forecast.healthStatus === 'danger') {
+    } else if (
+      displayBalance < 0 ||
+      forecast.freeBalance < 0 ||
+      forecast.healthStatus === 'danger' ||
+      isSpendingWithoutIncome
+    ) {
       status = 'danger'
-    } else if (forecast.healthStatus === 'warning') {
+    } else if (isHighConsumption || forecast.healthStatus === 'warning') {
       status = 'warning'
     } else {
       status = 'safe'
@@ -216,7 +234,9 @@ export const DashboardPage: React.FC = () => {
         badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
         badgeText: isInitialOrLoading
           ? 'جاري التحديث...'
-          : 'فائض مالي',
+          : isZeroState
+            ? 'لا توجد معاملات بعد'
+            : 'فائض مالي',
         subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
         subLabel: 'text-emerald-100',
         stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
@@ -229,7 +249,7 @@ export const DashboardPage: React.FC = () => {
           'bg-gradient-to-br from-amber-600 via-amber-700 to-yellow-800 border-amber-400/40 shadow-xl shadow-amber-900/15',
         walletBg: 'bg-white/20 text-white',
         badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
-        badgeText: 'انتبه للوتيرة',
+        badgeText: isHighConsumption ? 'استهلكت 80% من الدخل' : 'انتبه للوتيرة',
         subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
         subLabel: 'text-amber-100',
         stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
@@ -241,13 +261,24 @@ export const DashboardPage: React.FC = () => {
         'bg-gradient-to-br from-rose-600 via-red-700 to-rose-800 border-rose-400/40 shadow-xl shadow-rose-900/20',
       walletBg: 'bg-white/20 text-white',
       badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
-      badgeText: displayBalance < 0 ? 'عجز مالي' : 'التزامات تفوق الرصيد',
+      badgeText:
+        displayBalance < 0 || isSpendingWithoutIncome
+          ? 'عجز مالي'
+          : 'التزامات تفوق الرصيد',
       subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
       subLabel: 'text-rose-100',
       stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
       stripText: 'text-rose-100',
     }
-  }, [isInitialOrLoading, forecast.healthStatus, forecast.freeBalance, displayBalance])
+  }, [
+    isInitialOrLoading,
+    isZeroState,
+    isSpendingWithoutIncome,
+    isHighConsumption,
+    forecast.healthStatus,
+    forecast.freeBalance,
+    displayBalance,
+  ])
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -402,6 +433,38 @@ export const DashboardPage: React.FC = () => {
               </div>
             </Link>
           )}
+        </div>
+      )}
+
+      {/* Financial Health Proactive Alert Banner */}
+      {!isInitialOrLoading && !isZeroState && (isSpendingWithoutIncome || isHighConsumption) && (
+        <div
+          className={cn(
+            'p-3.5 sm:p-4 rounded-2xl border flex items-center gap-3 text-xs sm:text-sm animate-fade-in shadow-xs',
+            isSpendingWithoutIncome
+              ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40 text-rose-800 dark:text-rose-200'
+              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'
+          )}
+        >
+          {isSpendingWithoutIncome ? (
+            <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+          )}
+          <div className="flex-1">
+            {isSpendingWithoutIncome ? (
+              <span>
+                <strong>عجز في السيولة:</strong> تم تسجيل مصاريف بقيمة{' '}
+                <strong>{format(sums.expense)}</strong> دون توفر دخل محصل أو رصيد مرحّل كافٍ لتغطيتها.
+              </span>
+            ) : (
+              <span>
+                <strong>تنبيه الاستهلاك:</strong> لقد استهلكت{' '}
+                <strong>{Math.round(consumptionRatio * 100)}%</strong> من إجمالي السيولة المتاحة (
+                {format(effectiveAvailableIncome)}) لهذا الشهر.
+              </span>
+            )}
+          </div>
         </div>
       )}
 

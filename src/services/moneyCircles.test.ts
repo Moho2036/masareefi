@@ -6,6 +6,7 @@ import {
   deleteMoneyCircle,
   deleteCircle,
   updateMoneyCircle,
+  checkCircleHasTransactions,
 } from './moneyCircles'
 import type { MoneyCircle } from '../types'
 
@@ -42,6 +43,7 @@ vi.mock('firebase/firestore', () => ({
   })),
   query: vi.fn((c) => c),
   where: vi.fn(),
+  limit: vi.fn(),
   orderBy: vi.fn(),
   onSnapshot: vi.fn(),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
@@ -399,6 +401,45 @@ describe('moneyCircles service', () => {
       const txData = mockBatchSet.mock.calls[0][1]
       const expectedSeconds = Math.floor(new Date(2025, 0, 1).getTime() / 1000)
       expect(txData.date.seconds).toBe(expectedSeconds)
+    })
+  })
+
+  describe('checkCircleHasTransactions', () => {
+    it('returns true if circle payout transaction exists', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+
+      const hasTx = await checkCircleHasTransactions('uid-1', 'circle-1', 'rec-1')
+      expect(hasTx).toBe(true)
+    })
+
+    it('returns true if recurring installment transactions exist', async () => {
+      // Payout does not exist
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      // Recurring transactions found
+      mockGetDocs.mockResolvedValueOnce({
+        empty: false,
+        docs: [{ id: 'tx-1' }],
+      })
+
+      const hasTx = await checkCircleHasTransactions('uid-1', 'circle-1', 'rec-1')
+      expect(hasTx).toBe(true)
+    })
+
+    it('returns false if neither payout nor recurring transactions exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      mockGetDocs.mockResolvedValueOnce({
+        empty: true,
+        docs: [],
+      })
+
+      const hasTx = await checkCircleHasTransactions('uid-1', 'circle-1', 'rec-1')
+      expect(hasTx).toBe(false)
     })
   })
 })

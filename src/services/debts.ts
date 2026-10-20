@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   query,
+  where,
   orderBy,
   onSnapshot,
   getDoc,
@@ -191,6 +192,9 @@ function serializePayment(p: DebtPayment): Record<string, unknown> {
   } else {
     item.note = 'دفعة سداد'
   }
+  if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
+    item.transactionId = p.transactionId.trim()
+  }
   return item
 }
 
@@ -223,7 +227,7 @@ export async function updateDebt(
 
   if (data.amountFils !== undefined) {
     if (effectiveAmountFils < currentPaidFils) {
-      throw new Error('لا يمكن تعديل إجمالي الدين ليصبح أقل من المبلغ المسدد بالفعل')
+      throw new Error('لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل')
     }
   }
 
@@ -368,7 +372,11 @@ export async function updateDebt(
   await batch.commit()
 }
 
-export async function deleteDebt(uid: string, id: string): Promise<void> {
+export async function deleteDebt(
+  uid: string,
+  id: string,
+  options?: { deleteTransactions?: boolean }
+): Promise<void> {
   const debtRef = doc(db, 'users', uid, 'debts', id)
   const snap = await getDoc(debtRef)
   const debt = snap.data()
@@ -377,15 +385,22 @@ export async function deleteDebt(uid: string, id: string): Promise<void> {
   const batch = writeBatch(db)
   batch.delete(debtRef)
 
-  // Synchronize: Delete initial transaction
-  const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
-  batch.delete(initTxRef)
+  const shouldDeleteTransactions = options?.deleteTransactions ?? true
 
-  // Synchronize: Delete all payment transactions
-  for (const p of payments) {
-    if (p.id) {
-      const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
-      batch.delete(payTxRef)
+  if (shouldDeleteTransactions) {
+    // Synchronize: Delete initial transaction
+    const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
+    batch.delete(initTxRef)
+
+    // Synchronize: Delete all payment transactions
+    for (const p of payments) {
+      if (p.transactionId) {
+        batch.delete(doc(db, 'users', uid, 'transactions', p.transactionId))
+      }
+      if (p.id && p.id !== p.transactionId) {
+        const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
+        batch.delete(payTxRef)
+      }
     }
   }
 
@@ -434,18 +449,20 @@ export async function addDebtPayment(
   const paymentId = generatePaymentId()
   const defaultPaymentNote = debt.type === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
   const finalPaymentNote = (payment.note?.trim() || defaultPaymentNote).slice(0, 500)
+  const txId = `debt_pay_${paymentId}`
 
   const newPayment: DebtPayment = {
     id: paymentId,
     amountFils: amount,
     date: payment.date,
     note: finalPaymentNote,
+    transactionId: options?.syncTransaction ? txId : undefined,
     createdAt: new Date(),
   }
 
   const updatedPayments = [...(debt.payments || []), newPayment]
   const newPaidFils = (debt.paidFils || 0) + amount
-  const newSettled = newPaidFils >= debt.amountFils
+  const newSettled = newPaidFils === debt.amountFils
 
   const batch = writeBatch(db)
   const debtRef = doc(db, 'users', uid, 'debts', debt.id)
@@ -469,7 +486,7 @@ export async function addDebtPayment(
         : `سداد دفعة دين: ${debt.personName}`
     ).slice(0, 100)
 
-    const txRef = doc(db, 'users', uid, 'transactions', `debt_pay_${paymentId}`)
+    const txRef = doc(db, 'users', uid, 'transactions', txId)
     const txData: Record<string, unknown> = {
       type: txType,
       amountFils: amount,
@@ -486,14 +503,60 @@ export async function addDebtPayment(
   return paymentId
 }
 
+async function findLegacyPaymentTransactionId(
+  uid: string,
+  payment: DebtPayment,
+  debt: Debt
+): Promise<string | null> {
+  try {
+    const txColRef = collection(db, 'users', uid, 'transactions')
+    const q = query(txColRef, where('amountFils', '==', payment.amountFils))
+    const snap = await getDocs(q)
+    if (!snap || !snap.docs || snap.docs.length === 0) return null
+
+    const pDate = payment.date instanceof Date ? payment.date : new Date(payment.date)
+    const pTime = pDate.getTime()
+
+    for (const d of snap.docs) {
+      const tx = d.data()
+      const txDate = tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date)
+      const dayDiff = Math.abs(txDate.getTime() - pTime)
+      const isSameDay = dayDiff < 24 * 60 * 60 * 1000
+
+      const titleMatches =
+        typeof tx.title === 'string' &&
+        (tx.title.includes(debt.personName) ||
+          tx.title.includes('دين') ||
+          tx.title.includes('سداد') ||
+          tx.title.includes('استرداد'))
+
+      const noteMatches =
+        payment.note && typeof tx.note === 'string' && tx.note.includes(payment.note)
+
+      if (isSameDay && (titleMatches || noteMatches)) {
+        return d.id
+      }
+    }
+  } catch (err) {
+    console.error('Error querying legacy payment transaction:', err)
+  }
+  return null
+}
+
+export interface DeletePaymentOptions {
+  deleteTransaction?: boolean
+}
+
 export async function deleteDebtPayment(
   uid: string,
   debt: Debt,
-  paymentId: string
+  paymentId: string,
+  options?: DeletePaymentOptions
 ): Promise<void> {
+  const targetPayment = (debt.payments || []).find((p) => p.id === paymentId)
   const updatedPayments = (debt.payments || []).filter((p) => p.id !== paymentId)
   const newPaidFils = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
-  const newSettled = newPaidFils >= debt.amountFils
+  const newSettled = newPaidFils === debt.amountFils
 
   const batch = writeBatch(db)
   const debtRef = doc(db, 'users', uid, 'debts', debt.id)
@@ -506,9 +569,25 @@ export async function deleteDebtPayment(
     payments: serializedPayments,
   })
 
-  // Synchronize: Delete payment transaction if it exists
-  const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${paymentId}`)
-  batch.delete(payTxRef)
+  // Synchronize: Delete payment transaction if options?.deleteTransaction !== false
+  if (options?.deleteTransaction !== false) {
+    const txId = targetPayment?.transactionId || `debt_pay_${paymentId}`
+    const payTxRef = doc(db, 'users', uid, 'transactions', txId)
+    batch.delete(payTxRef)
+
+    // Legacy fallback: if targetPayment had no transactionId and deterministic doc might not match,
+    // search by note/title/amount/date
+    if (!targetPayment?.transactionId && targetPayment) {
+      try {
+        const legacyTxId = await findLegacyPaymentTransactionId(uid, targetPayment, debt)
+        if (legacyTxId && legacyTxId !== txId) {
+          batch.delete(doc(db, 'users', uid, 'transactions', legacyTxId))
+        }
+      } catch (err) {
+        console.error('Error finding legacy payment transaction to delete:', err)
+      }
+    }
+  }
 
   await batch.commit()
 }
@@ -561,7 +640,7 @@ export async function updateDebtPayment(
   })
 
   const newPaidFils = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
-  const newSettled = newPaidFils >= debt.amountFils
+  const newSettled = newPaidFils === debt.amountFils
 
   const batch = writeBatch(db)
   const debtRef = doc(db, 'users', uid, 'debts', debt.id)
@@ -575,7 +654,8 @@ export async function updateDebtPayment(
   })
 
   // Synchronize payment transaction if it exists in transactions
-  const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${paymentId}`)
+  const txId = existingPayment.transactionId || `debt_pay_${paymentId}`
+  const payTxRef = doc(db, 'users', uid, 'transactions', txId)
   const payTxSnap = await getDoc(payTxRef)
   if (payTxSnap && typeof payTxSnap.exists === 'function' && payTxSnap.exists()) {
     batch.update(payTxRef, {

@@ -8,6 +8,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CalendarDays,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { MonthSelector } from '../components/ui/MonthSelector'
@@ -31,7 +33,7 @@ import {
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
-  calculateYearlyMonthlyAverage,
+  calculateAnnualSummary,
 } from '../lib/reports'
 import {
   getFinancialMonthRange,
@@ -45,6 +47,8 @@ import { cn } from '../lib/cn'
 
 export const ReportsPage: React.FC = () => {
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const [showAllMonthCategories, setShowAllMonthCategories] = useState(false)
+  const [showAllYearCategories, setShowAllYearCategories] = useState(false)
 
   // Monthly data hooks
   const { user } = useAuth()
@@ -192,6 +196,17 @@ export const ReportsPage: React.FC = () => {
     }
   }, [monthSums.expense, prevMonthSums.expense])
 
+  const monthIncomeComparison = useMemo(() => {
+    if (prevMonthSums.income === 0) return null
+    const diff = monthSums.income - prevMonthSums.income
+    const percent = Math.round((Math.abs(diff) / prevMonthSums.income) * 100)
+    return {
+      diff,
+      percent,
+      isIncrease: diff > 0,
+    }
+  }, [monthSums.income, prevMonthSums.income])
+
   // Yearly calculations
   const yearSums = useMemo(() => sumByType(yearTransactions), [yearTransactions])
   const yearlySavingsRate = useMemo(
@@ -206,24 +221,17 @@ export const ReportsPage: React.FC = () => {
     () => calculateCategoryDistribution(yearTransactions, categories, 'expense'),
     [yearTransactions, categories]
   )
-  const monthlyAverage = useMemo(() => {
-    const activeMonths = yearlyBreakdown.filter(
-      (m) => m.expense > 0 || m.income > 0
-    ).length
-    return calculateYearlyMonthlyAverage(
-      yearSums.expense,
+
+  const annualSummary = useMemo(() => {
+    return calculateAnnualSummary(
+      yearlyBreakdown,
       selectedYear,
       currentYear,
-      currentFiscalInfo.monthIndex,
-      activeMonths
+      currentFiscalInfo.monthIndex
     )
-  }, [
-    yearSums.expense,
-    selectedYear,
-    currentYear,
-    currentFiscalInfo.monthIndex,
-    yearlyBreakdown,
-  ])
+  }, [yearlyBreakdown, selectedYear, currentYear, currentFiscalInfo.monthIndex])
+
+  const monthlyAverage = annualSummary.averageMonthlyExpenseFils
 
   const yearOptions = useMemo(() => {
     const calendarYear = new Date().getFullYear()
@@ -293,8 +301,33 @@ export const ReportsPage: React.FC = () => {
               <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
                 {format(monthSums.income)}
               </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                الدخل المحصل في هذا الشهر
+              <div className="mt-1">
+                {monthIncomeComparison ? (
+                  <span
+                    className={cn(
+                      'text-[11px] font-bold inline-flex items-center gap-0.5',
+                      monthIncomeComparison.isIncrease
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-red-500 dark:text-red-400'
+                    )}
+                  >
+                    {monthIncomeComparison.isIncrease ? (
+                      <ArrowUpRight className="w-3 h-3" />
+                    ) : (
+                      <ArrowDownRight className="w-3 h-3" />
+                    )}
+                    <span>
+                      {monthIncomeComparison.isIncrease ? 'أعلى' : 'أقل'} بـ{' '}
+                      {monthIncomeComparison.percent}% عن الشهر السابق
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {prevMonthSums.income === 0 && monthSums.income > 0
+                      ? 'لا توجد بيانات في الشهر السابق للمقارنة'
+                      : 'الدخل المحصل في هذا الشهر'}
+                  </span>
+                )}
               </div>
             </Card>
 
@@ -333,7 +366,9 @@ export const ReportsPage: React.FC = () => {
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    إجمالي ما تم صرفه
+                    {prevMonthSums.expense === 0 && monthSums.expense > 0
+                      ? 'لا توجد بيانات في الشهر السابق للمقارنة'
+                      : 'إجمالي ما تم صرفه'}
                   </span>
                 )}
               </div>
@@ -428,7 +463,10 @@ export const ReportsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {monthCategoryDist.map((item) => (
+                  {(showAllMonthCategories
+                    ? monthCategoryDist
+                    : monthCategoryDist.slice(0, 6)
+                  ).map((item) => (
                     <div key={item.categoryId} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
@@ -459,6 +497,27 @@ export const ReportsPage: React.FC = () => {
                       </div>
                     </div>
                   ))}
+
+                  {monthCategoryDist.length > 6 && (
+                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllMonthCategories((v) => !v)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                      >
+                        <span>
+                          {showAllMonthCategories
+                            ? 'عرض أقل'
+                            : `عرض جميع التصنيفات (${monthCategoryDist.length})`}
+                        </span>
+                        {showAllMonthCategories ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
@@ -555,7 +614,12 @@ export const ReportsPage: React.FC = () => {
                 %{yearlySavingsRate}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                متوسط الصرف: {format(monthlyAverage)} / شهر
+                <div>متوسط الصرف: {format(monthlyAverage)} / شهر</div>
+                {annualSummary.note && (
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
+                    ({annualSummary.note})
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -611,7 +675,10 @@ export const ReportsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {yearCategoryDist.map((item) => (
+                  {(showAllYearCategories
+                    ? yearCategoryDist
+                    : yearCategoryDist.slice(0, 6)
+                  ).map((item) => (
                     <div key={item.categoryId} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
@@ -642,6 +709,27 @@ export const ReportsPage: React.FC = () => {
                       </div>
                     </div>
                   ))}
+
+                  {yearCategoryDist.length > 6 && (
+                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllYearCategories((v) => !v)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                      >
+                        <span>
+                          {showAllYearCategories
+                            ? 'عرض أقل'
+                            : `عرض جميع التصنيفات (${yearCategoryDist.length})`}
+                        </span>
+                        {showAllYearCategories ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>

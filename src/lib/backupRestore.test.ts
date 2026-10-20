@@ -639,4 +639,182 @@ describe('backupRestore module', () => {
       expect(downloadedName).toBe(`masareefi-backup-${expectedDate}.json`)
     })
   })
+
+  describe('Edge cases: skipMonth, debts normalization, and workHoursPrefs', () => {
+    it('validateBackup cleans invalid skipMonth and normalizes debt paidFils/settled', () => {
+      const dirtyBackupJson = JSON.stringify({
+        version: 1,
+        app: 'masareefi',
+        exportedAt: '2026-10-15T12:00:00.000Z',
+        data: {
+          categories: [
+            { id: 'cat-1', name: 'عام', type: 'expense', icon: '📁', color: '#10B981', archived: false, order: 0 },
+          ],
+          transactions: [],
+          debts: [
+            {
+              id: 'debt-overpaid',
+              personName: 'سامر',
+              type: 'lent',
+              amountFils: 50000,
+              paidFils: 80000, // overpaid
+              settled: false, // mismatch
+              startDate: '2026-01-01',
+              note: '',
+              payments: [
+                { id: 'p1', amountFils: 80000, date: '2026-01-02', note: '' }, // empty note
+              ],
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec-skip-zero',
+              type: 'expense',
+              amountFils: 10000,
+              categoryId: 'cat-1',
+              note: 'قاعدة',
+              frequency: 'monthly',
+              startDate: '2026-01-01',
+              nextDate: '2026-02-01',
+              active: true,
+              skipMonth: 0, // invalid: 0 violates firestore rules
+            },
+            {
+              id: 'rec-skip-null',
+              type: 'expense',
+              amountFils: 15000,
+              categoryId: 'cat-1',
+              note: 'قاعدة 2',
+              frequency: 'monthly',
+              startDate: '2026-01-01',
+              nextDate: '2026-02-01',
+              active: true,
+              skipMonth: null, // invalid
+            },
+            {
+              id: 'rec-skip-valid',
+              type: 'expense',
+              amountFils: 20000,
+              categoryId: 'cat-1',
+              note: 'قاعدة 3',
+              frequency: 'monthly',
+              startDate: '2026-01-01',
+              nextDate: '2026-02-01',
+              active: true,
+              skipMonth: 3, // valid
+            },
+          ],
+          circles: [],
+          workHoursPrefs: {
+            salary: '4500',
+            currencyCode: 'SAR',
+            isCustomSalary: true,
+          },
+        },
+      })
+
+      const res = validateBackup(dirtyBackupJson)
+      expect(res.valid).toBe(true)
+      expect(res.data).toBeDefined()
+      const data = res.data!.data
+
+      // Debt checks
+      expect(data.debts[0].paidFils).toBe(50000) // clamped to amountFils
+      expect(data.debts[0].settled).toBe(true) // paidFils === amountFils
+      expect(data.debts[0].payments[0].note).toBe('دفعة سداد') // fallback for empty note
+
+      // Recurring skipMonth checks
+      const recZero = data.recurring.find((r) => r.id === 'rec-skip-zero')
+      expect(recZero?.skipMonth).toBeUndefined()
+
+      const recNull = data.recurring.find((r) => r.id === 'rec-skip-null')
+      expect(recNull?.skipMonth).toBeUndefined()
+
+      const recValid = data.recurring.find((r) => r.id === 'rec-skip-valid')
+      expect(recValid?.skipMonth).toBe(3)
+
+      // Work hours preferences
+      expect(data.workHoursPrefs?.salary).toBe('4500')
+      expect(data.workHoursPrefs?.currencyCode).toBe('SAR')
+      expect(data.workHoursPrefs?.isCustomSalary).toBe(true)
+    })
+
+    it('restoreBackup restores workHoursPrefs to localStorage and enforces skipMonth limits', async () => {
+      mockSet.mockClear()
+      localStorage.clear()
+
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({ docs: [] })
+
+      const backup: MasareefiBackup = {
+        version: 1,
+        app: 'masareefi',
+        exportedAt: '2026-10-15T12:00:00.000Z',
+        data: {
+          categories: [
+            { id: 'cat-1', name: 'عام', type: 'expense', icon: '📁', color: '#10B981', archived: false, order: 0 },
+          ],
+          transactions: [],
+          debts: [
+            {
+              id: 'debt-underpaid',
+              personName: 'مازن',
+              type: 'lent',
+              amountFils: 100000,
+              paidFils: 100000,
+              startDate: new Date('2026-01-01'),
+              dueDate: null,
+              note: '',
+              settled: true,
+              payments: [],
+              createdAt: new Date('2026-01-01'),
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec-1',
+              type: 'expense',
+              amountFils: 10000,
+              categoryId: 'cat-1',
+              note: '',
+              frequency: 'monthly',
+              startDate: new Date('2026-01-01'),
+              nextDate: new Date('2026-02-01'),
+              active: true,
+              skipMonth: 0 as unknown as number, // 0 must be omitted from doc payload
+            },
+          ],
+          circles: [],
+          workHoursPrefs: {
+            salary: '6000',
+            currencyCode: 'AED',
+            isCustomSalary: true,
+          },
+        },
+      }
+
+      await restoreBackup('u1', backup, 'merge')
+
+      // Check localStorage restored
+      const storedPrefs = localStorage.getItem('masareefi_work_hours_prefs')
+      expect(storedPrefs).toBeDefined()
+      expect(JSON.parse(storedPrefs!)).toEqual({
+        salary: '6000',
+        currencyCode: 'AED',
+        isCustomSalary: true,
+      })
+
+      // Check rec-1 doc written without skipMonth
+      const recSetCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path?.includes('recurring/rec-1')
+      )
+      expect(recSetCall).toBeDefined()
+      expect(recSetCall![1].skipMonth).toBeUndefined()
+    })
+  })
 })

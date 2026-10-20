@@ -113,10 +113,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const usageMap = useMemo(() => getCategoryUsageMap(), [])
 
   // Filter & sort available categories for current transaction type
+  // Preserve current transaction's category even if archived
+  const originalCatId = initialTransaction?.categoryId || duplicateFrom?.categoryId
   const availableCategories = useMemo(() => {
-    const filtered = categories.filter((c) => c.type === type && !c.archived)
+    const filtered = categories.filter(
+      (c) => c.type === type && (!c.archived || c.id === originalCatId)
+    )
     return sortCategoriesByUsage(filtered, usageMap)
-  }, [categories, type, usageMap])
+  }, [categories, type, usageMap, originalCatId])
 
   // Compute the effectively selected category ID:
   // If user selected one that belongs to available categories, use it.
@@ -545,7 +549,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   >
                     {cat.icon}
                   </span>
-                  <span className="truncate flex-1 text-xs sm:text-sm font-semibold">{cat.name}</span>
+                  <span className="truncate flex-1 text-xs sm:text-sm font-semibold">
+                    {cat.name}
+                    {cat.archived ? ' (مؤرشف)' : ''}
+                  </span>
                   {isSelected && (
                     <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   )}

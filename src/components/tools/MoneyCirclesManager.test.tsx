@@ -146,6 +146,7 @@ vi.mock('../../services/moneyCircles', async () => {
     updateMoneyCircle: vi.fn().mockResolvedValue(undefined),
     addMoneyCircle: vi.fn().mockResolvedValue('new-circle-id'),
     checkCirclePayoutExists: vi.fn().mockResolvedValue(false),
+    checkCircleHasTransactions: vi.fn().mockResolvedValue(false),
     depositCircleNetPayout: vi.fn().mockResolvedValue('payout-tx-id'),
   }
 })
@@ -431,5 +432,141 @@ describe('MoneyCirclesManager Component', () => {
 
     const startDateInput = screen.getByLabelText(/تاريخ البدء/i) as HTMLInputElement
     expect(startDateInput.value.endsWith('-25')).toBe(true)
+  })
+
+  it('renders "مستلم الدورة (معفى)" badge for this month receiver and keeps paid count bounded', async () => {
+    // Circle where member 1 has turnMonth 1 and viewingMonth is 1
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+        members: [
+          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [] },
+          { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [1] },
+          { id: 'mem_3', name: 'عضو 3', turnMonth: 3, paidMonths: [1] },
+          { id: 'mem_4', name: 'عضو 4', turnMonth: 4, paidMonths: [1] },
+          { id: 'mem_5', name: 'عضو 5', turnMonth: 5, paidMonths: [1] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Open members tracking table
+    const expandBtn = screen.getByRole('button', { name: /تتبع دفعات الأعضاء/i })
+    fireEvent.click(expandBtn)
+
+    // Select month 1
+    const month1Btn = screen.getByRole('button', { name: 'شهر 1' })
+    fireEvent.click(month1Btn)
+
+    // Payer count should be 5 of 5 (4 non-receivers + 1 exempt receiver)
+    expect(screen.getByText(/5 من 5 دفعوا/i)).toBeInTheDocument()
+
+    // Member 1 is the receiver for month 1: should show static "مستلم الدورة (معفى)" badge
+    expect(screen.getByText('مستلم الدورة (معفى)')).toBeInTheDocument()
+  })
+
+  it('strips member payout turn month from paidMonths when saving updated turns', async () => {
+    // Member had paidMonths containing month 2, but their new turn is set to 2
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+        members: [
+          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [2] },
+          { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [1, 2] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Open edit modal
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    // Save circle
+    const submitBtn = screen.getByRole('button', { name: /حفظ التعديلات/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        expect.objectContaining({
+          members: expect.arrayContaining([
+            // Turn 2 member should NOT have 2 in their paidMonths
+            expect.objectContaining({
+              turnMonth: 2,
+              paidMonths: expect.not.arrayContaining([2]),
+            }),
+          ]),
+        })
+      )
+    })
+  })
+
+  it('updates startDate and recalculates nextDate in recurring transaction when circle start date changes', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        startDate: new Date('2026-01-01'),
+        recurringId: 'rec-circle-1',
+      },
+    ]
+    mockRecurring = [
+      {
+        ...sampleRecurring,
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-02-01'),
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Open edit modal
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    // Change start date to 2026-11-15 (future date)
+    const startDateInput = screen.getByLabelText(/تاريخ البدء/i)
+    fireEvent.change(startDateInput, { target: { value: '2026-11-15' } })
+
+    // Save
+    const submitBtn = screen.getByRole('button', { name: /حفظ التعديلات/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.updateRecurring).toHaveBeenCalledWith(
+        'user-123',
+        'rec-circle-1',
+        expect.objectContaining({
+          startDate: expect.any(Date),
+          nextDate: expect.any(Date),
+        })
+      )
+    })
+  })
+
+  it('shows amount change warning if depositedMonths has previous entries', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        depositedMonths: [1],
+      } as unknown as MoneyCircle,
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    const amountInput = screen.getByLabelText(/القسط الشهري/i)
+    fireEvent.change(amountInput, { target: { value: '250' } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/تنبيه بشأن تعديل القسط الشهري/i)).toBeInTheDocument()
+    })
   })
 })

@@ -14,6 +14,7 @@ import {
   Smartphone,
   Share2,
   PlusSquare,
+  Pencil,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Card } from '../components/ui/Card'
@@ -29,7 +30,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { usePWAInstall } from '../hooks/usePWAInstall'
-import { signOutUser } from '../services/auth'
+import { signOutUser, updateUserDisplayName } from '../services/auth'
 import { getAllTransactions } from '../services/transactions'
 import { getAllDebts } from '../services/debts'
 import { exportTransactionsToCsv, exportDebtsToCsv } from '../lib/exportCsv'
@@ -83,6 +84,42 @@ export const SettingsPage: React.FC = () => {
     setPrevMonthStartDay(settings?.monthStartDay)
     if (settings?.monthStartDay !== undefined) {
       setSelectedDay(String(settings.monthStartDay))
+    }
+  }
+
+  const effectiveDisplayName = settings?.displayName?.trim() || user?.displayName?.trim() || 'مستخدم مصاريفي'
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [displayNameInput, setDisplayNameInput] = useState(
+    settings?.displayName?.trim() || user?.displayName?.trim() || ''
+  )
+  const [savingName, setSavingName] = useState(false)
+
+  // Track prevDisplayName to adjust state during render
+  const [prevDisplayName, setPrevDisplayName] = useState(settings?.displayName)
+  if (settings?.displayName !== prevDisplayName) {
+    setPrevDisplayName(settings?.displayName)
+    setDisplayNameInput(settings?.displayName?.trim() || user?.displayName?.trim() || '')
+  }
+
+  const handleSaveDisplayName = async () => {
+    const trimmed = displayNameInput.trim()
+    if (!trimmed) {
+      showToast('يرجى إدخال اسم صالح', 'error')
+      return
+    }
+    setSavingName(true)
+    try {
+      await updateSettings({ displayName: trimmed })
+      if (user) {
+        await updateUserDisplayName(user, trimmed).catch(() => {})
+      }
+      showToast('تم تحديث الاسم بنجاح', 'success')
+      setIsEditingName(false)
+    } catch (err) {
+      console.error('Failed to update display name:', err)
+      showToast('تعذر تحديث الاسم', 'error')
+    } finally {
+      setSavingName(false)
     }
   }
 
@@ -613,26 +650,72 @@ export const SettingsPage: React.FC = () => {
       </Card>
 
       {/* Account Info */}
-      <Card title="الحساب الشخصي" subtitle="معلومات تسجيل الدخول عبر Google">
+      <Card title="الحساب الشخصي" subtitle="معلومات الحساب وتعديل الاسم">
         <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             {user?.photoURL ? (
               <img
                 src={user.photoURL}
-                alt={user.displayName || 'صورة المستخدم'}
-                className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                alt={effectiveDisplayName}
+                className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
-                {user?.displayName ? user.displayName.charAt(0) : 'م'}
+              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold shrink-0">
+                {effectiveDisplayName.charAt(0) || 'م'}
               </div>
             )}
-            <div>
-              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                {user?.displayName || 'مستخدم مصاريفي'}
-              </div>
-              <div className="text-xs text-slate-400" dir="ltr">
+            <div className="min-w-0 flex-1">
+              {isEditingName ? (
+                <div className="flex items-center gap-2 max-w-sm">
+                  <Input
+                    type="text"
+                    value={displayNameInput}
+                    onChange={(e) => setDisplayNameInput(e.target.value)}
+                    placeholder="أدخل اسمك"
+                    maxLength={100}
+                    className="text-xs sm:text-sm py-1.5"
+                    autoFocus
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveDisplayName}
+                    disabled={savingName || !displayNameInput.trim()}
+                    className="shrink-0 text-xs"
+                  >
+                    {savingName ? 'جاري الحفظ...' : 'حفظ'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDisplayNameInput(effectiveDisplayName)
+                      setIsEditingName(false)
+                    }}
+                    disabled={savingName}
+                    className="shrink-0 text-xs"
+                  >
+                    إلغاء
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {effectiveDisplayName}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingName(true)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-750 transition-colors"
+                    title="تعديل الاسم"
+                    aria-label="تعديل الاسم"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="text-xs text-slate-400 truncate mt-0.5" dir="ltr">
                 {user?.email || 'بدون بريد إلكتروني'}
               </div>
             </div>
@@ -644,6 +727,7 @@ export const SettingsPage: React.FC = () => {
             icon={<LogOut className="w-4 h-4 rtl:rotate-180" />}
             onClick={handleSignOut}
             disabled={loggingOut}
+            className="shrink-0"
           >
             {loggingOut ? 'جاري الخروج...' : 'تسجيل الخروج'}
           </Button>

@@ -43,6 +43,7 @@ vi.mock('firebase/firestore', () => ({
     withConverter: vi.fn().mockReturnThis(),
   })),
   query: vi.fn((c) => c),
+  where: vi.fn(),
   orderBy: vi.fn(),
   onSnapshot: vi.fn(),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
@@ -295,6 +296,65 @@ describe('debts service with accounting link', () => {
       expect(mockBatchDelete).toHaveBeenCalledTimes(1)
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
+
+    it('does not delete payment transaction when deleteTransaction option is false', async () => {
+      const sampleDebtWithPayments: Debt = {
+        id: 'debt-100',
+        personName: 'محمود',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 20000,
+        startDate: new Date(),
+        dueDate: null,
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'pay-1',
+            amountFils: 20000,
+            date: new Date(),
+            createdAt: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+      }
+
+      await deleteDebtPayment('user-1', sampleDebtWithPayments, 'pay-1', { deleteTransaction: false })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      expect(mockBatchDelete).not.toHaveBeenCalled()
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('deletes linked transaction using custom transactionId when present on payment', async () => {
+      const sampleDebtWithPayments: Debt = {
+        id: 'debt-100',
+        personName: 'محمود',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 20000,
+        startDate: new Date(),
+        dueDate: null,
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'pay-1',
+            amountFils: 20000,
+            date: new Date(),
+            transactionId: 'custom-tx-123',
+            createdAt: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+      }
+
+      await deleteDebtPayment('user-1', sampleDebtWithPayments, 'pay-1')
+
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/custom-tx-123' })
+      )
+    })
   })
 
   describe('updateDebtPayment with sync', () => {
@@ -378,6 +438,23 @@ describe('debts service with accounting link', () => {
       expect(mockBatchDelete).toHaveBeenCalledTimes(4)
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
+
+    it('deletes debt record only when deleteTransactions is false', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        data: () => ({
+          payments: [{ id: 'p1' }, { id: 'p2' }],
+        }),
+      })
+
+      await deleteDebt('user-1', 'debt-123', { deleteTransactions: false })
+
+      // Only 1 delete call for the debt document itself
+      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/debts/debt-123' })
+      )
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('updateDebt with sync', () => {
@@ -446,7 +523,7 @@ describe('debts service with accounting link', () => {
         updateDebt('user-1', 'debt-999', {
           amountFils: 20000,
         })
-      ).rejects.toThrow('لا يمكن تعديل إجمالي الدين ليصبح أقل من المبلغ المسدد بالفعل')
+      ).rejects.toThrow('لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل')
       expect(mockBatchUpdate).not.toHaveBeenCalled()
       expect(mockBatchCommit).not.toHaveBeenCalled()
     })

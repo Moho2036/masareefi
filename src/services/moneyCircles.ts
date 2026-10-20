@@ -10,6 +10,7 @@ import {
   getDocs,
   query,
   where,
+  limit,
   onSnapshot,
   Timestamp,
   serverTimestamp,
@@ -238,6 +239,36 @@ export async function checkCirclePayoutExists(uid: string, circleId: string): Pr
   const txRef = doc(db, 'users', uid, 'transactions', `circle_payout_${circleId}`)
   const snap = await getDoc(txRef)
   return snap.exists()
+}
+
+/**
+ * Checks whether any financial transactions exist for this circle,
+ * either as a net payout transaction or as recurring installment transactions.
+ */
+export async function checkCircleHasTransactions(
+  uid: string,
+  circleId: string,
+  recurringId?: string
+): Promise<boolean> {
+  try {
+    // 1. Check if net payout transaction exists
+    const payoutExists = await checkCirclePayoutExists(uid, circleId)
+    if (payoutExists) return true
+
+    // 2. Check if recurring rule transactions exist
+    if (recurringId) {
+      const txColRef = collection(db, 'users', uid, 'transactions')
+      const q = query(txColRef, where('recurringId', '==', recurringId), limit(1))
+      const txSnap = await getDocs(q)
+      if (!txSnap.empty) {
+        return true
+      }
+    }
+
+    return false
+  } catch {
+    return false
+  }
 }
 
 export async function depositCircleNetPayout(

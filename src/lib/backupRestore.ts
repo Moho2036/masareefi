@@ -26,6 +26,17 @@ export interface RestoreOptions {
   mode?: RestoreMode
 }
 
+export interface WorkHoursPrefsBackup {
+  currencyCode?: string
+  salary?: string
+  isCustomSalary?: boolean
+  itemPrice?: string
+  isCustomItemPrice?: boolean
+  dailyHours?: string
+  workDays?: string
+  itemName?: string
+}
+
 export interface MasareefiBackup {
   version: 1
   app: 'masareefi'
@@ -37,6 +48,7 @@ export interface MasareefiBackup {
     debts: Debt[]
     recurring: Recurring[]
     circles: MoneyCircle[]
+    workHoursPrefs?: WorkHoursPrefsBackup
   }
 }
 
@@ -82,6 +94,21 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
   const recurring = recurringSnap.docs.map((d) => d.data())
   const circles = circlesSnap.docs.map((d) => d.data())
 
+  let workHoursPrefs: WorkHoursPrefsBackup | undefined
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    try {
+      const rawPrefs = localStorage.getItem('masareefi_work_hours_prefs')
+      if (rawPrefs) {
+        const parsed = JSON.parse(rawPrefs)
+        if (parsed && typeof parsed === 'object') {
+          workHoursPrefs = parsed
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return {
     version: 1,
     app: 'masareefi',
@@ -93,6 +120,7 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
       debts,
       recurring,
       circles,
+      ...(workHoursPrefs ? { workHoursPrefs } : {}),
     },
   }
 }
@@ -231,15 +259,70 @@ export function validateBackup(jsonText: string): BackupValidationResult {
     const validTransactions = transactions.filter(
       (t) => Boolean(t && typeof t === 'object' && t.id && Math.round(Number(t.amountFils || 0)) > 0)
     )
-    const validDebts = debts.filter(
-      (d) => Boolean(d && typeof d === 'object' && d.id && Math.round(Number(d.amountFils || 0)) > 0)
-    )
-    const validRecurring = recurring.filter(
-      (r) => Boolean(r && typeof r === 'object' && r.id && Math.round(Number(r.amountFils || 0)) > 0)
-    )
+    const validDebts = debts
+      .filter((d) => Boolean(d && typeof d === 'object' && d.id && Math.round(Number(d.amountFils || 0)) > 0))
+      .map((d) => {
+        const amountFils = Math.round(Number(d.amountFils || 0))
+        const rawPaidFils = Math.round(Number(d.paidFils || 0))
+        const paidFils = Math.max(0, Math.min(amountFils, rawPaidFils))
+        const settled = paidFils === amountFils
+        const payments = (Array.isArray(d.payments) ? d.payments : [])
+          .filter((p) => Boolean(p && typeof p === 'object' && Math.round(Number(p.amountFils || 0)) > 0))
+          .map((p) => ({
+            ...p,
+            id: p.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            amountFils: Math.round(Number(p.amountFils || 0)),
+            note: typeof p.note === 'string' && p.note.trim() ? p.note.trim().slice(0, 500) : 'دفعة سداد',
+          }))
+          .slice(0, 100)
+
+        return {
+          ...d,
+          amountFils,
+          paidFils,
+          settled,
+          payments,
+        }
+      })
+
+    const validRecurring = recurring
+      .filter(
+        (r) => Boolean(r && typeof r === 'object' && r.id && Math.round(Number(r.amountFils || 0)) > 0)
+      )
+      .map((r) => {
+        const item = { ...r }
+        if (
+          item.skipMonth !== undefined &&
+          item.skipMonth !== null &&
+          Number.isFinite(Number(item.skipMonth)) &&
+          Math.round(Number(item.skipMonth)) >= 1 &&
+          Math.round(Number(item.skipMonth)) <= 50
+        ) {
+          item.skipMonth = Math.round(Number(item.skipMonth))
+        } else {
+          delete item.skipMonth
+        }
+        return item
+      })
+
     const validCircles = circles.filter(
       (c) => Boolean(c && typeof c === 'object' && c.id && Math.round(Number(c.monthlyAmountFils || 0)) > 0)
     )
+
+    let workHoursPrefs: WorkHoursPrefsBackup | undefined
+    if (data.workHoursPrefs && typeof data.workHoursPrefs === 'object') {
+      const p = data.workHoursPrefs as Record<string, unknown>
+      workHoursPrefs = {
+        ...(typeof p.currencyCode === 'string' ? { currencyCode: p.currencyCode.slice(0, 20) } : {}),
+        ...(typeof p.salary === 'string' ? { salary: p.salary.slice(0, 30) } : {}),
+        ...(typeof p.isCustomSalary === 'boolean' ? { isCustomSalary: p.isCustomSalary } : {}),
+        ...(typeof p.itemPrice === 'string' ? { itemPrice: p.itemPrice.slice(0, 30) } : {}),
+        ...(typeof p.isCustomItemPrice === 'boolean' ? { isCustomItemPrice: p.isCustomItemPrice } : {}),
+        ...(typeof p.dailyHours === 'string' ? { dailyHours: p.dailyHours.slice(0, 10) } : {}),
+        ...(typeof p.workDays === 'string' ? { workDays: p.workDays.slice(0, 10) } : {}),
+        ...(typeof p.itemName === 'string' ? { itemName: p.itemName.slice(0, 100) } : {}),
+      }
+    }
 
     // Resolve orphan categories so every transaction and recurring item is backed by a valid category
     const resolvedCategories = resolveOrphanCategories(
@@ -261,6 +344,7 @@ export function validateBackup(jsonText: string): BackupValidationResult {
         debts: validDebts,
         recurring: validRecurring,
         circles: validCircles,
+        ...(workHoursPrefs ? { workHoursPrefs } : {}),
       },
     }
 
@@ -296,6 +380,22 @@ export async function restoreBackup(
 ): Promise<void> {
   if (!backup || !backup.data || typeof backup.data !== 'object') {
     throw new Error('بيانات النسخة الاحتياطية غير صالحة أو مفقودة')
+  }
+
+  // Restore work hours calculator preferences to localStorage if present
+  if (
+    backup.data.workHoursPrefs &&
+    typeof window !== 'undefined' &&
+    typeof window.localStorage !== 'undefined'
+  ) {
+    try {
+      localStorage.setItem(
+        'masareefi_work_hours_prefs',
+        JSON.stringify(backup.data.workHoursPrefs)
+      )
+    } catch {
+      // ignore
+    }
   }
 
   // Pre-validation and orphan category resolution:
@@ -545,7 +645,7 @@ export async function restoreBackup(
       .map((p) => {
         const pAmount = Math.round(Number(p.amountFils || 0))
         if (pAmount <= 0) return null
-        const item: { id: string; amountFils: number; date: Date; note: string; createdAt: Date } = {
+        const item: { id: string; amountFils: number; date: Date; note: string; transactionId?: string; createdAt: Date } = {
           id: p.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           amountFils: pAmount,
           date: parseDate(p.date),
@@ -554,6 +654,10 @@ export async function restoreBackup(
             typeof p.note === 'string' && p.note.trim()
               ? p.note.trim().slice(0, 500)
               : 'دفعة سداد',
+          transactionId:
+            typeof p.transactionId === 'string' && p.transactionId.trim()
+              ? p.transactionId.trim()
+              : undefined,
         }
         return item
       })
@@ -589,6 +693,15 @@ export async function restoreBackup(
     const rawCatId = r.categoryId || ''
     const finalCatId = categoryIdRemap.get(rawCatId) || rawCatId
 
+    const skipMonth =
+      r.skipMonth !== undefined &&
+      r.skipMonth !== null &&
+      Number.isFinite(Number(r.skipMonth)) &&
+      Math.round(Number(r.skipMonth)) >= 1 &&
+      Math.round(Number(r.skipMonth)) <= 50
+        ? Math.round(Number(r.skipMonth))
+        : undefined
+
     const recData: Recurring = {
       id: r.id,
       type: r.type === 'income' ? 'income' : 'expense',
@@ -603,7 +716,7 @@ export async function restoreBackup(
       createdAt: r.createdAt ? parseDate(r.createdAt) : new Date(),
       ...(title !== undefined ? { title } : {}),
       ...(circleId !== undefined ? { circleId } : {}),
-      ...(typeof r.skipMonth === 'number' && !isNaN(r.skipMonth) ? { skipMonth: Math.round(r.skipMonth) } : {}),
+      ...(skipMonth !== undefined ? { skipMonth } : {}),
     }
     ops.push((b) => b.set(recRef, recData))
   }

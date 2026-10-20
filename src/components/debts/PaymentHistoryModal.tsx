@@ -32,6 +32,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const { format: formatCurrency, config } = useCurrency()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletePaymentTx, setDeletePaymentTx] = useState(true)
 
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
   const [editAmountStr, setEditAmountStr] = useState('')
@@ -42,6 +43,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   const handleClose = () => {
     setConfirmDeleteId(null)
+    setDeletePaymentTx(true)
     setEditingPaymentId(null)
     setEditError(null)
     onClose()
@@ -55,14 +57,15 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const debtStartDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
   const debtStartStr = format(debtStartDate, 'yyyy-MM-dd')
 
-  const handleDeletePayment = async (paymentId: string) => {
+  const handleDeletePayment = async (paymentId: string, deleteTx: boolean = true) => {
     if (!user) return
 
     setDeletingId(paymentId)
     try {
-      await deleteDebtPayment(user.uid, debt, paymentId)
+      await deleteDebtPayment(user.uid, debt, paymentId, { deleteTransaction: deleteTx })
       showToast('تم حذف الدفعة وتحديث الرصيد', 'success')
       setConfirmDeleteId(null)
+      setDeletePaymentTx(true)
       onSuccess?.()
     } catch (err) {
       console.error('Error deleting payment:', err)
@@ -252,6 +255,66 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           </button>
                         </div>
                       </div>
+                    ) : confirmDeleteId === p.id ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div
+                              className={cn(
+                                'text-sm font-black',
+                                isLent
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400'
+                              )}
+                            >
+                              {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
+                            </div>
+                            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                              {formattedDate}
+                              {p.note ? ` • ${p.note}` : ''}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-red-50/70 dark:bg-red-950/30 rounded-xl border border-red-200/80 dark:border-red-900/50 space-y-2.5">
+                          <div className="flex items-center gap-1.5 text-red-700 dark:text-red-400 text-xs font-bold">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>تأكيد حذف الدفعة؟</span>
+                          </div>
+
+                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+                            <input
+                              type="checkbox"
+                              checked={deletePaymentTx}
+                              onChange={(e) => setDeletePaymentTx(e.target.checked)}
+                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                            />
+                            <span>حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً</span>
+                          </label>
+
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => {
+                                setConfirmDeleteId(null)
+                                setDeletePaymentTx(true)
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                            >
+                              إلغاء
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => handleDeletePayment(p.id, deletePaymentTx)}
+                              className="px-3 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {isDeleting ? 'جاري الحذف...' : 'تأكيد الحذف'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
@@ -271,47 +334,30 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           </div>
                         </div>
 
-                        {confirmDeleteId === p.id ? (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => handleDeletePayment(p.id)}
-                              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                              {isDeleting ? 'جاري الحذف...' : 'تأكيد الحذف'}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
-                            >
-                              إلغاء
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              disabled={Boolean(deletingId) || isSavingEdit}
-                              onClick={() => handleStartEdit(p)}
-                              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                              title="تعديل هذه الدفعة"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={Boolean(deletingId) || isSavingEdit}
-                              onClick={() => setConfirmDeleteId(p.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                              title="حذف هذه الدفعة"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            disabled={Boolean(deletingId) || isSavingEdit}
+                            onClick={() => handleStartEdit(p)}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="تعديل هذه الدفعة"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={Boolean(deletingId) || isSavingEdit}
+                            onClick={() => {
+                              setEditingPaymentId(null)
+                              setConfirmDeleteId(p.id)
+                              setDeletePaymentTx(true)
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="حذف هذه الدفعة"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

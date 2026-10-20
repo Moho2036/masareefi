@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { format } from 'date-fns'
+import { AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -96,7 +97,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
     if (isEditing && initialDebt && amountFils < (initialDebt.paidFils || 0)) {
       setError(
-        `المبلغ الجديد لا يمكن أن يقل عن المبالغ المسددة مسبقاً (${formatCurrency(initialDebt.paidFils)})`
+        `لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل (${formatCurrency(initialDebt.paidFils)})`
       )
       return
     }
@@ -235,6 +236,18 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             {config.symbol}
           </span>
         </div>
+        {isEditing &&
+          initialDebt &&
+          (initialDebt.paidFils || 0) > 0 &&
+          toFils(amountStr, config.decimals) > 0 &&
+          toFils(amountStr, config.decimals) < (initialDebt.paidFils || 0) && (
+            <p className="text-xs text-red-500 dark:text-red-400 font-semibold mt-1.5 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل ({formatCurrency(initialDebt.paidFils)})
+              </span>
+            </p>
+          )}
       </div>
 
       {/* 4. Start Date */}

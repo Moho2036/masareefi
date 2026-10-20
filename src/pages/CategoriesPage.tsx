@@ -120,8 +120,15 @@ export const CategoriesPage: React.FC = () => {
   const handleArchive = async (cat: Category) => {
     if (!user) return
     try {
+      const isUsedInActiveRecurring = recurring.some(
+        (r) => (r.active !== false) && r.categoryId === cat.id
+      )
       await archiveCategory(user.uid, cat.id, true)
-      showToast('تمت أرشفة التصنيف بنجاح', 'info')
+      if (isUsedInActiveRecurring) {
+        showToast('تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة نشطة', 'info')
+      } else {
+        showToast('تمت أرشفة التصنيف بنجاح', 'info')
+      }
     } catch (err) {
       console.error('Failed to archive category:', err)
       showToast(err instanceof Error ? err.message : 'تعذر أرشفة التصنيف', 'error')

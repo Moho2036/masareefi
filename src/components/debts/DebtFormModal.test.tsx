@@ -113,4 +113,104 @@ describe('DebtFormModal syncTransaction on edit', () => {
       )
     })
   })
+
+  it('prevents submission and shows Arabic error when editing amount to less than paidFils', async () => {
+    const partiallyPaidDebt: Debt = {
+      ...sampleDebt,
+      amountFils: 100000,
+      paidFils: 70000,
+    }
+
+    render(
+      <DebtFormModal
+        isOpen={true}
+        onClose={vi.fn()}
+        initialDebt={partiallyPaidDebt}
+      />
+    )
+
+    const amountInput = screen.getByDisplayValue('100')
+    fireEvent.change(amountInput, { target: { value: '50' } })
+
+    // Verify inline error appears
+    expect(
+      screen.getByText('لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل (70 د.أ)')
+    ).toBeInTheDocument()
+
+    // Submit form
+    fireEvent.click(screen.getByRole('button', { name: 'تحديث الدين' }))
+
+    expect(debtsService.updateDebt).not.toHaveBeenCalled()
+  })
+
+  it('updates debt with settled = true when amount is edited to equal paidFils', async () => {
+    const partiallyPaidDebt: Debt = {
+      ...sampleDebt,
+      amountFils: 100000,
+      paidFils: 70000,
+    }
+
+    render(
+      <DebtFormModal
+        isOpen={true}
+        onClose={vi.fn()}
+        initialDebt={partiallyPaidDebt}
+      />
+    )
+
+    const amountInput = screen.getByDisplayValue('100')
+    fireEvent.change(amountInput, { target: { value: '70' } })
+
+    // Submit form
+    fireEvent.click(screen.getByRole('button', { name: 'تحديث الدين' }))
+
+    await waitFor(() => {
+      expect(debtsService.updateDebt).toHaveBeenCalledWith(
+        'user-123',
+        'debt-456',
+        expect.objectContaining({
+          amountFils: 70000,
+          paidFils: 70000,
+          settled: true,
+        }),
+        expect.any(Object)
+      )
+    })
+  })
+
+  it('updates debt with settled = false when settled debt amount is increased', async () => {
+    const fullySettledDebt: Debt = {
+      ...sampleDebt,
+      amountFils: 100000,
+      paidFils: 100000,
+      settled: true,
+    }
+
+    render(
+      <DebtFormModal
+        isOpen={true}
+        onClose={vi.fn()}
+        initialDebt={fullySettledDebt}
+      />
+    )
+
+    const amountInput = screen.getByDisplayValue('100')
+    fireEvent.change(amountInput, { target: { value: '150' } })
+
+    // Submit form
+    fireEvent.click(screen.getByRole('button', { name: 'تحديث الدين' }))
+
+    await waitFor(() => {
+      expect(debtsService.updateDebt).toHaveBeenCalledWith(
+        'user-123',
+        'debt-456',
+        expect.objectContaining({
+          amountFils: 150000,
+          paidFils: 100000,
+          settled: false,
+        }),
+        expect.any(Object)
+      )
+    })
+  })
 })

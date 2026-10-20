@@ -34,6 +34,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     currentExpense,
     monthNet,
     rolloverBalance,
+    availablePool,
     upcomingRecurringExpenses,
     upcomingDebtObligations,
     isDeficitProjected,
@@ -257,9 +258,20 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">الرصيد المرحّل المتوقع</div>
-                <div className="text-lg font-black text-slate-700 dark:text-slate-200">
-                  {format(rolloverBalance)}
+                <div className="text-xs font-bold text-slate-400 mb-1">
+                  {rolloverBalance >= 0 ? 'الرصيد المرحّل المتوقع' : 'العجز المرحّل المتوقع'}
+                </div>
+                <div
+                  className={cn(
+                    'text-lg font-black',
+                    rolloverBalance >= 0
+                      ? 'text-slate-700 dark:text-slate-200'
+                      : 'text-red-500 dark:text-red-400'
+                  )}
+                >
+                  {rolloverBalance >= 0
+                    ? `+ ${format(rolloverBalance)}`
+                    : `- ${format(Math.abs(rolloverBalance))}`}
                 </div>
               </div>
             </div>
@@ -384,8 +396,29 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
           </div>
 
+          {/* Rollover & Available Liquidity Pool if rollover exists */}
+          {rolloverBalance !== 0 && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400">
+                {rolloverBalance > 0 ? 'فائض مرحّل متاح:' : 'عجز مرحّل من الشهر السابق:'}
+              </span>
+              <span
+                className={cn(
+                  'font-bold',
+                  rolloverBalance > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-500 dark:text-red-400'
+                )}
+              >
+                {rolloverBalance > 0
+                  ? `+ ${format(rolloverBalance)}`
+                  : `- ${format(Math.abs(rolloverBalance))}`}
+              </span>
+            </div>
+          )}
+
           {totalUpcomingObligations > 0 && (
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
               <span>التزامات محجوزة (فواتير + ديون):</span>
               <span className="font-bold text-amber-600 dark:text-amber-400">
                 {format(totalUpcomingObligations)}
@@ -411,6 +444,16 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 </span>{' '}
                 {estimatedDeficitDay ? `بحلول يوم ${estimatedDeficitDay} من الشهر تقريباً!` : 'قبل نهاية الشهر!'}
               </p>
+              {rolloverBalance < 0 && (
+                <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+                  ملاحظة: يتأثر رصيدك المتاح بوجود عجز مرحّل قدره{' '}
+                  <strong className="text-red-600 dark:text-red-400">
+                    {format(Math.abs(rolloverBalance))}
+                  </strong>
+                  ، مما يجعل إجمالي السيولة المتاحة للشهر{' '}
+                  <strong>{format(availablePool)}</strong>.
+                </p>
+              )}
               {recommendedDailyReductionFils > 0 && (
                 <div className="flex items-center gap-1.5 pt-1 text-slate-700 dark:text-slate-300 font-medium">
                   <ArrowDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />

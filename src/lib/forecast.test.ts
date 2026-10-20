@@ -575,4 +575,84 @@ describe('forecast lib', () => {
     // Feb 28 was prior to March 1. It advances to March 31, which is >= March 5 and < April 1.
     expect(res.upcomingRecurringExpenses).toBe(50000)
   })
+
+  it('correctly integrates negative rollover deficit into available balance and exposes availablePool', () => {
+    // Current month: 500 JOD income, 100 JOD expense
+    // Rollover from previous months is a deficit of -150 JOD (-150,000 fils)
+    const incomeTx: Transaction = {
+      id: 'tx-inc-500',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 9, 2),
+      note: 'راتب',
+      createdAt: new Date(),
+    }
+    const expenseTx: Transaction = {
+      id: 'tx-exp-100',
+      type: 'expense',
+      amountFils: 100000,
+      categoryId: 'cat-exp',
+      date: new Date(2026, 9, 5),
+      note: 'مصاريف',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [incomeTx, expenseTx],
+      rolloverBalanceFils: -150000, // Deficit from prior month
+      monthStartDay: 1,
+      referenceDate: midMonthDate,
+    })
+
+    expect(res.rolloverBalance).toBe(-150000)
+    // monthNet = 500,000 - 100,000 = +400,000
+    expect(res.monthNet).toBe(400000)
+    // availableBalance = -150,000 + 400,000 = +250,000
+    expect(res.availableBalance).toBe(250000)
+    // availablePool = 500,000 + (-150,000) = 350,000
+    expect(res.availablePool).toBe(350000)
+    // freeBalance = 250,000
+    expect(res.freeBalance).toBe(250000)
+    expect(res.healthStatus).toBe('safe')
+  })
+
+  it('triggers deficit/danger status when negative rollover deficit exceeds current income', () => {
+    // Current month: 200 JOD income, 50 JOD expense
+    // Rollover deficit: -300 JOD (-300,000 fils)
+    const incomeTx: Transaction = {
+      id: 'tx-inc-200',
+      type: 'income',
+      amountFils: 200000,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 9, 2),
+      note: 'دخل',
+      createdAt: new Date(),
+    }
+    const expenseTx: Transaction = {
+      id: 'tx-exp-50',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-exp',
+      date: new Date(2026, 9, 5),
+      note: 'مصاريف',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [incomeTx, expenseTx],
+      rolloverBalanceFils: -300000,
+      monthStartDay: 1,
+      referenceDate: midMonthDate,
+    })
+
+    expect(res.rolloverBalance).toBe(-300000)
+    // monthNet = +150,000. availableBalance = -300,000 + 150,000 = -150,000
+    expect(res.availableBalance).toBe(-150000)
+    expect(res.availablePool).toBe(-100000)
+    expect(res.freeBalance).toBe(-150000)
+    expect(res.dailySafeFils).toBe(0)
+    expect(res.healthStatus).toBe('danger')
+    expect(res.isDeficitProjected).toBe(true)
+  })
 })

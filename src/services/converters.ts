@@ -110,8 +110,14 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
     if (typeof rec.circleId === 'string' && rec.circleId.trim()) {
       data.circleId = rec.circleId.trim().slice(0, 128)
     }
-    if (rec.skipMonth !== undefined && rec.skipMonth !== null) {
-      data.skipMonth = Math.round(rec.skipMonth)
+    if (
+      rec.skipMonth !== undefined &&
+      rec.skipMonth !== null &&
+      Number.isFinite(Number(rec.skipMonth)) &&
+      Math.round(Number(rec.skipMonth)) >= 1 &&
+      Math.round(Number(rec.skipMonth)) <= 50
+    ) {
+      data.skipMonth = Math.round(Number(rec.skipMonth))
     }
     return data
   },
@@ -152,8 +158,14 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
     if (data.circleId) {
       rec.circleId = data.circleId
     }
-    if (data.skipMonth !== undefined) {
-      rec.skipMonth = Number(data.skipMonth)
+    if (
+      data.skipMonth !== undefined &&
+      data.skipMonth !== null &&
+      Number.isFinite(Number(data.skipMonth)) &&
+      Math.round(Number(data.skipMonth)) >= 1 &&
+      Math.round(Number(data.skipMonth)) <= 50
+    ) {
+      rec.skipMonth = Math.round(Number(data.skipMonth))
     }
     return rec
   },
@@ -227,6 +239,9 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
               ? p.note.trim().slice(0, 500)
               : 'دفعة سداد',
         }
+        if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
+          item.transactionId = p.transactionId.trim()
+        }
         return item
       }),
       createdAt:
@@ -257,6 +272,10 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
             ? new Date(p.date as string | number)
             : new Date(),
       note: typeof p.note === 'string' ? p.note : undefined,
+      transactionId:
+        typeof p.transactionId === 'string' && p.transactionId.trim()
+          ? p.transactionId.trim()
+          : undefined,
       createdAt:
         p.createdAt instanceof Timestamp
           ? p.createdAt.toDate()

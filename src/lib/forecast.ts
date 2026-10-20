@@ -31,6 +31,7 @@ export interface ForecastResult {
   monthNet: number
   rolloverBalance: number
   availableBalance: number
+  availablePool: number
   upcomingRecurringExpenses: number
   upcomingRecurringIncome: number
   upcomingDebtObligations: number
@@ -126,6 +127,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const rolloverBalance = params.rolloverBalanceFils ?? 0
   const monthNet = currentIncome - currentExpense
   const availableBalance = rolloverBalance + monthNet
+  const availablePool = currentIncome + rolloverBalance
 
   // 2. Upcoming recurring expenses and income in this cycle (accumulate all occurrences within [rangeStart, rangeEnd))
   let upcomingRecurringExpenses = 0
@@ -274,6 +276,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     monthNet,
     rolloverBalance,
     availableBalance,
+    availablePool,
     upcomingRecurringExpenses,
     upcomingRecurringIncome,
     upcomingDebtObligations,

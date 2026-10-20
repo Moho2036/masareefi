@@ -192,4 +192,114 @@ describe('PaymentHistoryModal', () => {
     expect(screen.getByText('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')).toBeInTheDocument()
     expect(debtServices.updateDebtPayment).not.toHaveBeenCalled()
   })
+
+  it('shows delete confirmation with checkbox checked by default and calls deleteDebtPayment with deleteTransaction = true', async () => {
+    const lentDebt: Debt = {
+      id: 'd1',
+      personName: 'خالد',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'p1',
+          amountFils: 50000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة سداد',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={lentDebt}
+      />
+    )
+
+    // Click delete icon
+    const deleteBtn = screen.getByTitle('حذف هذه الدفعة')
+    fireEvent.click(deleteBtn)
+
+    // Confirmation UI should appear
+    expect(screen.getByText('تأكيد حذف الدفعة؟')).toBeInTheDocument()
+    const checkbox = screen.getByRole('checkbox', {
+      name: /حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً/i,
+    }) as HTMLInputElement
+    expect(checkbox).toBeInTheDocument()
+    expect(checkbox.checked).toBe(true)
+
+    // Click confirm delete
+    const confirmBtn = screen.getByRole('button', { name: 'تأكيد الحذف' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(debtServices.deleteDebtPayment).toHaveBeenCalledWith(
+        'user-1',
+        lentDebt,
+        'p1',
+        { deleteTransaction: true }
+      )
+    })
+  })
+
+  it('allows unchecking deleteTransaction checkbox and passes deleteTransaction = false to deleteDebtPayment', async () => {
+    const lentDebt: Debt = {
+      id: 'd1',
+      personName: 'خالد',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'p1',
+          amountFils: 50000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة سداد',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={lentDebt}
+      />
+    )
+
+    // Click delete icon
+    const deleteBtn = screen.getByTitle('حذف هذه الدفعة')
+    fireEvent.click(deleteBtn)
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً/i,
+    })
+    // Uncheck it
+    fireEvent.click(checkbox)
+
+    // Click confirm delete
+    const confirmBtn = screen.getByRole('button', { name: 'تأكيد الحذف' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(debtServices.deleteDebtPayment).toHaveBeenCalledWith(
+        'user-1',
+        lentDebt,
+        'p1',
+        { deleteTransaction: false }
+      )
+    })
+  })
 })

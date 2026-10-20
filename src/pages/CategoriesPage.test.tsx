@@ -137,4 +137,36 @@ describe('CategoriesPage component category protection', () => {
       )
     })
   })
+
+  it('shows warning toast when archiving a category used in active recurring transactions', async () => {
+    render(<CategoriesPage />)
+
+    // Archive button for cat-used-rec ("اشتراك نت")
+    const archiveBtn = await screen.findByLabelText('أرشفة تصنيف اشتراك نت')
+    fireEvent.click(archiveBtn)
+
+    await waitFor(() => {
+      expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-used-rec', true)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة نشطة',
+        'info'
+      )
+    })
+  })
+
+  it('shows standard info toast when archiving an unused category', async () => {
+    render(<CategoriesPage />)
+
+    // Archive button for cat-unused ("تصنيف فارغ")
+    const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف فارغ')
+    fireEvent.click(archiveBtn)
+
+    await waitFor(() => {
+      expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-unused', true)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'تمت أرشفة التصنيف بنجاح',
+        'info'
+      )
+    })
+  })
 })

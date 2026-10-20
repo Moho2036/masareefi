@@ -19,6 +19,7 @@ describe('SafeDailySpendCard Component', () => {
     monthNet: 450000,
     rolloverBalance: 0,
     availableBalance: 450000,
+    availablePool: 600000,
     upcomingRecurringExpenses: 0,
     upcomingRecurringIncome: 0,
     upcomingDebtObligations: 0,

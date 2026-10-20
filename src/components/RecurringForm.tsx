@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { format, addMonths } from 'date-fns'
-import { Check } from 'lucide-react'
+import { Check, Info } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -20,12 +20,27 @@ import { calculateNextDateOnEdit, advanceDateWithTargetDay } from '../lib/recurr
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
+export interface RecurringSubmitPayload {
+  type: TxType
+  amountFils: number
+  categoryId: string
+  title: string
+  note: string
+  frequency: Frequency
+  startDate: Date
+  nextDate?: Date
+  endDate?: Date | null
+  circleId?: string
+  skipMonth?: number
+}
+
 export interface RecurringFormProps {
   isOpen: boolean
   onClose: () => void
   initialRecurring?: Recurring | null
   defaultType?: TxType
   onSuccess?: () => void
+  onSubmit?: (payload: RecurringSubmitPayload) => Promise<void> | void
 }
 
 interface RecurringFormContentProps {
@@ -33,6 +48,7 @@ interface RecurringFormContentProps {
   defaultType: TxType
   onClose: () => void
   onSuccess?: () => void
+  onSubmit?: (payload: RecurringSubmitPayload) => Promise<void> | void
 }
 
 const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
@@ -40,6 +56,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   defaultType,
   onClose,
   onSuccess,
+  onSubmit,
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
@@ -119,10 +136,20 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
 
+  // Identify linked circle if editing or selecting
+  const linkedCircle = useMemo(() => {
+    const effectiveCircleId = circleId || initialRecurring?.circleId
+    return circles.find((c) => c.id === effectiveCircleId)
+  }, [circles, circleId, initialRecurring?.circleId])
+
   // Filter available categories for current transaction type
-  const availableCategories = categories.filter(
-    (c) => c.type === type && !c.archived
-  )
+  // Preserve recurring item's category even if archived
+  const originalCatId = initialRecurring?.categoryId
+  const availableCategories = useMemo(() => {
+    return categories.filter(
+      (c) => c.type === type && (!c.archived || c.id === originalCatId)
+    )
+  }, [categories, type, originalCatId])
 
   const activeCategoryId =
     categoryId && availableCategories.some((c) => c.id === categoryId)
@@ -210,7 +237,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           nextDate = candidate
         }
 
-        await updateRecurring(user.uid, initialRecurring.id, {
+        const payload: RecurringSubmitPayload = {
           type,
           amountFils,
           categoryId: activeCategoryId,
@@ -218,11 +245,29 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           note: note.trim().slice(0, 500),
           frequency,
           startDate: parsedStartDate,
-          ...(nextDate ? { nextDate } : {}),
+          nextDate,
           endDate: parsedEndDate,
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
-        })
+        }
+
+        if (onSubmit) {
+          await onSubmit(payload)
+        } else {
+          await updateRecurring(user.uid, initialRecurring.id, {
+            type,
+            amountFils,
+            categoryId: activeCategoryId,
+            title: trimmedTitle,
+            note: note.trim().slice(0, 500),
+            frequency,
+            startDate: parsedStartDate,
+            ...(nextDate ? { nextDate } : {}),
+            endDate: parsedEndDate,
+            circleId: circleId || undefined,
+            skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+          })
+        }
 
         // Two-way sync with money circles
         if (initialRecurring.circleId && initialRecurring.circleId !== circleId) {
@@ -230,6 +275,18 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         }
         if (circleId) {
           await updateMoneyCircle(user.uid, circleId, { recurringId: initialRecurring.id }).catch(() => {})
+        }
+
+        // Synchronize circle amounts if recurring installment amount changed
+        const effectiveCircleId = circleId || initialRecurring.circleId
+        if (effectiveCircleId) {
+          const linked = circles.find((c) => c.id === effectiveCircleId)
+          if (linked && linked.monthlyAmountFils !== amountFils) {
+            await updateMoneyCircle(user.uid, linked.id, {
+              monthlyAmountFils: amountFils,
+              totalAmountFils: amountFils * linked.membersCount,
+            }).catch(() => {})
+          }
         }
 
         await processDueRecurring(user.uid)
@@ -282,6 +339,16 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Linked Circle Info Banner */}
+      {isEditing && linkedCircle && (
+        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-xs flex items-center gap-2">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>
+            هذه المعاملة مرتبطة بالجمعية ({linkedCircle.name}) وتعديل القسط سيُحدث قسط الجمعية تلقائياً.
+          </span>
+        </div>
+      )}
+
       {/* Type Toggle: مصروف / دخل */}
       <div>
         <SegmentedControl<TxType>
@@ -367,7 +434,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   >
                     {cat.icon}
                   </span>
-                  <span className="truncate flex-1">{cat.name}</span>
+                  <span className="truncate flex-1">
+                    {cat.name}
+                    {cat.archived ? ' (مؤرشف)' : ''}
+                  </span>
                   {isSelected && (
                     <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   )}
@@ -529,6 +599,7 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
   initialRecurring,
   defaultType = 'expense',
   onSuccess,
+  onSubmit,
 }) => {
   return (
     <Modal
@@ -543,6 +614,7 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
         defaultType={defaultType}
         onClose={onClose}
         onSuccess={onSuccess}
+        onSubmit={onSubmit}
       />
     </Modal>
   )
