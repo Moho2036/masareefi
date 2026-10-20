@@ -4,6 +4,7 @@ import {
   writeBatch,
   deleteDoc,
   updateDoc,
+  deleteField,
   getDoc,
   getDocs,
   query,
@@ -175,7 +176,13 @@ export async function updateMoneyCircle(
   if (partial.membersCount !== undefined) updates.membersCount = Math.round(partial.membersCount)
   if (partial.totalAmountFils !== undefined) updates.totalAmountFils = Math.round(partial.totalAmountFils)
   if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
-  if (partial.recurringId !== undefined) updates.recurringId = partial.recurringId
+  if ('recurringId' in partial) {
+    if (!partial.recurringId) {
+      updates.recurringId = deleteField()
+    } else {
+      updates.recurringId = partial.recurringId
+    }
+  }
   if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
   if (partial.startDate !== undefined) {
     updates.startDate =
@@ -286,6 +293,15 @@ export function getCurrentCircleMonth(circle: MoneyCircle, refDate = new Date())
  * Checks if the current month is the user's turn to receive the payout.
  */
 export function isUserTurnMonth(circle: MoneyCircle, refDate = new Date()): boolean {
-  const currentMonth = getCurrentCircleMonth(circle, refDate)
-  return currentMonth === circle.myTurnMonth
+  const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+  const target = refDate instanceof Date ? refDate : new Date(refDate)
+  const diffMonths =
+    (target.getFullYear() - start.getFullYear()) * 12 +
+    (target.getMonth() - start.getMonth())
+
+  if (diffMonths < 0 || diffMonths + 1 > circle.membersCount) {
+    return false
+  }
+
+  return diffMonths + 1 === circle.myTurnMonth
 }

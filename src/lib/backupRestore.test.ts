@@ -8,8 +8,10 @@ vi.mock('./firebase', () => ({
 }))
 
 const mockSet = vi.fn()
+const mockDelete = vi.fn()
 const mockCommit = vi.fn().mockResolvedValue(undefined)
 const mockGetDoc = vi.fn()
+const mockGetDocs = vi.fn().mockResolvedValue({ docs: [] })
 
 vi.mock('firebase/firestore', () => {
   const createMockDoc = (_db: unknown, ...parts: string[]) => {
@@ -22,11 +24,15 @@ vi.mock('firebase/firestore', () => {
 
   return {
     doc: vi.fn(createMockDoc),
-    collection: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
+    collection: vi.fn((_db, ...parts) => ({
+      path: parts.join('/'),
+      withConverter: () => ({ path: parts.join('/') }),
+    })),
     getDoc: (...args: unknown[]) => mockGetDoc(...args),
-    getDocs: vi.fn(),
+    getDocs: (...args: unknown[]) => mockGetDocs(...args),
     writeBatch: vi.fn(() => ({
       set: mockSet,
+      delete: mockDelete,
       commit: mockCommit,
     })),
     Timestamp: {
@@ -300,6 +306,23 @@ describe('backupRestore module', () => {
       const circleCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/circles/circle-strip')
       expect(circleCall).toBeDefined()
       expect(circleCall![1].recurringId).toBeUndefined()
+    })
+
+    it('deletes newly seeded duplicate categories that match incoming backup categories by type and name', async () => {
+      const seededRef = { path: 'users/u1/categories/seeded-food-id' }
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'seeded-food-id',
+            ref: seededRef,
+            data: () => ({ name: 'طعام', type: 'expense' }),
+          },
+        ],
+      })
+
+      await restoreBackup('u1', sampleBackup)
+
+      expect(mockDelete).toHaveBeenCalledWith(seededRef)
     })
   })
 

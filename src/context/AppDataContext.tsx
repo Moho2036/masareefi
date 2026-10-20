@@ -75,22 +75,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!userId) {
-      setSettings(null)
-      setSettingsLoading(false)
-      setSettingsError(null)
-      setCategories([])
-      setCategoriesLoading(false)
-      setCategoriesError(null)
-      setDebts([])
-      setDebtsLoading(false)
-      setDebtsError(null)
-      setRecurring([])
-      setRecurringLoading(false)
-      setRecurringError(null)
-      setMoneyCircles([])
-      setMoneyCirclesLoading(false)
-      setMoneyCirclesError(null)
-      setRolloverBalanceFils(0)
       return
     }
 
@@ -182,7 +166,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // Real-time rollover prior balance sync: calculates cumulative balance before financial cycle start
   useEffect(() => {
     if (!userId || !settings?.rolloverBalance) {
-      setRolloverBalanceFils(0)
       return
     }
 
@@ -243,6 +226,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const effectiveRolloverBalanceFils =
+      user && settings?.rolloverBalance ? rolloverBalanceFils : 0
+
     return {
       settings,
       settingsLoading,
@@ -265,7 +251,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       moneyCirclesLoading,
       moneyCirclesError,
 
-      rolloverBalanceFils,
+      rolloverBalanceFils: effectiveRolloverBalanceFils,
       setRolloverBalanceFils: handleSetRolloverBalanceFils,
     }
   }, [

@@ -14,7 +14,7 @@ import { addRecurring, updateRecurring } from '../services/recurring'
 import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
-import { calculateNextDateOnEdit } from '../lib/recurring'
+import { calculateNextDateOnEdit, advanceDate } from '../lib/recurring'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -160,16 +160,33 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         const frequencyChanged = initialRecurring.frequency !== frequency
 
         let nextDate: Date | undefined = undefined
-        if (startDateChanged) {
-          // User explicitly changed the start date; recalculate from the new start date
-          nextDate = calculateNextDateOnEdit(parsedStartDate, frequency)
-        } else if (frequencyChanged) {
-          // Frequency changed but start date didn't; reschedule from the current upcoming/last due date (nextDate)
-          const currentNext =
-            initialRecurring.nextDate instanceof Date
-              ? initialRecurring.nextDate
-              : new Date(initialRecurring.nextDate)
-          nextDate = calculateNextDateOnEdit(currentNext, frequency)
+        if (startDateChanged || frequencyChanged) {
+          let candidate = calculateNextDateOnEdit(parsedStartDate, frequency)
+
+          if (frequencyChanged && !startDateChanged) {
+            const currentNext =
+              initialRecurring.nextDate instanceof Date
+                ? initialRecurring.nextDate
+                : new Date(initialRecurring.nextDate)
+
+            const startOfToday = new Date()
+            startOfToday.setHours(0, 0, 0, 0)
+
+            const todayEnd = new Date()
+            todayEnd.setHours(23, 59, 59, 999)
+
+            const startOfCandidate = new Date(candidate.getTime())
+            startOfCandidate.setHours(0, 0, 0, 0)
+
+            const isCandidateToday = startOfCandidate.getTime() === startOfToday.getTime()
+            const wasTodayProcessed = currentNext > todayEnd || currentNext > candidate
+
+            if (isCandidateToday && wasTodayProcessed) {
+              candidate = advanceDate(candidate, frequency)
+            }
+          }
+
+          nextDate = candidate
         }
 
         await updateRecurring(user.uid, initialRecurring.id, {

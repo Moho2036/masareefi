@@ -42,7 +42,8 @@ import { sumByType } from '../lib/aggregate'
 import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/reports'
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
-import { toWesternDigits, formatDayHeader } from '../lib/dates'
+import { isOccurrenceSkipped } from '../lib/recurring'
+import { toWesternDigits, formatDayHeader, getFiscalMonthKey } from '../lib/dates'
 import { format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { cn } from '../lib/cn'
@@ -60,6 +61,13 @@ export const DashboardPage: React.FC = () => {
 
   const [rolloverBalance, setRolloverBalance] = useState<number>(0)
   const isRolloverEnabled = Boolean(settings?.rolloverBalance)
+  const monthStartDay = settings?.monthStartDay ?? 1
+
+  const appData = useAppData()
+  const setContextRollover = appData?.setRolloverBalanceFils
+  const isCurrentFiscalMonth =
+    getFiscalMonthKey(range.start, monthStartDay) ===
+    getFiscalMonthKey(new Date(), monthStartDay)
 
   useEffect(() => {
     if (!user?.uid || !isRolloverEnabled) {
@@ -70,6 +78,9 @@ export const DashboardPage: React.FC = () => {
       range.start,
       (bal) => {
         setRolloverBalance(bal)
+        if (isCurrentFiscalMonth) {
+          setContextRollover?.(bal)
+        }
       },
       (err) => {
         console.error('Failed to subscribe prior balance:', err)
@@ -78,15 +89,9 @@ export const DashboardPage: React.FC = () => {
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, setContextRollover])
 
-  const monthStartDay = settings?.monthStartDay ?? 1
   const effectiveRollover = isRolloverEnabled ? rolloverBalance : 0
-
-  const appData = useAppData()
-  useEffect(() => {
-    appData?.setRolloverBalanceFils(effectiveRollover)
-  }, [appData, effectiveRollover])
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
@@ -137,7 +142,12 @@ export const DashboardPage: React.FC = () => {
   // Up to 5 upcoming active recurring items
   const upcomingRecurring = useMemo(() => {
     return recurringList
-      .filter((r) => r.active)
+      .filter((r) => {
+        if (!r.active) return false
+        const nextD = r.nextDate instanceof Date ? r.nextDate : new Date(r.nextDate)
+        if (isOccurrenceSkipped(r, nextD)) return false
+        return true
+      })
       .sort((a, b) => {
         const dateA = a.nextDate instanceof Date ? a.nextDate : new Date(a.nextDate)
         const dateB = b.nextDate instanceof Date ? b.nextDate : new Date(b.nextDate)

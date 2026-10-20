@@ -1,6 +1,34 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { WriteBatch, DocumentReference } from 'firebase/firestore'
-import { DEFAULT_CATEGORIES, addDefaultCategoriesToBatch } from './seed'
+import { DEFAULT_CATEGORIES, addDefaultCategoriesToBatch, syncCategoriesForUser } from './seed'
+
+vi.mock('../lib/firebase', () => ({
+  db: {},
+}))
+
+const mockBatchSet = vi.fn()
+const mockBatchUpdate = vi.fn()
+const mockBatchCommit = vi.fn().mockResolvedValue(undefined)
+const mockBatch = {
+  set: mockBatchSet,
+  update: mockBatchUpdate,
+  commit: mockBatchCommit,
+}
+
+const mockGetDocs = vi.fn()
+
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn((_db, ...parts) => ({
+    path: parts.join('/'),
+    id: parts[parts.length - 1],
+  })),
+  doc: vi.fn((_collOrDb, ...parts) => ({
+    id: parts[parts.length - 1] || 'mock-doc-id',
+    path: parts.join('/'),
+  })),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  writeBatch: () => mockBatch,
+}))
 
 describe('DEFAULT_CATEGORIES seed data', () => {
   it('contains exactly 23 categories (18 expenses, 5 incomes)', () => {
@@ -124,5 +152,34 @@ describe('DEFAULT_CATEGORIES seed data', () => {
       archived: false,
       order: 22,
     })
+  })
+})
+
+describe('syncCategoriesForUser', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('correctly keys by type and name so expense "أخرى" does not prevent syncing income "أخرى"', async () => {
+    const existingExpenseDocs = DEFAULT_CATEGORIES.filter((c) => c.type === 'expense').map((c, i) => ({
+      id: `doc_${i}`,
+      data: () => ({ name: c.name, type: c.type, order: c.order }),
+    }))
+
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: existingExpenseDocs,
+    })
+
+    await syncCategoriesForUser('user-test')
+
+    expect(mockBatchCommit).toHaveBeenCalled()
+    const addedCategories = mockBatchSet.mock.calls.map((call) => call[1] as { name: string; type: string })
+    const incomeOther = addedCategories.find(
+      (c) => c.type === 'income' && c.name === 'أخرى'
+    )
+    expect(incomeOther).toBeDefined()
+    expect(incomeOther?.name).toBe('أخرى')
+    expect(incomeOther?.type).toBe('income')
   })
 })

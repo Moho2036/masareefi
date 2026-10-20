@@ -19,9 +19,11 @@ import { Button } from '../ui/Button'
 import { MonthSelector } from '../ui/MonthSelector'
 import { useAuth } from '../../hooks/useAuth'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
+import { useUserSettings } from '../../hooks/useUserSettings'
 import { useTransactionModal } from '../../hooks/useTransactionModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
+import { getFiscalMonthKey } from '../../lib/dates'
 import { cn } from '../../lib/cn'
 
 interface NavItem {
@@ -52,13 +54,15 @@ export const AppShell: React.FC = () => {
 
   const isMonthPage = pathname === '/' || pathname === '/transactions'
 
+  const { data: settings } = useUserSettings()
+  const monthStartDay = settings?.monthStartDay ?? 1
+
   const isCurrentMonth = useMemo(() => {
-    const now = new Date()
     return (
-      now.getFullYear() === selectedDate.getFullYear() &&
-      now.getMonth() === selectedDate.getMonth()
+      getFiscalMonthKey(selectedDate, monthStartDay) ===
+      getFiscalMonthKey(new Date(), monthStartDay)
     )
-  }, [selectedDate])
+  }, [selectedDate, monthStartDay])
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans">

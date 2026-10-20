@@ -191,7 +191,7 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     const s = backup.data.settings
     const userSettingsRef = doc(db, 'users', uid).withConverter(userSettingsConverter)
     const existingSnap = await getDoc(userSettingsRef)
-    let finalCreatedAt: unknown = undefined
+    let finalCreatedAt: UserSettings['createdAt'] = undefined
 
     if (existingSnap && typeof existingSnap.exists === 'function' && existingSnap.exists()) {
       const existingData = existingSnap.data()
@@ -210,12 +210,32 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
       monthStartDay: Math.min(28, Math.max(1, Math.round(s.monthStartDay || 1))),
       theme: s.theme || 'system',
       ...(typeof s.rolloverBalance === 'boolean' ? { rolloverBalance: s.rolloverBalance } : {}),
-      createdAt: finalCreatedAt as any,
+      createdAt: finalCreatedAt,
     }
     ops.push((b) => b.set(userSettingsRef, settingsData, { merge: true }))
   }
 
   // 2. Categories
+  const existingCatsSnap = await getDocs(
+    collection(db, 'users', uid, 'categories').withConverter(categoryConverter)
+  )
+  const incomingCategoryIds = new Set(backup.data.categories.map((c) => c.id).filter(Boolean))
+  const incomingCategoryKeys = new Set(
+    backup.data.categories.map((c) => `${c.type}:${(c.name || '').trim()}`)
+  )
+
+  if (existingCatsSnap && existingCatsSnap.docs) {
+    for (const existingDoc of existingCatsSnap.docs) {
+      if (!incomingCategoryIds.has(existingDoc.id)) {
+        const existingCat = existingDoc.data()
+        const key = `${existingCat.type}:${(existingCat.name || '').trim()}`
+        if (incomingCategoryKeys.has(key)) {
+          ops.push((b) => b.delete(existingDoc.ref))
+        }
+      }
+    }
+  }
+
   for (const cat of backup.data.categories) {
     if (!cat.id) continue
     const catRef = doc(db, 'users', uid, 'categories', cat.id).withConverter(categoryConverter)
@@ -262,14 +282,15 @@ export async function restoreBackup(uid: string, backup: MasareefiBackup): Promi
     const settled = paidFils === amountFils
 
     const payments = (d.payments || []).map((p) => {
-      const item: { id: string; amountFils: number; date: Date; note?: string; createdAt: Date } = {
+      const item: { id: string; amountFils: number; date: Date; note: string; createdAt: Date } = {
         id: p.id,
         amountFils: Math.round(Number(p.amountFils || 0)),
         date: parseDate(p.date),
         createdAt: p.createdAt ? parseDate(p.createdAt) : new Date(),
-      }
-      if (typeof p.note === 'string' && p.note.trim()) {
-        item.note = p.note.trim().slice(0, 500)
+        note:
+          typeof p.note === 'string' && p.note.trim()
+            ? p.note.trim().slice(0, 500)
+            : 'دفعة سداد',
       }
       return item
     })

@@ -94,6 +94,10 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
         rec.nextDate instanceof Date ? Timestamp.fromDate(rec.nextDate) : rec.nextDate,
       active: Boolean(rec.active),
     }
+    if (rec.createdAt) {
+      data.createdAt =
+        rec.createdAt instanceof Date ? Timestamp.fromDate(rec.createdAt) : rec.createdAt
+    }
     if (typeof rec.title === 'string' && rec.title.trim()) {
       data.title = rec.title.trim().slice(0, 100)
     }
@@ -127,6 +131,12 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
           ? data.nextDate.toDate()
           : new Date(data.nextDate),
       active: Boolean(data.active),
+    }
+    if (data.createdAt) {
+      rec.createdAt =
+        data.createdAt instanceof Timestamp
+          ? data.createdAt.toDate()
+          : new Date(data.createdAt)
     }
     if (data.title) {
       rec.title = data.title
@@ -210,9 +220,10 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
           date: p.date instanceof Date ? Timestamp.fromDate(p.date) : p.date,
           createdAt:
             p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt,
-        }
-        if (p.note) {
-          item.note = p.note.slice(0, 500)
+          note:
+            typeof p.note === 'string' && p.note.trim()
+              ? p.note.trim().slice(0, 500)
+              : 'دفعة سداد',
         }
         return item
       }),

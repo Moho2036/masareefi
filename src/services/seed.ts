@@ -81,7 +81,7 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
   }
 
   const existingDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; name: string; type: TxType; order?: number }))
-  const existingNames = new Set(existingDocs.map((c) => c.name))
+  const existingKeys = new Set(existingDocs.map((c) => `${c.type}:${c.name}`))
   const batch = writeBatch(db)
   let changed = false
 
@@ -90,14 +90,14 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
     if (docItem.name === 'تسوق وملابس') {
       const ref = doc(categoriesRef, docItem.id)
       batch.update(ref, { name: 'ملابس وإكسسوارات' })
-      existingNames.delete('تسوق وملابس')
-      existingNames.add('ملابس وإكسسوارات')
+      existingKeys.delete(`${docItem.type}:تسوق وملابس`)
+      existingKeys.add(`${docItem.type}:ملابس وإكسسوارات`)
       changed = true
     } else if (docItem.name === 'عائلة وهدايا') {
       const ref = doc(categoriesRef, docItem.id)
       batch.update(ref, { name: 'الهدايا والمناسبات' })
-      existingNames.delete('عائلة وهدايا')
-      existingNames.add('الهدايا والمناسبات')
+      existingKeys.delete(`${docItem.type}:عائلة وهدايا`)
+      existingKeys.add(`${docItem.type}:الهدايا والمناسبات`)
       changed = true
     }
   }
@@ -106,7 +106,8 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
   let maxOrder = existingDocs.reduce((acc, c) => Math.max(acc, c.order ?? 0), 0)
 
   for (const defaultCat of DEFAULT_CATEGORIES) {
-    if (!existingNames.has(defaultCat.name)) {
+    const key = `${defaultCat.type}:${defaultCat.name}`
+    if (!existingKeys.has(key)) {
       maxOrder++
       const newDocRef = doc(categoriesRef)
       batch.set(newDocRef, {
@@ -117,6 +118,7 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
         archived: false,
         order: maxOrder,
       })
+      existingKeys.add(key)
       changed = true
     }
   }

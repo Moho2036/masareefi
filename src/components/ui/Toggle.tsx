@@ -21,21 +21,32 @@ export const Toggle: React.FC<ToggleProps> = ({
   id,
 }) => {
   const toggleId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
+  const labelId = toggleId && label ? `${toggleId}-label` : undefined
+  const descId = toggleId && description ? `${toggleId}-desc` : undefined
 
   return (
     <div className={cn('flex items-center justify-between gap-3', className)}>
       {(label || description) && (
-        <div className="flex-1 cursor-pointer" onClick={() => !disabled && onChange(!checked)}>
+        <div
+          className={cn('flex-1', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}
+          onClick={() => !disabled && onChange(!checked)}
+        >
           {label && (
-            <label
-              htmlFor={toggleId}
-              className="text-sm font-medium text-slate-800 dark:text-slate-200 cursor-pointer select-none"
+            <span
+              id={labelId}
+              className={cn(
+                'text-sm font-medium text-slate-800 dark:text-slate-200 select-none block',
+                disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+              )}
             >
               {label}
-            </label>
+            </span>
           )}
           {description && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 select-none">
+            <p
+              id={descId}
+              className="text-xs text-slate-500 dark:text-slate-400 select-none"
+            >
               {description}
             </p>
           )}
@@ -46,6 +57,8 @@ export const Toggle: React.FC<ToggleProps> = ({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-labelledby={labelId}
+        aria-describedby={descId}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(

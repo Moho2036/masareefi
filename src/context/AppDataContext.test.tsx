@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { AppDataProvider, useAppData } from './AppDataContext'
 import * as transactionsService from '../services/transactions'
+import type { UserSettings } from '../types'
 import React from 'react'
 
 const mockUser = { uid: 'user-456' }
@@ -12,7 +13,7 @@ vi.mock('../hooks/useAuth', () => ({
   }),
 }))
 
-let mockSettingsCb: ((settings: any) => void) | null = null
+let mockSettingsCb: ((settings: Partial<UserSettings> & { uid?: string }) => void) | null = null
 vi.mock('../services/userProfile', () => ({
   subscribeUserSettings: vi.fn((_uid, cb) => {
     mockSettingsCb = cb

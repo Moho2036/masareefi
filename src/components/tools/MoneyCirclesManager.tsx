@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { addMonths } from 'date-fns'
+import { addMonths, format as formatDate } from 'date-fns'
 import {
   Users,
   Plus,
@@ -7,6 +7,7 @@ import {
   Clock,
   Crown,
   Trash2,
+  Pencil,
   ChevronDown,
   ChevronUp,
   AlertCircle,
@@ -21,9 +22,10 @@ import { EmptyState } from '../ui/EmptyState'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrency } from '../../hooks/useCurrency'
 import { useMoneyCircles } from '../../hooks/useMoneyCircles'
+import { useRecurring } from '../../hooks/useRecurring'
 import { useCategories } from '../../hooks/useCategories'
 import { useToast } from '../../hooks/useToast'
-import { addRecurring, deleteRecurring } from '../../services/recurring'
+import { addRecurring, updateRecurring, deleteRecurring } from '../../services/recurring'
 import { getOrCreateDebtCategory } from '../../services/debts'
 import {
   addMoneyCircle,
@@ -34,14 +36,16 @@ import {
   checkCirclePayoutExists,
   depositCircleNetPayout,
 } from '../../services/moneyCircles'
-import { toFils } from '../../lib/money'
+import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
+import { calculateNextDateOnEdit } from '../../lib/recurring'
 import { cn } from '../../lib/cn'
 import type { MoneyCircle, CircleMember } from '../../types'
 
 export const MoneyCirclesManager: React.FC = () => {
   const { user } = useAuth()
   const { data: circles, loading } = useMoneyCircles()
+  const { data: recurringList } = useRecurring()
   const { data: categories } = useCategories()
   const { format, config } = useCurrency()
   const { showToast } = useToast()
@@ -89,7 +93,8 @@ export const MoneyCirclesManager: React.FC = () => {
     }
   }, [user, circles])
 
-  // Add Circle form state
+  // Form state (Add / Edit)
+  const [editingCircle, setEditingCircle] = useState<MoneyCircle | null>(null)
   const [name, setName] = useState('')
   const [monthlyAmountStr, setMonthlyAmountStr] = useState('100')
   const [membersCount, setMembersCount] = useState(10)
@@ -113,7 +118,9 @@ export const MoneyCirclesManager: React.FC = () => {
   const handleMembersCountChange = (count: number) => {
     const safeCount = Math.max(2, Math.min(50, count))
     setMembersCount(safeCount)
-    if (myTurnMonth > safeCount) {
+    let effectiveTurn = myTurnMonth
+    if (Number(myTurnMonth) > safeCount) {
+      effectiveTurn = safeCount
       setMyTurnMonth(safeCount)
     }
 
@@ -121,13 +128,42 @@ export const MoneyCirclesManager: React.FC = () => {
       const next = [...prev]
       while (next.length < safeCount) {
         const idx = next.length + 1
-        next.push(idx === myTurnMonth ? 'أنت' : `عضو ${idx}`)
+        next.push(idx === effectiveTurn ? 'أنت' : `عضو ${idx}`)
       }
       return next.slice(0, safeCount)
     })
   }
 
+  // Update turn month and sync custom member names when user is manager
+  const handleMyTurnMonthChange = (newTurn: number) => {
+    const safeTurn = Math.max(1, Math.min(membersCount, newTurn))
+    const oldTurn = myTurnMonth
+    setMyTurnMonth(safeTurn)
+
+    if (isManager) {
+      setCustomMembers((prev) => {
+        const next = [...prev]
+        while (next.length < membersCount) {
+          const idx = next.length + 1
+          next.push(idx === safeTurn ? 'أنت' : `عضو ${idx}`)
+        }
+        const oldIndex = oldTurn - 1
+        if (oldIndex >= 0 && oldIndex < next.length) {
+          if (!next[oldIndex] || next[oldIndex] === 'أنت') {
+            next[oldIndex] = `عضو ${oldTurn}`
+          }
+        }
+        const newIndex = safeTurn - 1
+        if (newIndex >= 0 && newIndex < next.length) {
+          next[newIndex] = 'أنت'
+        }
+        return next
+      })
+    }
+  }
+
   const handleOpenAddModal = () => {
+    setEditingCircle(null)
     setName('')
     setMonthlyAmountStr('100')
     setMembersCount(10)
@@ -143,7 +179,32 @@ export const MoneyCirclesManager: React.FC = () => {
     setIsAddModalOpen(true)
   }
 
-  const handleCreateCircle = async (e: React.FormEvent) => {
+  const handleOpenEditModal = (circle: MoneyCircle) => {
+    setEditingCircle(circle)
+    setName(circle.name)
+    setMonthlyAmountStr(String(fromFils(circle.monthlyAmountFils)))
+    setMembersCount(circle.membersCount)
+    setMyTurnMonth(circle.myTurnMonth)
+    const startDate =
+      circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
+    setStartDateStr(formatDate(startDate, 'yyyy-MM-dd'))
+    setIsManager(Boolean(circle.isManager))
+
+    const initialNames: string[] = []
+    for (let i = 1; i <= circle.membersCount; i++) {
+      const existing = circle.members?.find((m) => m.turnMonth === i)
+      initialNames.push(existing?.name ?? (i === circle.myTurnMonth ? 'أنت' : `عضو ${i}`))
+    }
+    setCustomMembers(initialNames)
+
+    const linkedRecId =
+      circle.recurringId || recurringList.find((r) => r.circleId === circle.id)?.id
+    setAutoSchedule(Boolean(linkedRecId))
+    setFormError(null)
+    setIsAddModalOpen(true)
+  }
+
+  const handleSaveCircle = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
     const trimmedName = name.trim()
@@ -162,62 +223,145 @@ export const MoneyCirclesManager: React.FC = () => {
     setFormError(null)
 
     try {
-      const members: CircleMember[] = []
-      for (let i = 1; i <= membersCount; i++) {
-        const memberName = isManager
-          ? ((customMembers[i - 1] || '').trim() || (i === myTurnMonth ? 'أنت' : `عضو ${i}`))
-          : (i === myTurnMonth ? 'أنت' : `عضو ${i}`)
-        members.push({
-          id: `mem_${i}`,
-          name: memberName,
-          turnMonth: i,
-          paidMonths: [],
-        })
-      }
-
       const totalAmountFils = toFils(monthlyAmount * membersCount)
       const monthlyAmountFils = toFils(monthlyAmount)
       const startDate = parseLocalDateInput(startDateStr)
 
-      const circleId = await addMoneyCircle(user.uid, {
-        name: trimmedName,
-        monthlyAmountFils,
-        membersCount,
-        totalAmountFils,
-        myTurnMonth,
-        startDate,
-        members,
-        status: 'active',
-        isManager,
-      })
+      if (editingCircle) {
+        // Look up any existing linked recurring rule
+        const linkedRecId =
+          editingCircle.recurringId ||
+          recurringList.find((r) => r.circleId === editingCircle.id)?.id
 
-      if (autoSchedule && defaultExpenseCategory) {
-        try {
-          const recId = await addRecurring(user.uid, {
-            type: 'expense',
-            amountFils: monthlyAmountFils,
-            categoryId: defaultExpenseCategory.id,
-            title: `قسط ${trimmedName}`,
-            note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
-            frequency: 'monthly',
-            startDate,
-            nextDate: startDate,
-            endDate: addMonths(startDate, membersCount - 1),
-            active: true,
-            circleId,
-            skipMonth: myTurnMonth,
-          })
-          await updateMoneyCircle(user.uid, circleId, { recurringId: recId })
-        } catch (recErr) {
-          console.error('Failed to auto-schedule recurring for circle:', recErr)
+        let effectiveRecurringId = linkedRecId || ''
+
+        if (!autoSchedule && linkedRecId) {
+          // Unlink and delete the linked recurring rule
+          await deleteRecurring(user.uid, linkedRecId).catch(() => {})
+          effectiveRecurringId = ''
+        } else if (autoSchedule) {
+          // Use calculateNextDateOnEdit directly without double advancement
+          const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
+
+          if (linkedRecId) {
+            await updateRecurring(user.uid, linkedRecId, {
+              type: 'expense',
+              amountFils: monthlyAmountFils,
+              categoryId: defaultExpenseCategory?.id,
+              title: `قسط ${trimmedName}`,
+              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
+              frequency: 'monthly',
+              startDate,
+              nextDate,
+              endDate: addMonths(startDate, membersCount - 1),
+              active: true,
+              circleId: editingCircle.id,
+              skipMonth: myTurnMonth,
+            })
+          } else if (defaultExpenseCategory) {
+            effectiveRecurringId = await addRecurring(user.uid, {
+              type: 'expense',
+              amountFils: monthlyAmountFils,
+              categoryId: defaultExpenseCategory.id,
+              title: `قسط ${trimmedName}`,
+              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
+              frequency: 'monthly',
+              startDate,
+              nextDate,
+              endDate: addMonths(startDate, membersCount - 1),
+              active: true,
+              circleId: editingCircle.id,
+              skipMonth: myTurnMonth,
+            })
+          }
         }
+
+        const members: CircleMember[] = []
+        for (let i = 1; i <= membersCount; i++) {
+          const existingMember = editingCircle.members?.find((m) => m.turnMonth === i)
+          const defaultName = i === myTurnMonth ? 'أنت' : `عضو ${i}`
+          const memberName = isManager
+            ? ((customMembers[i - 1] || '').trim() || defaultName)
+            : defaultName
+          members.push({
+            id: existingMember?.id || `mem_${i}`,
+            name: memberName,
+            turnMonth: i,
+            paidMonths: existingMember?.paidMonths || [],
+          })
+        }
+
+        await updateMoneyCircle(user.uid, editingCircle.id, {
+          name: trimmedName,
+          monthlyAmountFils,
+          membersCount,
+          totalAmountFils,
+          myTurnMonth,
+          startDate,
+          members,
+          isManager,
+          recurringId: effectiveRecurringId,
+        })
+
+        showToast('تم تعديل الجمعية بنجاح', 'success')
+      } else {
+        const members: CircleMember[] = []
+        for (let i = 1; i <= membersCount; i++) {
+          const memberName = isManager
+            ? ((customMembers[i - 1] || '').trim() || (i === myTurnMonth ? 'أنت' : `عضو ${i}`))
+            : (i === myTurnMonth ? 'أنت' : `عضو ${i}`)
+          members.push({
+            id: `mem_${i}`,
+            name: memberName,
+            turnMonth: i,
+            paidMonths: [],
+          })
+        }
+
+        const circleId = await addMoneyCircle(user.uid, {
+          name: trimmedName,
+          monthlyAmountFils,
+          membersCount,
+          totalAmountFils,
+          myTurnMonth,
+          startDate,
+          members,
+          status: 'active',
+          isManager,
+        })
+
+        if (autoSchedule && defaultExpenseCategory) {
+          try {
+            // Fix for past start date: calculate next upcoming date
+            const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
+            const recId = await addRecurring(user.uid, {
+              type: 'expense',
+              amountFils: monthlyAmountFils,
+              categoryId: defaultExpenseCategory.id,
+              title: `قسط ${trimmedName}`,
+              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
+              frequency: 'monthly',
+              startDate,
+              nextDate,
+              endDate: addMonths(startDate, membersCount - 1),
+              active: true,
+              circleId,
+              skipMonth: myTurnMonth,
+            })
+            await updateMoneyCircle(user.uid, circleId, { recurringId: recId })
+          } catch (recErr) {
+            console.error('Failed to auto-schedule recurring for circle:', recErr)
+          }
+        }
+
+        showToast('تم إنشاء الجمعية بنجاح', 'success')
       }
 
-      showToast('تم إنشاء الجمعية بنجاح', 'success')
       setIsAddModalOpen(false)
+      setEditingCircle(null)
     } catch (err) {
-      console.error('Failed to create circle:', err)
-      setFormError(err instanceof Error ? err.message : 'تعذر إنشاء الجمعية')
+      console.error('Failed to save circle:', err)
+      setFormError(err instanceof Error ? err.message : 'تعذر حفظ الجمعية')
     } finally {
       setSubmitting(false)
     }
@@ -226,6 +370,7 @@ export const MoneyCirclesManager: React.FC = () => {
   const handleScheduleCircle = async (circle: MoneyCircle) => {
     if (!user || !defaultExpenseCategory) return
     try {
+      const nextDate = calculateNextDateOnEdit(circle.startDate, 'monthly')
       const recId = await addRecurring(user.uid, {
         type: 'expense',
         amountFils: circle.monthlyAmountFils,
@@ -234,7 +379,7 @@ export const MoneyCirclesManager: React.FC = () => {
         note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`,
         frequency: 'monthly',
         startDate: circle.startDate,
-        nextDate: circle.startDate,
+        nextDate,
         endDate: addMonths(circle.startDate, circle.membersCount - 1),
         active: true,
         circleId: circle.id,
@@ -427,6 +572,14 @@ export const MoneyCirclesManager: React.FC = () => {
                       </div>
                     </div>
 
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(circle)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                      title="تعديل الجمعية"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => setDeleteCircleId(circle.id)}
@@ -677,13 +830,16 @@ export const MoneyCirclesManager: React.FC = () => {
         </div>
       )}
 
-      {/* Add Circle Modal */}
+      {/* Add / Edit Circle Modal */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="إنشاء جمعية مالية جديدة"
+        onClose={() => {
+          setIsAddModalOpen(false)
+          setEditingCircle(null)
+        }}
+        title={editingCircle ? 'تعديل الجمعية المالية' : 'إنشاء جمعية مالية جديدة'}
       >
-        <form onSubmit={handleCreateCircle} className="space-y-4">
+        <form onSubmit={handleSaveCircle} className="space-y-4">
           {formError && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -728,7 +884,7 @@ export const MoneyCirclesManager: React.FC = () => {
               min="1"
               max={membersCount}
               value={myTurnMonth}
-              onChange={(e) => setMyTurnMonth(parseInt(e.target.value, 10) || 1)}
+              onChange={(e) => handleMyTurnMonthChange(parseInt(e.target.value, 10) || 1)}
               required
             />
 
@@ -805,11 +961,24 @@ export const MoneyCirclesManager: React.FC = () => {
           )}
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setIsAddModalOpen(false)
+                setEditingCircle(null)
+              }}
+            >
               إلغاء
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
-              {submitting ? 'جاري الإنشاء...' : 'إنشاء الجمعية'}
+              {submitting
+                ? editingCircle
+                  ? 'جاري الحفظ...'
+                  : 'جاري الإنشاء...'
+                : editingCircle
+                  ? 'حفظ التعديلات'
+                  : 'إنشاء الجمعية'}
             </Button>
           </div>
         </form>

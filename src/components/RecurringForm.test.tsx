@@ -120,7 +120,7 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     expect((payload.nextDate as Date).getDate()).toBe(1)
   })
 
-  it('reschedules nextDate from current nextDate rather than old startDate when frequency changes', async () => {
+  it('reschedules nextDate from parsedStartDate when frequency changes without skipping upcoming occurrences', async () => {
     render(
       <RecurringForm
         isOpen={true}
@@ -142,9 +142,49 @@ describe('RecurringForm component nextDate calculation on edit', () => {
 
     const payload = vi.mocked(recurringServices.updateRecurring).mock.calls[0][2]
     expect(payload.nextDate).toBeDefined()
-    // It should be based on current nextDate (2026-11-01), NOT 2026-01-01
     expect((payload.nextDate as Date).getTime()).toBeGreaterThanOrEqual(
       new Date('2026-10-01').getTime()
     )
+  })
+
+  it('advances candidate by one interval if candidate lands on today and today was already processed', async () => {
+    const today = new Date()
+    const pastStart = new Date(today.getTime())
+    pastStart.setMonth(pastStart.getMonth() - 2)
+    pastStart.setDate(today.getDate())
+
+    const futureNext = new Date(today.getTime())
+    futureNext.setDate(today.getDate() + 30)
+
+    const processedRecurring: Recurring = {
+      ...sampleRecurring,
+      startDate: pastStart,
+      nextDate: futureNext,
+      frequency: 'monthly',
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={processedRecurring}
+      />
+    )
+
+    const weeklyBtn = screen.getByRole('radio', { name: /أسبوعي/i })
+    fireEvent.click(weeklyBtn)
+
+    const submitBtn = screen.getByRole('button', { name: /تعديل المعاملة/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.updateRecurring).toHaveBeenCalledTimes(1)
+    })
+
+    const payload = vi.mocked(recurringServices.updateRecurring).mock.calls[0][2]
+    expect(payload.nextDate).toBeDefined()
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    expect((payload.nextDate as Date).getTime()).toBeGreaterThan(startOfToday.getTime())
   })
 })

@@ -114,6 +114,9 @@ export const RecurringPage: React.FC = () => {
     if (!user || !itemToDelete) return
     setDeleting(true)
     try {
+      if (itemToDelete.circleId) {
+        await updateMoneyCircle(user.uid, itemToDelete.circleId, { recurringId: '' }).catch(() => {})
+      }
       await deleteRecurring(user.uid, itemToDelete.id)
       showToast('تم حذف المعاملة المتكررة بنجاح', 'info')
       setItemToDelete(null)

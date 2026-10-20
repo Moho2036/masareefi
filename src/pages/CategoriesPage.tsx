@@ -37,7 +37,7 @@ export const CategoriesPage: React.FC = () => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
   const appData = useAppData()
-  const recurring = appData?.recurring ?? []
+  const recurring = useMemo(() => appData?.recurring ?? [], [appData?.recurring])
   const { range } = useSelectedMonth()
   const { data: transactions } = useTransactions(range)
   const { showToast } = useToast()
@@ -73,7 +73,7 @@ export const CategoriesPage: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
-    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap)
+    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, {})
     if (details.isInUse) {
       showToast(
         `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${
@@ -142,7 +142,7 @@ export const CategoriesPage: React.FC = () => {
       showToast('تمت أرشفة التصنيف بنجاح', 'info')
     } catch (err) {
       console.error('Failed to archive category:', err)
-      showToast('تعذر أرشفة التصنيف', 'error')
+      showToast(err instanceof Error ? err.message : 'تعذر أرشفة التصنيف', 'error')
     }
   }
 
@@ -153,12 +153,12 @@ export const CategoriesPage: React.FC = () => {
       showToast('تمت استعادة التصنيف بنجاح', 'success')
     } catch (err) {
       console.error('Failed to restore category:', err)
-      showToast('تعذر استعادة التصنيف', 'error')
+      showToast(err instanceof Error ? err.message : 'تعذر استعادة التصنيف', 'error')
     }
   }
 
   const formatUsageText = (catId: string) => {
-    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap)
+    const details = getCategoryUsageDetails(catId, transactions, recurring, {})
     const currentMonthCount = txCounts[catId] || 0
 
     if (!details.isInUse) {
@@ -246,7 +246,7 @@ export const CategoriesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeCategories.map((cat) => {
-            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
+            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, {})
 
             return (
               <div
@@ -338,7 +338,7 @@ export const CategoriesPage: React.FC = () => {
           {isArchivedExpanded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
               {archivedCategories.map((cat) => {
-                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
+                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, {})
                 return (
                   <div
                     key={cat.id}
@@ -404,7 +404,7 @@ export const CategoriesPage: React.FC = () => {
         }}
         title="تأكيد حذف التصنيف"
       >
-        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap).isInUse ? (
+        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, {}).isInUse ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />

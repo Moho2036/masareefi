@@ -1,8 +1,14 @@
 import React from 'react'
+import { useLocation } from 'react-router'
 import { DashboardSkeleton } from './DashboardSkeleton'
+import { PageSkeleton } from './PageSkeleton'
 import { Skeleton } from '../ui/Skeleton'
 
 export const AppShellSkeleton: React.FC = () => {
+  const location = useLocation()
+  const isDashboard = location.pathname === '/'
+  const hideMonthSelector = ['/debts', '/tools', '/settings'].includes(location.pathname)
+
   return (
     <div
       role="status"
@@ -54,13 +60,15 @@ export const AppShellSkeleton: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <Skeleton className="w-28 sm:w-36 h-8 sm:h-9 rounded-xl" />
+            {!hideMonthSelector && (
+              <Skeleton className="w-28 sm:w-36 h-8 sm:h-9 rounded-xl" />
+            )}
           </div>
         </header>
 
         {/* Page View Slot */}
         <main className="flex-1 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto">
-          <DashboardSkeleton />
+          {isDashboard ? <DashboardSkeleton /> : <PageSkeleton />}
         </main>
       </div>
 

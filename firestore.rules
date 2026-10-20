@@ -43,6 +43,7 @@ rules_version = '2';
 //   - active: bool (required)
 //   - circleId: string (optional, 1..128)
 //   - skipMonth: int (optional, 1..50)
+//   - createdAt: timestamp (optional)
 //
 // Collection: users/{uid}/debts        Document ID: any
 //   - personName: string (required, 1..100)
@@ -136,7 +137,7 @@ service cloud.firestore {
     }
 
     function isValidRecurring(data) {
-      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'title', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active', 'circleId', 'skipMonth'])
+      return data.keys().hasOnly(['type', 'amountFils', 'categoryId', 'title', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'active', 'circleId', 'skipMonth', 'createdAt'])
         && data.keys().hasAll(['type', 'amountFils', 'categoryId', 'note', 'frequency', 'startDate', 'nextDate', 'active'])
         && isTxType(data.type)
         && isValidAmount(data.amountFils)
@@ -149,7 +150,8 @@ service cloud.firestore {
         && (!('endDate' in data) || data.endDate == null || data.endDate is timestamp)
         && data.active is bool
         && (!('circleId' in data) || isStr(data.circleId, 1, 128))
-        && (!('skipMonth' in data) || (data.skipMonth is int && data.skipMonth >= 1 && data.skipMonth <= 50));
+        && (!('skipMonth' in data) || (data.skipMonth is int && data.skipMonth >= 1 && data.skipMonth <= 50))
+        && (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     function isValidDebt(data) {
@@ -203,7 +205,7 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create: if isOwner(uid) && isValidTransaction(request.resource.data);
         allow update: if isOwner(uid) && isValidTransaction(request.resource.data)
-          && fieldUnchanged('createdAt');
+          && (fieldUnchanged('createdAt') || request.resource.data.createdAt is timestamp);
       }
 
       match /recurring/{id} {
@@ -216,14 +218,14 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create: if isOwner(uid) && isValidDebt(request.resource.data);
         allow update: if isOwner(uid) && isValidDebt(request.resource.data)
-          && fieldUnchanged('createdAt');
+          && (fieldUnchanged('createdAt') || request.resource.data.createdAt is timestamp);
       }
 
       match /circles/{id} {
         allow read, delete: if isOwner(uid);
         allow create: if isOwner(uid) && isValidMoneyCircle(request.resource.data);
         allow update: if isOwner(uid) && isValidMoneyCircle(request.resource.data)
-          && fieldUnchanged('createdAt');
+          && (fieldUnchanged('createdAt') || request.resource.data.createdAt is timestamp);
       }
     }
 

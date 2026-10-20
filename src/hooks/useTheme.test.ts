@@ -25,7 +25,12 @@ describe('useTheme hook', () => {
 
     // Mock useUserSettings returning loading: true with DEFAULT_SETTINGS (theme: 'system')
     vi.spyOn(useUserSettingsModule, 'useUserSettings').mockReturnValue({
-      data: { theme: 'system' } as any,
+      data: {
+        displayName: '',
+        currency: 'JOD',
+        monthStartDay: 1,
+        theme: 'system',
+      },
       loading: true,
       error: null,
       updateSettings: vi.fn(),
@@ -44,7 +49,12 @@ describe('useTheme hook', () => {
 
     // Mock useUserSettings returning loading: false with Firestore preference 'dark'
     vi.spyOn(useUserSettingsModule, 'useUserSettings').mockReturnValue({
-      data: { theme: 'dark' } as any,
+      data: {
+        displayName: '',
+        currency: 'JOD',
+        monthStartDay: 1,
+        theme: 'dark',
+      },
       loading: false,
       error: null,
       updateSettings: vi.fn(),

@@ -223,6 +223,33 @@ describe('converters', () => {
       expect(rec.endDate).toBeUndefined()
       expect(rec.active).toBe(true)
     })
+
+    it('preserves createdAt in toFirestore and fromFirestore when provided', () => {
+      const createdAt = new Date('2026-01-01T12:00:00Z')
+      const rec: Recurring = {
+        id: 'rec-created',
+        type: 'expense',
+        amountFils: 2000,
+        categoryId: 'cat-test',
+        note: 'اختبار',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        nextDate: new Date('2026-02-01T00:00:00Z'),
+        active: true,
+        createdAt,
+      }
+
+      const data = recurringConverter.toFirestore(rec) as Record<string, unknown>
+      expect(data.createdAt).toBeInstanceOf(Timestamp)
+      expect((data.createdAt as Timestamp).toDate().getTime()).toBe(createdAt.getTime())
+
+      const snap = makeMockSnapshot('rec-created', {
+        ...data,
+      })
+      const parsed = recurringConverter.fromFirestore(snap)
+      expect(parsed.createdAt).toBeInstanceOf(Date)
+      expect(parsed.createdAt?.getTime()).toBe(createdAt.getTime())
+    })
   })
 
   describe('userSettingsConverter', () => {

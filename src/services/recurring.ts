@@ -140,6 +140,39 @@ export async function updateRecurring(
 
 export async function deleteRecurring(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'recurring', id)
+  try {
+    const snap = await getDoc(docRef)
+    if (snap.exists()) {
+      const data = snap.data()
+      const circleId = data.circleId
+      if (circleId && typeof circleId === 'string') {
+        try {
+          await updateDoc(doc(db, 'users', uid, 'circles', circleId), {
+            recurringId: deleteField(),
+          })
+        } catch {
+          // ignore if circle doesn't exist
+        }
+      }
+      // Also clean up any circle referencing this recurringId
+      try {
+        const circlesCol = collection(db, 'users', uid, 'circles')
+        const q = query(circlesCol, where('recurringId', '==', id))
+        const circleSnap = await getDocs(q)
+        if (!circleSnap.empty) {
+          const batch = writeBatch(db)
+          circleSnap.docs.forEach((d) => {
+            batch.update(d.ref, { recurringId: deleteField() })
+          })
+          await batch.commit()
+        }
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore lookup error
+  }
   await deleteDoc(docRef)
 }
 

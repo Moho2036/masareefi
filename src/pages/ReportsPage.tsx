@@ -32,7 +32,7 @@ import {
   calculateYearlyBreakdown,
   calculateSavingsRate,
 } from '../lib/reports'
-import { getFinancialMonthRange, getMonthRange } from '../lib/dates'
+import { getFinancialMonthRange, getMonthRange, getFiscalMonthKey } from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
 import { cn } from '../lib/cn'
@@ -53,6 +53,11 @@ export const ReportsPage: React.FC = () => {
   const [localRollover, setLocalRollover] = useState<number>(0)
   const isRolloverEnabled = Boolean(settings?.rolloverBalance)
 
+  const setContextRollover = appData?.setRolloverBalanceFils
+  const isCurrentFiscalMonth =
+    getFiscalMonthKey(range.start, monthStartDay) ===
+    getFiscalMonthKey(new Date(), monthStartDay)
+
   useEffect(() => {
     if (!user?.uid || !isRolloverEnabled) {
       return
@@ -62,7 +67,9 @@ export const ReportsPage: React.FC = () => {
       range.start,
       (bal) => {
         setLocalRollover(bal)
-        appData?.setRolloverBalanceFils(bal)
+        if (isCurrentFiscalMonth) {
+          setContextRollover?.(bal)
+        }
       },
       (err) => {
         console.error('Failed to subscribe prior balance in ReportsPage:', err)
@@ -71,10 +78,10 @@ export const ReportsPage: React.FC = () => {
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, appData])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, setContextRollover])
 
   const effectiveRollover = isRolloverEnabled
-    ? (appData?.rolloverBalanceFils ?? localRollover)
+    ? localRollover
     : 0
 
   const isMonthly = reportPeriod === 'monthly'

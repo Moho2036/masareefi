@@ -93,7 +93,7 @@ export function getCategoryUsageDetails(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = getCategoryUsageMap()
+  localMap: Record<string, number> = {}
 ): CategoryUsageDetails {
   if (!categoryId) {
     return { txCount: 0, recurringCount: 0, totalCount: 0, isInUse: false }
@@ -128,7 +128,7 @@ export function getCategoryUsageCount(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = getCategoryUsageMap()
+  localMap: Record<string, number> = {}
 ): number {
   return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).totalCount
 }
@@ -140,7 +140,7 @@ export function isCategoryInUse(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = getCategoryUsageMap()
+  localMap: Record<string, number> = {}
 ): boolean {
   return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).isInUse
 }

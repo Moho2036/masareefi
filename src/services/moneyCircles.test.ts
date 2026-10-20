@@ -118,6 +118,27 @@ describe('moneyCircles service', () => {
       // May 2026 is month 5
       expect(isUserTurnMonth(sampleCircle, new Date(2026, 4, 10))).toBe(false)
     })
+
+    it('returns false when circle start date is in the future even if myTurnMonth is 1', () => {
+      const futureCircle: MoneyCircle = {
+        ...sampleCircle,
+        myTurnMonth: 1,
+        startDate: new Date(2026, 5, 1), // June 2026
+      }
+      // In April 2026 (2 months before start)
+      expect(isUserTurnMonth(futureCircle, new Date(2026, 3, 10))).toBe(false)
+    })
+
+    it('returns false when reference date is past the circle duration even if myTurnMonth equals membersCount', () => {
+      const endCircle: MoneyCircle = {
+        ...sampleCircle,
+        myTurnMonth: 10,
+        membersCount: 10,
+        startDate: new Date(2026, 0, 1), // Jan - Oct 2026
+      }
+      // In December 2026 (month 12, after end)
+      expect(isUserTurnMonth(endCircle, new Date(2026, 11, 10))).toBe(false)
+    })
   })
 
   describe('circleConverter', () => {

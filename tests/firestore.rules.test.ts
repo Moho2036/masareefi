@@ -215,6 +215,26 @@ describe('transaction validation', () => {
       setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t0`), { ...validTx(), amountFils: 0 }),
     );
   });
+  it('allows updating createdAt with a valid timestamp but denies non-timestamp', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t0`), {
+        ...validTx(),
+        createdAt: Timestamp.fromDate(new Date('2027-01-01T00:00:00Z')),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t0`), {
+        ...validTx(),
+        createdAt: '2027-01-01T00:00:00Z',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/transactions/t0`), {
+        ...validTx(),
+        createdAt: 123456789,
+      }),
+    );
+  });
 });
 
 describe('recurring validation', () => {
@@ -311,6 +331,26 @@ describe('recurring validation', () => {
       }),
     );
   });
+  it('allows optional createdAt timestamp and denies non-timestamp createdAt', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_created`), {
+        ...validRecurring(),
+        createdAt: now(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_invalid_created_str`), {
+        ...validRecurring(),
+        createdAt: '2026-01-01',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_invalid_created_num`), {
+        ...validRecurring(),
+        createdAt: 12345,
+      }),
+    );
+  });
 });
 
 describe('user profile validation', () => {
@@ -397,6 +437,15 @@ describe('user profile validation', () => {
       setDoc(doc(aliceDb(), `users/${ALICE}`), {
         ...validProfile(),
         rolloverBalance: 1,
+      }),
+    );
+  });
+
+  it('denies modifying createdAt on update', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        createdAt: Timestamp.fromDate(new Date('2027-01-01T00:00:00Z')),
       }),
     );
   });
@@ -610,11 +659,23 @@ describe('debt validation', () => {
     );
   });
 
-  it('denies modifying createdAt on update', async () => {
-    await assertFails(
+  it('allows updating createdAt with a valid timestamp but denies non-timestamp', async () => {
+    await assertSucceeds(
       setDoc(doc(aliceDb(), `users/${ALICE}/debts/d0`), {
         ...validDebt(),
         createdAt: Timestamp.fromDate(new Date('2027-01-01T00:00:00Z')),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d0`), {
+        ...validDebt(),
+        createdAt: '2027-01-01T00:00:00Z',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d0`), {
+        ...validDebt(),
+        createdAt: 123456789,
       }),
     );
   });
@@ -880,11 +941,23 @@ describe('money circle validation', () => {
     }
   });
 
-  it('denies modifying createdAt on update', async () => {
-    await assertFails(
+  it('allows updating createdAt with a valid timestamp but denies non-timestamp', async () => {
+    await assertSucceeds(
       setDoc(doc(aliceDb(), `users/${ALICE}/circles/c0`), {
         ...validCircle(),
         createdAt: Timestamp.fromDate(new Date('2027-01-01T00:00:00Z')),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c0`), {
+        ...validCircle(),
+        createdAt: '2027-01-01T00:00:00Z',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c0`), {
+        ...validCircle(),
+        createdAt: 123456789,
       }),
     );
   });
