@@ -7,6 +7,7 @@ import {
   calculateDebtSummary,
   filterDebts,
   isDebtSettled,
+  findLinkedDebtPayment,
 } from './debts'
 import type { Debt } from '../types'
 
@@ -167,6 +168,43 @@ describe('debts domain logic', () => {
       const resultNote = filterDebts(list, { search: 'سياره' })
       expect(resultNote).toHaveLength(1)
       expect(resultNote[0].id).toBe('d2')
+    })
+  })
+
+  describe('findLinkedDebtPayment', () => {
+    const payment = {
+      id: 'pay-1',
+      amountFils: 20000,
+      date: new Date('2026-09-10'),
+      transactionId: 'tx-payment-1',
+      createdAt: new Date('2026-09-10'),
+    }
+    const debtWithPayment: Debt = {
+      ...baseDebt,
+      payments: [payment],
+    }
+
+    it('returns null for empty or undefined txId', () => {
+      expect(findLinkedDebtPayment(undefined, [debtWithPayment])).toBeNull()
+      expect(findLinkedDebtPayment('', [debtWithPayment])).toBeNull()
+    })
+
+    it('matches by explicit payment.transactionId', () => {
+      const match = findLinkedDebtPayment('tx-payment-1', [debtWithPayment])
+      expect(match).not.toBeNull()
+      expect(match?.debt.id).toBe(debtWithPayment.id)
+      expect(match?.payment.id).toBe(payment.id)
+    })
+
+    it('matches by deterministic debt_pay_${payment.id}', () => {
+      const match = findLinkedDebtPayment('debt_pay_pay-1', [debtWithPayment])
+      expect(match).not.toBeNull()
+      expect(match?.debt.id).toBe(debtWithPayment.id)
+      expect(match?.payment.id).toBe(payment.id)
+    })
+
+    it('returns null when no debt has a matching payment', () => {
+      expect(findLinkedDebtPayment('tx-other', [debtWithPayment])).toBeNull()
     })
   })
 })

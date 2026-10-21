@@ -141,7 +141,7 @@ export const DashboardPage: React.FC = () => {
 
   // Daily expenses for trend area chart
   const dailyExpenses = useMemo(
-    () => calculateDailyExpenses(rawTransactions, range.start, range.end),
+    () => calculateDailyExpenses(rawTransactions, range.start, range.end, new Date()),
     [rawTransactions, range.start, range.end]
   )
 

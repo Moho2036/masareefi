@@ -15,6 +15,7 @@ import {
   TrendingDown,
   Users,
   Download,
+  AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -24,12 +25,15 @@ import { Modal } from '../components/ui/Modal'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
+import { useDebts } from '../hooks/useDebts'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
 import { deleteTransaction } from '../services/transactions'
+import { removeDebtPayment } from '../services/debts'
 import { formatDayHeader } from '../lib/dates'
+import { findLinkedDebtPayment } from '../lib/debts'
 import { exportTransactionsToCsv } from '../lib/exportCsv'
 import {
   getCategoryUsageMap,
@@ -47,6 +51,7 @@ export const TransactionsPage: React.FC = () => {
   const { range } = useSelectedMonth()
   const { data: rawTransactions, loading: txLoading } = useTransactions(range)
   const { data: categories } = useCategories()
+  const { data: debts } = useDebts()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
   const { format, formatWithSign, config: currencyConfig } = useCurrency()
@@ -60,6 +65,9 @@ export const TransactionsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [prevFilterKey, setPrevFilterKey] = useState('')
   const PAGE_SIZE = 30
+
+  // Check if txToDelete is linked to a debt payment
+  const linkedDebtPayment = findLinkedDebtPayment(txToDelete?.id, debts)
 
   // Automatically reset to page 1 during render whenever month range or search/filter parameters change
   const currentFilterKey = `${range.start.getTime()}_${deferredQuery}_${filterType}_${selectedCategory}`
@@ -179,8 +187,27 @@ export const TransactionsPage: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!user || !txToDelete) return
-    if (txToDelete.id.startsWith('debt_init_') || txToDelete.id.startsWith('debt_pay_')) {
-      showToast('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+
+    if (linkedDebtPayment) {
+      setDeleting(true)
+      try {
+        await removeDebtPayment(user.uid, linkedDebtPayment.debt, linkedDebtPayment.payment.id)
+        showToast(
+          `تم حذف دفعة السداد لـ (${linkedDebtPayment.debt.personName}) وإعادة فتح المبلغ المستحق في سجل الدين بنجاح`,
+          'info'
+        )
+        setTxToDelete(null)
+      } catch (err) {
+        console.error('Failed to remove linked debt payment:', err)
+        showToast('تعذر حذف دفعة الدين المرتبطة', 'error')
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
+
+    if (txToDelete.id.startsWith('debt_init_')) {
+      showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
       setTxToDelete(null)
       return
     }
@@ -557,7 +584,7 @@ export const TransactionsPage: React.FC = () => {
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
-                                {tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_') ? (
+                                {tx.id.startsWith('debt_init_') ? (
                                   <Link
                                     to="/debts"
                                     onClick={(e) => e.stopPropagation()}
@@ -645,6 +672,17 @@ export const TransactionsPage: React.FC = () => {
         title="تأكيد حذف المعاملة"
       >
         <div className="space-y-4">
+          {linkedDebtPayment && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>تنبيه: هذه المعاملة مرتبطة بدفعة سداد دين</span>
+              </div>
+              <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
+                هذه المعاملة مرتبطة بسجل دين لـ <strong>{linkedDebtPayment.debt.personName}</strong>. عند تأكيد الحذف، سيتم أيضاً حذف دفعة السداد وإعادة فتح المبلغ المستحق في سجل الديون للحفاظ على تطابق الرصيد المحاسبي.
+              </p>
+            </div>
+          )}
           <p className="text-sm text-slate-600 dark:text-slate-300">
             هل أنت متأكد من رغبتك في حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء.
           </p>

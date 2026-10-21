@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   getFinancialMonthRange,
   formatMonthLabel,
+  formatFinancialMonthLabel,
   formatFinancialRangeLabel,
   formatDayHeader,
   parseLocalDateInput,
@@ -87,6 +88,32 @@ describe('dates lib', () => {
     it('formats month and year in Arabic with Western digits', () => {
       expect(formatMonthLabel(new Date(2026, 9, 4))).toBe('أكتوبر 2026')
       expect(formatMonthLabel(new Date(2025, 0, 1))).toBe('يناير 2025')
+    })
+  })
+
+  describe('formatFinancialMonthLabel', () => {
+    it('returns single month when monthStartDay is 1', () => {
+      const range = {
+        start: new Date(2026, 9, 1),
+        end: new Date(2026, 10, 1),
+      }
+      expect(formatFinancialMonthLabel(range, 1)).toBe('أكتوبر 2026')
+    })
+
+    it('returns both months when monthStartDay > 1 within the same year', () => {
+      const range = {
+        start: new Date(2026, 2, 25), // 25 March 2026
+        end: new Date(2026, 3, 25), // 25 April 2026
+      }
+      expect(formatFinancialMonthLabel(range, 25)).toBe('مارس / أبريل 2026')
+    })
+
+    it('returns both months with years when spanning across years', () => {
+      const range = {
+        start: new Date(2025, 11, 25), // 25 Dec 2025
+        end: new Date(2026, 0, 25), // 25 Jan 2026
+      }
+      expect(formatFinancialMonthLabel(range, 25)).toBe('ديسمبر 2025 / يناير 2026')
     })
   })
 

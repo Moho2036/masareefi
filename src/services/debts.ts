@@ -718,6 +718,8 @@ export async function deleteDebtPayment(
   await batch.commit()
 }
 
+export const removeDebtPayment = deleteDebtPayment
+
 export interface UpdatePaymentOptions {
   syncTransaction?: boolean
   categoryId?: string
@@ -839,6 +841,7 @@ export async function updateDebtPayment(
           amountFils: amount,
           date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
           note: finalPaymentNote,
+          ...(updatedData.categoryId ? { categoryId: updatedData.categoryId } : {}),
         },
       }
       finalTransactionId = existingTxId || existingPayment.transactionId || `debt_pay_${paymentId}`

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { TransactionsPage } from './TransactionsPage'
 import * as exportCsvModule from '../lib/exportCsv'
-import type { Transaction, Category } from '../types'
+import * as debtsServices from '../services/debts'
+import type { Transaction, Category, Debt } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -13,10 +14,16 @@ const mockCategories: Category[] = [
 ]
 
 let mockTransactions: Transaction[] = []
+let mockDebts: Debt[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
 
 vi.mock('../services/transactions', () => ({
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../services/debts', () => ({
+  removeDebtPayment: vi.fn().mockResolvedValue(undefined),
+  deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -36,6 +43,14 @@ vi.mock('../hooks/useCategories', () => ({
 vi.mock('../hooks/useTransactions', () => ({
   useTransactions: () => ({
     data: mockTransactions,
+    loading: false,
+    error: null,
+  }),
+}))
+
+vi.mock('../hooks/useDebts', () => ({
+  useDebts: () => ({
+    data: mockDebts,
     loading: false,
     error: null,
   }),
@@ -86,6 +101,7 @@ describe('TransactionsPage Component', () => {
     localStorage.clear()
     mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
     mockTransactions = []
+    mockDebts = []
   })
 
   it('paginates transactions at 30 items per page and allows navigating between pages', () => {
@@ -190,5 +206,70 @@ describe('TransactionsPage Component', () => {
     expect(exportedList).toHaveLength(1)
     expect(exportedList[0].id).toBe('tx-food')
     expect(mockShowToast).toHaveBeenCalledWith('تم تصدير المعاملات المحددة بنجاح', 'success')
+  })
+
+  it('shows linked debt payment alert in modal and calls removeDebtPayment when deleting', async () => {
+    const debtId = 'debt-100'
+    const payId = 'pay-200'
+    const txId = 'debt_pay_pay-200'
+    const mockDebt: Debt = {
+      id: debtId,
+      personName: 'خالد السعيد',
+      type: 'borrowed',
+      amountFils: 100000,
+      paidFils: 40000,
+      settled: false,
+      dueDate: null,
+      note: '',
+      startDate: new Date('2026-10-01'),
+      createdAt: new Date('2026-10-01'),
+      payments: [
+        {
+          id: payId,
+          amountFils: 40000,
+          date: new Date('2026-10-10'),
+          transactionId: txId,
+          createdAt: new Date('2026-10-10'),
+        },
+      ],
+    }
+    mockDebts = [mockDebt]
+    mockTransactions = [
+      {
+        id: txId,
+        type: 'expense',
+        amountFils: 40000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-10'),
+        title: 'سداد دين: خالد السعيد',
+        note: '',
+        createdAt: new Date('2026-10-10'),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    const deleteBtn = screen.getByLabelText('حذف المعاملة')
+    fireEvent.click(deleteBtn)
+
+    // Verify modal warning shows the debtor's name
+    expect(screen.getByText('تنبيه: هذه المعاملة مرتبطة بدفعة سداد دين')).toBeInTheDocument()
+    expect(screen.getByText('خالد السعيد')).toBeInTheDocument()
+    expect(
+      screen.getByText(/عند تأكيد الحذف، سيتم أيضاً حذف دفعة السداد وإعادة فتح المبلغ المستحق في سجل الديون/)
+    ).toBeInTheDocument()
+
+    // Confirm deletion
+    const confirmButtons = screen.getAllByRole('button', { name: 'حذف المعاملة' })
+    expect(confirmButtons.length).toBe(2)
+    fireEvent.click(confirmButtons[1])
+
+    await waitFor(() => {
+      expect(debtsServices.removeDebtPayment).toHaveBeenCalledWith('user-123', mockDebt, payId)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('تم حذف دفعة السداد لـ (خالد السعيد)'),
+        'info'
+      )
+    })
   })
 })

@@ -47,7 +47,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
           <span>{monthLabel}</span>
         </div>
         {monthStartDay !== 1 && rangeLabel && (
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 leading-tight">
+          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 leading-tight">
             {rangeLabel}
           </span>
         )}

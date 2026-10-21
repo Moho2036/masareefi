@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { addMonths } from 'date-fns'
-import { formatMonthLabel, getFinancialMonthRange, formatFinancialRangeLabel } from '../lib/dates'
+import { formatFinancialMonthLabel, getFinancialMonthRange, formatFinancialRangeLabel } from '../lib/dates'
 import { useUserSettings } from './useUserSettings'
 
 interface SelectedMonthContextValue {
@@ -61,8 +61,8 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   }, [selectedDate, monthStartDay])
 
   const monthLabel = useMemo(() => {
-    return formatMonthLabel(range.start)
-  }, [range.start])
+    return formatFinancialMonthLabel(range, monthStartDay)
+  }, [range, monthStartDay])
 
   const rangeLabel = useMemo(() => {
     return formatFinancialRangeLabel(range)

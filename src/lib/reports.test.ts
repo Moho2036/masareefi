@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   calculateDailyExpenses,
+  generateDailyExpenses,
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
@@ -100,6 +101,65 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       for (let i = 0; i < result.length; i++) {
         expect(result[i].day).toBe(i + 1)
       }
+    })
+
+    it('stops at today when today is in current month and no future expenses exist', () => {
+      const start = new Date(2026, 9, 1) // Oct 1, 2026
+      const end = new Date(2026, 10, 1) // Nov 1, 2026
+      const today = new Date(2026, 9, 10) // Oct 10, 2026
+
+      const txs: Transaction[] = [
+        {
+          id: 'tx-1',
+          type: 'expense',
+          amountFils: 5000,
+          categoryId: 'cat-food',
+          date: new Date(2026, 9, 5),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const result = generateDailyExpenses(txs, { start, end }, today)
+      expect(result).toHaveLength(10) // days 1 to 10
+      expect(result[result.length - 1].day).toBe(10)
+    })
+
+    it('extends beyond today up to the latest future expense in the current month', () => {
+      const start = new Date(2026, 9, 1)
+      const end = new Date(2026, 10, 1)
+      const today = new Date(2026, 9, 10) // Today is Oct 10
+
+      const txs: Transaction[] = [
+        {
+          id: 'tx-1',
+          type: 'expense',
+          amountFils: 5000,
+          categoryId: 'cat-food',
+          date: new Date(2026, 9, 5),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-future',
+          type: 'expense',
+          amountFils: 12000,
+          categoryId: 'cat-rent',
+          date: new Date(2026, 9, 15), // Future expense on Oct 15
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const result = generateDailyExpenses(txs, start, end, today)
+      // Must extend to day 15 so future expense is included
+      expect(result).toHaveLength(15)
+      expect(result[14].day).toBe(15)
+      expect(result[14].amountFils).toBe(12000)
+
+      // Total sum of points matches total expenses exactly
+      const totalPoints = result.reduce((acc, p) => acc + p.amountFils, 0)
+      expect(totalPoints).toBe(17000)
     })
   })
 

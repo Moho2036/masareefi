@@ -8,6 +8,7 @@ import { Input } from './ui/Input'
 import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
+import { useDebts } from '../hooks/useDebts'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
@@ -17,8 +18,10 @@ import {
   deleteTransaction,
 } from '../services/transactions'
 import { addRecurring, processDueRecurring } from '../services/recurring'
+import { updateDebtPayment, removeDebtPayment } from '../services/debts'
 import { toFils, fromFils } from '../lib/money'
 import { parseLocalDateInput } from '../lib/dates'
+import { findLinkedDebtPayment } from '../lib/debts'
 import {
   getCategoryUsageMap,
   recordCategoryUsage,
@@ -46,20 +49,29 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
+  const { data: debts } = useDebts()
   const { setSelectedDate, range } = useSelectedMonth()
   const { showToast } = useToast()
   const { config: currencyConfig } = useCurrency()
 
   const isEditing = Boolean(initialTransaction)
-  const isLinkedToDebt = Boolean(
-    initialTransaction?.id &&
-      (initialTransaction.id.startsWith('debt_init_') ||
-        initialTransaction.id.startsWith('debt_pay_'))
+
+  // Find linked debt payment if editing a debt payment transaction
+  const linkedDebtPayment = findLinkedDebtPayment(initialTransaction?.id, debts)
+
+  const isLinkedToDebtInit = Boolean(
+    initialTransaction?.id && initialTransaction.id.startsWith('debt_init_')
+  )
+  const isLinkedToDebtPayment = Boolean(
+    linkedDebtPayment ||
+      (initialTransaction?.id && initialTransaction.id.startsWith('debt_pay_'))
   )
   const isLinkedToCircle = Boolean(
     initialTransaction?.id && initialTransaction.id.startsWith('circle_payout_')
   )
-  const isLockedTransaction = isLinkedToDebt || isLinkedToCircle
+  // Only completely lock amount & date for debt_init_ and circle_payout_
+  // Debt payments allow editing amount, category, date, and note!
+  const isLockedTransaction = isLinkedToDebtInit || isLinkedToCircle
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -165,6 +177,49 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       const isOutsideMonth = parsedDate < range.start || parsedDate >= range.end
 
       if (isEditing && initialTransaction) {
+        if (isLinkedToDebtPayment && linkedDebtPayment) {
+          const previousPaymentsSum = (linkedDebtPayment.debt.payments || []).reduce(
+            (acc, p) => acc + p.amountFils,
+            0
+          )
+          const untrackedPaidFils = Math.max(
+            0,
+            (linkedDebtPayment.debt.paidFils || 0) - previousPaymentsSum
+          )
+          const otherPaymentsTotal = (linkedDebtPayment.debt.payments || [])
+            .filter((p) => p.id !== linkedDebtPayment.payment.id)
+            .reduce((sum, p) => sum + p.amountFils, 0)
+          const remainingAllowed = Math.max(
+            0,
+            linkedDebtPayment.debt.amountFils - (otherPaymentsTotal + untrackedPaidFils)
+          )
+          if (amountFils > remainingAllowed) {
+            setError('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
+            setSubmitting(false)
+            return
+          }
+
+          await updateDebtPayment(
+            user.uid,
+            linkedDebtPayment.debt,
+            linkedDebtPayment.payment.id,
+            {
+              amountFils,
+              date: parsedDate,
+              note: note.trim().slice(0, 500),
+              categoryId: activeCategoryId,
+            }
+          )
+          recordCategoryUsage(activeCategoryId)
+          showToast('تم تعديل دفعة الدين وتحديث سجل الدين بنجاح', 'success')
+          if (isOutsideMonth) {
+            setSelectedDate(parsedDate)
+          }
+          onSuccess?.()
+          onClose()
+          return
+        }
+
         const finalType = isLockedTransaction ? initialTransaction.type : type
         const finalAmountFils = isLockedTransaction ? initialTransaction.amountFils : amountFils
         const finalDate = isLockedTransaction
@@ -352,8 +407,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleDelete = async () => {
     if (!user || !initialTransaction) return
-    if (isLinkedToDebt) {
-      setError('لا يمكن حذف معاملات الديون من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
+    if (isLinkedToDebtPayment && linkedDebtPayment) {
+      setDeleting(true)
+      try {
+        await removeDebtPayment(user.uid, linkedDebtPayment.debt, linkedDebtPayment.payment.id)
+        showToast(
+          `تم حذف دفعة السداد لـ (${linkedDebtPayment.debt.personName}) وإعادة فتح المبلغ المستحق في سجل الدين بنجاح`,
+          'info'
+        )
+        onSuccess?.()
+        onClose()
+      } catch (err) {
+        console.error('Failed to remove linked debt payment:', err)
+        setError('تعذر حذف دفعة الدين المرتبطة')
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
+    if (isLinkedToDebtInit) {
+      setError('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
       return
     }
     if (isLinkedToCircle) {
@@ -411,24 +484,41 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Linked Debt Warning Banner */}
-      {isLinkedToDebt && (
+      {/* Linked Debt Init Warning Banner */}
+      {isLinkedToDebtInit && (
         <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
           <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
             <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>معاملة متزامنة مع سجل الديون</span>
+            <span>معاملة أصل الدين متزامنة مع سجل الديون</span>
           </div>
           <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
-            هذه المعاملة مرتبطة بسجل الديون، لتعديل المبلغ أو حذفها يرجى إدارة الدفعة من صفحة الديون. يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
+            هذه المعاملة تمثل نشوء الدين الأصلي. لتعديل المبلغ أو حذف الدين، يرجى إدارته من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.
           </p>
           <Link
             to="/debts"
             onClick={onClose}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
           >
-            <span>الانتقال إلى سجل الديون لتعديل أو حذف الدفعة</span>
+            <span>الانتقال إلى سجل الديون</span>
             <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
           </Link>
+        </div>
+      )}
+
+      {/* Linked Debt Payment Warning Banner */}
+      {isLinkedToDebtPayment && (
+        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+            <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>
+              {linkedDebtPayment
+                ? `معاملة مرتبطة بدفعة سداد دين لـ (${linkedDebtPayment.debt.personName})`
+                : 'معاملة مرتبطة بدفعة سداد دين'}
+            </span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
+            عند تعديل المبلغ أو حذف هذه المعاملة، سيتم تلقائياً تحديث دفعة السداد في سجل الدين وإعادة احتساب رصيد الدين وحالة الإغلاق.
+          </p>
         </div>
       )}
 
@@ -457,7 +547,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       <div>
         <SegmentedControl<TxType>
           value={type}
-          disabled={isLockedTransaction}
+          disabled={isLockedTransaction || isLinkedToDebtPayment}
           onChange={(newType) => {
             setType(newType)
             setCategoryId('')

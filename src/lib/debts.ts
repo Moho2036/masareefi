@@ -150,3 +150,22 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
       return b.startDate.getTime() - a.startDate.getTime()
     })
 }
+
+/**
+ * Finds a linked debt and payment item for a given transaction id (if any).
+ */
+export function findLinkedDebtPayment(
+  txId: string | undefined,
+  debts: Debt[]
+): { debt: Debt; payment: Debt['payments'][number] } | null {
+  if (!txId) return null
+  for (const debt of debts) {
+    if (!debt.payments || debt.payments.length === 0) continue
+    for (const p of debt.payments) {
+      if (p.transactionId === txId || txId === `debt_pay_${p.id}`) {
+        return { debt, payment: p }
+      }
+    }
+  }
+  return null
+}

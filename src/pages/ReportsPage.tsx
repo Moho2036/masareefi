@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { addMonths } from 'date-fns'
+import { addMonths, subDays, format as formatDate } from 'date-fns'
+import { ar } from 'date-fns/locale'
 import {
   TrendingUp,
   TrendingDown,
@@ -8,6 +9,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CalendarDays,
+  Calendar,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
@@ -40,6 +42,7 @@ import {
   getMonthRange,
   getFiscalMonthKey,
   getFiscalMonthInfo,
+  toWesternDigits,
 } from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
@@ -153,13 +156,14 @@ export const ReportsPage: React.FC = () => {
   }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover])
 
   // Yearly data hooks
+  const defaultYear = useMemo(() => range.start.getFullYear(), [range.start])
   const currentFiscalInfo = useMemo(
     () => getFiscalMonthInfo(new Date(), monthStartDay),
     [monthStartDay]
   )
   const currentYear = currentFiscalInfo.year
   const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
-  const selectedYear = userSelectedYear ?? currentYear
+  const selectedYear = userSelectedYear ?? defaultYear
   const setSelectedYear = (year: number) => setUserSelectedYear(year)
 
   const yearRange = useMemo(() => {
@@ -167,6 +171,13 @@ export const ReportsPage: React.FC = () => {
     const end = getMonthRange(selectedYear, 11, monthStartDay).end
     return { start, end }
   }, [selectedYear, monthStartDay])
+
+  const financialYearLabel = useMemo(() => {
+    const inclusiveEnd = subDays(yearRange.end, 1)
+    const startStr = toWesternDigits(formatDate(yearRange.start, 'd MMMM yyyy', { locale: ar }))
+    const endStr = toWesternDigits(formatDate(inclusiveEnd, 'd MMMM yyyy', { locale: ar }))
+    return `${startStr} – ${endStr}`
+  }, [yearRange])
 
   const { data: yearTransactions, loading: yearLoading } = useTransactions(yearRange, {
     enabled: isYearly,
@@ -532,6 +543,14 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================= */}
       {reportPeriod === 'yearly' && (
         <div className="space-y-6">
+          {/* Financial Year Period Banner when monthStartDay > 1 */}
+          {monthStartDay > 1 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+              <Calendar className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>السنة المالية: {financialYearLabel}</span>
+            </div>
+          )}
+
           {/* 4 Yearly KPI Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Total Annual Income */}

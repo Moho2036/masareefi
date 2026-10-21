@@ -63,6 +63,31 @@ export function formatMonthLabel(date: Date): string {
 }
 
 /**
+ * Formats a financial month label clearly.
+ * When monthStartDay === 1, returns standard formatMonthLabel(range.start) e.g. "أكتوبر 2026".
+ * When monthStartDay > 1, displays both months clearly e.g. "مارس / أبريل 2026",
+ * or if spanning year boundaries "ديسمبر 2025 / يناير 2026", avoiding user ambiguity.
+ */
+export function formatFinancialMonthLabel(
+  range: { start: Date; end: Date },
+  monthStartDay: number = 1
+): string {
+  if (monthStartDay === 1) {
+    return formatMonthLabel(range.start)
+  }
+  const inclusiveEnd = subDays(range.end, 1)
+  const startMonth = toWesternDigits(format(range.start, 'LLLL', { locale: ar }))
+  const endMonth = toWesternDigits(format(inclusiveEnd, 'LLLL', { locale: ar }))
+  const startYear = range.start.getFullYear()
+  const endYear = inclusiveEnd.getFullYear()
+
+  if (startYear === endYear) {
+    return `${startMonth} / ${endMonth} ${startYear}`
+  }
+  return `${startMonth} ${startYear} / ${endMonth} ${endYear}`
+}
+
+/**
  * Formats a financial date range into an Arabic descriptive string with Western digits.
  * Example: "25 سبتمبر - 24 أكتوبر"
  */

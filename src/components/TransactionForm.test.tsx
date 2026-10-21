@@ -281,9 +281,9 @@ describe('TransactionForm Component', () => {
       />
     )
 
-    expect(screen.getByText('معاملة متزامنة مع سجل الديون')).toBeInTheDocument()
-    expect(screen.getByText(/هذه المعاملة مرتبطة بسجل الديون/)).toBeInTheDocument()
-    expect(screen.getByText('الانتقال إلى سجل الديون لتعديل أو حذف الدفعة')).toBeInTheDocument()
+    expect(screen.getByText('معاملة أصل الدين متزامنة مع سجل الديون')).toBeInTheDocument()
+    expect(screen.getByText(/هذه المعاملة تمثل نشوء الدين الأصلي/)).toBeInTheDocument()
+    expect(screen.getByText('الانتقال إلى سجل الديون')).toBeInTheDocument()
 
     // Amount and date inputs should be read-only / disabled
     const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement

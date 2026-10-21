@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useContext } from 'react'
 import {
   Sun,
   Moon,
@@ -30,9 +30,11 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { usePWAInstall } from '../hooks/usePWAInstall'
+import { SelectedMonthContext } from '../hooks/useSelectedMonth'
 import { signOutUser, updateUserDisplayName } from '../services/auth'
 import { getAllTransactions } from '../services/transactions'
 import { getAllDebts } from '../services/debts'
+import { processDueRecurring } from '../services/recurring'
 import { exportTransactionsToCsv, exportDebtsToCsv } from '../lib/exportCsv'
 import {
   createFullBackup,
@@ -53,6 +55,8 @@ export const SettingsPage: React.FC = () => {
   const { data: categories } = useCategories()
   const { showToast } = useToast()
   const { isInstallable, isInstalled, isIOS, promptInstall } = usePWAInstall()
+  const selectedMonth = useContext(SelectedMonthContext)
+  const refreshData = selectedMonth?.refreshData
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -317,6 +321,18 @@ export const SettingsPage: React.FC = () => {
           : 'تمت استعادة النسخة الاحتياطية واستبدال البيانات بنجاح!',
         'success'
       )
+      try {
+        const executedCount = await processDueRecurring(user.uid)
+        if (executedCount > 0) {
+          showToast(
+            `تم تنفيذ ${executedCount} معاملة متكررة مستحقة تلقائياً بعد الاستعادة!`,
+            'info'
+          )
+        }
+      } catch (recErr) {
+        console.error('Failed to process due recurring after restore:', recErr)
+      }
+      refreshData?.()
       setRestoreValidation(null)
     } catch (err) {
       console.error('Failed to restore backup:', err)

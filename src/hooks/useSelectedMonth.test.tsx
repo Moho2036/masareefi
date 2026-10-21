@@ -12,7 +12,7 @@ vi.mock('./useUserSettings', () => ({
 }))
 
 describe('useSelectedMonth hook', () => {
-  it('formats monthLabel based on range.start when monthStartDay = 25', () => {
+  it('formats monthLabel based on range with both financial months when monthStartDay = 25', () => {
     mockMonthStartDay = 25
 
     const { result } = renderHook(() => useSelectedMonth(), {
@@ -27,8 +27,8 @@ describe('useSelectedMonth hook', () => {
     // Cycle starts Sep 25, 2026 and ends Oct 25, 2026
     expect(result.current.range.start.getDate()).toBe(25)
     expect(result.current.range.start.getMonth()).toBe(8) // September
-    // Month label should consistently be September 2026 (based on range.start)
-    expect(result.current.monthLabel).toBe('سبتمبر 2026')
+    // Month label should clearly show both months for financial cycle (September / October 2026)
+    expect(result.current.monthLabel).toBe('سبتمبر / أكتوبر 2026')
     expect(result.current.rangeLabel).toBe('25 سبتمبر - 24 أكتوبر')
   })
 
@@ -48,7 +48,7 @@ describe('useSelectedMonth hook', () => {
       result.current.goToNextMonth()
     })
 
-    expect(result.current.monthLabel).toBe('أكتوبر 2026')
+    expect(result.current.monthLabel).toBe('أكتوبر / نوفمبر 2026')
     expect(result.current.range.start.getDate()).toBe(25)
     expect(result.current.range.start.getMonth()).toBe(9) // October
     expect(result.current.rangeLabel).toBe('25 أكتوبر - 24 نوفمبر')
@@ -58,7 +58,7 @@ describe('useSelectedMonth hook', () => {
       result.current.goToPreviousMonth()
     })
 
-    expect(result.current.monthLabel).toBe('سبتمبر 2026')
+    expect(result.current.monthLabel).toBe('سبتمبر / أكتوبر 2026')
     expect(result.current.range.start.getDate()).toBe(25)
     expect(result.current.range.start.getMonth()).toBe(8) // September
   })

@@ -6,6 +6,11 @@ const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
 const mockSetTheme = vi.fn()
 const mockShowToast = vi.fn()
 const mockRestoreBackup = vi.fn().mockResolvedValue(undefined)
+const mockProcessDueRecurring = vi.fn().mockResolvedValue(0)
+
+vi.mock('../services/recurring', () => ({
+  processDueRecurring: (...args: unknown[]) => mockProcessDueRecurring(...args),
+}))
 
 vi.mock('../lib/backupRestore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/backupRestore')>()
@@ -153,9 +158,44 @@ describe('SettingsPage Backup and Restore modal', () => {
         expect.objectContaining({ app: 'masareefi' }),
         'merge'
       )
+      expect(mockProcessDueRecurring).toHaveBeenCalledWith('user-123')
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.stringContaining('تم دمج النسخة الاحتياطية'),
         'success'
+      )
+    })
+  })
+
+  it('runs due recurring and notifies user when recurring items are processed after restore', async () => {
+    mockProcessDueRecurring.mockResolvedValueOnce(2)
+    render(<SettingsPage />)
+
+    const fileInput = screen.getByLabelText(/اختيار ملف النسخة الاحتياطية/i)
+    const validJson = JSON.stringify({
+      version: 1,
+      app: 'masareefi',
+      exportedAt: '2026-10-15T12:00:00Z',
+      data: {
+        categories: [{ id: 'c1', name: 'طعام', type: 'expense' }],
+        transactions: [],
+      },
+    })
+    const file = new File([validJson], 'backup.json', { type: 'application/json' })
+
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/تأكيد استعادة النسخة الاحتياطية/i)).toBeDefined()
+    })
+
+    const confirmBtn = screen.getByRole('button', { name: 'تأكيد ودمج البيانات' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockProcessDueRecurring).toHaveBeenCalledWith('user-123')
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('تم تنفيذ 2 معاملة متكررة مستحقة تلقائياً بعد الاستعادة!'),
+        'info'
       )
     })
   })
