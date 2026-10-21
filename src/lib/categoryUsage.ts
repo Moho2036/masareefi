@@ -42,6 +42,18 @@ export function buildUsageFromTransactions(
   return map
 }
 
+/**
+ * Synchronizes the category usage cache in localStorage directly from the current transactions,
+ * ensuring Firestore transactions remain the single source of truth without accumulating deleted counts.
+ */
+export function syncCategoryUsageCache(
+  transactions: Array<{ categoryId?: string }>
+): Record<string, number> {
+  const map = buildUsageFromTransactions(transactions)
+  saveCategoryUsageMap(map)
+  return map
+}
+
 export function mergeUsageMaps(
   txMap: Record<string, number>,
   localMap: Record<string, number> = getCategoryUsageMap()
@@ -93,7 +105,7 @@ export function getCategoryUsageDetails(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = {}
+  _localMap: Record<string, number> = {}
 ): CategoryUsageDetails {
   if (!categoryId) {
     return { txCount: 0, recurringCount: 0, totalCount: 0, isInUse: false }
@@ -109,8 +121,7 @@ export function getCategoryUsageDetails(
     if (rec.categoryId === categoryId) recurringCount++
   }
 
-  const localTxCount = localMap[categoryId] || 0
-  const effectiveTxCount = Math.max(txCount, localTxCount)
+  const effectiveTxCount = txCount
   const totalCount = effectiveTxCount + recurringCount
 
   return {

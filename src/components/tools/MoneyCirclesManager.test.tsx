@@ -287,6 +287,9 @@ describe('MoneyCirclesManager Component', () => {
         'circle-1',
         expect.objectContaining({
           recurringId: '',
+        }),
+        expect.objectContaining({
+          monthStartDay: expect.any(Number),
         })
       )
     })
@@ -502,6 +505,9 @@ describe('MoneyCirclesManager Component', () => {
               paidMonths: expect.not.arrayContaining([2]),
             }),
           ]),
+        }),
+        expect.objectContaining({
+          monthStartDay: expect.any(Number),
         })
       )
     })

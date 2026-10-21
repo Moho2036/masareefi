@@ -207,18 +207,18 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     upcomingRecurringExpenses +
     upcomingDebtObligations
   const projectedIncome = currentIncome + upcomingRecurringIncome
-  const projectedNet = rolloverBalance + projectedIncome - projectedExpense
+  const projectedNet = isPastMonth ? availableBalance : rolloverBalance + projectedIncome - projectedExpense
 
   const isDeficitProjected = (isCurrentMonth || isFutureMonth) && projectedNet < 0
   const deficitAmount = isDeficitProjected
     ? Math.abs(projectedNet)
-    : isPastMonth && monthNet < 0
-      ? Math.abs(monthNet)
+    : isPastMonth && availableBalance < 0
+      ? Math.abs(availableBalance)
       : 0
   const surplusAmount = isDeficitProjected
     ? 0
     : isPastMonth
-      ? (monthNet > 0 ? monthNet : 0)
+      ? (availableBalance >= 0 ? availableBalance : 0)
       : (projectedNet > 0 ? projectedNet : 0)
 
   // Recommended daily reduction if a deficit is projected
@@ -247,7 +247,13 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   // 6. Health Status
   let healthStatus: FinancialHealthStatus
   if (isPastMonth) {
-    healthStatus = monthNet < 0 ? 'danger' : 'safe'
+    if (availableBalance < 0) {
+      healthStatus = 'danger'
+    } else if (monthNet < 0) {
+      healthStatus = 'warning'
+    } else {
+      healthStatus = 'safe'
+    }
   } else if (
     freeBalance < 0 ||
     isDeficitProjected ||

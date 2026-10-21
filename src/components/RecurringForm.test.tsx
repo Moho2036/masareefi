@@ -310,7 +310,9 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     expect(screen.getByRole('option', { name: /جمعيتي الحالية/i })).toBeInTheDocument()
     // Info banner is displayed
     expect(
-      screen.getByText(/هذه المعاملة مرتبطة بالجمعية \(جمعيتي الحالية\) وتعديل القسط سيُحدث قسط الجمعية تلقائياً/i)
+      screen.getByText(
+        /هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات/i
+      )
     ).toBeInTheDocument()
   })
 
@@ -380,5 +382,60 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     )
 
     expect(screen.getByText(/اشتراك ملغى \(مؤرشف\)/i)).toBeInTheDocument()
+  })
+
+  it('locks type, frequency, startDate, and circle select and shows guidance banner when editing a circle-linked recurring item', () => {
+    mockCirclesData = [
+      {
+        id: 'circle-lock-test',
+        name: 'جمعية الرواد',
+        status: 'active',
+        monthlyAmountFils: 200000,
+        totalAmountFils: 2000000,
+        myTurnMonth: 5,
+        startDate: new Date('2026-01-01'),
+        membersCount: 10,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+        recurringId: 'rec-circle-lock',
+      },
+    ]
+
+    const circleRecurring: Recurring = {
+      ...sampleRecurring,
+      id: 'rec-circle-lock',
+      circleId: 'circle-lock-test',
+      frequency: 'monthly',
+      type: 'expense',
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={circleRecurring}
+      />
+    )
+
+    // Banner is visible
+    expect(
+      screen.getByText(
+        /هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات/i
+      )
+    ).toBeInTheDocument()
+
+    // Type options are disabled
+    const expenseOption = screen.getByRole('radio', { name: /مصروف/i })
+    const incomeOption = screen.getByRole('radio', { name: /دخل/i })
+    expect(expenseOption).toBeDisabled()
+    expect(incomeOption).toBeDisabled()
+
+    // Frequency options are disabled
+    const monthlyOption = screen.getByRole('radio', { name: /شهري/i })
+    expect(monthlyOption).toBeDisabled()
+
+    // Start date input is disabled
+    const startDateInput = screen.getByLabelText(/تاريخ البداية/i)
+    expect(startDateInput).toBeDisabled()
   })
 })

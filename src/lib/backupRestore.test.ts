@@ -248,6 +248,38 @@ describe('backupRestore module', () => {
       expect(res.summary?.categoriesCount).toBe(2)
       expect(res.data?.data.categories.some((c) => c.id === 'cat-missing-1')).toBe(true)
     })
+
+    it('synchronizes paidFils and settled when paymentsSum exceeds raw paidFils', () => {
+      const backupWithUnsyncedDebt = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [],
+          debts: [
+            {
+              id: 'd-1',
+              personName: 'خالد',
+              amountFils: 50000,
+              paidFils: 0,
+              type: 'lent',
+              startDate: new Date(),
+              payments: [
+                { id: 'p1', amountFils: 30000, date: new Date() },
+                { id: 'p2', amountFils: 20000, date: new Date() },
+              ],
+            },
+          ],
+        },
+      }
+
+      const res = validateBackup(JSON.stringify(backupWithUnsyncedDebt))
+      expect(res.valid).toBe(true)
+      const validatedDebt = res.data?.data.debts[0]
+      expect(validatedDebt?.paidFils).toBe(50000)
+      expect(validatedDebt?.settled).toBe(true)
+    })
   })
 
   describe('restoreBackup', () => {
@@ -491,6 +523,48 @@ describe('backupRestore module', () => {
       const circleCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/circles/circle-strip')
       expect(circleCall).toBeDefined()
       expect(circleCall![1].recurringId).toBeUndefined()
+    })
+
+    it('restores debt with normalized paidFils and settled when paymentsSum exceeds raw paidFils', async () => {
+      mockSet.mockClear()
+      mockCommit.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithUnsyncedDebt: MasareefiBackup = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [],
+          debts: [
+            {
+              id: 'd-unsynced',
+              personName: 'طارق',
+              amountFils: 40000,
+              paidFils: 10000, // raw paidFils is 10000, but payments sum to 40000
+              type: 'lent',
+              startDate: new Date(),
+              note: '',
+              settled: false,
+              payments: [
+                { id: 'p1', amountFils: 25000, date: new Date(), createdAt: new Date(), note: 'دفعة 1' },
+                { id: 'p2', amountFils: 15000, date: new Date(), createdAt: new Date(), note: 'دفعة 2' },
+              ],
+              createdAt: new Date(),
+            },
+          ],
+          recurring: [],
+          circles: [],
+        },
+      }
+
+      await restoreBackup('user-test-uid', backupWithUnsyncedDebt)
+
+      const debtSetCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/debts/d-unsynced')
+      expect(debtSetCall).toBeDefined()
+      expect(debtSetCall![1].paidFils).toBe(40000)
+      expect(debtSetCall![1].settled).toBe(true)
     })
 
     it('deletes newly seeded duplicate categories that match incoming backup categories by type and name in replace mode', async () => {

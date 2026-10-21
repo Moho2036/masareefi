@@ -4,6 +4,7 @@ import {
   recordCategoryUsage,
   sortCategoriesByUsage,
   buildUsageFromTransactions,
+  syncCategoryUsageCache,
   mergeAndSaveUsage,
   getCategoryUsageDetails,
   getCategoryUsageCount,
@@ -113,13 +114,29 @@ describe('categoryUsage utilities', () => {
     expect(isCategoryInUse('cat-unused', txs, recurring, {})).toBe(false)
   })
 
-  it('considers historical local storage usage if higher than active transactions', () => {
-    const txs = [{ categoryId: 'cat-past' }]
+  it('relies on active transactions as single source of truth and ignores residual local storage', () => {
+    // Even if local storage has old counts, if transactions are empty or deleted, details reflect active data
     const localMap = { 'cat-past': 10 }
-    const details = getCategoryUsageDetails('cat-past', txs, [], localMap)
+    const details = getCategoryUsageDetails('cat-past', [], [], localMap)
 
-    expect(details.txCount).toBe(10) // max of 1 and 10
-    expect(details.totalCount).toBe(10)
-    expect(details.isInUse).toBe(true)
+    expect(details.txCount).toBe(0)
+    expect(details.totalCount).toBe(0)
+    expect(details.isInUse).toBe(false)
+  })
+
+  it('syncs category usage cache directly to localStorage', () => {
+    const txs = [
+      { categoryId: 'cat-a' },
+      { categoryId: 'cat-a' },
+      { categoryId: 'cat-b' },
+    ]
+    const map = syncCategoryUsageCache(txs)
+    expect(map).toEqual({ 'cat-a': 2, 'cat-b': 1 })
+    expect(getCategoryUsageMap()).toEqual({ 'cat-a': 2, 'cat-b': 1 })
+
+    // When transactions are deleted, syncing resets the cache
+    const updatedMap = syncCategoryUsageCache([{ categoryId: 'cat-b' }])
+    expect(updatedMap).toEqual({ 'cat-b': 1 })
+    expect(getCategoryUsageMap()).toEqual({ 'cat-b': 1 })
   })
 })

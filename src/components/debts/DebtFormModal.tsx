@@ -61,7 +61,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   useEffect(() => {
     if (!user || !initialDebt) return
     let active = true
-    checkDebtInitialTransactionExists(user.uid, initialDebt.id)
+    checkDebtInitialTransactionExists(user.uid, initialDebt.id, initialDebt)
       .then((exists) => {
         if (active) {
           setSyncTransaction(exists)
@@ -328,15 +328,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
               ? 'خصم المبلغ من الرصيد الحالي تلقائياً'
               : 'إضافة المبلغ للرصيد الحالي (استلمت المبلغ نقداً)'
           }
-          description={
-            isEditing
-              ? syncTransaction
-                ? 'المعاملة مرتبطة بالرصيد. إيقاف المفتاح سيحذف المعاملة ويلغي تأثيرها على الرصيد.'
-                : 'المعاملة غير مرتبطة بالرصيد. تفعيل المفتاح سينشئ معاملة ويؤثر على الرصيد.'
-              : type === 'lent'
-                ? 'تسجيل المعاملة كمصروف لتحديث الرصيد الفعلي'
-                : 'تسجيل المعاملة كدخل لتحديث الرصيد الفعلي'
-          }
+          description="يربط مبلغ أصل الدين برصيد محفظتك كمعاملة مالية (دفعات السداد تُدار بشكل مستقل)."
         />
       </div>
 

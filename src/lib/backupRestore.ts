@@ -19,6 +19,7 @@ import {
   userSettingsConverter,
 } from '../services/converters'
 import { circleConverter } from '../services/moneyCircles'
+import { syncCategoryUsageCache } from './categoryUsage'
 
 export type RestoreMode = 'merge' | 'replace'
 
@@ -264,8 +265,6 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       .map((d) => {
         const amountFils = Math.round(Number(d.amountFils || 0))
         const rawPaidFils = Math.round(Number(d.paidFils || 0))
-        const paidFils = Math.max(0, Math.min(amountFils, rawPaidFils))
-        const settled = paidFils === amountFils
         const payments = (Array.isArray(d.payments) ? d.payments : [])
           .filter((p) => Boolean(p && typeof p === 'object' && Math.round(Number(p.amountFils || 0)) > 0))
           .map((p) => ({
@@ -275,6 +274,10 @@ export function validateBackup(jsonText: string): BackupValidationResult {
             note: typeof p.note === 'string' && p.note.trim() ? p.note.trim().slice(0, 500) : 'دفعة سداد',
           }))
           .slice(0, 100)
+
+        const paymentsSum = payments.reduce((sum, p) => sum + p.amountFils, 0)
+        const paidFils = Math.max(0, Math.min(amountFils, Math.max(rawPaidFils, paymentsSum)))
+        const settled = paidFils === amountFils
 
         return {
           ...d,
@@ -479,6 +482,12 @@ export async function restoreBackup(
   const categoryIdRemap = new Map<string, string>()
 
   if (mode === 'replace') {
+    try {
+      syncCategoryUsageCache(backup.data.transactions || [])
+    } catch {
+      // ignore
+    }
+
     // In replace mode, existing transactions/recurring not in backup will be deleted.
     // So the used category IDs are only those in the backup data.
     const usedCategoryIds = new Set<string>()
@@ -638,8 +647,6 @@ export async function restoreBackup(
 
     const debtRef = doc(db, 'users', uid, 'debts', d.id).withConverter(debtConverter)
     const rawPaidFils = Math.round(Number(d.paidFils || 0))
-    const paidFils = Math.max(0, Math.min(amountFils, rawPaidFils))
-    const settled = paidFils === amountFils
 
     const payments = (d.payments || [])
       .map((p) => {
@@ -663,6 +670,10 @@ export async function restoreBackup(
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
       .slice(0, 100)
+
+    const paymentsSum = payments.reduce((sum, p) => sum + p.amountFils, 0)
+    const paidFils = Math.max(0, Math.min(amountFils, Math.max(rawPaidFils, paymentsSum)))
+    const settled = paidFils === amountFils
 
     const debtData: Debt = {
       id: d.id,

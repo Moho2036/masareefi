@@ -6,7 +6,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { deleteDebtPayment, updateDebtPayment } from '../../services/debts'
+import { deleteDebtPayment, updateDebtPayment, checkDebtPaymentTransactionExists } from '../../services/debts'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
 import { toWesternDigits, parseLocalDateInput } from '../../lib/dates'
@@ -38,6 +38,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [editAmountStr, setEditAmountStr] = useState('')
   const [editDateStr, setEditDateStr] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [editSyncTx, setEditSyncTx] = useState(true)
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
@@ -45,6 +46,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setConfirmDeleteId(null)
     setDeletePaymentTx(true)
     setEditingPaymentId(null)
+    setEditSyncTx(true)
     setEditError(null)
     onClose()
   }
@@ -83,10 +85,22 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setEditDateStr(format(pDate, 'yyyy-MM-dd'))
     setEditNote(p.note || '')
     setEditError(null)
+
+    const isSynced = Boolean(p.transactionId)
+    setEditSyncTx(isSynced)
+
+    if (user && !p.transactionId) {
+      checkDebtPaymentTransactionExists(user.uid, debt, p)
+        .then((exists) => {
+          setEditSyncTx(exists)
+        })
+        .catch(() => {})
+    }
   }
 
   const handleCancelEdit = () => {
     setEditingPaymentId(null)
+    setEditSyncTx(true)
     setEditError(null)
   }
 
@@ -98,10 +112,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       return
     }
 
+    const previousPaymentsSum = payments.reduce((acc, item) => acc + item.amountFils, 0)
+    const untrackedPaidFils = Math.max(0, (debt.paidFils || 0) - previousPaymentsSum)
     const otherPaymentsTotal = payments
       .filter((item) => item.id !== p.id)
       .reduce((sum, item) => sum + item.amountFils, 0)
-    const maxAllowed = Math.max(0, debt.amountFils - otherPaymentsTotal)
+    const maxAllowed = Math.max(0, debt.amountFils - (otherPaymentsTotal + untrackedPaidFils))
     if (amountFils > maxAllowed) {
       setEditError(`مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي (${formatCurrency(maxAllowed)})`)
       return
@@ -122,6 +138,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         amountFils,
         date,
         note: editNote.trim(),
+        syncTransaction: editSyncTx,
       })
       showToast('تم تعديل الدفعة وتحديث الرصيد', 'success')
       setEditingPaymentId(null)
@@ -235,6 +252,17 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
                             placeholder="ملاحظة للدفعة..."
                           />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+                            <input
+                              type="checkbox"
+                              checked={editSyncTx}
+                              onChange={(e) => setEditSyncTx(e.target.checked)}
+                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                            />
+                            <span>ربط الدفعة بالرصيد (تأثير مالي في سجل المعاملات)</span>
+                          </label>
                         </div>
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
                           <button

@@ -337,6 +337,43 @@ describe('moneyCircles service', () => {
       expect(mockDeleteDoc.mock.calls[0][0].path).toBe('users/uid-1/transactions/circle_payout_circle-1')
     })
 
+    it('updates payout transaction date when startDate or myTurnMonth changes', async () => {
+      // 1. payout doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+      // 2. circle doc exists with turn in past or current (startDate 2026-01-01, turnMonth 2)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 2,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        {
+          myTurnMonth: 2,
+        },
+        { monthStartDay: 1 }
+      )
+
+      expect(mockUpdateDoc).toHaveBeenCalledTimes(2)
+      const payoutUpdatePayload = mockUpdateDoc.mock.calls[1][1]
+      expect(payoutUpdatePayload.date).toBeDefined()
+      const expectedSeconds = Math.floor(new Date(2026, 1, 1).getTime() / 1000)
+      expect(payoutUpdatePayload.date.seconds).toBe(expectedSeconds)
+    })
+
     it('depositCircleNetPayout sets payout transaction and adds myTurnMonth to member paidMonths', async () => {
       const { depositCircleNetPayout } = await import('./moneyCircles')
 

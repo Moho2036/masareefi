@@ -103,18 +103,15 @@ describe('CategoriesPage component category protection', () => {
     })
   })
 
-  it('protects category with saved usage history from hard deletion', async () => {
-    // cat-unused has 0 transactions in current month, but 2 in saved usage history (localStorage)
+  it('allows hard deletion of category when transactions are empty even if old localStorage cache had counts', async () => {
+    // cat-unused has 0 transactions in Firestore, but had old stale count in localStorage
     localStorage.setItem('masareefi_category_usage', JSON.stringify({ 'cat-unused': 2 }))
 
     render(<CategoriesPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText(/2 معاملة سابقة/i)).toBeDefined()
-    })
-
-    // Delete button should now be hidden and replaced with "مستخدم"
-    expect(screen.queryByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeNull()
+    // With Firestore as single source of truth, the stale count in localStorage does not block deletion
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    expect(deleteBtn).toBeInTheDocument()
   })
 
   it('displays error toast when backend rejects deleteCategory due to existing records in Firestore', async () => {

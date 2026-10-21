@@ -25,10 +25,8 @@ import { archiveCategory, deleteCategory } from '../services/categories'
 import { countByCategory } from '../lib/aggregate'
 import { useAppData } from '../context/AppDataContext'
 import {
-  getCategoryUsageMap,
   buildUsageFromTransactions,
-  mergeUsageMaps,
-  saveCategoryUsageMap,
+  syncCategoryUsageCache,
   getCategoryUsageDetails,
 } from '../lib/categoryUsage'
 import type { Category, TxType } from '../types'
@@ -54,16 +52,14 @@ export const CategoriesPage: React.FC = () => {
     return countByCategory(transactions)
   }, [transactions])
 
-  // Track category usage frequencies from localStorage + current month transactions
-  const localUsageMap = useMemo(() => getCategoryUsageMap(), [])
+  // Track category usage frequencies from current transactions (Single Source of Truth)
   const usageMap = useMemo(() => {
-    const txMap = buildUsageFromTransactions(transactions)
-    return mergeUsageMaps(txMap, localUsageMap)
-  }, [transactions, localUsageMap])
+    return buildUsageFromTransactions(transactions)
+  }, [transactions])
 
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
-    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap)
+    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring)
     if (details.isInUse) {
       showToast(
         `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${
@@ -88,12 +84,10 @@ export const CategoriesPage: React.FC = () => {
     }
   }
 
-  // Save merged category usage in localStorage outside render in an effect
+  // Save category usage in localStorage outside render in an effect
   useEffect(() => {
-    if (transactions.length > 0) {
-      saveCategoryUsageMap(usageMap)
-    }
-  }, [transactions.length, usageMap])
+    syncCategoryUsageCache(transactions)
+  }, [transactions])
 
   // Active categories for the selected type, sorted consistently by natural order (a.order - b.order)
   const activeCategories = useMemo(() => {

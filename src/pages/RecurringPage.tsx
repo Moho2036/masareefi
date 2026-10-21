@@ -27,6 +27,7 @@ import { useRecurring } from '../hooks/useRecurring'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
+import { useUserSettings } from '../hooks/useUserSettings'
 import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../services/recurring'
 import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle, getCircleCycleIndex } from '../services/moneyCircles'
 import { calculateMonthlyEquivalent, isOccurrenceSkipped, calculateNextDateOnEdit } from '../lib/recurring'
@@ -36,6 +37,8 @@ import type { Recurring, Frequency } from '../types'
 
 export const RecurringPage: React.FC = () => {
   const { user } = useAuth()
+  const { data: settings } = useUserSettings()
+  const monthStartDay = settings?.monthStartDay ?? 1
   const { data: recurringItems, loading: recurringLoading } = useRecurring()
   const { data: categories } = useCategories()
   const { data: circles } = useMoneyCircles()
@@ -51,10 +54,10 @@ export const RecurringPage: React.FC = () => {
     const now = new Date()
     return circles.filter((c) => {
       if (c.status === 'completed') return false
-      const diffMonths = getCircleCycleIndex(c.startDate, now)
+      const diffMonths = getCircleCycleIndex(c.startDate, now, monthStartDay)
       return diffMonths < c.membersCount
     })
-  }, [circles])
+  }, [circles, monthStartDay])
 
   // Map categoryId to Category
   const categoryMap = useMemo(() => {
@@ -100,7 +103,7 @@ export const RecurringPage: React.FC = () => {
         circleId: circle.id,
         skipMonth: circle.myTurnMonth,
       })
-      await updateMoneyCircle(user.uid, circle.id, { recurringId: recId })
+      await updateMoneyCircle(user.uid, circle.id, { recurringId: recId }, { monthStartDay })
       await processDueRecurring(user.uid)
       showToast('تمت جدولة القسط في المعاملات المتكررة بنجاح مع تخطي شهر استلامك!', 'success')
     } catch (err) {
@@ -134,7 +137,12 @@ export const RecurringPage: React.FC = () => {
     setDeleting(true)
     try {
       if (itemToDelete.circleId) {
-        await updateMoneyCircle(user.uid, itemToDelete.circleId, { recurringId: '' }).catch(() => {})
+        await updateMoneyCircle(
+          user.uid,
+          itemToDelete.circleId,
+          { recurringId: '' },
+          { monthStartDay }
+        ).catch(() => {})
       }
       await deleteRecurring(user.uid, itemToDelete.id)
       showToast('تم حذف المعاملة المتكررة بنجاح', 'info')
@@ -227,10 +235,10 @@ export const RecurringPage: React.FC = () => {
             {activeCircles.map((circle) => {
               const now = new Date()
               const start = new Date(circle.startDate)
-              const diffMonths = getCircleCycleIndex(circle.startDate, now)
+              const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
               const isStarted = diffMonths >= 0
-              const isUserTurn = isStarted && isUserTurnMonth(circle, now)
-              const currentMonth = getCurrentCircleMonth(circle, now)
+              const isUserTurn = isStarted && isUserTurnMonth(circle, now, monthStartDay)
+              const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
               const isScheduled = Boolean(
                 circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
               )

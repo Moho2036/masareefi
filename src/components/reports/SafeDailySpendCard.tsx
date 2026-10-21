@@ -34,6 +34,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     currentExpense,
     monthNet,
     rolloverBalance,
+    availableBalance,
     availablePool,
     upcomingRecurringExpenses,
     upcomingDebtObligations,
@@ -51,7 +52,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
   // Case 1: Past Month (Cycle has ended)
   if (isPastMonth) {
-    const isSurplus = monthNet >= 0
+    const isSurplus = availableBalance >= 0
     return (
       <Card
         className={cn(
@@ -98,7 +99,13 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <div>
               <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                {isSurplus ? 'صافي الوفر المحقق' : 'صافي العجز المالي'}
+                {rolloverBalance !== 0
+                  ? isSurplus
+                    ? 'الرصيد الختامي المتبقي (شامل المرحّل)'
+                    : 'عجز مالي ختامي (تجاوز الدخل والمرحّل)'
+                  : isSurplus
+                    ? 'صافي الوفر المحقق'
+                    : 'صافي العجز المالي'}
               </div>
               <div
                 className={cn(
@@ -106,14 +113,20 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                   isSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
                 )}
               >
-                {isSurplus ? `+ ${format(surplusAmount)}` : `- ${format(deficitAmount)}`}
+                {isSurplus ? `+ ${format(Math.abs(availableBalance))}` : `- ${format(Math.abs(availableBalance))}`}
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-              {isSurplus
-                ? 'تم إنهاء هذا الشهر بنجاح مع تحقيق فائض مالي إيجابي.'
-                : 'تجاوزت المصاريف إجمالي المداخيل المحصلة لهذا الشهر.'}
-            </p>
+            {rolloverBalance !== 0 ? (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
+                صافي عمليات الشهر وحده: {monthNet >= 0 ? '+' : '-'}{format(Math.abs(monthNet))} | المرحّل السابق: {rolloverBalance >= 0 ? '+' : '-'}{format(Math.abs(rolloverBalance))}
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                {isSurplus
+                  ? 'تم إنهاء هذا الشهر بنجاح مع تحقيق فائض مالي إيجابي.'
+                  : 'تجاوزت المصاريف إجمالي المداخيل المحصلة لهذا الشهر.'}
+              </p>
+            )}
           </div>
 
           {/* Actual Daily Pace & Totals */}
@@ -148,22 +161,48 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5 text-xs">
             <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
             <div>
-              <span className="font-bold">أداء مالي ناجح!</span> اكتمل هذا الشهر بوفر مالي قدره{' '}
-              <strong className="font-black text-emerald-600 dark:text-emerald-400">
-                {format(surplusAmount)}
-              </strong>
-              .
+              <span className="font-bold">أداء مالي ناجح!</span>{' '}
+              {rolloverBalance !== 0 ? (
+                <>
+                  اكتمل هذا الشهر برصيد ختامي متبقي قدره{' '}
+                  <strong className="font-black text-emerald-600 dark:text-emerald-400">
+                    {format(Math.abs(availableBalance))}
+                  </strong>
+                  .
+                </>
+              ) : (
+                <>
+                  اكتمل هذا الشهر بوفر مالي قدره{' '}
+                  <strong className="font-black text-emerald-600 dark:text-emerald-400">
+                    {format(surplusAmount)}
+                  </strong>
+                  .
+                </>
+              )}
             </div>
           </div>
         ) : (
           <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
             <div>
-              <span className="font-bold">تنبيه مالي:</span> انتهى هذا الشهر بعجز قدره{' '}
-              <strong className="font-black text-red-600 dark:text-red-400">
-                {format(deficitAmount)}
-              </strong>
-              .
+              <span className="font-bold">تنبيه مالي:</span>{' '}
+              {rolloverBalance !== 0 ? (
+                <>
+                  انتهى هذا الشهر بعجز ختامي كلي قدره{' '}
+                  <strong className="font-black text-red-600 dark:text-red-400">
+                    {format(Math.abs(availableBalance))}
+                  </strong>
+                  .
+                </>
+              ) : (
+                <>
+                  انتهى هذا الشهر بعجز قدره{' '}
+                  <strong className="font-black text-red-600 dark:text-red-400">
+                    {format(deficitAmount)}
+                  </strong>
+                  .
+                </>
+              )}
             </div>
           </div>
         )}

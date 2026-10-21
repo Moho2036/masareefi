@@ -395,7 +395,9 @@ export const ReportsPage: React.FC = () => {
                 {format(monthSums.balance)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                المبلغ المتبقي بعد كل المصاريف
+                {isRolloverEnabled && effectiveRollover !== 0
+                  ? `صافي الشهر المستقل (الرصيد المتاح مع المرحّل: ${format(monthSums.balance + effectiveRollover)})`
+                  : 'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'}
               </div>
             </Card>
 

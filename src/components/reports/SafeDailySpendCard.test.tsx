@@ -57,6 +57,8 @@ describe('SafeDailySpendCard Component', () => {
       currentIncome: 800000,
       currentExpense: 500000,
       monthNet: 300000,
+      rolloverBalance: 0,
+      availableBalance: 300000,
       surplusAmount: 300000,
       deficitAmount: 0,
     }
@@ -81,6 +83,8 @@ describe('SafeDailySpendCard Component', () => {
       currentIncome: 400000,
       currentExpense: 550000,
       monthNet: -150000,
+      rolloverBalance: 0,
+      availableBalance: -150000,
       surplusAmount: 0,
       deficitAmount: 150000,
       healthStatus: 'danger',
@@ -91,6 +95,60 @@ describe('SafeDailySpendCard Component', () => {
     expect(screen.getByText(/هذا الشهر قد انتهى/)).toBeInTheDocument()
     expect(screen.getByText('صافي العجز المالي')).toBeInTheDocument()
     expect(screen.getByText('تنبيه مالي:')).toBeInTheDocument()
+  })
+
+  it('renders completed past month with rolloverBalance > 0 covering month deficit as ending surplus', () => {
+    const pastRolloverSurplusForecast: ForecastResult = {
+      ...baseForecast,
+      isCurrentMonth: false,
+      isPastMonth: true,
+      isFutureMonth: false,
+      remainingDays: 0,
+      elapsedDays: 30,
+      totalDays: 30,
+      currentIncome: 0,
+      currentExpense: 200000,
+      monthNet: -200000,
+      rolloverBalance: 1000000,
+      availableBalance: 800000,
+      surplusAmount: 800000,
+      deficitAmount: 0,
+      healthStatus: 'warning',
+    }
+
+    render(<SafeDailySpendCard forecast={pastRolloverSurplusForecast} />)
+
+    expect(screen.getByText('الرصيد الختامي المتبقي (شامل المرحّل)')).toBeInTheDocument()
+    expect(screen.getByText(/\+ 800(\.000)? د\.أ/)).toBeInTheDocument()
+    expect(screen.getByText(/صافي عمليات الشهر وحده:.*200.*المرحّل السابق:.*1[,.]000/)).toBeInTheDocument()
+    expect(screen.getByText(/اكتمل هذا الشهر برصيد ختامي متبقي قدره/)).toBeInTheDocument()
+  })
+
+  it('renders completed past month with rolloverBalance causing total deficit', () => {
+    const pastRolloverDeficitForecast: ForecastResult = {
+      ...baseForecast,
+      isCurrentMonth: false,
+      isPastMonth: true,
+      isFutureMonth: false,
+      remainingDays: 0,
+      elapsedDays: 30,
+      totalDays: 30,
+      currentIncome: 500000,
+      currentExpense: 400000,
+      monthNet: 100000,
+      rolloverBalance: -300000,
+      availableBalance: -200000,
+      surplusAmount: 0,
+      deficitAmount: 200000,
+      healthStatus: 'danger',
+    }
+
+    render(<SafeDailySpendCard forecast={pastRolloverDeficitForecast} />)
+
+    expect(screen.getByText('عجز مالي ختامي (تجاوز الدخل والمرحّل)')).toBeInTheDocument()
+    expect(screen.getByText(/- 200(\.000)? د\.أ/)).toBeInTheDocument()
+    expect(screen.getByText(/صافي عمليات الشهر وحده:.*100.*المرحّل السابق:.*300/)).toBeInTheDocument()
+    expect(screen.getByText(/انتهى هذا الشهر بعجز ختامي كلي قدره/)).toBeInTheDocument()
   })
 
   it('renders future month with proposed daily spend across all days', () => {

@@ -7,6 +7,7 @@ import type { Debt } from '../../types'
 vi.mock('../../services/debts', () => ({
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
   updateDebtPayment: vi.fn().mockResolvedValue(undefined),
+  checkDebtPaymentTransactionExists: vi.fn().mockResolvedValue(true),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -145,6 +146,67 @@ describe('PaymentHistoryModal', () => {
         'p1',
         expect.objectContaining({
           amountFils: 60000,
+        })
+      )
+    })
+  })
+
+  it('allows toggling syncTransaction checkbox when editing a payment and passes it to updateDebtPayment', async () => {
+    const lentDebt: Debt = {
+      id: 'd1',
+      personName: 'خالد',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'p1',
+          amountFils: 50000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة',
+          transactionId: 'tx-123',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={lentDebt}
+      />
+    )
+
+    const editBtn = screen.getByTitle('تعديل هذه الدفعة')
+    fireEvent.click(editBtn)
+
+    const syncCheckbox = screen.getByRole('checkbox', {
+      name: /ربط الدفعة بالرصيد \(تأثير مالي في سجل المعاملات\)/i,
+    }) as HTMLInputElement
+    expect(syncCheckbox).toBeInTheDocument()
+    expect(syncCheckbox.checked).toBe(true)
+
+    // Uncheck it
+    fireEvent.click(syncCheckbox)
+    expect(syncCheckbox.checked).toBe(false)
+
+    // Save edit
+    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(debtServices.updateDebtPayment).toHaveBeenCalledWith(
+        'user-1',
+        lentDebt,
+        'p1',
+        expect.objectContaining({
+          amountFils: 50000,
+          syncTransaction: false,
         })
       )
     })

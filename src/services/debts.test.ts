@@ -355,6 +355,42 @@ describe('debts service with accounting link', () => {
         expect.objectContaining({ path: 'users/user-1/transactions/custom-tx-123' })
       )
     })
+
+    it('preserves untrackedPaidFils math protection when deleting a payment', async () => {
+      const debtWithUntracked: Debt = {
+        id: 'debt-100',
+        personName: 'محمود',
+        type: 'lent',
+        amountFils: 100000,
+        paidFils: 60000, // untracked: 60000 - 30000 = 30000
+        startDate: new Date(),
+        dueDate: null,
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'pay-1',
+            amountFils: 20000,
+            date: new Date(),
+            createdAt: new Date(),
+          },
+          {
+            id: 'pay-2',
+            amountFils: 10000,
+            date: new Date(),
+            createdAt: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+      }
+
+      await deleteDebtPayment('user-1', debtWithUntracked, 'pay-1')
+
+      // newPaidFils = Math.min(100000, untracked(30000) + remainingPayments(10000)) = 40000
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.paidFils).toBe(40000)
+      expect(debtPayload.settled).toBe(false)
+    })
   })
 
   describe('updateDebtPayment with sync', () => {
@@ -421,6 +457,96 @@ describe('debts service with accounting link', () => {
           date: new Date('2026-10-06'),
         })
       ).rejects.toThrow('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
+    })
+
+    it('unlinks and deletes linked transaction when syncTransaction is explicitly false', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ id: 'debt_pay_pay-1', amountFils: 20000 }),
+      })
+
+      await updateDebtPayment(
+        'user-1',
+        sampleDebtWithPayments,
+        'pay-1',
+        {
+          amountFils: 20000,
+          date: new Date('2026-10-05'),
+          syncTransaction: false,
+        }
+      )
+
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/debt_pay_pay-1' })
+      )
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.payments[0].transactionId).toBeUndefined()
+    })
+
+    it('creates linked transaction when syncTransaction is true and transaction does not exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [],
+      })
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { data: () => ({ id: 'cat-inc', name: 'سداد الديون والأقساط', type: 'income', archived: false }) },
+        ],
+      })
+
+      await updateDebtPayment(
+        'user-1',
+        sampleDebtWithPayments,
+        'pay-1',
+        {
+          amountFils: 20000,
+          date: new Date('2026-10-05'),
+          syncTransaction: true,
+        }
+      )
+
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      expect(mockBatchSet.mock.calls[0][1]).toMatchObject({
+        type: 'income',
+        amountFils: 20000,
+        title: 'استرداد دفعة دين: محمود',
+      })
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.payments[0].transactionId).toBe('debt_pay_pay-1')
+    })
+
+    it('preserves untrackedPaidFils math protection when updating a payment', async () => {
+      const debtWithUntracked: Debt = {
+        ...sampleDebtWithPayments,
+        amountFils: 100000,
+        paidFils: 50000, // untracked: 50000 - 20000 = 30000
+        payments: [
+          {
+            id: 'pay-1',
+            amountFils: 20000,
+            date: new Date('2026-10-05'),
+            createdAt: new Date('2026-10-05'),
+          },
+        ],
+      }
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ id: 'debt_pay_pay-1', amountFils: 20000 }),
+      })
+
+      await updateDebtPayment('user-1', debtWithUntracked, 'pay-1', {
+        amountFils: 25000,
+        date: new Date('2026-10-05'),
+      })
+
+      // newPaidFils = Math.min(100000, untracked(30000) + updated(25000)) = 55000
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.paidFils).toBe(55000)
+      expect(debtPayload.settled).toBe(false)
     })
   })
 
@@ -634,7 +760,7 @@ describe('debts service with accounting link', () => {
       expect(mockBatchCommit).toHaveBeenCalled()
     })
 
-    it('deletes initial transaction AND all payment transactions when syncTransaction is explicitly false', async () => {
+    it('deletes ONLY initial transaction and preserves payment transactions when syncTransaction is explicitly false', async () => {
       mockGetDoc.mockImplementation(async (ref: { path: string }) => {
         if (ref.path.includes('debts')) {
           return {
@@ -658,17 +784,22 @@ describe('debts service with accounting link', () => {
         personName: 'زيد',
       }, { syncTransaction: false })
 
-      // 1 initTx + 2 payTx = 3 delete calls
-      expect(mockBatchDelete).toHaveBeenCalledTimes(3)
+      // Only initial transaction is deleted (payments are managed independently)
+      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/debt_init_debt-123' })
+      )
       expect(mockBatchCommit).toHaveBeenCalled()
     })
 
     it('creates initial transaction when syncTransaction is true and initTx does NOT exist', async () => {
-      mockGetDocs.mockResolvedValueOnce({
-        docs: [
-          { data: () => ({ id: 'cat-debt', name: 'سداد الديون والأقساط', type: 'expense', archived: false }) },
-        ],
-      })
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: [] })
+        .mockResolvedValueOnce({
+          docs: [
+            { data: () => ({ id: 'cat-debt', name: 'سداد الديون والأقساط', type: 'expense', archived: false }) },
+          ],
+        })
 
       mockGetDoc.mockImplementation(async (ref: { path: string }) => {
         if (ref.path.includes('debts')) {

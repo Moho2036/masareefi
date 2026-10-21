@@ -187,7 +187,165 @@ describe('forecast lib', () => {
     expect(res.upcomingDebtObligations).toBe(0)
     expect(res.isDeficitProjected).toBe(false)
     expect(res.monthNet).toBe(-300000)
+    expect(res.availableBalance).toBe(-300000)
+    expect(res.healthStatus).toBe('danger')
     expect(res.deficitAmount).toBe(300000)
+    expect(res.surplusAmount).toBe(0)
+    expect(res.projectedNet).toBe(-300000)
+  })
+
+  it('handles past month with positive rolloverBalance covering month net deficit as surplus', () => {
+    const septRange = {
+      start: new Date(2026, 8, 1),
+      end: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'tx-sept-exp',
+          type: 'expense',
+          amountFils: 200000,
+          categoryId: 'cat-exp',
+          date: new Date(2026, 8, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      rolloverBalanceFils: 1000000, // +1,000 JOD rollover
+      monthStartDay: 1,
+      referenceDate: midMonthDate, // Oct 15, 2026
+      periodRange: septRange,
+    })
+
+    expect(res.isPastMonth).toBe(true)
+    expect(res.monthNet).toBe(-200000)
+    expect(res.rolloverBalance).toBe(1000000)
+    expect(res.availableBalance).toBe(800000)
+    expect(res.healthStatus).toBe('warning') // Withdrew from rollover but still in surplus
+    expect(res.deficitAmount).toBe(0)
+    expect(res.surplusAmount).toBe(800000)
+    expect(res.projectedNet).toBe(800000)
+  })
+
+  it('handles past month with positive rolloverBalance NOT covering month net deficit', () => {
+    const septRange = {
+      start: new Date(2026, 8, 1),
+      end: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'tx-sept-exp',
+          type: 'expense',
+          amountFils: 500000,
+          categoryId: 'cat-exp',
+          date: new Date(2026, 8, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      rolloverBalanceFils: 200000, // +200 JOD rollover, but spent 500 JOD
+      monthStartDay: 1,
+      referenceDate: midMonthDate,
+      periodRange: septRange,
+    })
+
+    expect(res.isPastMonth).toBe(true)
+    expect(res.monthNet).toBe(-500000)
+    expect(res.rolloverBalance).toBe(200000)
+    expect(res.availableBalance).toBe(-300000)
+    expect(res.healthStatus).toBe('danger')
+    expect(res.deficitAmount).toBe(300000)
+    expect(res.surplusAmount).toBe(0)
+    expect(res.projectedNet).toBe(-300000)
+  })
+
+  it('handles past month with negative rolloverBalance and positive month net resulting in net deficit', () => {
+    const septRange = {
+      start: new Date(2026, 8, 1),
+      end: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'tx-sept-inc',
+          type: 'income',
+          amountFils: 500000,
+          categoryId: 'cat-inc',
+          date: new Date(2026, 8, 5),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-sept-exp',
+          type: 'expense',
+          amountFils: 200000,
+          categoryId: 'cat-exp',
+          date: new Date(2026, 8, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      rolloverBalanceFils: -400000, // Started with -400 JOD deficit
+      monthStartDay: 1,
+      referenceDate: midMonthDate,
+      periodRange: septRange,
+    })
+
+    expect(res.isPastMonth).toBe(true)
+    expect(res.monthNet).toBe(300000)
+    expect(res.rolloverBalance).toBe(-400000)
+    expect(res.availableBalance).toBe(-100000)
+    expect(res.healthStatus).toBe('danger')
+    expect(res.deficitAmount).toBe(100000)
+    expect(res.surplusAmount).toBe(0)
+    expect(res.projectedNet).toBe(-100000)
+  })
+
+  it('handles past month with positive month net and positive rolloverBalance as safe surplus', () => {
+    const septRange = {
+      start: new Date(2026, 8, 1),
+      end: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'tx-sept-inc',
+          type: 'income',
+          amountFils: 500000,
+          categoryId: 'cat-inc',
+          date: new Date(2026, 8, 5),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-sept-exp',
+          type: 'expense',
+          amountFils: 300000,
+          categoryId: 'cat-exp',
+          date: new Date(2026, 8, 10),
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      rolloverBalanceFils: 100000,
+      monthStartDay: 1,
+      referenceDate: midMonthDate,
+      periodRange: septRange,
+    })
+
+    expect(res.isPastMonth).toBe(true)
+    expect(res.monthNet).toBe(200000)
+    expect(res.rolloverBalance).toBe(100000)
+    expect(res.availableBalance).toBe(300000)
+    expect(res.healthStatus).toBe('safe')
+    expect(res.deficitAmount).toBe(0)
+    expect(res.surplusAmount).toBe(300000)
+    expect(res.projectedNet).toBe(300000)
   })
 
   it('correctly handles future month when periodRange is passed and divides across totalDays', () => {

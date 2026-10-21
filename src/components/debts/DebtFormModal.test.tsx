@@ -55,7 +55,11 @@ describe('DebtFormModal syncTransaction on edit', () => {
     )
 
     await waitFor(() => {
-      expect(debtsService.checkDebtInitialTransactionExists).toHaveBeenCalledWith('user-123', 'debt-456')
+      expect(debtsService.checkDebtInitialTransactionExists).toHaveBeenCalledWith(
+        'user-123',
+        'debt-456',
+        sampleDebt
+      )
     })
 
     const toggle = screen.getByRole('switch')
@@ -74,7 +78,11 @@ describe('DebtFormModal syncTransaction on edit', () => {
     )
 
     await waitFor(() => {
-      expect(debtsService.checkDebtInitialTransactionExists).toHaveBeenCalledWith('user-123', 'debt-456')
+      expect(debtsService.checkDebtInitialTransactionExists).toHaveBeenCalledWith(
+        'user-123',
+        'debt-456',
+        sampleDebt
+      )
     })
 
     const toggle = screen.getByRole('switch')

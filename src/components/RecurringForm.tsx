@@ -136,11 +136,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
 
-  // Identify linked circle if editing or selecting
-  const linkedCircle = useMemo(() => {
-    const effectiveCircleId = circleId || initialRecurring?.circleId
-    return circles.find((c) => c.id === effectiveCircleId)
-  }, [circles, circleId, initialRecurring?.circleId])
+  const isCircleLinked = Boolean(initialRecurring?.circleId)
 
   // Filter available categories for current transaction type
   // Preserve recurring item's category even if archived
@@ -340,11 +336,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Linked Circle Info Banner */}
-      {isEditing && linkedCircle && (
+      {isCircleLinked && (
         <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-xs flex items-center gap-2">
           <Info className="w-4 h-4 shrink-0" />
           <span>
-            هذه المعاملة مرتبطة بالجمعية ({linkedCircle.name}) وتعديل القسط سيُحدث قسط الجمعية تلقائياً.
+            هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات
           </span>
         </div>
       )}
@@ -359,6 +355,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             setError(null)
           }}
           options={typeOptions}
+          disabled={isCircleLinked}
           className="w-full"
         />
       </div>
@@ -469,6 +466,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           value={frequency}
           onChange={setFrequency}
           options={frequencyOptions}
+          disabled={isCircleLinked}
           className="w-full"
         />
       </div>
@@ -481,6 +479,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           </label>
           <select
             value={circleId}
+            disabled={isCircleLinked}
             onChange={(e) => {
               const selectedId = e.target.value
               setCircleId(selectedId)
@@ -501,7 +500,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 setSkipMonth(undefined)
               }
             }}
-            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="">-- ليست مرتبطة بجمعية --</option>
             {availableCircles.map((c) => (
@@ -525,6 +524,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           label="تاريخ البداية"
           value={startDateStr}
           onChange={(e) => setStartDateStr(e.target.value)}
+          disabled={isCircleLinked}
           required
         />
 

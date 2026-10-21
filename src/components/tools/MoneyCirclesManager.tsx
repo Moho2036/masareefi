@@ -412,17 +412,22 @@ export const MoneyCirclesManager: React.FC = () => {
           })
         }
 
-        await updateMoneyCircle(user.uid, editingCircle.id, {
-          name: trimmedName,
-          monthlyAmountFils,
-          membersCount,
-          totalAmountFils,
-          myTurnMonth,
-          startDate,
-          members,
-          isManager,
-          recurringId: effectiveRecurringId,
-        })
+        await updateMoneyCircle(
+          user.uid,
+          editingCircle.id,
+          {
+            name: trimmedName,
+            monthlyAmountFils,
+            membersCount,
+            totalAmountFils,
+            myTurnMonth,
+            startDate,
+            members,
+            isManager,
+            recurringId: effectiveRecurringId,
+          },
+          { monthStartDay }
+        )
 
         const exists = await checkCirclePayoutExists(user.uid, editingCircle.id)
         setDepositedCircleIds((prev) => {
@@ -476,7 +481,12 @@ export const MoneyCirclesManager: React.FC = () => {
               circleId,
               skipMonth: myTurnMonth,
             })
-            await updateMoneyCircle(user.uid, circleId, { recurringId: recId })
+            await updateMoneyCircle(
+              user.uid,
+              circleId,
+              { recurringId: recId },
+              { monthStartDay }
+            )
             await processDueRecurring(user.uid)
           } catch (recErr) {
             console.error('Failed to auto-schedule recurring for circle:', recErr)
@@ -521,7 +531,12 @@ export const MoneyCirclesManager: React.FC = () => {
         circleId: circle.id,
         skipMonth: circle.myTurnMonth,
       })
-      await updateMoneyCircle(user.uid, circle.id, { recurringId: recId })
+      await updateMoneyCircle(
+        user.uid,
+        circle.id,
+        { recurringId: recId },
+        { monthStartDay }
+      )
       await processDueRecurring(user.uid)
       showToast('تمت جدولة القسط بنجاح مع تخطي شهر استلامك!', 'success')
     } catch (err) {
@@ -571,7 +586,12 @@ export const MoneyCirclesManager: React.FC = () => {
     })
 
     try {
-      await updateMoneyCircle(user.uid, circle.id, { members: updatedMembers })
+      await updateMoneyCircle(
+        user.uid,
+        circle.id,
+        { members: updatedMembers },
+        { monthStartDay }
+      )
     } catch (err) {
       console.error('Failed to toggle member payment:', err)
     }
@@ -602,7 +622,12 @@ export const MoneyCirclesManager: React.FC = () => {
   const handleCompleteCircle = async (circle: MoneyCircle) => {
     if (!user) return
     try {
-      await updateMoneyCircle(user.uid, circle.id, { status: 'completed' })
+      await updateMoneyCircle(
+        user.uid,
+        circle.id,
+        { status: 'completed' },
+        { monthStartDay }
+      )
       showToast('تم إنهاء الجمعية بنجاح', 'success')
     } catch (err) {
       console.error('Failed to complete circle:', err)

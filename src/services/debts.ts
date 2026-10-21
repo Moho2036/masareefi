@@ -12,6 +12,7 @@ import {
   Timestamp,
   serverTimestamp,
   type Unsubscribe,
+  type DocumentReference,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { Debt, DebtPayment, TxType } from '../types'
@@ -198,13 +199,95 @@ function serializePayment(p: DebtPayment): Record<string, unknown> {
   return item
 }
 
+async function findLegacyInitTransactionId(
+  uid: string,
+  _debtId: string,
+  debt: Debt
+): Promise<string | null> {
+  try {
+    const txColRef = collection(db, 'users', uid, 'transactions')
+    const q = query(txColRef, where('amountFils', '==', debt.amountFils))
+    const snap = await getDocs(q)
+    if (!snap || !snap.docs || snap.docs.length === 0) return null
+
+    const dDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
+    const dTime = dDate.getTime()
+
+    for (const d of snap.docs) {
+      if (typeof d?.id === 'string' && d.id.startsWith('debt_pay_')) continue
+      const tx = typeof d?.data === 'function' ? d.data() : (d as unknown as Record<string, unknown>)
+      if (!tx) continue
+      const txDate = tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date as string | number | Date)
+      const dayDiff = Math.abs(txDate.getTime() - dTime)
+      const isSameDay = dayDiff < 24 * 60 * 60 * 1000
+
+      const titleMatches =
+        typeof tx.title === 'string' &&
+        (tx.title.includes(debt.personName) ||
+          tx.title.includes('إقراض') ||
+          tx.title.includes('اقتراض') ||
+          tx.title.includes('دين'))
+
+      if (isSameDay && titleMatches) {
+        return d.id
+      }
+    }
+  } catch (err) {
+    console.error('Error querying legacy init transaction:', err)
+  }
+  return null
+}
+
 export async function checkDebtInitialTransactionExists(
   uid: string,
-  debtId: string
+  debtId: string,
+  debt?: Debt
 ): Promise<boolean> {
   const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${debtId}`)
   const snap = await getDoc(initTxRef)
-  return Boolean(snap && typeof snap.exists === 'function' && snap.exists())
+  if (snap && typeof snap.exists === 'function' && snap.exists()) return true
+  if (debt) {
+    const legacyId = await findLegacyInitTransactionId(uid, debtId, debt)
+    return Boolean(legacyId)
+  }
+  return false
+}
+
+export async function checkDebtPaymentTransactionExists(
+  uid: string,
+  debt: Debt,
+  payment: DebtPayment
+): Promise<boolean> {
+  if (payment.transactionId) {
+    const txRef = doc(db, 'users', uid, 'transactions', payment.transactionId)
+    const snap = await getDoc(txRef)
+    if (snap && typeof snap.exists === 'function' && snap.exists()) return true
+  }
+  const defaultPayTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${payment.id}`)
+  const defaultSnap = await getDoc(defaultPayTxRef)
+  if (defaultSnap && typeof defaultSnap.exists === 'function' && defaultSnap.exists()) return true
+
+  const legacyId = await findLegacyPaymentTransactionId(uid, payment, debt)
+  return Boolean(legacyId)
+}
+
+function updatePaymentTxNote(
+  existingNote: string | undefined,
+  effectiveType: 'lent' | 'borrowed',
+  effectivePersonName: string
+): string | undefined {
+  if (typeof existingNote !== 'string') return undefined
+
+  const prefixRegex = /^(سداد دين|تحصيل دين)\s*\([^)]*\)/
+  if (prefixRegex.test(existingNote)) {
+    const newPrefix =
+      effectiveType === 'lent'
+        ? `تحصيل دين (${effectivePersonName})`
+        : `سداد دين (${effectivePersonName})`
+    return existingNote.replace(prefixRegex, newPrefix).slice(0, 500)
+  }
+
+  return undefined
 }
 
 export async function updateDebt(
@@ -213,7 +296,7 @@ export async function updateDebt(
   data: Partial<Omit<Debt, 'id' | 'createdAt'>>,
   options?: { syncTransaction?: boolean }
 ): Promise<void> {
-  const docRef = doc(db, 'users', uid, 'debts', id)
+  const docRef = doc(db, 'users', uid, 'debts', id).withConverter(debtConverter)
   const debtSnap = await getDoc(docRef)
   if (debtSnap && typeof debtSnap.exists === 'function' && !debtSnap.exists()) {
     throw new Error('الدين غير موجود')
@@ -266,21 +349,24 @@ export async function updateDebt(
   const batch = writeBatch(db)
   batch.update(docRef, updates)
 
-  // Synchronize with transactions/debt_init_${id}
+  // Synchronize with initial transaction debt_init_${id} or legacy initial transaction
   const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
   const initTxSnap = await getDoc(initTxRef)
-  const initTxExists = Boolean(initTxSnap && typeof initTxSnap.exists === 'function' && initTxSnap.exists())
+  let effectiveInitTxRef = initTxRef
+  let initTxExists = Boolean(initTxSnap && typeof initTxSnap.exists === 'function' && initTxSnap.exists())
+
+  if (!initTxExists && currentDebt) {
+    const legacyInitId = await findLegacyInitTransactionId(uid, id, currentDebt)
+    if (legacyInitId) {
+      effectiveInitTxRef = doc(db, 'users', uid, 'transactions', legacyInitId)
+      initTxExists = true
+    }
+  }
 
   if (options?.syncTransaction === false) {
+    // Only delete the initial transaction; DO NOT delete payment transactions!
     if (initTxExists) {
-      batch.delete(initTxRef)
-    }
-    const payments: DebtPayment[] = currentDebt?.payments || []
-    for (const p of payments) {
-      if (p.id) {
-        const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
-        batch.delete(payTxRef)
-      }
+      batch.delete(effectiveInitTxRef)
     }
   } else if (initTxExists) {
     const txUpdates: Record<string, unknown> = {}
@@ -309,7 +395,7 @@ export async function updateDebt(
     }
 
     if (Object.keys(txUpdates).length > 0) {
-      batch.update(initTxRef, txUpdates)
+      batch.update(effectiveInitTxRef, txUpdates)
     }
   } else if (options?.syncTransaction === true) {
     // Transaction did not exist, but user enabled sync to link debt to balance
@@ -332,39 +418,69 @@ export async function updateDebt(
     })
   }
 
-  // Synchronize all associated payment transactions debt_pay_${payment.id} if personName or type actually changed
+  // Synchronize all associated payment transactions if personName or type actually changed
   const nameChanged = data.personName !== undefined && data.personName.trim() !== currentDebt?.personName
   const typeChanged = data.type !== undefined && data.type !== currentDebt?.type
 
   if (nameChanged || typeChanged) {
     const effectiveType = data.type !== undefined ? data.type : (currentDebt?.type || 'lent')
-    const name = (data.personName !== undefined ? data.personName.trim() : currentDebt?.personName) || ''
+    const effectivePersonName = (data.personName !== undefined ? data.personName.trim() : currentDebt?.personName) || ''
     const payments: DebtPayment[] = currentDebt?.payments || []
 
-    let newPayCatId: string | undefined
-    if (payments.length > 0 && typeChanged) {
+    if (payments.length > 0) {
       const payTxType: TxType = effectiveType === 'lent' ? 'income' : 'expense'
-      newPayCatId = await getOrCreateDebtCategory(uid, payTxType)
-    }
+      let newPayCatId: string | undefined
+      if (typeChanged) {
+        newPayCatId = await getOrCreateDebtCategory(uid, payTxType)
+      }
 
-    const validPayments = payments.filter((p) => Boolean(p.id))
-    const paymentRefs = validPayments.map((p) => doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`))
-    const paySnaps = await Promise.all(paymentRefs.map((ref) => getDoc(ref)))
+      for (const p of payments) {
+        if (!p.id) continue
+        let payTxRef = null
+        let payTxSnap = null
 
-    for (let i = 0; i < validPayments.length; i++) {
-      const payTxSnap = paySnaps[i]
-      const payTxRef = paymentRefs[i]
-      if (payTxSnap && typeof payTxSnap.exists === 'function' && payTxSnap.exists()) {
-        const payTxUpdates: Record<string, unknown> = {
-          title: (effectiveType === 'lent' ? `استرداد دفعة دين: ${name}` : `سداد دفعة دين: ${name}`).slice(0, 100),
-        }
-        if (typeChanged) {
-          payTxUpdates.type = effectiveType === 'lent' ? 'income' : 'expense'
-          if (newPayCatId) {
-            payTxUpdates.categoryId = newPayCatId
+        const candidateIds = [p.transactionId, `debt_pay_${p.id}`].filter(Boolean) as string[]
+        for (const cId of candidateIds) {
+          const candidateRef = doc(db, 'users', uid, 'transactions', cId)
+          const snap = await getDoc(candidateRef)
+          if (snap.exists()) {
+            payTxRef = candidateRef
+            payTxSnap = snap
+            break
           }
         }
-        batch.update(payTxRef, payTxUpdates)
+
+        if (!payTxRef && currentDebt) {
+          const legacyTxId = await findLegacyPaymentTransactionId(uid, id, currentDebt, p)
+          if (legacyTxId) {
+            const legRef = doc(db, 'users', uid, 'transactions', legacyTxId)
+            const snap = await getDoc(legRef)
+            if (snap.exists()) {
+              payTxRef = legRef
+              payTxSnap = snap
+            }
+          }
+        }
+
+        if (payTxRef && payTxSnap && payTxSnap.exists()) {
+          const txData = payTxSnap.data() as Record<string, unknown>
+          const payTxUpdates: Record<string, unknown> = {
+            title: (effectiveType === 'lent' ? `تحصيل دين: ${effectivePersonName}` : `سداد دين: ${effectivePersonName}`).slice(0, 100),
+          }
+          if (typeChanged) {
+            payTxUpdates.type = payTxType
+            if (newPayCatId) {
+              payTxUpdates.categoryId = newPayCatId
+            }
+          }
+          if (typeof txData?.note === 'string') {
+            const updatedNote = updatePaymentTxNote(txData.note, effectiveType, effectivePersonName)
+            if (updatedNote !== undefined) {
+              payTxUpdates.note = updatedNote
+            }
+          }
+          batch.update(payTxRef, payTxUpdates)
+        }
       }
     }
   }
@@ -505,10 +621,15 @@ export async function addDebtPayment(
 
 async function findLegacyPaymentTransactionId(
   uid: string,
-  payment: DebtPayment,
-  debt: Debt
+  debtIdOrPayment: string | DebtPayment,
+  debtOrCurrentDebt: Debt,
+  paymentParam?: DebtPayment
 ): Promise<string | null> {
   try {
+    const debt = debtOrCurrentDebt
+    const payment = typeof debtIdOrPayment === 'string' ? paymentParam! : debtIdOrPayment
+    if (!payment) return null
+
     const txColRef = collection(db, 'users', uid, 'transactions')
     const q = query(txColRef, where('amountFils', '==', payment.amountFils))
     const snap = await getDocs(q)
@@ -528,6 +649,7 @@ async function findLegacyPaymentTransactionId(
         (tx.title.includes(debt.personName) ||
           tx.title.includes('دين') ||
           tx.title.includes('سداد') ||
+          tx.title.includes('تحصيل') ||
           tx.title.includes('استرداد'))
 
       const noteMatches =
@@ -555,7 +677,11 @@ export async function deleteDebtPayment(
 ): Promise<void> {
   const targetPayment = (debt.payments || []).find((p) => p.id === paymentId)
   const updatedPayments = (debt.payments || []).filter((p) => p.id !== paymentId)
-  const newPaidFils = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
+
+  const previousPaymentsSum = (debt.payments || []).reduce((acc, p) => acc + p.amountFils, 0)
+  const untrackedPaidFils = Math.max(0, (debt.paidFils || 0) - previousPaymentsSum)
+  const updatedPaymentsTotal = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
+  const newPaidFils = Math.min(debt.amountFils, untrackedPaidFils + updatedPaymentsTotal)
   const newSettled = newPaidFils === debt.amountFils
 
   const batch = writeBatch(db)
@@ -579,7 +705,7 @@ export async function deleteDebtPayment(
     // search by note/title/amount/date
     if (!targetPayment?.transactionId && targetPayment) {
       try {
-        const legacyTxId = await findLegacyPaymentTransactionId(uid, targetPayment, debt)
+        const legacyTxId = await findLegacyPaymentTransactionId(uid, debt.id, debt, targetPayment)
         if (legacyTxId && legacyTxId !== txId) {
           batch.delete(doc(db, 'users', uid, 'transactions', legacyTxId))
         }
@@ -592,11 +718,23 @@ export async function deleteDebtPayment(
   await batch.commit()
 }
 
+export interface UpdatePaymentOptions {
+  syncTransaction?: boolean
+  categoryId?: string
+}
+
 export async function updateDebtPayment(
   uid: string,
   debt: Debt,
   paymentId: string,
-  updatedData: { amountFils: number; date: Date; note?: string }
+  updatedData: {
+    amountFils: number
+    date: Date
+    note?: string
+    syncTransaction?: boolean
+    categoryId?: string
+  },
+  options?: UpdatePaymentOptions
 ): Promise<void> {
   const payments = debt.payments || []
   const existingPayment = payments.find((p) => p.id === paymentId)
@@ -609,11 +747,14 @@ export async function updateDebtPayment(
     throw new Error('مبلغ الدفعة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
 
+  const previousPaymentsSum = payments.reduce((acc, p) => acc + p.amountFils, 0)
+  const untrackedPaidFils = Math.max(0, (debt.paidFils || 0) - previousPaymentsSum)
+
   const otherPaymentsTotal = payments
     .filter((p) => p.id !== paymentId)
     .reduce((sum, p) => sum + p.amountFils, 0)
 
-  const remainingAllowed = Math.max(0, debt.amountFils - otherPaymentsTotal)
+  const remainingAllowed = Math.max(0, debt.amountFils - (otherPaymentsTotal + untrackedPaidFils))
   if (amount > remainingAllowed) {
     throw new Error('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
   }
@@ -629,22 +770,128 @@ export async function updateDebtPayment(
   const defaultPaymentNote = debt.type === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
   const finalPaymentNote = (updatedData.note?.trim() || defaultPaymentNote).slice(0, 500)
 
+  const syncTxOption =
+    updatedData.syncTransaction !== undefined
+      ? updatedData.syncTransaction
+      : options?.syncTransaction
+
+  // 1. Look up existing transaction for this payment
+  let existingTxId: string | null = null
+  let existingTxRef = null
+
+  const candidateIds = [existingPayment.transactionId, `debt_pay_${paymentId}`].filter(Boolean) as string[]
+  for (const cId of candidateIds) {
+    const candidateRef = doc(db, 'users', uid, 'transactions', cId)
+    const snap = await getDoc(candidateRef)
+    if (snap.exists()) {
+      existingTxId = cId
+      existingTxRef = candidateRef
+      break
+    }
+  }
+
+  if (!existingTxRef) {
+    const legacyId = await findLegacyPaymentTransactionId(uid, debt.id, debt, existingPayment)
+    if (legacyId) {
+      const legRef = doc(db, 'users', uid, 'transactions', legacyId)
+      const snap = await getDoc(legRef)
+      if (snap.exists()) {
+        existingTxId = legacyId
+        existingTxRef = legRef
+      }
+    }
+  }
+
+  const batch = writeBatch(db)
+  let finalTransactionId: string | undefined = existingPayment.transactionId
+  let txToDelete: DocumentReference | null = null
+  let txToUpdate: {
+    ref: DocumentReference
+    data: {
+      amountFils: number
+      date: Timestamp | Date
+      note: string
+    }
+  } | null = null
+  let newTxData: {
+    ref: DocumentReference
+    data: {
+      type: TxType
+      amountFils: number
+      categoryId: string
+      date: Timestamp | Date
+      title: string
+      note: string
+      createdAt: ReturnType<typeof serverTimestamp>
+    }
+  } | null = null
+
+  if (syncTxOption === false) {
+    if (existingTxRef) {
+      txToDelete = existingTxRef
+    }
+    finalTransactionId = undefined
+  } else if (syncTxOption === true || (syncTxOption === undefined && existingTxRef)) {
+    if (existingTxRef) {
+      txToUpdate = {
+        ref: existingTxRef,
+        data: {
+          amountFils: amount,
+          date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
+          note: finalPaymentNote,
+        },
+      }
+      finalTransactionId = existingTxId || existingPayment.transactionId || `debt_pay_${paymentId}`
+    } else if (syncTxOption === true) {
+      const newTxId = `debt_pay_${paymentId}`
+      const newTxRef = doc(db, 'users', uid, 'transactions', newTxId)
+      const txType: TxType = debt.type === 'lent' ? 'income' : 'expense'
+      const categoryId =
+        updatedData.categoryId ||
+        options?.categoryId ||
+        (await getOrCreateDebtCategory(uid, txType))
+      const title = (
+        debt.type === 'lent'
+          ? `استرداد دفعة دين: ${debt.personName}`
+          : `سداد دفعة دين: ${debt.personName}`
+      ).slice(0, 100)
+
+      newTxData = {
+        ref: newTxRef,
+        data: {
+          type: txType,
+          amountFils: amount,
+          categoryId,
+          date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
+          title,
+          note: finalPaymentNote,
+          createdAt: serverTimestamp(),
+        },
+      }
+      finalTransactionId = newTxId
+    }
+  }
+
   const updatedPayments = payments.map((p) => {
     if (p.id !== paymentId) return p
-    return {
+    const item: DebtPayment = {
       ...p,
       amountFils: amount,
       date: updatedData.date,
       note: finalPaymentNote,
+      ...(finalTransactionId !== undefined ? { transactionId: finalTransactionId } : {}),
     }
+    if (finalTransactionId === undefined) {
+      delete item.transactionId
+    }
+    return item
   })
 
-  const newPaidFils = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
+  const updatedPaymentsTotal = updatedPayments.reduce((sum, p) => sum + p.amountFils, 0)
+  const newPaidFils = Math.min(debt.amountFils, untrackedPaidFils + updatedPaymentsTotal)
   const newSettled = newPaidFils === debt.amountFils
 
-  const batch = writeBatch(db)
   const debtRef = doc(db, 'users', uid, 'debts', debt.id)
-
   const serializedPayments = updatedPayments.map(serializePayment)
 
   batch.update(debtRef, {
@@ -653,16 +900,14 @@ export async function updateDebtPayment(
     payments: serializedPayments,
   })
 
-  // Synchronize payment transaction if it exists in transactions
-  const txId = existingPayment.transactionId || `debt_pay_${paymentId}`
-  const payTxRef = doc(db, 'users', uid, 'transactions', txId)
-  const payTxSnap = await getDoc(payTxRef)
-  if (payTxSnap && typeof payTxSnap.exists === 'function' && payTxSnap.exists()) {
-    batch.update(payTxRef, {
-      amountFils: amount,
-      date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
-      note: finalPaymentNote,
-    })
+  if (txToDelete) {
+    batch.delete(txToDelete)
+  }
+  if (txToUpdate) {
+    batch.update(txToUpdate.ref, txToUpdate.data)
+  }
+  if (newTxData) {
+    batch.set(newTxData.ref, newTxData.data)
   }
 
   await batch.commit()

@@ -167,7 +167,8 @@ export async function addMoneyCircle(
 export async function updateMoneyCircle(
   uid: string,
   id: string,
-  partial: Partial<Omit<MoneyCircle, 'id' | 'createdAt'>>
+  partial: Partial<Omit<MoneyCircle, 'id' | 'createdAt'>>,
+  options?: { monthStartDay?: number }
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'circles', id)
   const updates: Record<string, unknown> = {}
@@ -211,8 +212,19 @@ export async function updateMoneyCircle(
       const circleSnap = await getDoc(docRef)
       if (circleSnap?.exists?.()) {
         const circleData = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
+        let monthStartDay = options?.monthStartDay
+        if (monthStartDay === undefined) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', uid))
+            if (userSnap?.exists?.()) {
+              monthStartDay = userSnap.data()?.monthStartDay
+            }
+          } catch {
+            // fallback
+          }
+        }
         const now = new Date()
-        const diffMonths = getCircleCycleIndex(circleData.startDate, now)
+        const diffMonths = getCircleCycleIndex(circleData.startDate, now, monthStartDay)
         const currentMonthIndex = diffMonths + 1
 
         // If circle hasn't started yet or turn month is in the future
@@ -221,11 +233,21 @@ export async function updateMoneyCircle(
         } else {
           const netAmountFils = circleData.totalAmountFils - circleData.monthlyAmountFils
           if (netAmountFils > 0) {
-            await updateDoc(payoutRef, {
+            const payoutUpdates: Record<string, unknown> = {
               amountFils: netAmountFils,
               title: `استلام صافي جمعية ${circleData.name}`.slice(0, 100),
               note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circleData.name})`.slice(0, 500),
-            }).catch(() => {})
+            }
+
+            if (partial.startDate !== undefined || partial.myTurnMonth !== undefined) {
+              const expectedTurnDate = addMonths(
+                circleData.startDate,
+                Math.max(0, circleData.myTurnMonth - 1)
+              )
+              payoutUpdates.date = Timestamp.fromDate(expectedTurnDate)
+            }
+
+            await updateDoc(payoutRef, payoutUpdates).catch(() => {})
           }
         }
       }
