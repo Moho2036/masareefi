@@ -8,6 +8,7 @@ import {
   Scale,
   AlertCircle,
   Info,
+  X,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -213,8 +214,18 @@ export const DebtsPage: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ابحث باسم الشخص أو الملاحظة..."
-            className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+            className="w-full ps-10 pe-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute inset-y-0 end-0 pe-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              aria-label="مسح البحث"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Type Filter Buttons */}
@@ -330,9 +341,23 @@ export const DebtsPage: React.FC = () => {
                 : 'يمكنك البدء بتسجيل مبالغ أقرضتها للآخرين أو استدنتها لمتابعتها بسهولة ودقة'
             }
             action={
-              <Button variant="primary" onClick={handleOpenAdd}>
-                إضافة دين جديد
-              </Button>
+              search || typeFilter !== 'all' || statusFilter !== 'all' ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearch('')
+                    setTypeFilter('all')
+                    setStatusFilter('all')
+                  }}
+                  icon={<X className="w-4 h-4" />}
+                >
+                  مسح البحث
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={handleOpenAdd}>
+                  إضافة دين جديد
+                </Button>
+              )
             }
           />
         </div>

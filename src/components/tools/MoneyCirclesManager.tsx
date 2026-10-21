@@ -38,6 +38,7 @@ import {
   checkCircleHasTransactions,
   depositCircleNetPayout,
   getCircleCycleIndex,
+  isCircleFullyPaid,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
@@ -404,11 +405,31 @@ export const MoneyCirclesManager: React.FC = () => {
           // Ensure member's payout month (i) is stripped and any month exceeding membersCount is removed
           const cleanedPaid = rawPaid.filter((mNum) => mNum <= membersCount && mNum !== i)
 
+          // Clean paymentsByMonth: retain only valid months (1 <= monthKey <= membersCount) and strip payout month i
+          const rawPaymentsByMonth = existingMember?.paymentsByMonth
+          let cleanedPaymentsByMonth: Record<string, boolean> | undefined = undefined
+          if (rawPaymentsByMonth) {
+            cleanedPaymentsByMonth = {}
+            for (const [key, val] of Object.entries(rawPaymentsByMonth)) {
+              const monthKeyNum = Number(key)
+              if (
+                !isNaN(monthKeyNum) &&
+                monthKeyNum >= 1 &&
+                monthKeyNum <= membersCount &&
+                monthKeyNum !== i &&
+                Boolean(val)
+              ) {
+                cleanedPaymentsByMonth[key] = true
+              }
+            }
+          }
+
           members.push({
             id: existingMember?.id || `mem_${i}`,
             name: memberName,
             turnMonth: i,
             paidMonths: cleanedPaid,
+            ...(cleanedPaymentsByMonth ? { paymentsByMonth: cleanedPaymentsByMonth } : {}),
           })
         }
 
@@ -578,11 +599,23 @@ export const MoneyCirclesManager: React.FC = () => {
 
     const updatedMembers = circle.members.map((m) => {
       if (m.id !== memberId) return m
-      const hasPaid = m.paidMonths.includes(monthNum)
+      const hasPaid =
+        m.paidMonths.includes(monthNum) ||
+        m.paymentsByMonth?.[String(monthNum)] === true
       const newPaid = hasPaid
         ? m.paidMonths.filter((mn) => mn !== monthNum)
-        : [...m.paidMonths, monthNum]
-      return { ...m, paidMonths: newPaid }
+        : [...m.paidMonths.filter((mn) => mn !== monthNum), monthNum]
+      const newPaymentsByMonth = { ...(m.paymentsByMonth || {}) }
+      if (hasPaid) {
+        delete newPaymentsByMonth[String(monthNum)]
+      } else {
+        newPaymentsByMonth[String(monthNum)] = true
+      }
+      return {
+        ...m,
+        paidMonths: newPaid,
+        paymentsByMonth: newPaymentsByMonth,
+      }
     })
 
     try {
@@ -683,8 +716,11 @@ export const MoneyCirclesManager: React.FC = () => {
             const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
             const isStarted = diffMonths >= 0
             const isCompleted = circle.status === 'completed' || diffMonths >= circle.membersCount
+            const isObligationsCompleted =
+              circle.status === 'active' &&
+              (diffMonths >= circle.membersCount || isCircleFullyPaid(circle))
             const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
-            const isUserTurn = isStarted && !isCompleted && isUserTurnMonth(circle, now, monthStartDay)
+            const isUserTurn = isStarted && !isCompleted && !isObligationsCompleted && isUserTurnMonth(circle, now, monthStartDay)
             const isExpanded = expandedCircleId === circle.id
             const viewingMonth = selectedCircleMonth[circle.id] || currentMonth
 
@@ -752,7 +788,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
-                    {isCompleted && circle.status !== 'completed' && (
+                    {(isCompleted || isObligationsCompleted) && circle.status !== 'completed' && (
                       <Button
                         type="button"
                         variant="outline"
@@ -792,7 +828,7 @@ export const MoneyCirclesManager: React.FC = () => {
                 </div>
 
                 {/* Turn Announcement Banner */}
-                {isCompleted ? (
+                {circle.status === 'completed' ? (
                   <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -801,6 +837,23 @@ export const MoneyCirclesManager: React.FC = () => {
                     <span className="text-[11px] font-bold text-slate-400">
                       مكتملة ✓
                     </span>
+                  </div>
+                ) : isObligationsCompleted ? (
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-2.5 text-xs font-bold">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف (مكتملة).</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleCompleteCircle(circle)}
+                      className="text-xs shrink-0 self-end sm:self-auto"
+                      icon={<CheckCircle2 className="w-4 h-4" />}
+                    >
+                      إنهاء الجمعية
+                    </Button>
                   </div>
                 ) : !isStarted ? (
                   <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
@@ -907,14 +960,14 @@ export const MoneyCirclesManager: React.FC = () => {
                 <div className="mt-4 space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
                     <span>
-                      {isCompleted
+                      {isCompleted || isObligationsCompleted
                         ? 'اكتملت جميع دورات الجمعية'
                         : !isStarted
                           ? `الجمعية تبدأ في ${formatDate(start, 'yyyy/MM/dd')}`
                           : `التقدم الزمني: الشهر ${currentMonth} من ${circle.membersCount}`}
                     </span>
                     <span>
-                      {isCompleted
+                      {isCompleted || isObligationsCompleted
                         ? '100%'
                         : !isStarted
                           ? '0%'
@@ -925,10 +978,10 @@ export const MoneyCirclesManager: React.FC = () => {
                     <div
                       className={cn(
                         'h-full rounded-full transition-all duration-500',
-                        isCompleted ? 'bg-slate-400 dark:bg-slate-500' : 'bg-emerald-500'
+                        circle.status === 'completed' ? 'bg-slate-400 dark:bg-slate-500' : 'bg-emerald-500'
                       )}
                       style={{
-                        width: isCompleted
+                        width: isCompleted || isObligationsCompleted
                           ? '100%'
                           : !isStarted
                             ? '0%'

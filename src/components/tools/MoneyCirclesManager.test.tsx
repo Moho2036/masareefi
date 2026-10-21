@@ -575,4 +575,88 @@ describe('MoneyCirclesManager Component', () => {
       expect(screen.getByText(/تنبيه بشأن تعديل القسط الشهري/i)).toBeInTheDocument()
     })
   })
+
+  it('displays emerald completion banner when active circle has all obligations fulfilled and allows completing it', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        membersCount: 2,
+        startDate: new Date(),
+        members: [
+          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [2] },
+          { id: 'mem_2', name: 'أنت', turnMonth: 2, paidMonths: [1] },
+        ],
+        status: 'active',
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    expect(
+      screen.getByText(/🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف \(مكتملة\)\./i)
+    ).toBeInTheDocument()
+
+    const completeBtn = screen.getAllByRole('button', { name: /إنهاء الجمعية/i })[0]
+    fireEvent.click(completeBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        { status: 'completed' },
+        expect.any(Object)
+      )
+    })
+  })
+
+  it('cleans paymentsByMonth beyond new membersCount when editing circle', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        membersCount: 5,
+        members: [
+          {
+            id: 'mem_1',
+            name: 'عضو 1',
+            turnMonth: 1,
+            paidMonths: [2, 3, 4, 5],
+            paymentsByMonth: { '2': true, '3': true, '4': true, '5': true },
+          },
+          { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [1, 3] },
+          { id: 'mem_3', name: 'أنت', turnMonth: 3, paidMonths: [1, 2] },
+          { id: 'mem_4', name: 'عضو 4', turnMonth: 4, paidMonths: [1, 2] },
+          { id: 'mem_5', name: 'عضو 5', turnMonth: 5, paidMonths: [1, 2] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    const membersSelect = screen.getByLabelText(/عدد الأعضاء/i)
+    fireEvent.change(membersSelect, { target: { value: '3' } })
+
+    const submitBtn = screen.getByRole('button', { name: /حفظ التعديلات/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        expect.objectContaining({
+          membersCount: 3,
+          members: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'mem_1',
+              paidMonths: [2, 3],
+              paymentsByMonth: { '2': true, '3': true },
+            }),
+          ]),
+        }),
+        expect.any(Object)
+      )
+    })
+  })
 })

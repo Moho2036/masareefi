@@ -22,6 +22,14 @@ import {
 import { db } from '../lib/firebase'
 import type { MoneyCircle } from '../types'
 
+interface FirestoreCircleMember {
+  id: string
+  name: string
+  turnMonth: number
+  paidMonths: number[]
+  paymentsByMonth?: Record<string, boolean>
+}
+
 interface FirestoreCircleDoc {
   name: string
   monthlyAmountFils: number
@@ -29,12 +37,7 @@ interface FirestoreCircleDoc {
   totalAmountFils: number
   myTurnMonth: number
   startDate: Timestamp
-  members: Array<{
-    id: string
-    name: string
-    turnMonth: number
-    paidMonths: number[]
-  }>
+  members: FirestoreCircleMember[]
   status: 'active' | 'completed'
   recurringId?: string
   isManager?: boolean
@@ -58,6 +61,7 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
         name: m.name.trim().slice(0, 50),
         turnMonth: Math.round(m.turnMonth),
         paidMonths: (m.paidMonths || []).map(Number),
+        ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
       })),
       status: circle.status,
       createdAt:
@@ -81,11 +85,12 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
       totalAmountFils: data.totalAmountFils,
       myTurnMonth: data.myTurnMonth,
       startDate: data.startDate?.toDate ? data.startDate.toDate() : new Date(),
-      members: (data.members || []).map((m) => ({
+      members: (data.members || []).map((m: FirestoreCircleMember) => ({
         id: m.id,
         name: m.name,
         turnMonth: m.turnMonth,
         paidMonths: m.paidMonths || [],
+        ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
       })),
       status: data.status || 'active',
       ...(data.recurringId ? { recurringId: data.recurringId } : {}),
@@ -483,3 +488,24 @@ export function isUserTurnMonth(
   }
   return diffMonths + 1 === circle.myTurnMonth
 }
+
+/**
+ * Checks if all member obligations have been fulfilled across all months of the circle.
+ * In each month (1..membersCount), all members except the exempt recipient for that month must have paid.
+ */
+export function isCircleFullyPaid(circle: MoneyCircle): boolean {
+  if (!circle.members || circle.members.length === 0 || circle.membersCount <= 0) {
+    return false
+  }
+  for (let month = 1; month <= circle.membersCount; month++) {
+    for (const member of circle.members) {
+      if (member.turnMonth === month) continue // Exempt receiver for this month
+      const isPaid =
+        member.paidMonths?.includes(month) ||
+        member.paymentsByMonth?.[String(month)] === true
+      if (!isPaid) return false
+    }
+  }
+  return true
+}
+

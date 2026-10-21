@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getCurrentCircleMonth,
   isUserTurnMonth,
+  isCircleFullyPaid,
   circleConverter,
   deleteMoneyCircle,
   deleteCircle,
@@ -477,6 +478,50 @@ describe('moneyCircles service', () => {
 
       const hasTx = await checkCircleHasTransactions('uid-1', 'circle-1', 'rec-1')
       expect(hasTx).toBe(false)
+    })
+  })
+
+  describe('isCircleFullyPaid', () => {
+    it('returns false if circle has no members or membersCount is 0', () => {
+      expect(isCircleFullyPaid({ ...sampleCircle, members: [] })).toBe(false)
+      expect(isCircleFullyPaid({ ...sampleCircle, membersCount: 0 })).toBe(false)
+    })
+
+    it('returns false if any non-exempt member has not paid for any month', () => {
+      const circle: MoneyCircle = {
+        ...sampleCircle,
+        membersCount: 2,
+        members: [
+          { id: 'm-1', name: 'عضو 1', turnMonth: 1, paidMonths: [2] }, // Paid month 2, exempt in 1
+          { id: 'm-2', name: 'عضو 2', turnMonth: 2, paidMonths: [] }, // Needs to pay month 1, hasn't paid!
+        ],
+      }
+      expect(isCircleFullyPaid(circle)).toBe(false)
+    })
+
+    it('returns true when all non-exempt members have paid across all months', () => {
+      const circle: MoneyCircle = {
+        ...sampleCircle,
+        membersCount: 3,
+        members: [
+          { id: 'm-1', name: 'عضو 1', turnMonth: 1, paidMonths: [2, 3] }, // Exempt in 1, paid 2 & 3
+          { id: 'm-2', name: 'عضو 2', turnMonth: 2, paidMonths: [1, 3] }, // Exempt in 2, paid 1 & 3
+          { id: 'm-3', name: 'عضو 3', turnMonth: 3, paidMonths: [1, 2] }, // Exempt in 3, paid 1 & 2
+        ],
+      }
+      expect(isCircleFullyPaid(circle)).toBe(true)
+    })
+
+    it('supports paymentsByMonth record as well', () => {
+      const circle: MoneyCircle = {
+        ...sampleCircle,
+        membersCount: 2,
+        members: [
+          { id: 'm-1', name: 'عضو 1', turnMonth: 1, paidMonths: [], paymentsByMonth: { '2': true } },
+          { id: 'm-2', name: 'عضو 2', turnMonth: 2, paidMonths: [1] },
+        ],
+      }
+      expect(isCircleFullyPaid(circle)).toBe(true)
     })
   })
 })

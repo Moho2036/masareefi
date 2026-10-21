@@ -20,7 +20,7 @@ import {
 import { addRecurring, processDueRecurring } from '../services/recurring'
 import { updateDebtPayment, removeDebtPayment } from '../services/debts'
 import { toFils, fromFils } from '../lib/money'
-import { parseLocalDateInput } from '../lib/dates'
+import { parseLocalDateInput, formatDateInput } from '../lib/dates'
 import { findLinkedDebtPayment } from '../lib/debts'
 import {
   getCategoryUsageMap,
@@ -92,17 +92,30 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     return ''
   })
 
+  const isBrowsingDifferentMonth = useMemo(() => {
+    if (initialTransaction || duplicateFrom) return false
+    const now = new Date()
+    return now < range.start || now >= range.end
+  }, [initialTransaction, duplicateFrom, range])
+
   const [dateStr, setDateStr] = useState<string>(() => {
     if (initialTransaction?.date) {
       const d =
         initialTransaction.date instanceof Date
           ? initialTransaction.date
           : new Date(initialTransaction.date)
-      return format(d, 'yyyy-MM-dd')
+      return formatDateInput(d)
+    }
+    if (duplicateFrom?.date) {
+      const d =
+        duplicateFrom.date instanceof Date
+          ? duplicateFrom.date
+          : new Date(duplicateFrom.date)
+      return formatDateInput(d)
     }
     const now = new Date()
     const isWithinRange = now >= range.start && now < range.end
-    return format(isWithinRange ? now : range.start, 'yyyy-MM-dd')
+    return formatDateInput(isWithinRange ? now : range.start)
   })
 
   const [title, setTitle] = useState<string>(
@@ -718,6 +731,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           disabled={isLockedTransaction}
           readOnly={isLockedTransaction}
         />
+        {isBrowsingDifferentMonth && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1 font-medium">
+            <span>💡</span>
+            <span>
+              تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً ({formatDateInput(range.start)}). يمكنك تغييره بحرية.
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Description / Title Input */}

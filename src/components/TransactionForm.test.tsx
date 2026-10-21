@@ -477,4 +477,32 @@ describe('TransactionForm Component', () => {
 
     expect(screen.getByText(/جيم ورياضة \(مؤرشف\)/i)).toBeInTheDocument()
   })
+
+  it('sets default date to range.start and displays hint when browsing a past/future month', () => {
+    // Set mockRange to a past month (Feb 2026)
+    mockRange = { start: new Date('2026-02-01T00:00:00Z'), end: new Date('2026-03-01T00:00:00Z') }
+
+    renderWithRouter(<TransactionForm onClose={vi.fn()} />)
+
+    const dateInput = screen.getByLabelText('التاريخ') as HTMLInputElement
+    expect(dateInput.value).toBe('2026-02-01')
+
+    // Hint should be rendered
+    expect(
+      screen.getByText(/تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً/)
+    ).toBeInTheDocument()
+  })
+
+  it('sets default date to today without showing hint when browsing current active month', () => {
+    const today = new Date()
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+    mockRange = { start: startOfMonth, end: endOfMonth }
+
+    renderWithRouter(<TransactionForm onClose={vi.fn()} />)
+
+    expect(
+      screen.queryByText(/تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً/)
+    ).not.toBeInTheDocument()
+  })
 })

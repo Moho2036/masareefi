@@ -85,6 +85,7 @@ export interface CircleMember {
   name: string
   turnMonth: number
   paidMonths: number[] // Array of month numbers (1..membersCount) they have paid
+  paymentsByMonth?: Record<string, boolean>
 }
 
 export interface MoneyCircle {

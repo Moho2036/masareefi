@@ -76,6 +76,24 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
       return
     }
 
+    const duplicateCat = categories.find(
+      (c) =>
+        c.type === type &&
+        c.name.trim() === trimmedName &&
+        (!isEditing || c.id !== initialCategory?.id)
+    )
+
+    if (duplicateCat) {
+      if (duplicateCat.archived) {
+        setError(
+          'يوجد تصنيف مؤرشف بنفس الاسم والنوع. يمكنك استعادته من قسم التصنيفات المؤرشفة بدلاً من تكراره.'
+        )
+      } else {
+        setError('يوجد تصنيف آخر بنفس الاسم والنوع بالفعل.')
+      }
+      return
+    }
+
     const trimmedIcon = (icon.trim() || '📁').slice(0, 16)
 
     setSubmitting(true)
