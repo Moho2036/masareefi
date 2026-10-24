@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MoneyCirclesManager } from './MoneyCirclesManager'
 import * as circleServices from '../../services/moneyCircles'
-import * as recurringServices from '../../services/recurring'
 import type { MoneyCircle, Recurring } from '../../types'
 
 vi.mock('../../lib/firebase', () => ({
@@ -176,7 +175,7 @@ describe('MoneyCirclesManager Component', () => {
 
     // Verify modal and transaction cleanup checkbox appear
     expect(screen.getByText('تأكيد حذف الجمعية')).toBeInTheDocument()
-    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة سابقاً/i)
+    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة/i)
     expect(checkbox).toBeInTheDocument()
     expect((checkbox as HTMLInputElement).checked).toBe(false)
 
@@ -199,7 +198,7 @@ describe('MoneyCirclesManager Component', () => {
     const deleteBtn = screen.getByRole('button', { name: /حذف الجمعية/i })
     fireEvent.click(deleteBtn)
 
-    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة سابقاً/i)
+    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة/i)
     fireEvent.click(checkbox)
     expect((checkbox as HTMLInputElement).checked).toBe(true)
 
@@ -216,6 +215,7 @@ describe('MoneyCirclesManager Component', () => {
   })
 
   it('preserves existing recurring categoryId when editing a circle', async () => {
+    mockCircles = [{ ...sampleCircle, recurringId: 'rec-circle-1' }]
     render(<MoneyCirclesManager />)
 
     // Click edit button
@@ -229,11 +229,15 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
-      expect(recurringServices.updateRecurring).toHaveBeenCalledWith(
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
         'user-123',
-        'rec-circle-1',
+        'circle-1',
         expect.objectContaining({
-          categoryId: 'cat-custom-circle', // Preserved from sampleRecurring!
+          recurringId: 'rec-circle-1',
+        }),
+        expect.objectContaining({
+          createRecurringRule: true,
+          defaultCategoryId: expect.any(String),
         })
       )
     })
@@ -249,13 +253,16 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(scheduleBtn)
 
     await waitFor(() => {
-      expect(recurringServices.addRecurring).toHaveBeenCalled()
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        {},
+        expect.objectContaining({
+          createRecurringRule: true,
+          defaultCategoryId: expect.any(String),
+        })
+      )
     })
-
-    const callArgs = vi.mocked(recurringServices.addRecurring).mock.calls[0]
-    expect(callArgs[0]).toBe('user-123')
-    expect(callArgs[1].startDate).toEqual(sampleCircle.startDate)
-    expect(callArgs[1].nextDate).not.toEqual(sampleCircle.startDate)
   })
 
   it('deletes recurring rule and unlinks recurringId when autoSchedule is toggled off during edit', async () => {
@@ -279,9 +286,7 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
-      // Must delete existing recurring rule
-      expect(recurringServices.deleteRecurring).toHaveBeenCalledWith('user-123', 'rec-circle-1')
-      // Must clear recurringId
+      // Must pass recurringId: '' and createRecurringRule: false to updateMoneyCircle
       expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
         'user-123',
         'circle-1',
@@ -289,6 +294,7 @@ describe('MoneyCirclesManager Component', () => {
           recurringId: '',
         }),
         expect.objectContaining({
+          createRecurringRule: false,
           monthStartDay: expect.any(Number),
         })
       )
@@ -322,13 +328,17 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
-      expect(recurringServices.updateRecurring).toHaveBeenCalledWith(
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
         'user-123',
-        'rec-circle-1',
+        'circle-1',
         expect.objectContaining({
-          title: 'قسط جمعية الرواد المحدثة',
-          amountFils: 150000,
-          skipMonth: 4,
+          name: 'جمعية الرواد المحدثة',
+          monthlyAmountFils: 150000,
+          myTurnMonth: 4,
+          recurringId: 'rec-circle-1',
+        }),
+        expect.objectContaining({
+          createRecurringRule: true,
         })
       )
     })
@@ -409,7 +419,7 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(editBtn)
 
     // Warning not shown initially
-    expect(screen.queryByText(/تنبيه بشأن تعديل القسط الشهري/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/تنبيه بشأن تعديل/i)).not.toBeInTheDocument()
 
     // Change monthly amount
     const amountInput = screen.getByLabelText(/القسط الشهري/i)
@@ -417,7 +427,7 @@ describe('MoneyCirclesManager Component', () => {
 
     // Warning should now appear
     await waitFor(() => {
-      expect(screen.getByText(/تنبيه بشأن تعديل القسط الشهري/i)).toBeInTheDocument()
+      expect(screen.getByText(/تنبيه بشأن تعديل/i)).toBeInTheDocument()
       expect(
         screen.getByText(/تحتوي هذه الجمعية على أقساط أو دفعات مسجلة مسبقاً/i)
       ).toBeInTheDocument()
@@ -544,12 +554,14 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
-      expect(recurringServices.updateRecurring).toHaveBeenCalledWith(
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
         'user-123',
-        'rec-circle-1',
+        'circle-1',
         expect.objectContaining({
           startDate: expect.any(Date),
-          nextDate: expect.any(Date),
+        }),
+        expect.objectContaining({
+          createRecurringRule: true,
         })
       )
     })
@@ -572,7 +584,7 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.change(amountInput, { target: { value: '250' } })
 
     await waitFor(() => {
-      expect(screen.getByText(/تنبيه بشأن تعديل القسط الشهري/i)).toBeInTheDocument()
+      expect(screen.getByText(/تنبيه بشأن تعديل/i)).toBeInTheDocument()
     })
   })
 

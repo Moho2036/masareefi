@@ -9,16 +9,16 @@ import {
   onSnapshot,
   addDoc,
   updateDoc,
-  deleteDoc,
   deleteField,
   Timestamp,
   serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import type { Recurring } from '../types'
+import type { Recurring, MoneyCircle } from '../types'
 import { recurringConverter } from './converters'
 import { calculateDueOccurrences, getDeterministicTxId } from '../lib/recurring'
+import { getCircleCycleIndex, circleConverter } from './moneyCircles'
 
 export function subscribeRecurring(
   uid: string,
@@ -140,45 +140,46 @@ export async function updateRecurring(
 
 export async function deleteRecurring(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'recurring', id)
+  const batch = writeBatch(db)
+  batch.delete(docRef)
+
   try {
     const snap = await getDoc(docRef)
+    let linkedCircleId: string | undefined
     if (snap.exists()) {
       const data = snap.data()
-      const circleId = data.circleId
-      if (circleId && typeof circleId === 'string') {
-        try {
-          await updateDoc(doc(db, 'users', uid, 'circles', circleId), {
-            recurringId: deleteField(),
-          })
-        } catch {
-          // ignore if circle doesn't exist
-        }
-      }
-      // Also clean up any circle referencing this recurringId
-      try {
-        const circlesCol = collection(db, 'users', uid, 'circles')
-        const q = query(circlesCol, where('recurringId', '==', id))
-        const circleSnap = await getDocs(q)
-        if (!circleSnap.empty) {
-          const batch = writeBatch(db)
-          circleSnap.docs.forEach((d) => {
-            batch.update(d.ref, { recurringId: deleteField() })
-          })
-          await batch.commit()
-        }
-      } catch {
-        // ignore
+      if (data.circleId && typeof data.circleId === 'string') {
+        linkedCircleId = data.circleId
       }
     }
-  } catch {
-    // ignore lookup error
+
+    if (linkedCircleId) {
+      batch.update(doc(db, 'users', uid, 'circles', linkedCircleId), {
+        recurringId: deleteField(),
+      })
+    }
+
+    // Also clean up any circle referencing this recurringId
+    const circlesCol = collection(db, 'users', uid, 'circles')
+    const q = query(circlesCol, where('recurringId', '==', id))
+    const circleSnap = await getDocs(q)
+    for (const cDoc of circleSnap.docs) {
+      if (cDoc.id !== linkedCircleId) {
+        batch.update(cDoc.ref, { recurringId: deleteField() })
+      }
+    }
+  } catch (err) {
+    console.error('Failed to unlink recurring from circles:', err)
   }
-  await deleteDoc(docRef)
+
+  await batch.commit()
 }
 
 /**
  * Checks for all due recurring transactions up to `today`,
  * creates idempotent transactions with deterministic IDs, and updates recurring items.
+ * If a recurring rule is linked to a money circle, it also automatically marks the user's
+ * installment for the corresponding cycle month as paid in the circle.
  * Returns the number of new transactions created.
  */
 export async function processDueRecurring(
@@ -232,6 +233,29 @@ export async function processDueRecurring(
     recurringUpdates.push({ recRef, payload: updatePayload })
   }
 
+  // Pre-fetch any linked circles for recurring items to prevent double deduction
+  const circleIds = Array.from(
+    new Set(
+      pendingTxs
+        .map((p) => p.rec.circleId)
+        .filter((cid): cid is string => typeof cid === 'string' && cid.trim().length > 0)
+    )
+  )
+
+  const circleDocs = await Promise.all(
+    circleIds.map((cid) =>
+      getDoc(doc(db, 'users', uid, 'circles', cid).withConverter(circleConverter))
+    )
+  )
+  const circleMap = new Map<string, MoneyCircle>()
+  for (const cDoc of circleDocs) {
+    if (cDoc.exists()) {
+      circleMap.set(cDoc.id, cDoc.data())
+    }
+  }
+
+  const circleModified = new Set<string>()
+
   // Fetch verification documents concurrently via Promise.all
   const txSnaps = await Promise.all(pendingTxs.map((item) => getDoc(item.txRef)))
 
@@ -257,11 +281,50 @@ export async function processDueRecurring(
       }
       operations.push((b) => b.set(txRef, newTxData))
       createdCount++
+
+      // If linked to circle, automatically mark user's slot (myTurnMonth) as paid for this cycle
+      if (rec.circleId && circleMap.has(rec.circleId)) {
+        const circle = circleMap.get(rec.circleId)!
+        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        if (
+          cycleIndex >= 1 &&
+          cycleIndex <= circle.membersCount &&
+          cycleIndex !== circle.myTurnMonth
+        ) {
+          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
+          if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
+            userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
+            if (userMember.paymentsByMonth) {
+              userMember.paymentsByMonth[String(cycleIndex)] = true
+            }
+            circleModified.add(circle.id)
+          }
+        }
+      }
     }
   }
 
   for (const { recRef, payload } of recurringUpdates) {
     operations.push((b) => b.update(recRef, payload))
+  }
+
+  // Add circle updates to operations
+  for (const circleId of circleModified) {
+    const circle = circleMap.get(circleId)
+    if (circle) {
+      operations.push((b) => {
+        const circleRef = doc(db, 'users', uid, 'circles', circle.id)
+        b.update(circleRef, {
+          members: circle.members.map((m) => ({
+            id: m.id,
+            name: m.name.trim().slice(0, 50),
+            turnMonth: Math.round(m.turnMonth),
+            paidMonths: (m.paidMonths || []).map(Number),
+            ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
+          })),
+        })
+      })
+    }
   }
 
   // Chunk write operations in writeBatch to max 400 per batch to respect Firestore limit (500)

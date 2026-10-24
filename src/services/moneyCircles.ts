@@ -1,10 +1,10 @@
 import { addMonths } from 'date-fns'
+import { calculateNextDateOnEdit } from '../lib/recurring'
 import {
   collection,
   doc,
   writeBatch,
   deleteDoc,
-  updateDoc,
   deleteField,
   getDoc,
   getDocs,
@@ -169,13 +169,26 @@ export async function addMoneyCircle(
   return docRef.id
 }
 
+export interface UpdateMoneyCircleOptions {
+  monthStartDay?: number
+  createRecurringRule?: boolean
+  defaultCategoryId?: string
+}
+
 export async function updateMoneyCircle(
   uid: string,
   id: string,
   partial: Partial<Omit<MoneyCircle, 'id' | 'createdAt'>>,
-  options?: { monthStartDay?: number }
+  options?: UpdateMoneyCircleOptions
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'circles', id)
+  const circleSnap = await getDoc(docRef)
+  if (!circleSnap.exists()) {
+    throw new Error('الجمعية غير موجودة')
+  }
+  const currentCircle = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
+  const batch = writeBatch(db)
+
   const updates: Record<string, unknown> = {}
 
   if (partial.name !== undefined) updates.name = partial.name.trim().slice(0, 100)
@@ -183,14 +196,8 @@ export async function updateMoneyCircle(
   if (partial.membersCount !== undefined) updates.membersCount = Math.round(partial.membersCount)
   if (partial.totalAmountFils !== undefined) updates.totalAmountFils = Math.round(partial.totalAmountFils)
   if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
-  if ('recurringId' in partial) {
-    if (!partial.recurringId) {
-      updates.recurringId = deleteField()
-    } else {
-      updates.recurringId = partial.recurringId
-    }
-  }
   if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
+  if (partial.status !== undefined) updates.status = partial.status
   if (partial.startDate !== undefined) {
     updates.startDate =
       partial.startDate instanceof Date
@@ -202,64 +209,209 @@ export async function updateMoneyCircle(
       id: m.id,
       name: m.name.trim().slice(0, 50),
       turnMonth: Math.round(m.turnMonth),
-      paidMonths: m.paidMonths || [],
+      paidMonths: (m.paidMonths || []).map(Number),
+      ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
     }))
   }
-  if (partial.status !== undefined) updates.status = partial.status
 
-  await updateDoc(docRef, updates)
+  const effectiveName = (partial.name !== undefined ? partial.name : currentCircle.name).trim()
+  const effectiveMonthly =
+    partial.monthlyAmountFils !== undefined
+      ? Math.round(partial.monthlyAmountFils)
+      : currentCircle.monthlyAmountFils
+  const effectiveMembersCount =
+    partial.membersCount !== undefined
+      ? Math.round(partial.membersCount)
+      : currentCircle.membersCount
+  const effectiveTurn =
+    partial.myTurnMonth !== undefined
+      ? Math.round(partial.myTurnMonth)
+      : currentCircle.myTurnMonth
+  const effectiveStartDate =
+    partial.startDate instanceof Date
+      ? partial.startDate
+      : (partial.startDate ? new Date(partial.startDate) : currentCircle.startDate)
 
-  // Sync circle payout transaction if it exists
+  // 1. Linked recurring rule handling
+  const candidateRecId =
+    partial.recurringId !== undefined ? partial.recurringId : currentCircle.recurringId
+
+  if ('recurringId' in partial && !partial.recurringId) {
+    // Unlink recurring rule explicitly
+    updates.recurringId = deleteField()
+    if (currentCircle.recurringId) {
+      const oldRecRef = doc(db, 'users', uid, 'recurring', currentCircle.recurringId)
+      const oldRecSnap = await getDoc(oldRecRef)
+      if (oldRecSnap.exists()) {
+        batch.delete(oldRecRef)
+      }
+    }
+  } else if (candidateRecId) {
+    const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
+    const recSnap = await getDoc(recRef)
+    if (recSnap.exists()) {
+      const recUpdates: Record<string, unknown> = {
+        title: `قسط ${effectiveName}`.slice(0, 100),
+        amountFils: effectiveMonthly,
+        skipMonth: effectiveTurn,
+        note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
+      }
+
+      if (options?.createRecurringRule) {
+        recUpdates.active = true
+      }
+
+      let startDateChanged = false
+      if (partial.startDate) {
+        const pStart = partial.startDate instanceof Date ? partial.startDate : new Date(partial.startDate)
+        if (pStart.getTime() !== currentCircle.startDate.getTime()) {
+          startDateChanged = true
+        }
+      }
+
+      if (startDateChanged) {
+        const newNextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+        recUpdates.startDate = Timestamp.fromDate(effectiveStartDate)
+        recUpdates.nextDate = Timestamp.fromDate(newNextDate)
+        recUpdates.endDate = Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1))
+      } else if (partial.membersCount !== undefined) {
+        recUpdates.endDate = Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1))
+      }
+
+      batch.update(recRef, recUpdates)
+      if (partial.recurringId) {
+        updates.recurringId = candidateRecId
+      }
+    } else {
+      // Document DOES NOT EXIST in Firestore!
+      if (options?.createRecurringRule) {
+        const newRecRef = doc(collection(db, 'users', uid, 'recurring'))
+        const nextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+        const categoryId = options.defaultCategoryId || 'cat-custom-circle'
+
+        batch.set(newRecRef, {
+          type: 'expense',
+          amountFils: effectiveMonthly,
+          categoryId,
+          title: `قسط ${effectiveName}`.slice(0, 100),
+          note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
+          frequency: 'monthly',
+          startDate: Timestamp.fromDate(effectiveStartDate),
+          nextDate: Timestamp.fromDate(nextDate),
+          endDate: Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1)),
+          active: true,
+          circleId: id,
+          skipMonth: effectiveTurn,
+          createdAt: serverTimestamp(),
+        })
+        updates.recurringId = newRecRef.id
+      } else {
+        updates.recurringId = deleteField()
+      }
+    }
+  } else if (options?.createRecurringRule && options?.defaultCategoryId) {
+    const newRecRef = doc(collection(db, 'users', uid, 'recurring'))
+    const nextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+
+    batch.set(newRecRef, {
+      type: 'expense',
+      amountFils: effectiveMonthly,
+      categoryId: options.defaultCategoryId,
+      title: `قسط ${effectiveName}`.slice(0, 100),
+      note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
+      frequency: 'monthly',
+      startDate: Timestamp.fromDate(effectiveStartDate),
+      nextDate: Timestamp.fromDate(nextDate),
+      endDate: Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1)),
+      active: true,
+      circleId: id,
+      skipMonth: effectiveTurn,
+      createdAt: serverTimestamp(),
+    })
+    updates.recurringId = newRecRef.id
+  }
+
+  // 2. Sync circle payout transaction if it exists
   const payoutRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
   try {
     const payoutSnap = await getDoc(payoutRef)
     if (payoutSnap?.exists?.()) {
-      const circleSnap = await getDoc(docRef)
-      if (circleSnap?.exists?.()) {
-        const circleData = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
-        let monthStartDay = options?.monthStartDay
-        if (monthStartDay === undefined) {
-          try {
-            const userSnap = await getDoc(doc(db, 'users', uid))
-            if (userSnap?.exists?.()) {
-              monthStartDay = userSnap.data()?.monthStartDay
-            }
-          } catch {
-            // fallback
+      let monthStartDay = options?.monthStartDay
+      if (monthStartDay === undefined) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', uid))
+          if (userSnap?.exists?.()) {
+            monthStartDay = userSnap.data()?.monthStartDay
           }
+        } catch {
+          // fallback
         }
-        const now = new Date()
-        const diffMonths = getCircleCycleIndex(circleData.startDate, now, monthStartDay)
-        const currentMonthIndex = diffMonths + 1
+      }
+      const now = new Date()
+      const diffMonths = getCircleCycleIndex(effectiveStartDate, now, monthStartDay)
+      const currentMonthIndex = diffMonths + 1
 
-        // If circle hasn't started yet or turn month is in the future
-        if (diffMonths < 0 || currentMonthIndex < circleData.myTurnMonth) {
-          await deleteDoc(payoutRef).catch(() => {})
-        } else {
-          const netAmountFils = circleData.totalAmountFils - circleData.monthlyAmountFils
-          if (netAmountFils > 0) {
-            const payoutUpdates: Record<string, unknown> = {
-              amountFils: netAmountFils,
-              title: `استلام صافي جمعية ${circleData.name}`.slice(0, 100),
-              note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circleData.name})`.slice(0, 500),
-            }
-
-            if (partial.startDate !== undefined || partial.myTurnMonth !== undefined) {
-              const expectedTurnDate = addMonths(
-                circleData.startDate,
-                Math.max(0, circleData.myTurnMonth - 1)
-              )
-              payoutUpdates.date = Timestamp.fromDate(expectedTurnDate)
-            }
-
-            await updateDoc(payoutRef, payoutUpdates).catch(() => {})
+      if (diffMonths < 0 || currentMonthIndex < effectiveTurn) {
+        batch.delete(payoutRef)
+      } else {
+        const netAmountFils = (effectiveMonthly * effectiveMembersCount) - effectiveMonthly
+        if (netAmountFils > 0) {
+          const payoutUpdates: Record<string, unknown> = {
+            amountFils: netAmountFils,
+            title: `استلام صافي جمعية ${effectiveName}`.slice(0, 100),
+            note: `استلام صافي الجمعية بعد خصم قسط الشهر (${effectiveName})`.slice(0, 500),
           }
+
+          if (partial.startDate !== undefined || partial.myTurnMonth !== undefined) {
+            const expectedTurnDate = addMonths(
+              effectiveStartDate,
+              Math.max(0, effectiveTurn - 1)
+            )
+            payoutUpdates.date = Timestamp.fromDate(expectedTurnDate)
+          }
+
+          batch.update(payoutRef, payoutUpdates)
         }
       }
     }
   } catch (err) {
     console.error('Failed to sync circle payout transaction:', err)
   }
+
+  // 3. Update installment transactions if monthly amount changed
+  const oldMonthly = currentCircle.monthlyAmountFils
+  if (partial.monthlyAmountFils !== undefined && effectiveMonthly !== oldMonthly) {
+    const allRecIds = new Set<string>()
+    if (currentCircle.recurringId) allRecIds.add(currentCircle.recurringId)
+    if (candidateRecId) allRecIds.add(candidateRecId)
+    try {
+      const recQuerySnap = await getDocs(
+        query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
+      )
+      recQuerySnap.docs.forEach((d) => allRecIds.add(d.id))
+    } catch {
+      // ignore
+    }
+
+    for (const rId of allRecIds) {
+      try {
+        const txSnap = await getDocs(
+          query(collection(db, 'users', uid, 'transactions'), where('recurringId', '==', rId))
+        )
+        for (const txDoc of txSnap.docs) {
+          const verifiedTx = await getDoc(txDoc.ref)
+          if (verifiedTx.exists()) {
+            batch.update(txDoc.ref, { amountFils: effectiveMonthly })
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  batch.update(docRef, updates)
+  await batch.commit()
 }
 
 export async function checkCirclePayoutExists(uid: string, circleId: string): Promise<boolean> {
@@ -374,8 +526,13 @@ export async function deleteCirclePayout(uid: string, circleId: string): Promise
 export async function deleteMoneyCircle(
   uid: string,
   id: string,
-  options?: { deleteTransactions?: boolean }
+  optionsOrFlag: boolean | { deleteTransactions?: boolean } = false
 ): Promise<void> {
+  const deleteWalletTransactions =
+    typeof optionsOrFlag === 'boolean'
+      ? optionsOrFlag
+      : Boolean(optionsOrFlag?.deleteTransactions)
+
   const docRef = doc(db, 'users', uid, 'circles', id)
   const circleSnap = await getDoc(docRef)
   const circleData = circleSnap.data()
@@ -401,9 +558,9 @@ export async function deleteMoneyCircle(
     recIds.add(recDoc.id)
   }
 
-  // 3. Clean up associated transactions if deleteTransactions is true
-  if (options?.deleteTransactions) {
-    // Delete payout transaction
+  // 3. Clean up associated transactions ONLY IF deleteWalletTransactions is true
+  if (deleteWalletTransactions) {
+    // Delete payout transaction if exists
     const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
     batch.delete(payoutTxRef)
 

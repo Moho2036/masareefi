@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { addMonths, format as formatDate } from 'date-fns'
+import React, { useState, useEffect, useRef } from 'react'
+import { format as formatDate } from 'date-fns'
 import {
   Users,
   Plus,
@@ -26,7 +26,7 @@ import { useMoneyCircles } from '../../hooks/useMoneyCircles'
 import { useRecurring } from '../../hooks/useRecurring'
 import { useCategories } from '../../hooks/useCategories'
 import { useToast } from '../../hooks/useToast'
-import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../../services/recurring'
+import { processDueRecurring } from '../../services/recurring'
 import { getOrCreateDebtCategory } from '../../services/debts'
 import {
   addMoneyCircle,
@@ -42,7 +42,6 @@ import {
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
-import { calculateNextDateOnEdit } from '../../lib/recurring'
 import { cn } from '../../lib/cn'
 import type { MoneyCircle, CircleMember } from '../../types'
 
@@ -68,14 +67,13 @@ export const MoneyCirclesManager: React.FC = () => {
   const [depositedCircleIds, setDepositedCircleIds] = useState<Set<string>>(new Set())
   const checkedCirclesRef = useRef<Set<string>>(new Set())
 
-  // Memoized Set of circle IDs that have recurring schedules
-  const scheduledCircleIds = useMemo(() => {
-    const set = new Set<string>()
-    recurringList.forEach((r) => {
-      if (r.circleId) set.add(r.circleId)
-    })
-    return set
-  }, [recurringList])
+  const isCircleScheduled = (circle: MoneyCircle) => {
+    return recurringList.some(
+      (r) =>
+        (r.id === circle.recurringId || r.circleId === circle.id) &&
+        r.active !== false
+    )
+  }
 
   const getInitialStartDateStr = (startDay: number = monthStartDay) => {
     const now = new Date()
@@ -149,7 +147,7 @@ export const MoneyCirclesManager: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null)
   const [hasLinkedTx, setHasLinkedTx] = useState(false)
 
-  // Warning when modifying monthly amount of a circle with previously recorded payments
+  // Warning when modifying monthly amount or members count of a circle with previously recorded payments
   const existingRecForEditing = editingCircle
     ? recurringList.find(
         (r) =>
@@ -182,8 +180,11 @@ export const MoneyCirclesManager: React.FC = () => {
   const isMonthlyAmountChanged = Boolean(
     editingCircle && currentEnteredFils !== editingCircle.monthlyAmountFils
   )
-  const showAmountChangeWarning = Boolean(
-    editingCircle && isMonthlyAmountChanged && hasRecordedCirclePayments
+  const isMembersCountChanged = Boolean(
+    editingCircle && membersCount !== editingCircle.membersCount
+  )
+  const showAmountOrMembersChangeWarning = Boolean(
+    editingCircle && (isMonthlyAmountChanged || isMembersCountChanged) && hasRecordedCirclePayments
   )
 
   // Track expanded circles
@@ -278,7 +279,12 @@ export const MoneyCirclesManager: React.FC = () => {
 
     const linkedRecId =
       circle.recurringId || recurringList.find((r) => r.circleId === circle.id)?.id
-    setAutoSchedule(Boolean(linkedRecId))
+    const isActivelyScheduled = recurringList.some(
+      (r) =>
+        (r.id === circle.recurringId || r.circleId === circle.id) &&
+        r.active !== false
+    )
+    setAutoSchedule(isActivelyScheduled)
     setHasLinkedTx(false)
     if (user?.uid) {
       checkCircleHasTransactions(user.uid, circle.id, linkedRecId)
@@ -315,82 +321,6 @@ export const MoneyCirclesManager: React.FC = () => {
       const startDate = parseLocalDateInput(startDateStr)
 
       if (editingCircle) {
-        // Look up any existing linked recurring rule (by recurringId or by circleId)
-        const recIdToDelete =
-          editingCircle.recurringId ||
-          recurringList.find((r) => r.circleId === editingCircle.id)?.id
-
-        const existingRec = recIdToDelete
-          ? recurringList.find((r) => r.id === recIdToDelete)
-          : undefined
-
-        let effectiveRecurringId = editingCircle.recurringId || existingRec?.id || ''
-
-        if (!autoSchedule) {
-          // Unlink and delete the linked recurring rule if it exists
-          if (recIdToDelete) {
-            await deleteRecurring(user.uid, recIdToDelete).catch((err) => {
-              console.error('Failed to delete recurring rule on unschedule:', err)
-            })
-          }
-          effectiveRecurringId = ''
-        } else if (autoSchedule) {
-          const oldStartDate =
-            editingCircle.startDate instanceof Date
-              ? editingCircle.startDate
-              : new Date(editingCircle.startDate)
-          const isStartDateChanged = oldStartDate.getTime() !== startDate.getTime()
-
-          if (effectiveRecurringId) {
-            // When start date changes upon editing, recalculate nextDate dynamically.
-            // Otherwise preserve existing nextDate if available.
-            const nextDate = isStartDateChanged
-              ? calculateNextDateOnEdit(startDate, 'monthly')
-              : existingRec?.nextDate instanceof Date
-                ? existingRec.nextDate
-                : existingRec?.nextDate
-                  ? new Date(existingRec.nextDate)
-                  : calculateNextDateOnEdit(startDate, 'monthly')
-
-            const recCategory = existingRec?.categoryId || defaultExpenseCategory?.id
-            const updatePayload: Parameters<typeof updateRecurring>[2] = {
-              type: 'expense',
-              amountFils: monthlyAmountFils,
-              title: `قسط ${trimmedName}`,
-              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
-              frequency: 'monthly',
-              startDate,
-              nextDate,
-              endDate: addMonths(startDate, membersCount - 1),
-              active: true,
-              circleId: editingCircle.id,
-              skipMonth: myTurnMonth,
-            }
-            if (recCategory) {
-              updatePayload.categoryId = recCategory
-            }
-            await updateRecurring(user.uid, effectiveRecurringId, updatePayload)
-            await processDueRecurring(user.uid)
-          } else if (defaultExpenseCategory) {
-            const nextDate = calculateNextDateOnEdit(startDate, 'monthly')
-            effectiveRecurringId = await addRecurring(user.uid, {
-              type: 'expense',
-              amountFils: monthlyAmountFils,
-              categoryId: defaultExpenseCategory.id,
-              title: `قسط ${trimmedName}`,
-              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
-              frequency: 'monthly',
-              startDate,
-              nextDate,
-              endDate: addMonths(startDate, membersCount - 1),
-              active: true,
-              circleId: editingCircle.id,
-              skipMonth: myTurnMonth,
-            })
-            await processDueRecurring(user.uid)
-          }
-        }
-
         const members: CircleMember[] = []
         for (let i = 1; i <= membersCount; i++) {
           const defaultName = i === myTurnMonth ? 'أنت' : `عضو ${i}`
@@ -445,10 +375,24 @@ export const MoneyCirclesManager: React.FC = () => {
             startDate,
             members,
             isManager,
-            recurringId: effectiveRecurringId,
+            ...(autoSchedule
+              ? editingCircle.recurringId
+                ? { recurringId: editingCircle.recurringId }
+                : {}
+              : { recurringId: '' }),
           },
-          { monthStartDay }
+          {
+            monthStartDay,
+            createRecurringRule: autoSchedule,
+            defaultCategoryId: defaultExpenseCategory?.id,
+          }
         )
+
+        if (autoSchedule) {
+          await processDueRecurring(user.uid).catch((err) => {
+            console.error('Failed to process due recurring after circle edit:', err)
+          })
+        }
 
         const exists = await checkCirclePayoutExists(user.uid, editingCircle.id)
         setDepositedCircleIds((prev) => {
@@ -487,26 +431,15 @@ export const MoneyCirclesManager: React.FC = () => {
 
         if (autoSchedule && defaultExpenseCategory) {
           try {
-            const nextDate = startDate
-            const recId = await addRecurring(user.uid, {
-              type: 'expense',
-              amountFils: monthlyAmountFils,
-              categoryId: defaultExpenseCategory.id,
-              title: `قسط ${trimmedName}`,
-              note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${myTurnMonth})`,
-              frequency: 'monthly',
-              startDate,
-              nextDate,
-              endDate: addMonths(startDate, membersCount - 1),
-              active: true,
-              circleId,
-              skipMonth: myTurnMonth,
-            })
             await updateMoneyCircle(
               user.uid,
               circleId,
-              { recurringId: recId },
-              { monthStartDay }
+              {},
+              {
+                monthStartDay,
+                createRecurringRule: true,
+                defaultCategoryId: defaultExpenseCategory.id,
+              }
             )
             await processDueRecurring(user.uid)
           } catch (recErr) {
@@ -529,34 +462,21 @@ export const MoneyCirclesManager: React.FC = () => {
 
   const handleScheduleCircle = async (circle: MoneyCircle) => {
     if (!user || !defaultExpenseCategory) return
-    const isAlreadyScheduled = Boolean(
-      circle.recurringId || scheduledCircleIds.has(circle.id)
-    )
+    const isAlreadyScheduled = isCircleScheduled(circle)
     if (isAlreadyScheduled) {
       showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
       return
     }
     try {
-      const nextDate = calculateNextDateOnEdit(circle.startDate, 'monthly')
-      const recId = await addRecurring(user.uid, {
-        type: 'expense',
-        amountFils: circle.monthlyAmountFils,
-        categoryId: defaultExpenseCategory.id,
-        title: `قسط ${circle.name}`,
-        note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`,
-        frequency: 'monthly',
-        startDate: circle.startDate,
-        nextDate,
-        endDate: addMonths(circle.startDate, circle.membersCount - 1),
-        active: true,
-        circleId: circle.id,
-        skipMonth: circle.myTurnMonth,
-      })
       await updateMoneyCircle(
         user.uid,
         circle.id,
-        { recurringId: recId },
-        { monthStartDay }
+        {},
+        {
+          monthStartDay,
+          createRecurringRule: true,
+          defaultCategoryId: defaultExpenseCategory.id,
+        }
       )
       await processDueRecurring(user.uid)
       showToast('تمت جدولة القسط بنجاح مع تخطي شهر استلامك!', 'success')
@@ -632,11 +552,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
   const handleDelete = async () => {
     if (!user || !deleteCircleId) return
-    const circleToDelete = circles.find((c) => c.id === deleteCircleId)
     try {
-      if (circleToDelete?.recurringId) {
-        await deleteRecurring(user.uid, circleToDelete.recurringId).catch(() => {})
-      }
       await deleteMoneyCircle(user.uid, deleteCircleId, { deleteTransactions })
       setDepositedCircleIds((prev) => {
         const next = new Set(prev)
@@ -728,9 +644,7 @@ export const MoneyCirclesManager: React.FC = () => {
             const hasUserDeposited = depositedCircleIds.has(circle.id)
             const canDepositNet = isStarted && !isCompleted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
             const netAmountFils = circle.totalAmountFils - circle.monthlyAmountFils
-            const isScheduled = Boolean(
-              circle.recurringId || scheduledCircleIds.has(circle.id)
-            )
+            const isScheduled = isCircleScheduled(circle)
 
             // Calculate payments for viewing month: non-receivers who paid + 1 (the exempt receiver)
             const nonReceiverPaidCount = circle.members.filter(
@@ -1091,6 +1005,11 @@ export const MoneyCirclesManager: React.FC = () => {
                                       (أنت)
                                     </span>
                                   )}
+                                  {isUserMember && isScheduled && !isReceiverThisMonth && (
+                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-800">
+                                      اقتطاع آلي
+                                    </span>
+                                  )}
                                   {isReceiverThisMonth && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                                       <Crown className="w-3 h-3 text-amber-500 shrink-0" />
@@ -1105,7 +1024,11 @@ export const MoneyCirclesManager: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="text-[10px] text-slate-400">
-                                  {isReceiverThisMonth ? 'يقبض هذا الشهر' : `قسط: ${format(circle.monthlyAmountFils)}`}
+                                  {isReceiverThisMonth
+                                    ? 'يقبض هذا الشهر'
+                                    : isUserMember && isScheduled
+                                      ? `قسط: ${format(circle.monthlyAmountFils)} (يُقتطع تلقائياً)`
+                                      : `قسط: ${format(circle.monthlyAmountFils)}`}
                                 </div>
                               </div>
                             </div>
@@ -1203,14 +1126,14 @@ export const MoneyCirclesManager: React.FC = () => {
             />
           </div>
 
-          {/* Warning when modifying monthly amount of a circle with previously recorded payments */}
-          {showAmountChangeWarning && (
+          {/* Warning when modifying monthly amount or members count of a circle with previously recorded payments */}
+          {showAmountOrMembersChangeWarning && (
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <div className="font-bold">تنبيه بشأن تعديل القسط الشهري:</div>
+                <div className="font-bold">تنبيه بشأن تعديل تفاصيل الجمعية:</div>
                 <p className="leading-relaxed text-[11px] text-amber-700 dark:text-amber-300">
-                  تحتوي هذه الجمعية على أقساط أو دفعات مسجلة مسبقاً. تغيير قيمة القسط سيُطبق على حسابات الجمعية دون تعديل مبالغ المعاملات المالية التي سُجلت في الماضي.
+                  تحتوي هذه الجمعية على أقساط أو دفعات مسجلة مسبقاً. تعديل القسط الشهري أو عدد الأعضاء سيقوم بتحديث حسابات الجمعية، وتحديث القسط في المعاملات المتكررة ومعاملة استلام الصافي المرتبطة بها تلقائياً.
                 </p>
               </div>
             </div>
@@ -1337,20 +1260,25 @@ export const MoneyCirclesManager: React.FC = () => {
             هل أنت متأكد من رغبتك في حذف هذه الجمعية؟ لن تتمكن من استرجاع بيانات الأقساط والأعضاء المسجلة فيها.
           </p>
 
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3">
-            <label
-              htmlFor="delete-circle-txs"
-              className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none"
-            >
-              حذف الأقساط والإيداعات المسجلة سابقاً في المعاملات لهذه الجمعية
-            </label>
-            <input
-              id="delete-circle-txs"
-              type="checkbox"
-              checked={deleteTransactions}
-              onChange={(e) => setDeleteTransactions(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
-            />
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label
+                htmlFor="delete-circle-txs"
+                className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 cursor-pointer select-none"
+              >
+                حذف الأقساط والإيداعات المسجلة في المحفظة لهذه الجمعية
+              </label>
+              <input
+                id="delete-circle-txs"
+                type="checkbox"
+                checked={deleteTransactions}
+                onChange={(e) => setDeleteTransactions(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer shrink-0"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              تنبيه: إذا قمت بتحديد هذا الخيار، ستُحذف المعاملات وتتغير أرصدة محفظتك السابقة. الإبقاء عليها دون تحديد يضمن دقة تقاريرك المالية وسجل مصروفاتك التاريخي.
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2">
