@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { subscribeUserSettings, updateUserSettings } from '../services/userProfile'
 import { subscribeCategories } from '../services/categories'
+import { syncCategoriesForUser } from '../services/seed'
 import { subscribeDebts } from '../services/debts'
 import { subscribeRecurring } from '../services/recurring'
 import { subscribeMoneyCircles } from '../services/moneyCircles'
@@ -77,6 +78,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (!userId) {
       return
     }
+
+    // Sync categories for user (runs once per user account via localStorage and seed markers)
+    syncCategoriesForUser(userId).catch((err) => {
+      console.warn('Categories sync deferred:', err)
+    })
 
     const unsubscribers: (() => void)[] = []
 

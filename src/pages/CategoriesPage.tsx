@@ -36,6 +36,7 @@ export const CategoriesPage: React.FC = () => {
   const { data: categories, loading: categoriesLoading } = useCategories()
   const appData = useAppData()
   const recurring = useMemo(() => appData?.recurring ?? [], [appData?.recurring])
+  const moneyCircles = useMemo(() => appData?.moneyCircles ?? [], [appData?.moneyCircles])
   const { range } = useSelectedMonth()
   const { data: transactions } = useTransactions(range)
   const { showToast } = useToast()
@@ -59,12 +60,54 @@ export const CategoriesPage: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
-    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring)
+
+    // Prevent archiving or deleting the last active category of a type
+    if (!catToDelete.archived) {
+      const remainingActive = categories.filter(
+        (c) => c.type === catToDelete.type && !c.archived
+      ).length
+      if (remainingActive <= 1) {
+        showToast(
+          'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.',
+          'error'
+        )
+        setCatToDelete(null)
+        return
+      }
+    }
+
+    const details = getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap, moneyCircles)
     if (details.isInUse) {
+      const parts: string[] = []
+      if (details.circlesCount > 0) {
+        parts.push(
+          details.circlesCount === 1
+            ? 'جمعية مالية واحدة'
+            : details.circlesCount === 2
+              ? 'جمعيتان ماليتان'
+              : `${details.circlesCount} جمعيات مالية`
+        )
+      }
+      if (details.recurringCount > 0) {
+        parts.push(
+          details.recurringCount === 1
+            ? 'معاملة متكررة واحدة'
+            : details.recurringCount === 2
+              ? 'معاملتان متكررتان'
+              : `${details.recurringCount} معاملات متكررة`
+        )
+      }
+      if (details.txCount > 0) {
+        parts.push(
+          details.txCount === 1
+            ? 'معاملة مالية واحدة'
+            : details.txCount === 2
+              ? 'معاملتان ماليتان'
+              : `${details.txCount} معاملة مالية`
+        )
+      }
       showToast(
-        `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${
-          details.recurringCount > 0 ? `${details.recurringCount} معاملة متكررة و ` : ''
-        }${details.txCount} معاملة مالية. يمكنك أرشفته بدلاً من ذلك.`,
+        `لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بـ ${parts.join(' و ')}. يمكنك أرشفته بدلاً من ذلك.`,
         'info'
       )
       setCatToDelete(null)
@@ -113,13 +156,43 @@ export const CategoriesPage: React.FC = () => {
 
   const handleArchive = async (cat: Category) => {
     if (!user) return
+
+    // Prevent archiving the last active category of a type
+    if (!cat.archived) {
+      const remainingActive = categories.filter(
+        (c) => c.type === cat.type && !c.archived
+      ).length
+      if (remainingActive <= 1) {
+        showToast(
+          'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.',
+          'error'
+        )
+        return
+      }
+    }
+
     try {
       const isUsedInActiveRecurring = recurring.some(
         (r) => (r.active !== false) && r.categoryId === cat.id
       )
+      const isUsedInActiveCircle = moneyCircles.some(
+        (c) =>
+          c.status === 'active' &&
+          (c.expenseCategoryId === cat.id ||
+            c.incomeCategoryId === cat.id ||
+            c.categoryId === cat.id)
+      )
+
       await archiveCategory(user.uid, cat.id, true)
-      if (isUsedInActiveRecurring) {
+      if (isUsedInActiveRecurring && isUsedInActiveCircle) {
+        showToast(
+          'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة وجمعيات نشطة',
+          'info'
+        )
+      } else if (isUsedInActiveRecurring) {
         showToast('تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة نشطة', 'info')
+      } else if (isUsedInActiveCircle) {
+        showToast('تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في جمعية مالية نشطة', 'info')
       } else {
         showToast('تمت أرشفة التصنيف بنجاح', 'info')
       }
@@ -141,7 +214,7 @@ export const CategoriesPage: React.FC = () => {
   }
 
   const formatUsageText = (catId: string) => {
-    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap)
+    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap, moneyCircles)
     const currentMonthCount = currentMonthTxCounts[catId] || 0
 
     if (!details.isInUse) {
@@ -162,6 +235,12 @@ export const CategoriesPage: React.FC = () => {
       if (details.recurringCount === 1) parts.push('معاملة متكررة مرتبطة')
       else if (details.recurringCount === 2) parts.push('معاملتان متكررتان')
       else parts.push(`${details.recurringCount} معاملات متكررة`)
+    }
+
+    if (details.circlesCount > 0) {
+      if (details.circlesCount === 1) parts.push('جمعية مالية مرتبطة')
+      else if (details.circlesCount === 2) parts.push('جمعيتان ماليتان')
+      else parts.push(`${details.circlesCount} جمعيات مالية`)
     }
 
     return parts.join(' • ')
@@ -229,7 +308,7 @@ export const CategoriesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeCategories.map((cat) => {
-            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
+            const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap, moneyCircles)
 
             return (
               <div
@@ -277,7 +356,7 @@ export const CategoriesPage: React.FC = () => {
                   {usageDetails.isInUse ? (
                     <span
                       className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-400 dark:text-slate-500 font-medium select-none"
-                      title="لا يمكن حذف التصنيف نهائياً لأنه مرتبط بمعاملات مالية أو متكررة. يمكنك أرشفته بدلاً من ذلك."
+                      title="لا يمكن حذف التصنيف نهائياً لأنه مرتبط بمعاملات مالية أو متكررة أو جمعيات. يمكنك أرشفته بدلاً من ذلك."
                     >
                       مستخدم
                     </span>
@@ -321,7 +400,7 @@ export const CategoriesPage: React.FC = () => {
           {isArchivedExpanded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
               {archivedCategories.map((cat) => {
-                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap)
+                const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap, moneyCircles)
                 return (
                   <div
                     key={cat.id}

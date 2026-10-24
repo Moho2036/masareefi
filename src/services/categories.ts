@@ -5,6 +5,7 @@ import {
   where,
   limit,
   getDocs,
+  getDoc,
   orderBy,
   onSnapshot,
   addDoc,
@@ -84,16 +85,52 @@ export async function archiveCategory(
   archived: boolean = true
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
+
+  if (archived) {
+    const snap = await getDoc(docRef)
+    if (snap.exists()) {
+      const catData = snap.data() as Category | undefined
+      if (catData?.type && !catData?.archived) {
+        const colRef = collection(db, 'users', uid, 'categories')
+        const activeSnap = await getDocs(
+          query(colRef, where('type', '==', catData.type), where('archived', '==', false))
+        )
+        if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
+          throw new Error('لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
+        }
+      }
+    }
+  }
+
   await updateDoc(docRef, { archived })
 }
 
 export async function deleteCategory(uid: string, id: string): Promise<void> {
+  const docRef = doc(db, 'users', uid, 'categories', id)
+  const catSnap = await getDoc(docRef)
+  if (catSnap.exists()) {
+    const catData = catSnap.data() as Category | undefined
+    if (catData?.type && !catData?.archived) {
+      const colRef = collection(db, 'users', uid, 'categories')
+      const activeSnap = await getDocs(
+        query(colRef, where('type', '==', catData.type), where('archived', '==', false))
+      )
+      if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
+        throw new Error('لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
+      }
+    }
+  }
+
   const txsCol = collection(db, 'users', uid, 'transactions')
   const recCol = collection(db, 'users', uid, 'recurring')
+  const circlesCol = collection(db, 'users', uid, 'circles')
 
-  const [snapTx, snapRec] = await Promise.all([
+  const [snapTx, snapRec, snapCircleExp, snapCircleInc, snapCircleCat] = await Promise.all([
     getDocs(query(txsCol, where('categoryId', '==', id), limit(1))),
     getDocs(query(recCol, where('categoryId', '==', id), limit(1))),
+    getDocs(query(circlesCol, where('expenseCategoryId', '==', id), limit(1))),
+    getDocs(query(circlesCol, where('incomeCategoryId', '==', id), limit(1))),
+    getDocs(query(circlesCol, where('categoryId', '==', id), limit(1))),
   ])
 
   if (!snapTx.empty) {
@@ -102,7 +139,9 @@ export async function deleteCategory(uid: string, id: string): Promise<void> {
   if (!snapRec.empty) {
     throw new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بمعاملات متكررة. يمكنك أرشفته بدلاً من ذلك.')
   }
+  if (!snapCircleExp.empty || !snapCircleInc.empty || !snapCircleCat.empty) {
+    throw new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بجمعية مالية. يمكنك أرشفته أو تغيير تصنيف الجمعية أولاً.')
+  }
 
-  const docRef = doc(db, 'users', uid, 'categories', id)
   await deleteDoc(docRef)
 }

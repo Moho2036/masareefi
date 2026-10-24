@@ -101,5 +101,8 @@ export interface MoneyCircle {
   recurringId?: string
   isManager?: boolean
   createdAt: Date
+  expenseCategoryId?: string
+  incomeCategoryId?: string
+  categoryId?: string
 }
 

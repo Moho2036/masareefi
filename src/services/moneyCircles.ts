@@ -42,6 +42,9 @@ interface FirestoreCircleDoc {
   recurringId?: string
   isManager?: boolean
   createdAt: Timestamp
+  expenseCategoryId?: string
+  incomeCategoryId?: string
+  categoryId?: string
 }
 
 export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
@@ -73,6 +76,15 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
     if (typeof circle.recurringId === 'string' && circle.recurringId.trim()) {
       docData.recurringId = circle.recurringId.trim().slice(0, 128)
     }
+    if (typeof circle.expenseCategoryId === 'string' && circle.expenseCategoryId.trim()) {
+      docData.expenseCategoryId = circle.expenseCategoryId.trim().slice(0, 128)
+    }
+    if (typeof circle.incomeCategoryId === 'string' && circle.incomeCategoryId.trim()) {
+      docData.incomeCategoryId = circle.incomeCategoryId.trim().slice(0, 128)
+    }
+    if (typeof circle.categoryId === 'string' && circle.categoryId.trim()) {
+      docData.categoryId = circle.categoryId.trim().slice(0, 128)
+    }
     return docData
   },
   fromFirestore(snapshot: QueryDocumentSnapshot): MoneyCircle {
@@ -94,6 +106,9 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
       })),
       status: data.status || 'active',
       ...(data.recurringId ? { recurringId: data.recurringId } : {}),
+      ...(data.expenseCategoryId ? { expenseCategoryId: data.expenseCategoryId } : {}),
+      ...(data.incomeCategoryId ? { incomeCategoryId: data.incomeCategoryId } : {}),
+      ...(data.categoryId ? { categoryId: data.categoryId } : {}),
       ...(data.isManager !== undefined ? { isManager: Boolean(data.isManager) } : {}),
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
     }

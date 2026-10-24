@@ -109,9 +109,44 @@ describe('categoryUsage utilities', () => {
     const unusedDetails = getCategoryUsageDetails('cat-unused', txs, recurring, {})
     expect(unusedDetails.txCount).toBe(0)
     expect(unusedDetails.recurringCount).toBe(0)
+    expect(unusedDetails.circlesCount).toBe(0)
     expect(unusedDetails.totalCount).toBe(0)
     expect(unusedDetails.isInUse).toBe(false)
     expect(isCategoryInUse('cat-unused', txs, recurring, {})).toBe(false)
+  })
+
+  it('calculates category usage details taking money circles into account', () => {
+    const circles = [
+      { id: 'circle-1', expenseCategoryId: 'cat-circle-exp', incomeCategoryId: 'cat-circle-inc' },
+      { id: 'circle-2', categoryId: 'cat-circle-legacy' },
+    ]
+
+    // expense category linked to circle 1
+    const expDetails = getCategoryUsageDetails('cat-circle-exp', [], [], {}, circles)
+    expect(expDetails.circlesCount).toBe(1)
+    expect(expDetails.totalCount).toBe(1)
+    expect(expDetails.isInUse).toBe(true)
+    expect(getCategoryUsageCount('cat-circle-exp', [], [], {}, circles)).toBe(1)
+    expect(isCategoryInUse('cat-circle-exp', [], [], {}, circles)).toBe(true)
+
+    // income category linked to circle 1
+    const incDetails = getCategoryUsageDetails('cat-circle-inc', [], [], {}, circles)
+    expect(incDetails.circlesCount).toBe(1)
+    expect(incDetails.totalCount).toBe(1)
+    expect(incDetails.isInUse).toBe(true)
+
+    // legacy categoryId linked to circle 2
+    const legacyDetails = getCategoryUsageDetails('cat-circle-legacy', [], [], {}, circles)
+    expect(legacyDetails.circlesCount).toBe(1)
+    expect(legacyDetails.totalCount).toBe(1)
+    expect(legacyDetails.isInUse).toBe(true)
+
+    // unlinked category
+    const unlinkedDetails = getCategoryUsageDetails('cat-unlinked', [], [], {}, circles)
+    expect(unlinkedDetails.circlesCount).toBe(0)
+    expect(unlinkedDetails.totalCount).toBe(0)
+    expect(unlinkedDetails.isInUse).toBe(false)
+    expect(isCategoryInUse('cat-unlinked', [], [], {}, circles)).toBe(false)
   })
 
   it('relies on active transactions as single source of truth and ignores residual local storage', () => {

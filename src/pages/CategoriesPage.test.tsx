@@ -14,11 +14,24 @@ vi.mock('../hooks/useAuth', () => ({
   }),
 }))
 
-const mockCategories = [
+let mockCategories = [
   { id: 'cat-used-tx', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
   { id: 'cat-used-rec', name: 'اشتراك نت', type: 'expense', icon: '🌐', color: '#3B82F6', archived: false, order: 1 },
   { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 2 },
 ]
+
+let mockRecurring = [
+  { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
+]
+
+let mockCircles: Array<{
+  id: string
+  name: string
+  status: 'active' | 'completed' | 'archived'
+  expenseCategoryId?: string
+  incomeCategoryId?: string
+  categoryId?: string
+}> = []
 
 vi.mock('../hooks/useCategories', () => ({
   useCategories: () => ({
@@ -45,9 +58,8 @@ vi.mock('../hooks/useTransactions', () => ({
 
 vi.mock('../context/AppDataContext', () => ({
   useAppData: () => ({
-    recurring: [
-      { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000 },
-    ],
+    recurring: mockRecurring,
+    moneyCircles: mockCircles,
     settings: { rolloverBalance: false, monthStartDay: 1 },
   }),
 }))
@@ -63,6 +75,15 @@ describe('CategoriesPage component category protection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    mockCategories = [
+      { id: 'cat-used-tx', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-used-rec', name: 'اشتراك نت', type: 'expense', icon: '🌐', color: '#3B82F6', archived: false, order: 1 },
+      { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 2 },
+    ]
+    mockRecurring = [
+      { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
+    ]
+    mockCircles = []
   })
 
   it('renders usage labels and prevents final deletion for categories in use', async () => {
@@ -162,6 +183,88 @@ describe('CategoriesPage component category protection', () => {
       expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-unused', true)
       expect(mockShowToast).toHaveBeenCalledWith(
         'تمت أرشفة التصنيف بنجاح',
+        'info'
+      )
+    })
+  })
+
+  it('blocks archiving the last active category of a type and shows error toast', async () => {
+    mockCategories = [
+      { id: 'cat-single', name: 'تصنيف وحيد', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+    ]
+
+    render(<CategoriesPage />)
+
+    const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف وحيد')
+    fireEvent.click(archiveBtn)
+
+    expect(categoriesService.archiveCategory).not.toHaveBeenCalled()
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.',
+      'error'
+    )
+  })
+
+  it('blocks deleting the last active category of a type and shows error toast', async () => {
+    mockCategories = [
+      { id: 'cat-single-unused', name: 'تصنيف وحيد غير مستخدم', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 0 },
+    ]
+
+    render(<CategoriesPage />)
+
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف وحيد غير مستخدم نهائياً')
+    fireEvent.click(deleteBtn)
+
+    const confirmBtn = screen.getByRole('button', { name: 'حذف نهائي' })
+    fireEvent.click(confirmBtn)
+
+    expect(categoriesService.deleteCategory).not.toHaveBeenCalled()
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.',
+      'error'
+    )
+  })
+
+  it('recognizes money circle linkage, displays label, and prevents hard deletion', async () => {
+    mockCircles = [
+      {
+        id: 'circle-1',
+        name: 'جمعية الشباب',
+        status: 'active',
+        expenseCategoryId: 'cat-unused',
+      },
+    ]
+
+    render(<CategoriesPage />)
+
+    // cat-unused is now linked to a money circle
+    await waitFor(() => {
+      expect(screen.getByText(/جمعية مالية مرتبطة/i)).toBeInTheDocument()
+    })
+
+    // Should NOT have a delete button, should show "مستخدم" tag instead
+    expect(screen.queryByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeNull()
+  })
+
+  it('shows warning toast when archiving a category used in active money circle', async () => {
+    mockCircles = [
+      {
+        id: 'circle-1',
+        name: 'جمعية الشباب',
+        status: 'active',
+        expenseCategoryId: 'cat-unused',
+      },
+    ]
+
+    render(<CategoriesPage />)
+
+    const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف فارغ')
+    fireEvent.click(archiveBtn)
+
+    await waitFor(() => {
+      expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-unused', true)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في جمعية مالية نشطة',
         'info'
       )
     })

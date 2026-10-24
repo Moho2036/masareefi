@@ -91,6 +91,7 @@ export function sortCategoriesByUsage<T extends { id: string; order: number }>(
 export interface CategoryUsageDetails {
   txCount: number
   recurringCount: number
+  circlesCount: number
   totalCount: number
   isInUse: boolean
 }
@@ -99,16 +100,18 @@ export interface CategoryUsageDetails {
  * Calculates detailed usage counts for a given category across:
  * - Active or current transactions list
  * - Recurring transactions rules
+ * - Money circles (expense/income category linkages)
  * - Persisted local historical usage counts (localStorage)
  */
 export function getCategoryUsageDetails(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  _localMap: Record<string, number> = {}
+  _localMap: Record<string, number> = {},
+  circles: Array<{ expenseCategoryId?: string; incomeCategoryId?: string; categoryId?: string }> = []
 ): CategoryUsageDetails {
   if (!categoryId) {
-    return { txCount: 0, recurringCount: 0, totalCount: 0, isInUse: false }
+    return { txCount: 0, recurringCount: 0, circlesCount: 0, totalCount: 0, isInUse: false }
   }
 
   let txCount = 0
@@ -121,37 +124,51 @@ export function getCategoryUsageDetails(
     if (rec.categoryId === categoryId) recurringCount++
   }
 
+  let circlesCount = 0
+  for (const c of circles) {
+    if (
+      c.expenseCategoryId === categoryId ||
+      c.incomeCategoryId === categoryId ||
+      c.categoryId === categoryId
+    ) {
+      circlesCount++
+    }
+  }
+
   const effectiveTxCount = txCount
-  const totalCount = effectiveTxCount + recurringCount
+  const totalCount = effectiveTxCount + recurringCount + circlesCount
 
   return {
     txCount: effectiveTxCount,
     recurringCount,
+    circlesCount,
     totalCount,
     isInUse: totalCount > 0,
   }
 }
 
 /**
- * Returns the total usage count of a category across transactions and recurring rules.
+ * Returns the total usage count of a category across transactions, recurring rules, and money circles.
  */
 export function getCategoryUsageCount(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = {}
+  localMap: Record<string, number> = {},
+  circles: Array<{ expenseCategoryId?: string; incomeCategoryId?: string; categoryId?: string }> = []
 ): number {
-  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).totalCount
+  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap, circles).totalCount
 }
 
 /**
- * Returns true if a category is currently linked to any transaction or recurring rule.
+ * Returns true if a category is currently linked to any transaction, recurring rule, or money circle.
  */
 export function isCategoryInUse(
   categoryId: string,
   transactions: Array<{ categoryId?: string }> = [],
   recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = {}
+  localMap: Record<string, number> = {},
+  circles: Array<{ expenseCategoryId?: string; incomeCategoryId?: string; categoryId?: string }> = []
 ): boolean {
-  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap).isInUse
+  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap, circles).isInUse
 }

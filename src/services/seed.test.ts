@@ -158,22 +158,73 @@ describe('DEFAULT_CATEGORIES seed data', () => {
 describe('syncCategoriesForUser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
   })
 
-  it('correctly keys by type and name so expense "أخرى" does not prevent syncing income "أخرى"', async () => {
-    const existingExpenseDocs = DEFAULT_CATEGORIES.filter((c) => c.type === 'expense').map((c, i) => ({
-      id: `doc_${i}`,
-      data: () => ({ name: c.name, type: c.type, order: c.order }),
-    }))
-
-    mockGetDocs.mockResolvedValueOnce({
-      empty: false,
-      docs: existingExpenseDocs,
-    })
+  it('skips Firestore queries if user is already upgraded in localStorage', async () => {
+    localStorage.setItem('masareefi_categories_seed_v2_user-test', 'true')
 
     await syncCategoriesForUser('user-test')
 
+    expect(mockGetDocs).not.toHaveBeenCalled()
+    expect(mockBatchCommit).not.toHaveBeenCalled()
+  })
+
+  it('seeds default categories when category collection is empty and marks upgraded', async () => {
+    mockGetDocs.mockResolvedValueOnce({
+      empty: true,
+      docs: [],
+    })
+
+    await syncCategoriesForUser('user-new')
+
     expect(mockBatchCommit).toHaveBeenCalled()
+    expect(mockBatchSet).toHaveBeenCalledTimes(23)
+    expect(localStorage.getItem('masareefi_categories_seed_v2_user-new')).toBe('true')
+  })
+
+  it('skips re-seeding if account already has deterministic seed_ doc IDs or v2 markers', async () => {
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          id: 'seed_expense_0',
+          data: () => ({ name: 'طعام وبقالة', type: 'expense', order: 0 }),
+        },
+      ],
+    })
+
+    await syncCategoriesForUser('user-v2')
+
+    expect(mockBatchCommit).not.toHaveBeenCalled()
+    expect(localStorage.getItem('masareefi_categories_seed_v2_user-v2')).toBe('true')
+  })
+
+  it('migrates legacy pre-v2 accounts, correctly keys by type and name so expense "أخرى" does not prevent syncing income "أخرى"', async () => {
+    // Legacy pre-v2 expense docs (without v2 markers and without seed_ prefix)
+    const legacyExpenseDocs = [
+      { id: 'legacy_1', data: () => ({ name: 'طعام وبقالة', type: 'expense', order: 0 }) },
+      { id: 'legacy_2', data: () => ({ name: 'تسوق وملابس', type: 'expense', order: 1 }) }, // Needs rename to ملابس وإكسسوارات
+      { id: 'legacy_3', data: () => ({ name: 'أخرى', type: 'expense', order: 2 }) },
+    ]
+
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: legacyExpenseDocs,
+    })
+
+    await syncCategoriesForUser('user-legacy')
+
+    expect(mockBatchCommit).toHaveBeenCalled()
+    expect(localStorage.getItem('masareefi_categories_seed_v2_user-legacy')).toBe('true')
+
+    // Verify rename update was called for 'تسوق وملابس'
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'legacy_2' }),
+      { name: 'ملابس وإكسسوارات' }
+    )
+
+    // Verify income "أخرى" was added even though expense "أخرى" existed
     const addedCategories = mockBatchSet.mock.calls.map((call) => call[1] as { name: string; type: string })
     const incomeOther = addedCategories.find(
       (c) => c.type === 'income' && c.name === 'أخرى'

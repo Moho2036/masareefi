@@ -68,19 +68,77 @@ export async function seedDefaultCategories(uid: string): Promise<void> {
   await batch.commit()
 }
 
+export const SEED_V2_STORAGE_KEY_PREFIX = 'masareefi_categories_seed_v2_'
+
+export function getCategoriesSeedV2Key(uid: string): string {
+  return `${SEED_V2_STORAGE_KEY_PREFIX}${uid}`
+}
+
+export function isCategoriesSeedUpgraded(uid: string): boolean {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(getCategoriesSeedV2Key(uid)) === 'true'
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  return false
+}
+
+export function markCategoriesSeedUpgraded(uid: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(getCategoriesSeedV2Key(uid), 'true')
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
 /**
  * Syncs any renamed or newly added default categories to existing user accounts.
+ * Executes once per user account using localStorage tracking and Firestore seed ID checks
+ * so user deletions or custom renames are strictly respected on subsequent app opens.
  */
 export async function syncCategoriesForUser(uid: string): Promise<void> {
+  // If this user account has already been upgraded on this device, skip immediately
+  if (isCategoriesSeedUpgraded(uid)) {
+    return
+  }
+
   const categoriesRef = collection(db, 'users', uid, 'categories')
   const snap = await getDocs(categoriesRef)
 
   if (snap.empty) {
     await seedDefaultCategories(uid)
+    markCategoriesSeedUpgraded(uid)
     return
   }
 
-  const existingDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; name: string; type: TxType; order?: number }))
+  const existingDocs = snap.docs.map(
+    (d) =>
+      ({ id: d.id, ...d.data() } as {
+        id: string
+        name: string
+        type: TxType
+        order?: number
+      })
+  )
+
+  // Check if the account already has deterministic seed IDs or v2 category markers
+  const hasV2Markers = existingDocs.some(
+    (d) =>
+      d.id.startsWith('seed_') ||
+      d.name === 'سداد الديون والأقساط' ||
+      d.name === 'العطاء الخيري' ||
+      d.name === 'المصاريف المصرفية'
+  )
+
+  if (hasV2Markers) {
+    markCategoriesSeedUpgraded(uid)
+    return
+  }
+
   const existingKeys = new Set(existingDocs.map((c) => `${c.type}:${c.name}`))
   const batch = writeBatch(db)
   let changed = false
@@ -102,14 +160,16 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
     }
   }
 
-  // Handle missing new categories
+  // Handle missing new categories for legacy pre-v2 accounts
   let maxOrder = existingDocs.reduce((acc, c) => Math.max(acc, c.order ?? 0), 0)
 
   for (const defaultCat of DEFAULT_CATEGORIES) {
     const key = `${defaultCat.type}:${defaultCat.name}`
-    if (!existingKeys.has(key)) {
+    const seedId = `seed_${defaultCat.type}_${defaultCat.order}`
+    const hasDocWithSeedId = existingDocs.some((d) => d.id === seedId)
+    if (!existingKeys.has(key) && !hasDocWithSeedId) {
       maxOrder++
-      const newDocRef = doc(categoriesRef)
+      const newDocRef = doc(categoriesRef, seedId)
       batch.set(newDocRef, {
         name: defaultCat.name,
         type: defaultCat.type,
@@ -126,4 +186,6 @@ export async function syncCategoriesForUser(uid: string): Promise<void> {
   if (changed) {
     await batch.commit()
   }
+
+  markCategoriesSeedUpgraded(uid)
 }
