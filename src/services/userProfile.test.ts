@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { updateUserSettings, DEFAULT_SETTINGS } from './userProfile'
+import type { User } from 'firebase/auth'
+import { updateUserSettings, ensureUserProfile, DEFAULT_SETTINGS } from './userProfile'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -81,6 +82,60 @@ describe('userProfile service', () => {
       })
       expect(fullPayload.displayName).toBe(DEFAULT_SETTINGS.displayName)
       expect(fullPayload.theme).toBe(DEFAULT_SETTINGS.theme)
+    })
+  })
+
+  describe('ensureUserProfile', () => {
+    it('self-heals and updates Firestore displayName when existing doc has placeholder "مستخدم" and auth user has real name', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          uid: 'u-123',
+          displayName: 'مستخدم',
+          currency: 'JOD',
+          monthStartDay: 1,
+          theme: 'system',
+          rolloverBalance: true,
+        }),
+      })
+
+      const mockUser = {
+        uid: 'u-123',
+        displayName: 'مهند حداد',
+      } as User
+
+      const result = await ensureUserProfile(mockUser)
+
+      expect(mockUpdateDoc).toHaveBeenCalledTimes(1)
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/u-123' }),
+        { displayName: 'مهند حداد' }
+      )
+      expect(result.displayName).toBe('مهند حداد')
+    })
+
+    it('does not overwrite custom displayName when existing doc already has a personalized name', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          uid: 'u-123',
+          displayName: 'أحمد',
+          currency: 'JOD',
+          monthStartDay: 1,
+          theme: 'system',
+          rolloverBalance: true,
+        }),
+      })
+
+      const mockUser = {
+        uid: 'u-123',
+        displayName: 'مهند',
+      } as User
+
+      const result = await ensureUserProfile(mockUser)
+
+      expect(mockUpdateDoc).not.toHaveBeenCalled()
+      expect(result.displayName).toBe('أحمد')
     })
   })
 })

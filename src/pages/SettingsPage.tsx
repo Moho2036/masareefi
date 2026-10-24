@@ -315,6 +315,9 @@ export const SettingsPage: React.FC = () => {
     setRestoringJson(true)
     try {
       await restoreBackup(user.uid, restoreValidation.data, restoreMode)
+      if (restoreValidation.data.data.settings?.displayName) {
+        setDisplayNameInput(restoreValidation.data.data.settings.displayName)
+      }
       showToast(
         restoreMode === 'merge'
           ? 'تم دمج النسخة الاحتياطية بنجاح!'

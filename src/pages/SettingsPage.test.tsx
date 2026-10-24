@@ -245,6 +245,48 @@ describe('SettingsPage Backup and Restore modal', () => {
     })
   })
 
+  it('updates displayNameInput immediately when restored backup contains settings.displayName', async () => {
+    render(<SettingsPage />)
+
+    const fileInput = screen.getByLabelText(/اختيار ملف النسخة الاحتياطية/i)
+    const validJsonWithDisplayName = JSON.stringify({
+      version: 1,
+      app: 'masareefi',
+      exportedAt: '2026-10-15T12:00:00Z',
+      data: {
+        settings: {
+          displayName: 'اسم مستعاد من النسخة',
+          currency: 'JOD',
+          monthStartDay: 1,
+          theme: 'system',
+          rolloverBalance: true,
+        },
+        categories: [],
+        transactions: [],
+      },
+    })
+    const file = new File([validJsonWithDisplayName], 'backup.json', { type: 'application/json' })
+
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/تأكيد استعادة النسخة الاحتياطية/i)).toBeDefined()
+    })
+
+    const confirmBtn = screen.getByRole('button', { name: 'تأكيد ودمج البيانات' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockRestoreBackup).toHaveBeenCalled()
+    })
+
+    // Open edit name mode to see displayNameInput
+    const editBtn = screen.getByRole('button', { name: 'تعديل الاسم' })
+    fireEvent.click(editBtn)
+    const nameInput = screen.getByPlaceholderText('أدخل اسمك') as HTMLInputElement
+    expect(nameInput.value).toBe('اسم مستعاد من النسخة')
+  })
+
   it('renders iOS Safari installation instructions when isIOS is true and not installed', () => {
     mockPWAInstallState = {
       isInstallable: false,

@@ -488,48 +488,12 @@ export async function restoreBackup(
       // ignore
     }
 
-    // In replace mode, existing transactions/recurring not in backup will be deleted.
-    // So the used category IDs are only those in the backup data.
-    const usedCategoryIds = new Set<string>()
-    for (const tx of backup.data.transactions) {
-      if (tx.categoryId) usedCategoryIds.add(tx.categoryId)
-    }
-    for (const rec of backup.data.recurring) {
-      if (rec.categoryId) usedCategoryIds.add(rec.categoryId)
-    }
-
     const incomingCategoryIds = new Set(backup.data.categories.map((c) => c.id).filter(Boolean))
-
-    // Map from `${c.type}:${c.name.trim()}` to restored category ID for remapping
-    const restoredKeyToIdMap = new Map<string, string>()
-    for (const cat of backup.data.categories) {
-      if (cat.id && cat.name && cat.type) {
-        const key = `${cat.type}:${cat.name.trim()}`
-        if (!restoredKeyToIdMap.has(key)) {
-          restoredKeyToIdMap.set(key, cat.id)
-        }
-      }
-    }
 
     if (existingCatsSnap && existingCatsSnap.docs) {
       for (const existingDoc of existingCatsSnap.docs) {
         if (!incomingCategoryIds.has(existingDoc.id)) {
-          const existingCat = existingDoc.data()
-          const key = `${existingCat.type}:${(existingCat.name || '').trim()}`
-          const isUsed = usedCategoryIds.has(existingDoc.id)
-          const targetRestoredId = restoredKeyToIdMap.get(key)
-
-          if (isUsed) {
-            // If used by backup records, ONLY delete if we can remap to a restored category with the same name & type
-            if (targetRestoredId && targetRestoredId !== existingDoc.id) {
-              categoryIdRemap.set(existingDoc.id, targetRestoredId)
-              ops.push((b) => b.delete(existingDoc.ref))
-            }
-            // If no matching restored category with the same name & type exists, DO NOT DELETE!
-          } else {
-            // In replace mode, delete unused categories not in backup
-            ops.push((b) => b.delete(existingDoc.ref))
-          }
+          ops.push((b) => b.delete(existingDoc.ref))
         }
       }
     }
@@ -569,18 +533,6 @@ export async function restoreBackup(
       for (const d of existingCirclesSnap.docs) {
         if (!incomingCircleIds.has(d.id)) {
           ops.push((b) => b.delete(d.ref))
-        }
-      }
-    }
-
-    // Remap existing transactions in Firestore whose category was deleted & remapped
-    if (categoryIdRemap.size > 0 && existingTxsSnap && existingTxsSnap.docs) {
-      for (const txDoc of existingTxsSnap.docs) {
-        if (!incomingTxIds.has(txDoc.id)) continue
-        const tx = txDoc.data()
-        if (tx.categoryId && categoryIdRemap.has(tx.categoryId)) {
-          const newCatId = categoryIdRemap.get(tx.categoryId)!
-          ops.push((b) => b.update(txDoc.ref, { categoryId: newCatId }))
         }
       }
     }
@@ -782,3 +734,6 @@ export async function restoreBackup(
     await batch.commit()
   }
 }
+
+export const restoreBackupData = restoreBackup
+

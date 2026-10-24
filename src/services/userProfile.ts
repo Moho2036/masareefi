@@ -27,7 +27,21 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const snap = await getDoc(userRef)
 
   if (snap.exists()) {
-    return snap.data()
+    const data = snap.data()
+    // Self-healing race condition fix:
+    // If users/{uid} document already exists and has default placeholder name 'مستخدم' (or empty),
+    // but the incoming user has a real non-empty displayName, update Firestore to reflect it.
+    if (
+      (!data.displayName || data.displayName === 'مستخدم') &&
+      user.displayName &&
+      user.displayName.trim() &&
+      user.displayName.trim() !== 'مستخدم'
+    ) {
+      const realName = user.displayName.trim().slice(0, 100)
+      await updateDoc(doc(db, 'users', user.uid), { displayName: realName })
+      return { ...data, displayName: realName }
+    }
+    return data
   }
 
   const initialSettings: UserSettings = {

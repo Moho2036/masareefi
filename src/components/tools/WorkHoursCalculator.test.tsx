@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { WorkHoursCalculator } from './WorkHoursCalculator'
+import {
+  clampWorkHoursPerDay,
+  clampWorkDaysPerWeek,
+  clampWorkDaysPerMonth,
+} from '../../lib/workHours'
 
 describe('WorkHoursCalculator component', () => {
   beforeEach(() => {
@@ -82,5 +87,46 @@ describe('WorkHoursCalculator component', () => {
     const parsed = JSON.parse(stored!)
     expect(parsed.salary).toBe('800')
     expect(parsed.isCustomSalary).toBe(true)
+  })
+
+  it('clamps work hours per day to maximum 24 when user enters a higher number', () => {
+    render(<WorkHoursCalculator />)
+
+    const hoursInput = screen.getByLabelText('ساعات الدوام / يوم') as HTMLInputElement
+    fireEvent.change(hoursInput, { target: { value: '30' } })
+
+    expect(hoursInput.value).toBe('24')
+  })
+
+  it('clamps work days per week to maximum 7 in weekly mode', () => {
+    render(<WorkHoursCalculator initialWorkDaysMode="week" />)
+
+    const daysInput = screen.getByLabelText('أيام العمل في الأسبوع') as HTMLInputElement
+    fireEvent.change(daysInput, { target: { value: '10' } })
+
+    expect(daysInput.value).toBe('7')
+  })
+
+  it('clamps work days per month to maximum 31 in monthly mode', () => {
+    render(<WorkHoursCalculator initialWorkDaysMode="month" />)
+
+    const daysInput = screen.getByLabelText('أيام العمل / شهر') as HTMLInputElement
+    fireEvent.change(daysInput, { target: { value: '45' } })
+
+    expect(daysInput.value).toBe('31')
+  })
+
+  it('correctly clamps values via pure helper functions clampWorkHoursPerDay and clampWorkDaysPerWeek', () => {
+    expect(clampWorkHoursPerDay(30)).toBe(24)
+    expect(clampWorkHoursPerDay(0)).toBe(1)
+    expect(clampWorkHoursPerDay(8)).toBe(8)
+
+    expect(clampWorkDaysPerWeek(10)).toBe(7)
+    expect(clampWorkDaysPerWeek(0)).toBe(1)
+    expect(clampWorkDaysPerWeek(5)).toBe(5)
+
+    expect(clampWorkDaysPerMonth(40)).toBe(31)
+    expect(clampWorkDaysPerMonth(0)).toBe(1)
+    expect(clampWorkDaysPerMonth(22)).toBe(22)
   })
 })

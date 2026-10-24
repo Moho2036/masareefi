@@ -11,6 +11,11 @@ import { useCurrency } from '../../hooks/useCurrency'
 import { toFils } from '../../lib/money'
 import { toWesternDigits } from '../../lib/dates'
 import { cn } from '../../lib/cn'
+import {
+  clampWorkHoursPerDay,
+  clampWorkDaysPerWeek,
+  clampWorkDaysPerMonth,
+} from '../../lib/workHours'
 
 function parseNumeric(val: string): number {
   const western = toWesternDigits(val)
@@ -62,6 +67,7 @@ interface StoredWorkHoursPrefs {
   isCustomItemPrice?: boolean
   dailyHours?: string
   workDays?: string
+  workDaysMode?: 'month' | 'week'
   itemName?: string
 }
 
@@ -72,6 +78,7 @@ function loadStoredPrefs(currencyCode: string): {
   isCustomItemPrice: boolean
   dailyHours: string
   workDays: string
+  workDaysMode: 'month' | 'week'
   itemName: string
   hasInteracted: boolean
 } {
@@ -120,8 +127,9 @@ function loadStoredPrefs(currencyCode: string): {
         isCustomItemPrice,
         dailyHours: parsed.dailyHours ? String(parsed.dailyHours) : '8',
         workDays: parsed.workDays ? String(parsed.workDays) : '22',
+        workDaysMode: parsed.workDaysMode === 'week' ? 'week' : 'month',
         itemName: parsed.itemName ? String(parsed.itemName) : 'هاتف ذكي',
-        hasInteracted: Boolean(isCustomSalary || isCustomItemPrice || parsed.dailyHours || parsed.workDays),
+        hasInteracted: Boolean(isCustomSalary || isCustomItemPrice || parsed.dailyHours || parsed.workDays || parsed.workDaysMode),
       }
     }
   } catch {
@@ -135,12 +143,19 @@ function loadStoredPrefs(currencyCode: string): {
     isCustomItemPrice: false,
     dailyHours: '8',
     workDays: '22',
+    workDaysMode: 'month',
     itemName: 'هاتف ذكي',
     hasInteracted: false,
   }
 }
 
-export const WorkHoursCalculator: React.FC = () => {
+export interface WorkHoursCalculatorProps {
+  initialWorkDaysMode?: 'month' | 'week'
+}
+
+export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
+  initialWorkDaysMode,
+}) => {
   const { format, config } = useCurrency()
   const benchmarks = useMemo(() => getCurrencyBenchmarks(config.code), [config.code])
 
@@ -150,7 +165,12 @@ export const WorkHoursCalculator: React.FC = () => {
   const [isCustomSalary, setIsCustomSalary] = useState<boolean>(initialPrefs.isCustomSalary)
 
   const [dailyHoursStr, setDailyHoursStr] = useState<string>(initialPrefs.dailyHours)
-  const [workDaysStr, setWorkDaysStr] = useState<string>(initialPrefs.workDays)
+  const [workDaysMode, setWorkDaysMode] = useState<'month' | 'week'>(
+    initialWorkDaysMode || initialPrefs.workDaysMode || 'month'
+  )
+  const [workDaysStr, setWorkDaysStr] = useState<string>(
+    initialWorkDaysMode === 'week' && initialPrefs.workDays === '22' ? '5' : initialPrefs.workDays
+  )
 
   const [itemName, setItemName] = useState<string>(initialPrefs.itemName)
   const [itemPriceStr, setItemPriceStr] = useState<string>(initialPrefs.itemPrice)
@@ -184,6 +204,7 @@ export const WorkHoursCalculator: React.FC = () => {
             isCustomItemPrice,
             dailyHours: dailyHoursStr,
             workDays: workDaysStr,
+            workDaysMode,
             itemName,
           })
         )
@@ -199,14 +220,44 @@ export const WorkHoursCalculator: React.FC = () => {
     isCustomItemPrice,
     dailyHoursStr,
     workDaysStr,
+    workDaysMode,
     itemName,
     hasInteracted,
   ])
 
+  const handleDailyHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = toWesternDigits(e.target.value)
+    const num = parseNumeric(raw)
+    if (num > 24) {
+      setDailyHoursStr('24')
+    } else {
+      setDailyHoursStr(raw)
+    }
+    setHasInteracted(true)
+  }
+
+  const handleWorkDaysChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = toWesternDigits(e.target.value)
+    const num = parseNumeric(raw)
+    const max = workDaysMode === 'week' ? 7 : 31
+    if (num > max) {
+      setWorkDaysStr(String(max))
+    } else {
+      setWorkDaysStr(raw)
+    }
+    setHasInteracted(true)
+  }
+
   // Calculations
   const salary = parseNumeric(salaryStr)
-  const dailyHours = parseNumeric(dailyHoursStr) || 8
-  const workDays = parseNumeric(workDaysStr) || 22
+  const rawDailyHours = parseNumeric(dailyHoursStr)
+  const dailyHours = rawDailyHours > 0 ? clampWorkHoursPerDay(rawDailyHours) : 8
+
+  const rawWorkDays = parseNumeric(workDaysStr)
+  const workDays =
+    workDaysMode === 'week'
+      ? (rawWorkDays > 0 ? clampWorkDaysPerWeek(rawWorkDays) : 5) * (52 / 12)
+      : (rawWorkDays > 0 ? clampWorkDaysPerMonth(rawWorkDays) : 22)
   const itemPrice = parseNumeric(itemPriceStr)
 
   const totalMonthlyHours = useMemo(() => {
@@ -274,23 +325,60 @@ export const WorkHoursCalculator: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={dailyHoursStr}
-                  onChange={(e) => {
-                    setDailyHoursStr(toWesternDigits(e.target.value))
-                    setHasInteracted(true)
-                  }}
+                  onChange={handleDailyHoursChange}
                   startIcon={<Clock className="w-4 h-4 text-slate-400" />}
                 />
 
-                <Input
-                  label="أيام العمل / شهر"
-                  type="text"
-                  inputMode="numeric"
-                  value={workDaysStr}
-                  onChange={(e) => {
-                    setWorkDaysStr(toWesternDigits(e.target.value))
-                    setHasInteracted(true)
-                  }}
-                />
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label
+                      htmlFor="work-days-input"
+                      className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                    >
+                      {workDaysMode === 'week' ? 'أيام العمل في الأسبوع' : 'أيام العمل / شهر'}
+                    </label>
+                    <div className="flex items-center bg-slate-200/70 dark:bg-slate-700 p-0.5 rounded-lg text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWorkDaysMode('month')
+                          setWorkDaysStr('22')
+                          setHasInteracted(true)
+                        }}
+                        className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                          workDaysMode === 'month'
+                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        شهرياً
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWorkDaysMode('week')
+                          setWorkDaysStr('5')
+                          setHasInteracted(true)
+                        }}
+                        className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                          workDaysMode === 'week'
+                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        أسبوعياً
+                      </button>
+                    </div>
+                  </div>
+                  <Input
+                    id="work-days-input"
+                    type="text"
+                    inputMode="numeric"
+                    value={workDaysStr}
+                    onChange={handleWorkDaysChange}
+                    aria-label={workDaysMode === 'week' ? 'أيام العمل في الأسبوع' : 'أيام العمل / شهر'}
+                  />
+                </div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-750/60 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
