@@ -73,6 +73,13 @@ export const DebtsPage: React.FC = () => {
   const [deleteTransactions, setDeleteTransactions] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const hasLinkedTransactions = Boolean(
+    debtToDelete && (
+      (debtToDelete.payments && debtToDelete.payments.length > 0) ||
+      (debtToDelete.paidFils || 0) > 0
+    )
+  )
+
   // Handlers
   const handleOpenAdd = () => {
     setEditingDebt(null)
@@ -418,21 +425,23 @@ export const DebtsPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3">
-            <label
-              htmlFor="delete-debt-txs"
-              className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none"
-            >
-              حذف معاملات السداد المسجلة سابقاً لهذا الدين من سجل المعاملات
-            </label>
-            <input
-              id="delete-debt-txs"
-              type="checkbox"
-              checked={deleteTransactions}
-              onChange={(e) => setDeleteTransactions(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
-            />
-          </div>
+          {hasLinkedTransactions && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3">
+              <label
+                htmlFor="delete-debt-txs"
+                className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+              >
+                حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً
+              </label>
+              <input
+                id="delete-debt-txs"
+                type="checkbox"
+                checked={deleteTransactions}
+                onChange={(e) => setDeleteTransactions(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button

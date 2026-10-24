@@ -6,7 +6,12 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { deleteDebtPayment, updateDebtPayment, checkDebtPaymentTransactionExists } from '../../services/debts'
+import {
+  deleteDebtPayment,
+  updateDebtPayment,
+  checkDebtPaymentTransactionExists,
+  compactDebtPayments,
+} from '../../services/debts'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
 import { toWesternDigits, parseLocalDateInput } from '../../lib/dates'
@@ -41,6 +46,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [editSyncTx, setEditSyncTx] = useState(true)
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [isCompacting, setIsCompacting] = useState(false)
 
   const handleClose = () => {
     setConfirmDeleteId(null)
@@ -151,6 +157,25 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     }
   }
 
+  const handleCompact = async () => {
+    if (!user || !debt) return
+    setIsCompacting(true)
+    try {
+      const result = await compactDebtPayments(user.uid, debt.id)
+      if (result.mergedCount > 0) {
+        showToast(`تم دمج ${result.mergedCount} دفعة قديمة بنجاح`, 'success')
+        onSuccess?.()
+      } else {
+        showToast('لا توجد دفعات كافية للدمج', 'info')
+      }
+    } catch (err) {
+      console.error('Failed to compact payments:', err)
+      showToast(err instanceof Error ? err.message : 'فشل دمج الدفعات', 'error')
+    } finally {
+      setIsCompacting(false)
+    }
+  }
+
   return (
     <Modal
       isOpen={isOpen}
@@ -186,6 +211,31 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Compaction Banner */}
+        {payments.length >= 90 && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs space-y-2">
+            <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>
+                وصل عدد الدفعات إلى {payments.length} (الحد الأقصى 100)
+              </span>
+            </div>
+            <p className="text-amber-700 dark:text-amber-400">
+              يمكنك دمج الدفعات القديمة في دفعة واحدة لفتح مساحة لدفعات جديدة دون أي تأثير على إجمالي المبلغ المسدد.
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                disabled={isCompacting || isSavingEdit || Boolean(deletingId)}
+                onClick={handleCompact}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isCompacting ? 'جاري الدمج...' : 'دمج الدفعات القديمة'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Payments List */}
         {payments.length === 0 ? (

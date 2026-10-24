@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DebtsPage } from './DebtsPage'
+import { deleteDebt } from '../services/debts'
 import type { Debt } from '../types'
 
 vi.mock('../lib/firebase', () => ({
@@ -129,5 +130,45 @@ describe('DebtsPage Component', () => {
     expect(searchInput.value).toBe('')
     expect(screen.getByText('أحمد محمود')).toBeInTheDocument()
     expect(screen.getByText('خالد عبد الله')).toBeInTheDocument()
+  })
+
+  it('opens delete confirmation modal with deleteTransactions unchecked by default and calls deleteDebt with false', async () => {
+    render(<DebtsPage />)
+    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
+    fireEvent.click(deleteButtons[0]) // أحمد محمود has paidFils > 0
+
+    expect(screen.getByText(/تأكيد حذف الدين/i)).toBeInTheDocument()
+    const checkbox = screen.getByRole('checkbox', {
+      name: /حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً/i,
+    }) as HTMLInputElement
+    expect(checkbox).toBeInTheDocument()
+    expect(checkbox.checked).toBe(false)
+
+    // Click confirm delete
+    const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: false })
+    })
+  })
+
+  it('allows checking deleteTransactions and calls deleteDebt with deleteTransactions = true', async () => {
+    render(<DebtsPage />)
+    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
+    fireEvent.click(deleteButtons[0])
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً/i,
+    }) as HTMLInputElement
+    fireEvent.click(checkbox)
+    expect(checkbox.checked).toBe(true)
+
+    const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: true })
+    })
   })
 })

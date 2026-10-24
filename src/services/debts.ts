@@ -278,12 +278,10 @@ function updatePaymentTxNote(
 ): string | undefined {
   if (typeof existingNote !== 'string') return undefined
 
-  const prefixRegex = /^(سداد دين|تحصيل دين)\s*\([^)]*\)/
+  const prefixRegex = /^(سداد دين|تحصيل دين|سداد دفعة دين|استرداد دفعة دين|دفعة سداد دين|دفعة استرداد دين)\s*(\([^)]*\)|:\s*[^•\n]+)?/
   if (prefixRegex.test(existingNote)) {
-    const newPrefix =
-      effectiveType === 'lent'
-        ? `تحصيل دين (${effectivePersonName})`
-        : `سداد دين (${effectivePersonName})`
+    const action = effectiveType === 'lent' ? 'تحصيل دين' : 'سداد دين'
+    const newPrefix = `${action} (${effectivePersonName})`
     return existingNote.replace(prefixRegex, newPrefix).slice(0, 500)
   }
 
@@ -491,7 +489,7 @@ export async function updateDebt(
 export async function deleteDebt(
   uid: string,
   id: string,
-  options?: { deleteTransactions?: boolean }
+  optionsOrFlag?: { deleteTransactions?: boolean } | boolean
 ): Promise<void> {
   const debtRef = doc(db, 'users', uid, 'debts', id)
   const snap = await getDoc(debtRef)
@@ -501,7 +499,10 @@ export async function deleteDebt(
   const batch = writeBatch(db)
   batch.delete(debtRef)
 
-  const shouldDeleteTransactions = options?.deleteTransactions ?? true
+  const shouldDeleteTransactions =
+    typeof optionsOrFlag === 'boolean'
+      ? optionsOrFlag
+      : (optionsOrFlag?.deleteTransactions ?? false)
 
   if (shouldDeleteTransactions) {
     // Synchronize: Delete initial transaction
@@ -727,7 +728,7 @@ export interface UpdatePaymentOptions {
 
 export async function updateDebtPayment(
   uid: string,
-  debt: Debt,
+  debtOrId: string | Debt,
   paymentId: string,
   updatedData: {
     amountFils: number
@@ -738,6 +739,18 @@ export async function updateDebtPayment(
   },
   options?: UpdatePaymentOptions
 ): Promise<void> {
+  let debt: Debt
+  if (typeof debtOrId === 'string') {
+    const docRef = doc(db, 'users', uid, 'debts', debtOrId).withConverter(debtConverter)
+    const snap = await getDoc(docRef)
+    if (!snap.exists() || !snap.data()) {
+      throw new Error('سجل الدين غير موجود')
+    }
+    debt = snap.data()!
+  } else {
+    debt = debtOrId
+  }
+
   const payments = debt.payments || []
   const existingPayment = payments.find((p) => p.id === paymentId)
   if (!existingPayment) {
@@ -914,6 +927,62 @@ export async function updateDebtPayment(
   }
 
   await batch.commit()
+}
+
+export interface CompactDebtPaymentsResult {
+  mergedCount: number
+  mergedAmountFils: number
+}
+
+export async function compactDebtPayments(
+  uid: string,
+  debtId: string
+): Promise<CompactDebtPaymentsResult> {
+  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
+  const snap = await getDoc(docRef)
+  if (!snap.exists() || !snap.data()) {
+    throw new Error('سجل الدين غير موجود')
+  }
+
+  const debt = snap.data()!
+  const payments = debt.payments || []
+
+  // If 10 or fewer payments, compaction is not required
+  if (payments.length <= 10) {
+    return { mergedCount: 0, mergedAmountFils: 0 }
+  }
+
+  // Keep the latest 10 payments separate
+  const toKeep = payments.slice(-10)
+  // Merge all older payments
+  const toMerge = payments.slice(0, -10)
+  const mergedCount = toMerge.length
+  const mergedAmountFils = toMerge.reduce((sum, p) => sum + p.amountFils, 0)
+
+  const lastMergedPayment = toMerge[toMerge.length - 1]
+  const mergedDate =
+    lastMergedPayment.date instanceof Date
+      ? lastMergedPayment.date
+      : new Date(lastMergedPayment.date)
+
+  const consolidatedPayment: DebtPayment = {
+    id: generatePaymentId(),
+    amountFils: mergedAmountFils,
+    date: mergedDate,
+    note: `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`,
+    createdAt: new Date(),
+  }
+
+  const newPayments = [consolidatedPayment, ...toKeep]
+  const serializedPayments = newPayments.map(serializePayment)
+
+  const batch = writeBatch(db)
+  batch.update(docRef, {
+    payments: serializedPayments,
+  })
+
+  await batch.commit()
+  return { mergedCount, mergedAmountFils }
 }
 
 export async function getAllDebts(uid: string): Promise<Debt[]> {

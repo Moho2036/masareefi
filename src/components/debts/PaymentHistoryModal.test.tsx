@@ -8,6 +8,7 @@ vi.mock('../../services/debts', () => ({
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
   updateDebtPayment: vi.fn().mockResolvedValue(undefined),
   checkDebtPaymentTransactionExists: vi.fn().mockResolvedValue(true),
+  compactDebtPayments: vi.fn().mockResolvedValue({ mergedCount: 85, mergedAmountFils: 170000 }),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -362,6 +363,51 @@ describe('PaymentHistoryModal', () => {
         'p1',
         { deleteTransaction: false }
       )
+    })
+  })
+
+  it('renders compaction banner when payments length >= 90 and triggers compactDebtPayments on click', async () => {
+    const mockPayments = Array.from({ length: 95 }, (_, i) => ({
+      id: `p-${i + 1}`,
+      amountFils: 1000,
+      date: new Date(2026, 0, i + 1),
+      note: `دفعة ${i + 1}`,
+      createdAt: new Date(),
+    }))
+
+    const debtWithManyPayments: Debt = {
+      id: 'd-many',
+      personName: 'سعيد',
+      type: 'borrowed',
+      amountFils: 100000,
+      paidFils: 95000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: mockPayments,
+      createdAt: new Date(),
+    }
+
+    const mockOnSuccess = vi.fn()
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={debtWithManyPayments}
+        onSuccess={mockOnSuccess}
+      />
+    )
+
+    expect(screen.getByText(/وصل عدد الدفعات إلى 95/i)).toBeInTheDocument()
+    const compactBtn = screen.getByRole('button', { name: /دمج الدفعات القديمة/i })
+    expect(compactBtn).toBeInTheDocument()
+
+    fireEvent.click(compactBtn)
+
+    await waitFor(() => {
+      expect(debtServices.compactDebtPayments).toHaveBeenCalledWith('user-1', 'd-many')
+      expect(mockOnSuccess).toHaveBeenCalled()
     })
   })
 })

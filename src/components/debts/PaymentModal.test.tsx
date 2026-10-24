@@ -6,6 +6,7 @@ import type { Debt, DebtPayment } from '../../types'
 
 vi.mock('../../services/debts', () => ({
   addDebtPayment: vi.fn().mockResolvedValue('pay-new'),
+  compactDebtPayments: vi.fn().mockResolvedValue({ mergedCount: 90, mergedAmountFils: 45000 }),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -93,6 +94,13 @@ describe('PaymentModal Component', () => {
     // Warning banner should be displayed
     expect(screen.getByText(/تم الوصول للحد الأقصى للدفعات \(100 دفعة\)/)).toBeInTheDocument()
     expect(screen.getByText(/تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين/)).toBeInTheDocument()
+
+    // Compaction button should be available
+    const compactBtn = screen.getByRole('button', { name: /دمج الدفعات القديمة لفتح مساحة/i })
+    expect(compactBtn).toBeInTheDocument()
+
+    fireEvent.click(compactBtn)
+    expect(debtServices.compactDebtPayments).toHaveBeenCalledWith('user-1', maxDebt.id)
 
     // Submit button should be disabled with descriptive text
     const submitBtn = screen.getByRole('button', { name: 'الحد الأقصى مكتمل (100 دفعة)' })

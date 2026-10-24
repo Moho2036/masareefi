@@ -179,11 +179,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenPaymentModal(debt)}
-              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60"
-              title="وصل إلى الحد الأقصى للدفعات (100 دفعة)"
+              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60"
+              title="وصل إلى الحد الأقصى للدفعات (100 دفعة) — اضغط للدمج"
             >
               <AlertCircle className="w-4 h-4 stroke-[2.5] text-amber-600 dark:text-amber-400" />
-              <span>الحد الأقصى للدفعات (100)</span>
+              <span>دمج الدفعات القديمة (100)</span>
             </button>
           ) : (
             <button
@@ -216,7 +216,12 @@ export const DebtCard: React.FC<DebtCardProps> = ({
           >
             <History className="w-4 h-4" />
             {(debt.payments?.length ?? 0) > 0 && (
-              <span className="absolute -top-1 -end-1 px-1 min-w-[14px] h-[14px] rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">
+              <span
+                className={cn(
+                  'absolute -top-1 -end-1 px-1 min-w-[14px] h-[14px] rounded-full text-white text-[9px] font-black flex items-center justify-center',
+                  (debt.payments?.length ?? 0) >= 90 ? 'bg-amber-500' : 'bg-emerald-500'
+                )}
+              >
                 {debt.payments.length}
               </span>
             )}

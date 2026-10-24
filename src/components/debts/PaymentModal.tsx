@@ -7,7 +7,7 @@ import { Input } from '../ui/Input'
 import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { addDebtPayment } from '../../services/debts'
+import { addDebtPayment, compactDebtPayments } from '../../services/debts'
 import { toFils, fromFils } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
@@ -43,6 +43,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
   const [syncTransaction, setSyncTransaction] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isCompacting, setIsCompacting] = useState(false)
 
   const remainingFils = getDebtRemainingFils(debt)
   const isLent = debt.type === 'lent'
@@ -54,12 +55,32 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
     setError(null)
   }
 
+  const handleCompact = async () => {
+    if (!user || !debt) return
+    setIsCompacting(true)
+    setError(null)
+    try {
+      const result = await compactDebtPayments(user.uid, debt.id)
+      if (result.mergedCount > 0) {
+        showToast(`تم دمج ${result.mergedCount} دفعة قديمة بنجاح`, 'success')
+        onSuccess?.()
+      } else {
+        showToast('لا توجد دفعات كافية للدمج', 'info')
+      }
+    } catch (err) {
+      console.error('Failed to compact payments:', err)
+      setError(err instanceof Error ? err.message : 'فشل دمج الدفعات القديمة')
+    } finally {
+      setIsCompacting(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
 
     if (isMaxPaymentsReached) {
-      setError('وصل هذا الدين إلى الحد الأقصى لعدد الدفعات (100 دفعة). يمكنك تسوية المبلغ المتبقي بدفعة واحدة عبر تعديل إجمالي الدين.')
+      setError('وصل هذا الدين إلى الحد الأقصى (100 دفعة). يرجى الضغط على زر "دمج الدفعات القديمة" أعلاه لفتح مساحة أولاً.')
       return
     }
 
@@ -112,15 +133,31 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {isMaxPaymentsReached && (
-        <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-semibold space-y-1">
+      {paymentsCount >= 90 && (
+        <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-semibold space-y-2">
           <div className="font-bold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>تم الوصول للحد الأقصى للدفعات (100 دفعة)</span>
+            <span>
+              {isMaxPaymentsReached
+                ? 'تم الوصول للحد الأقصى للدفعات (100 دفعة)'
+                : `اقترب عدد الدفعات من الحد الأقصى (${paymentsCount}/100)`}
+            </span>
           </div>
           <p>
-            تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين. لا يمكن تسجيل دفعات إضافية لهذا السجل، ويمكنك تسوية المبلغ المتبقي بدفعة واحدة عبر تعديل إجمالي مبلغ الدين في شاشة التعديل.
+            {isMaxPaymentsReached
+              ? 'تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين. لفتح مساحة لتسجيل هذه الدفعة، اضغط على الزر أدناه لدمج الدفعات الأقدم في دفعة مجمعة واحدة دون التأثير على إجمالي المبلغ المسدد.'
+              : 'لفتح مساحة لدفعات مستقبلية، يمكنك دمج الدفعات القديمة في دفعة واحدة دون أي تغيير في إجمالي المبلغ المسدد.'}
           </p>
+          <div>
+            <button
+              type="button"
+              disabled={loading || isCompacting}
+              onClick={handleCompact}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isCompacting ? 'جاري الدمج...' : 'دمج الدفعات القديمة لفتح مساحة'}
+            </button>
+          </div>
         </div>
       )}
 

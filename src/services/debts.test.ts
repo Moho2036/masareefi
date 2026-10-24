@@ -7,6 +7,7 @@ import {
   addDebtPayment,
   updateDebtPayment,
   deleteDebtPayment,
+  compactDebtPayments,
 } from './debts'
 import type { Debt } from '../types'
 
@@ -548,10 +549,37 @@ describe('debts service with accounting link', () => {
       expect(debtPayload.paidFils).toBe(55000)
       expect(debtPayload.settled).toBe(false)
     })
+
+    it('fetches debt document directly when debtId is passed as string', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => sampleDebtWithPayments,
+          }
+        }
+        if (ref.path.includes('transactions')) {
+          return {
+            exists: () => true,
+            data: () => ({ id: 'debt_pay_pay-1', amountFils: 20000 }),
+          }
+        }
+        return { exists: () => false, data: () => ({}) }
+      })
+
+      await updateDebtPayment('user-1', 'debt-100', 'pay-1', {
+        amountFils: 25000,
+        date: new Date('2026-10-06'),
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2)
+      const debtPayload = mockBatchUpdate.mock.calls[0][1]
+      expect(debtPayload.paidFils).toBe(25000)
+    })
   })
 
   describe('deleteDebt with cascade sync', () => {
-    it('deletes debt, initial transaction, and all payment transactions', async () => {
+    it('deletes debt record only by default (deleteTransactions = false)', async () => {
       mockGetDoc.mockResolvedValueOnce({
         data: () => ({
           payments: [{ id: 'p1' }, { id: 'p2' }],
@@ -560,25 +588,39 @@ describe('debts service with accounting link', () => {
 
       await deleteDebt('user-1', 'debt-123')
 
-      // 1 debt + 1 initTx + 2 payTx = 4 delete calls
-      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      // Only 1 delete call for the debt document itself
+      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/debts/debt-123' })
+      )
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
-    it('deletes debt record only when deleteTransactions is false', async () => {
+    it('deletes debt, initial transaction, and all payment transactions when deleteTransactions is true (object or boolean)', async () => {
       mockGetDoc.mockResolvedValueOnce({
         data: () => ({
           payments: [{ id: 'p1' }, { id: 'p2' }],
         }),
       })
 
-      await deleteDebt('user-1', 'debt-123', { deleteTransactions: false })
+      await deleteDebt('user-1', 'debt-123', true)
 
-      // Only 1 delete call for the debt document itself
-      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
-      expect(mockBatchDelete).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'users/user-1/debts/debt-123' })
-      )
+      // 1 debt + 1 initTx + 2 payTx = 4 delete calls
+      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+
+      mockBatchDelete.mockClear()
+      mockBatchCommit.mockClear()
+
+      mockGetDoc.mockResolvedValueOnce({
+        data: () => ({
+          payments: [{ id: 'p1', transactionId: 'tx-custom-1' }],
+        }),
+      })
+
+      await deleteDebt('user-1', 'debt-123', { deleteTransactions: true })
+      // 1 debt + 1 initTx + 1 payTx (tx-custom-1) + 1 payTx (debt_pay_p1) = 4 delete calls
+      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
@@ -827,6 +869,70 @@ describe('debts service with accounting link', () => {
         title: 'إقراض: زيد',
       })
       expect(mockBatchCommit).toHaveBeenCalled()
+    })
+  })
+
+  describe('compactDebtPayments', () => {
+    it('returns zero and does not update when payments count is 10 or fewer', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-1',
+          amountFils: 100000,
+          paidFils: 50000,
+          settled: false,
+          payments: Array.from({ length: 8 }, (_, i) => ({
+            id: `p-${i}`,
+            amountFils: 5000,
+            date: new Date(`2026-10-0${i + 1}`),
+            createdAt: new Date(),
+          })),
+        }),
+      })
+
+      const result = await compactDebtPayments('user-1', 'debt-compact-1')
+      expect(result).toEqual({ mergedCount: 0, mergedAmountFils: 0 })
+      expect(mockBatchUpdate).not.toHaveBeenCalled()
+    })
+
+    it('merges oldest payments keeping latest 10 and preserves paidFils and settled exactly', async () => {
+      const totalPayments = 25
+      const mockPayments = Array.from({ length: totalPayments }, (_, i) => ({
+        id: `p-${i + 1}`,
+        amountFils: 2000, // 25 * 2000 = 50,000 fils
+        date: new Date(2026, 9, i + 1),
+        createdAt: new Date(2026, 9, i + 1),
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-2',
+          amountFils: 100000,
+          paidFils: 50000,
+          settled: false,
+          payments: mockPayments,
+        }),
+      })
+
+      const result = await compactDebtPayments('user-1', 'debt-compact-2')
+
+      // toMerge = 25 - 10 = 15 payments
+      // mergedAmount = 15 * 2000 = 30,000 fils
+      expect(result.mergedCount).toBe(15)
+      expect(result.mergedAmountFils).toBe(30000)
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      // 1 consolidated payment + 10 kept payments = 11 payments
+      expect(updatedData.payments).toHaveLength(11)
+      expect(updatedData.payments[0].amountFils).toBe(30000)
+      expect(updatedData.payments[0].note).toBe('رصيد دفعات سابقة مدمجة (15 دفعة)')
+      expect(updatedData.payments[0].transactionId).toBeUndefined()
+      // Kept payments remain unchanged
+      expect(updatedData.payments[1].id).toBe('p-16')
+      expect(updatedData.payments[10].id).toBe('p-25')
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
 })
