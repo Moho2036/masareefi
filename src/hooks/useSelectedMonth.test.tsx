@@ -77,4 +77,41 @@ describe('useSelectedMonth hook', () => {
     expect(result.current.monthLabel).toBe('أكتوبر 2026')
     expect(result.current.range.start.getDate()).toBe(1)
   })
+
+  it('provides isCurrentMonth accurately and preserves month when going back and forth across February', () => {
+    mockMonthStartDay = 28
+
+    const { result } = renderHook(() => useSelectedMonth(), {
+      wrapper: SelectedMonthProvider,
+    })
+
+    // Set to current date -> isCurrentMonth is true
+    act(() => {
+      result.current.goToCurrentMonth()
+    })
+    expect(result.current.isCurrentMonth).toBe(true)
+
+    // Navigate to previous month -> isCurrentMonth becomes false
+    act(() => {
+      result.current.goToPreviousMonth()
+    })
+    expect(result.current.isCurrentMonth).toBe(false)
+
+    // Test February navigation starting from March 31
+    act(() => {
+      result.current.setSelectedDate(new Date(2026, 2, 31))
+    })
+    const marRange = result.current.range
+
+    act(() => {
+      result.current.goToPreviousMonth() // Moves to Feb 28
+    })
+    expect(result.current.range.start.getMonth()).toBe(1) // February
+
+    act(() => {
+      result.current.goToNextMonth() // Moves back to March 28
+    })
+    expect(result.current.range.start.getTime()).toBe(marRange.start.getTime())
+    expect(result.current.range.end.getTime()).toBe(marRange.end.getTime())
+  })
 })

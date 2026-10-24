@@ -44,6 +44,27 @@ export function subscribeTransactions(
   )
 }
 
+export function subscribeAllTransactions(
+  uid: string,
+  cb: (transactions: Transaction[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
+  const q = query(colRef, orderBy('date', 'desc'))
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => d.data())
+      cb(items)
+    },
+    (err) => {
+      console.error('subscribeAllTransactions error:', err)
+      onError?.(err)
+    }
+  )
+}
+
 export async function getRecentTransactions(
   uid: string,
   limitCount = 100

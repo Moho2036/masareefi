@@ -7,8 +7,14 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import { addMonths } from 'date-fns'
-import { formatFinancialMonthLabel, getFinancialMonthRange, formatFinancialRangeLabel } from '../lib/dates'
+import {
+  formatFinancialMonthLabel,
+  getFinancialMonthRange,
+  formatFinancialRangeLabel,
+  getPreviousFinancialMonth,
+  getNextFinancialMonth,
+  getFiscalMonthKey,
+} from '../lib/dates'
 import { useUserSettings } from './useUserSettings'
 
 interface SelectedMonthContextValue {
@@ -23,6 +29,7 @@ interface SelectedMonthContextValue {
   range: { start: Date; end: Date }
   monthStartDay: number
   rangeLabel: string
+  isCurrentMonth: boolean
 }
 
 export const SelectedMonthContext = createContext<SelectedMonthContextValue | null>(null)
@@ -35,17 +42,11 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   const monthStartDay = settings?.monthStartDay ?? 1
 
   const goToPreviousMonth = useCallback(() => {
-    setSelectedDate((prev) => {
-      const currentRange = getFinancialMonthRange(prev, monthStartDay)
-      return addMonths(currentRange.start, -1)
-    })
+    setSelectedDate((prev) => getPreviousFinancialMonth(prev, monthStartDay))
   }, [monthStartDay])
 
   const goToNextMonth = useCallback(() => {
-    setSelectedDate((prev) => {
-      const currentRange = getFinancialMonthRange(prev, monthStartDay)
-      return addMonths(currentRange.start, 1)
-    })
+    setSelectedDate((prev) => getNextFinancialMonth(prev, monthStartDay))
   }, [monthStartDay])
 
   const goToCurrentMonth = useCallback(() => {
@@ -58,6 +59,13 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
 
   const range = useMemo(() => {
     return getFinancialMonthRange(selectedDate, monthStartDay)
+  }, [selectedDate, monthStartDay])
+
+  const isCurrentMonth = useMemo(() => {
+    return (
+      getFiscalMonthKey(selectedDate, monthStartDay) ===
+      getFiscalMonthKey(new Date(), monthStartDay)
+    )
   }, [selectedDate, monthStartDay])
 
   const monthLabel = useMemo(() => {
@@ -81,6 +89,7 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       range,
       monthStartDay,
       rangeLabel,
+      isCurrentMonth,
     }),
     [
       selectedDate,
@@ -93,6 +102,7 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       range,
       monthStartDay,
       rangeLabel,
+      isCurrentMonth,
     ]
   )
 

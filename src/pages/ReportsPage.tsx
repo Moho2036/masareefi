@@ -12,6 +12,7 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { MonthSelector } from '../components/ui/MonthSelector'
@@ -56,7 +57,7 @@ export const ReportsPage: React.FC = () => {
   // Monthly data hooks
   const { user } = useAuth()
   const appData = useAppData()
-  const { range } = useSelectedMonth()
+  const { range, goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()
@@ -275,7 +276,21 @@ export const ReportsPage: React.FC = () => {
               ]}
             />
             {reportPeriod === 'monthly' ? (
-              <MonthSelector />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {!isCurrentMonth && (
+                  <button
+                    type="button"
+                    onClick={goToCurrentMonth}
+                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 transition-colors cursor-pointer"
+                    title="العودة إلى الشهر الحالي"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span className="hidden sm:inline">الشهر الحالي</span>
+                    <span className="sm:hidden">اليوم</span>
+                  </button>
+                )}
+                <MonthSelector />
+              </div>
             ) : (
               <div className="w-36">
                 <Select

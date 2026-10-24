@@ -49,7 +49,8 @@ import type { Transaction, TxType } from '../types'
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
   const { range } = useSelectedMonth()
-  const { data: rawTransactions, loading: txLoading } = useTransactions(range)
+  const [allMonths, setAllMonths] = useState(false)
+  const { data: rawTransactions, loading: txLoading } = useTransactions(allMonths ? undefined : range)
   const { data: categories } = useCategories()
   const { data: debts } = useDebts()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
@@ -69,21 +70,22 @@ export const TransactionsPage: React.FC = () => {
   // Check if txToDelete is linked to a debt payment
   const linkedDebtPayment = findLinkedDebtPayment(txToDelete?.id, debts)
 
-  // Automatically reset to page 1 during render whenever month range or search/filter parameters change
-  const currentFilterKey = `${range.start.getTime()}_${deferredQuery}_${filterType}_${selectedCategory}`
+  // Automatically reset to page 1 during render whenever month range, allMonths toggle, or search/filter parameters change
+  const currentFilterKey = `${allMonths ? 'all' : range.start.getTime()}_${deferredQuery}_${filterType}_${selectedCategory}`
   if (prevFilterKey !== currentFilterKey) {
     setPrevFilterKey(currentFilterKey)
     setCurrentPage(1)
   }
 
   const isFilterActive = Boolean(
-    query.trim() || filterType !== 'all' || selectedCategory !== 'all'
+    query.trim() || filterType !== 'all' || selectedCategory !== 'all' || allMonths
   )
 
   const handleResetFilters = () => {
     setQuery('')
     setFilterType('all')
     setSelectedCategory('all')
+    setAllMonths(false)
   }
 
   // Map categoryId to Category for O(1) lookups
@@ -182,7 +184,12 @@ export const TransactionsPage: React.FC = () => {
       symbol: currencyConfig.symbol,
       decimals: currencyConfig.decimals,
     })
-    showToast('تم تصدير المعاملات المحددة بنجاح', 'success')
+    showToast(
+      allMonths
+        ? 'تم تصدير المعاملات المحددة لكافة الأشهر بنجاح'
+        : 'تم تصدير المعاملات المحددة بنجاح',
+      'success'
+    )
   }
 
   const handleDeleteConfirm = async () => {
@@ -280,19 +287,41 @@ export const TransactionsPage: React.FC = () => {
                 />
               </div>
 
-              {/* Type Toggle: الكل / مصاريف / مداخيل */}
-              <SegmentedControl<TxType | 'all'>
-                value={filterType}
-                onChange={(val) => {
-                  setFilterType(val)
-                  setSelectedCategory('all')
-                }}
-                options={[
-                  { value: 'all', label: 'الكل' },
-                  { value: 'expense', label: 'مصاريف' },
-                  { value: 'income', label: 'مداخيل' },
-                ]}
-              />
+              {/* Type Toggle: الكل / مصاريف / مداخيل with All Months toggle */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <SegmentedControl<TxType | 'all'>
+                    value={filterType}
+                    onChange={(val) => {
+                      setFilterType(val)
+                      setSelectedCategory('all')
+                    }}
+                    options={[
+                      { value: 'all', label: 'الكل' },
+                      { value: 'expense', label: 'مصاريف' },
+                      { value: 'income', label: 'مداخيل' },
+                    ]}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllMonths((prev) => !prev)
+                    setCurrentPage(1)
+                  }}
+                  className={cn(
+                    'press-scale inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
+                    allMonths
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                  )}
+                  title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
+                  aria-pressed={allMonths}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>كل الأشهر</span>
+                </button>
+              </div>
             </div>
 
             {/* Bottom Row: Horizontal Scrollable Category Chips */}
@@ -333,6 +362,23 @@ export const TransactionsPage: React.FC = () => {
               })}
             </div>
           </div>
+
+          {/* All Months Indicator Banner */}
+          {allMonths && (
+            <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-0" />
+              <div className="flex-1">
+                وضع <strong>البحث في كامل السجل (كل الأشهر)</strong> مفعّل حالياً. النتائج المعروضة وتصدير CSV يشملان كافة الأشهر.
+              </div>
+              <button
+                type="button"
+                onClick={() => setAllMonths(false)}
+                className="text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:underline shrink-0 cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          )}
 
           {/* Active Filter & Search Summary Strip */}
           {isFilterActive && (
@@ -383,14 +429,16 @@ export const TransactionsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Monthly Totals Strip Card */}
+          {/* Totals Strip Card */}
           <div className="grid grid-cols-2 gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <TrendingUp className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المداخيل</div>
+                <div className="text-[11px] font-semibold text-slate-400 truncate">
+                  {allMonths ? 'إجمالي المداخيل (كافة الأشهر)' : 'إجمالي المداخيل'}
+                </div>
                 <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 truncate">
                   {format(totals.income)}
                 </div>
@@ -402,7 +450,9 @@ export const TransactionsPage: React.FC = () => {
                 <TrendingDown className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 truncate">إجمالي المصاريف</div>
+                <div className="text-[11px] font-semibold text-slate-400 truncate">
+                  {allMonths ? 'إجمالي المصاريف (كافة الأشهر)' : 'إجمالي المصاريف'}
+                </div>
                 <div className="text-sm sm:text-base font-black text-red-500 dark:text-red-400 truncate">
                   {format(totals.expense)}
                 </div>
@@ -426,11 +476,15 @@ export const TransactionsPage: React.FC = () => {
             <EmptyState
               icon={<ArrowLeftRight className="w-8 h-8" />}
               title={
-                query || filterType !== 'all' || selectedCategory !== 'all'
+                query || filterType !== 'all' || selectedCategory !== 'all' || allMonths
                   ? 'لا توجد معاملات مطابقة للفلترة'
                   : 'لا توجد معاملات لهذا الشهر'
               }
-              description="ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول."
+              description={
+                allMonths
+                  ? 'لم يتم العثور على أي معاملات مطابقة في كامل سجل المعاملات.'
+                  : 'ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول.'
+              }
               action={
                 <Button
                   variant="primary"

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React from 'react'
 import { Link, useLocation, Outlet } from 'react-router'
 import {
   Home,
@@ -23,7 +23,6 @@ import { useUserSettings } from '../../hooks/useUserSettings'
 import { useTransactionModal } from '../../hooks/useTransactionModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
-import { getFiscalMonthKey } from '../../lib/dates'
 import { cn } from '../../lib/cn'
 
 interface NavItem {
@@ -50,21 +49,13 @@ export const AppShell: React.FC = () => {
   const { user } = useAuth()
   const { openAdd } = useTransactionModal()
   const isOnline = useOnlineStatus()
-  const { selectedDate, goToCurrentMonth } = useSelectedMonth()
+  const { goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
 
   const isMonthPage = pathname === '/' || pathname === '/transactions'
 
   const { data: settings } = useUserSettings()
-  const monthStartDay = settings?.monthStartDay ?? 1
   const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || 'مستخدم مصاريفي'
   const avatarInitial = displayName.charAt(0) || 'م'
-
-  const isCurrentMonth = useMemo(() => {
-    return (
-      getFiscalMonthKey(selectedDate, monthStartDay) ===
-      getFiscalMonthKey(new Date(), monthStartDay)
-    )
-  }, [selectedDate, monthStartDay])
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans">

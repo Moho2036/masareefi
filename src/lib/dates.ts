@@ -54,6 +54,56 @@ export function getFinancialMonthRange(
 }
 
 /**
+ * Returns a stable reference date within the previous financial month.
+ * Navigates by the financial month start anchor (safeStartDay in [1..28]),
+ * guaranteeing 100% reversible navigation without date drift across February
+ * (28/29 days) and 31-day months.
+ */
+export function getPreviousFinancialMonth(
+  refDate: Date,
+  monthStartDay: number = 1
+): Date {
+  const safeStartDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
+  const currentRange = getFinancialMonthRange(refDate, safeStartDay)
+  const startYear = currentRange.start.getFullYear()
+  const startMonth = currentRange.start.getMonth()
+
+  let prevYear = startYear
+  let prevMonth = startMonth - 1
+  if (prevMonth < 0) {
+    prevMonth = 11
+    prevYear = startYear - 1
+  }
+
+  return new Date(prevYear, prevMonth, safeStartDay, 12, 0, 0, 0)
+}
+
+/**
+ * Returns a stable reference date within the next financial month.
+ * Navigates by the financial month start anchor (safeStartDay in [1..28]),
+ * guaranteeing 100% reversible navigation without date drift across February
+ * (28/29 days) and 31-day months.
+ */
+export function getNextFinancialMonth(
+  refDate: Date,
+  monthStartDay: number = 1
+): Date {
+  const safeStartDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
+  const currentRange = getFinancialMonthRange(refDate, safeStartDay)
+  const startYear = currentRange.start.getFullYear()
+  const startMonth = currentRange.start.getMonth()
+
+  let nextYear = startYear
+  let nextMonth = startMonth + 1
+  if (nextMonth > 11) {
+    nextMonth = 0
+    nextYear = startYear + 1
+  }
+
+  return new Date(nextYear, nextMonth, safeStartDay, 12, 0, 0, 0)
+}
+
+/**
  * Formats a date into an Arabic month label with Western digits.
  * Example: "أكتوبر 2026"
  */

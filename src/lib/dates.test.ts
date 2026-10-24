@@ -10,6 +10,8 @@ import {
   getMonthRange,
   getFiscalMonthInfo,
   getFiscalMonthKey,
+  getPreviousFinancialMonth,
+  getNextFinancialMonth,
 } from './dates'
 
 describe('dates lib', () => {
@@ -224,6 +226,81 @@ describe('dates lib', () => {
     it('formats a date into local YYYY-MM-DD string', () => {
       const d = new Date(2026, 9, 19, 15, 30) // Oct 19, 2026
       expect(formatDateInput(d)).toBe('2026-10-19')
+    })
+  })
+
+  describe('getPreviousFinancialMonth and getNextFinancialMonth (Navigation Symmetry & Drift Prevention)', () => {
+    it('is 100% reversible across all 12 months with various monthStartDay values', () => {
+      const testStartDays = [1, 5, 15, 25, 28]
+
+      for (const startDay of testStartDays) {
+        for (let month = 0; month < 12; month++) {
+          const originalDate = new Date(2026, month, startDay)
+          const originalRange = getFinancialMonthRange(originalDate, startDay)
+
+          // Step back, then step forward -> must equal originalRange
+          const prev = getPreviousFinancialMonth(originalDate, startDay)
+          const backToOriginal = getNextFinancialMonth(prev, startDay)
+          const restoredRange = getFinancialMonthRange(backToOriginal, startDay)
+
+          expect(restoredRange.start.getTime()).toBe(originalRange.start.getTime())
+          expect(restoredRange.end.getTime()).toBe(originalRange.end.getTime())
+
+          // Step forward, then step back -> must equal originalRange
+          const next = getNextFinancialMonth(originalDate, startDay)
+          const forwardBack = getPreviousFinancialMonth(next, startDay)
+          const forwardBackRange = getFinancialMonthRange(forwardBack, startDay)
+
+          expect(forwardBackRange.start.getTime()).toBe(originalRange.start.getTime())
+          expect(forwardBackRange.end.getTime()).toBe(originalRange.end.getTime())
+        }
+      }
+    })
+
+    it('prevents date drift across February (28 days) with monthStartDay = 28', () => {
+      // Starting in March with startDay 28
+      const mar28 = new Date(2026, 2, 28) // March 28
+      const feb = getPreviousFinancialMonth(mar28, 28)
+      expect(feb.getMonth()).toBe(1) // February
+      expect(feb.getDate()).toBe(28)
+
+      // Stepping back into January
+      const jan = getPreviousFinancialMonth(feb, 28)
+      expect(jan.getMonth()).toBe(0) // January
+      expect(jan.getDate()).toBe(28)
+
+      // Stepping forward from January to February to March
+      const backToFeb = getNextFinancialMonth(jan, 28)
+      expect(backToFeb.getMonth()).toBe(1)
+      expect(backToFeb.getDate()).toBe(28)
+
+      const backToMar = getNextFinancialMonth(backToFeb, 28)
+      expect(backToMar.getMonth()).toBe(2)
+      expect(backToMar.getDate()).toBe(28)
+    })
+
+    it('handles refDate on day 31 safely without jumping or shifting periods', () => {
+      // E.g. User is on March 31 with monthStartDay = 28
+      const mar31 = new Date(2026, 2, 31)
+      const currentRange = getFinancialMonthRange(mar31, 28)
+
+      const prev = getPreviousFinancialMonth(mar31, 28)
+      const next = getNextFinancialMonth(prev, 28)
+      const newRange = getFinancialMonthRange(next, 28)
+
+      expect(newRange.start.getTime()).toBe(currentRange.start.getTime())
+      expect(newRange.end.getTime()).toBe(currentRange.end.getTime())
+    })
+
+    it('navigates across year boundaries seamlessly (Dec <-> Jan)', () => {
+      const dec = new Date(2025, 11, 15) // Dec 15, 2025
+      const jan = getNextFinancialMonth(dec, 1)
+      expect(jan.getFullYear()).toBe(2026)
+      expect(jan.getMonth()).toBe(0)
+
+      const backToDec = getPreviousFinancialMonth(jan, 1)
+      expect(backToDec.getFullYear()).toBe(2025)
+      expect(backToDec.getMonth()).toBe(11)
     })
   })
 })

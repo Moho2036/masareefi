@@ -14,6 +14,7 @@ const mockCategories: Category[] = [
 ]
 
 let mockTransactions: Transaction[] = []
+let mockAllTransactions: Transaction[] = []
 let mockDebts: Debt[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
 
@@ -41,8 +42,8 @@ vi.mock('../hooks/useCategories', () => ({
 }))
 
 vi.mock('../hooks/useTransactions', () => ({
-  useTransactions: () => ({
-    data: mockTransactions,
+  useTransactions: (range?: unknown) => ({
+    data: range !== undefined ? mockTransactions : (mockAllTransactions.length > 0 ? mockAllTransactions : mockTransactions),
     loading: false,
     error: null,
   }),
@@ -101,6 +102,7 @@ describe('TransactionsPage Component', () => {
     localStorage.clear()
     mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
     mockTransactions = []
+    mockAllTransactions = []
     mockDebts = []
   })
 
@@ -271,5 +273,69 @@ describe('TransactionsPage Component', () => {
         'info'
       )
     })
+  })
+
+  it('switches to all-months mode, displays indicator banner, searches across history, and exports all months to CSV', async () => {
+    const octTx: Transaction = {
+      id: 'tx-oct',
+      type: 'expense',
+      amountFils: 5000,
+      categoryId: 'c-food',
+      date: new Date('2026-10-15'),
+      title: 'بقالة أكتوبر',
+      note: '',
+      createdAt: new Date('2026-10-15'),
+    }
+
+    const febTx: Transaction = {
+      id: 'tx-feb',
+      type: 'expense',
+      amountFils: 12000,
+      categoryId: 'c-food',
+      date: new Date('2026-02-10'),
+      title: 'فاتورة قديمة فبراير',
+      note: '',
+      createdAt: new Date('2026-02-10'),
+    }
+
+    mockTransactions = [octTx]
+    mockAllTransactions = [octTx, febTx]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Initially in monthly mode: only October transaction is shown
+    expect(screen.getByText('بقالة أكتوبر')).toBeInTheDocument()
+    expect(screen.queryByText('فاتورة قديمة فبراير')).not.toBeInTheDocument()
+
+    // Click "كل الأشهر" toggle button
+    const allMonthsBtn = screen.getByRole('button', { name: /كل الأشهر/i })
+    fireEvent.click(allMonthsBtn)
+
+    // Now both October and February transactions appear
+    expect(screen.getByText('بقالة أكتوبر')).toBeInTheDocument()
+    expect(screen.getByText('فاتورة قديمة فبراير')).toBeInTheDocument()
+
+    // Informative banner is visible
+    expect(
+      screen.getByText(/البحث في كامل السجل \(كل الأشهر\)/i)
+    ).toBeInTheDocument()
+
+    // Search for the old February transaction
+    const searchInput = screen.getByPlaceholderText(/ابحث في العنوان، الملاحظات، الفئة، أو المبلغ/i)
+    fireEvent.change(searchInput, { target: { value: 'فبراير' } })
+
+    // Only the February transaction matches
+    expect(screen.getByText('فاتورة قديمة فبراير')).toBeInTheDocument()
+    expect(screen.queryByText('بقالة أكتوبر')).not.toBeInTheDocument()
+
+    // Export CSV exports the matching results and toasts all-months message
+    const exportBtn = screen.getByRole('button', { name: /تصدير CSV/i })
+    fireEvent.click(exportBtn)
+
+    expect(exportCsvModule.exportTransactionsToCsv).toHaveBeenCalled()
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'تم تصدير المعاملات المحددة لكافة الأشهر بنجاح',
+      'success'
+    )
   })
 })

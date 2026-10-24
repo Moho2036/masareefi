@@ -18,6 +18,7 @@ vi.mock('../../hooks/useSelectedMonth', () => ({
   useSelectedMonth: () => ({
     selectedDate: new Date('2026-10-15T00:00:00Z'),
     goToCurrentMonth: vi.fn(),
+    isCurrentMonth: true,
   }),
 }))
 
