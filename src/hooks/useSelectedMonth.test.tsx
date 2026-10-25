@@ -114,4 +114,33 @@ describe('useSelectedMonth hook', () => {
     expect(result.current.range.start.getTime()).toBe(marRange.start.getTime())
     expect(result.current.range.end.getTime()).toBe(marRange.end.getTime())
   })
+
+  it('increments manualNavKey only on manual navigation functions, not on direct setSelectedDate', () => {
+    const { result } = renderHook(() => useSelectedMonth(), {
+      wrapper: SelectedMonthProvider,
+    })
+
+    expect(result.current.manualNavKey).toBe(0)
+
+    act(() => {
+      result.current.goToPreviousMonth()
+    })
+    expect(result.current.manualNavKey).toBe(1)
+
+    act(() => {
+      result.current.goToNextMonth()
+    })
+    expect(result.current.manualNavKey).toBe(2)
+
+    act(() => {
+      result.current.goToCurrentMonth()
+    })
+    expect(result.current.manualNavKey).toBe(3)
+
+    // Direct programmatic update does NOT increment manualNavKey
+    act(() => {
+      result.current.setSelectedDate(new Date(2026, 5, 1))
+    })
+    expect(result.current.manualNavKey).toBe(3)
+  })
 })

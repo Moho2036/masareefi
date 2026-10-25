@@ -137,7 +137,7 @@ describe('PaymentHistoryModal', () => {
     fireEvent.change(amountInput, { target: { value: '60' } })
 
     // Save edit
-    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    const saveBtn = await screen.findByRole('button', { name: 'حفظ التعديل' })
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
@@ -197,7 +197,7 @@ describe('PaymentHistoryModal', () => {
     expect(syncCheckbox.checked).toBe(false)
 
     // Save edit
-    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    const saveBtn = await screen.findByRole('button', { name: 'حفظ التعديل' })
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
@@ -249,7 +249,7 @@ describe('PaymentHistoryModal', () => {
     const dateInput = screen.getByDisplayValue('2026-01-10')
     fireEvent.change(dateInput, { target: { value: '2026-01-01' } }) // before 2026-01-05
 
-    const saveBtn = screen.getByRole('button', { name: 'حفظ التعديل' })
+    const saveBtn = await screen.findByRole('button', { name: 'حفظ التعديل' })
     fireEvent.click(saveBtn)
 
     expect(screen.getByText('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')).toBeInTheDocument()

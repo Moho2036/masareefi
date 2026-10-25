@@ -9,6 +9,8 @@ import {
   ChevronUp,
   Trash2,
   AlertCircle,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -21,7 +23,7 @@ import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
-import { archiveCategory, deleteCategory } from '../services/categories'
+import { archiveCategory, deleteCategory, updateCategory } from '../services/categories'
 import { countByCategory } from '../lib/aggregate'
 import { useAppData } from '../context/AppDataContext'
 import {
@@ -158,6 +160,33 @@ export const CategoriesPage: React.FC = () => {
   const handleOpenEdit = (cat: Category) => {
     setEditingCategory(cat)
     setIsFormOpen(true)
+  }
+
+  const handleMoveCategory = async (cat: Category, direction: 'up' | 'down') => {
+    if (!user) return
+    const currentIndex = activeCategories.findIndex((c) => c.id === cat.id)
+    if (currentIndex === -1) return
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (targetIndex < 0 || targetIndex >= activeCategories.length) return
+
+    const adjacentCat = activeCategories[targetIndex]
+    let currentOrder = cat.order ?? 0
+    let adjacentOrder = adjacentCat.order ?? 0
+
+    if (currentOrder === adjacentOrder) {
+      currentOrder = currentIndex
+      adjacentOrder = targetIndex
+    }
+
+    try {
+      await Promise.all([
+        updateCategory(user.uid, cat.id, { order: adjacentOrder }),
+        updateCategory(user.uid, adjacentCat.id, { order: currentOrder }),
+      ])
+    } catch (err) {
+      console.error('Failed to reorder category:', err)
+      showToast('تعذر تغيير ترتيب التصنيف', 'error')
+    }
   }
 
   const handleArchive = async (cat: Category) => {
@@ -316,7 +345,7 @@ export const CategoriesPage: React.FC = () => {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {activeCategories.map((cat) => {
+          {activeCategories.map((cat, index) => {
             const usageDetails = getCategoryUsageDetails(cat.id, transactions, recurring, usageMap, moneyCircles)
 
             return (
@@ -344,42 +373,69 @@ export const CategoriesPage: React.FC = () => {
                 </div>
 
                 {/* Card Bottom: Action buttons */}
-                <div className="flex items-center justify-end gap-1 pt-3 border-t border-slate-100 dark:border-slate-700/60">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(cat)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-                    aria-label={`تعديل تصنيف ${cat.name}`}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleArchive(cat)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
-                    aria-label={`أرشفة تصنيف ${cat.name}`}
-                    title="أرشفة التصنيف"
-                  >
-                    <Archive className="w-4 h-4" />
-                  </button>
-                  {usageDetails.isInUse ? (
-                    <span
-                      className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-400 dark:text-slate-500 font-medium select-none"
-                      title="لا يمكن حذف التصنيف نهائياً لأنه مرتبط بمعاملات مالية أو متكررة أو جمعيات. يمكنك أرشفته بدلاً من ذلك."
-                    >
-                      مستخدم
-                    </span>
-                  ) : (
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                  {/* Reorder Buttons (Up / Down) */}
+                  <div className="flex items-center gap-0.5">
                     <button
                       type="button"
-                      onClick={() => setCatToDelete(cat)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-                      aria-label={`حذف تصنيف ${cat.name} نهائياً`}
-                      title="حذف نهائي (غير مستخدم في أي معاملات)"
+                      onClick={() => handleMoveCategory(cat, 'up')}
+                      disabled={index === 0}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+                      aria-label={`تحريك تصنيف ${cat.name} للأعلى`}
+                      title="تحريك للأعلى"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <ArrowUp className="w-3.5 h-3.5" />
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => handleMoveCategory(cat, 'down')}
+                      disabled={index === activeCategories.length - 1}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+                      aria-label={`تحريك تصنيف ${cat.name} للأسفل`}
+                      title="تحريك للأسفل"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Actions: Edit, Archive, Delete */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(cat)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                      aria-label={`تعديل تصنيف ${cat.name}`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleArchive(cat)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+                      aria-label={`أرشفة تصنيف ${cat.name}`}
+                      title="أرشفة التصنيف"
+                    >
+                      <Archive className="w-4 h-4" />
+                    </button>
+                    {usageDetails.isInUse ? (
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-400 dark:text-slate-500 font-medium select-none"
+                        title="لا يمكن حذف التصنيف نهائياً لأنه مرتبط بمعاملات مالية أو متكررة أو جمعيات. يمكنك أرشفته بدلاً من ذلك."
+                      >
+                        مستخدم
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setCatToDelete(cat)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        aria-label={`حذف تصنيف ${cat.name} نهائياً`}
+                        title="حذف نهائي (غير مستخدم في أي معاملات)"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -475,7 +531,7 @@ export const CategoriesPage: React.FC = () => {
         }}
         title="تأكيد حذف التصنيف"
       >
-        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap).isInUse ? (
+        {catToDelete && getCategoryUsageDetails(catToDelete.id, transactions, recurring, usageMap, moneyCircles).isInUse ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />

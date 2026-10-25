@@ -6,11 +6,13 @@ import { LoginPage } from './LoginPage'
 const mockSignInWithGoogle = vi.fn().mockResolvedValue(undefined)
 const mockSignInWithEmail = vi.fn().mockResolvedValue(undefined)
 const mockSignUpWithEmail = vi.fn().mockResolvedValue(undefined)
+const mockResetPassword = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('../services/auth', () => ({
   signInWithGoogle: () => mockSignInWithGoogle(),
   signInWithEmail: (...args: unknown[]) => mockSignInWithEmail(...args),
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
+  resetPassword: (...args: unknown[]) => mockResetPassword(...args),
 }))
 
 let mockUser: unknown = null
@@ -144,6 +146,83 @@ describe('LoginPage Component', () => {
 
     await waitFor(() => {
       expect(mockSignInWithGoogle).toHaveBeenCalled()
+    })
+  })
+
+  it('toggles password visibility between password and text types when clicking eye button', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    const passwordInput = screen.getByLabelText('كلمة المرور')
+    expect(passwordInput).toHaveAttribute('type', 'password')
+
+    const toggleBtn = screen.getByRole('button', { name: 'إظهار كلمة المرور' })
+    fireEvent.click(toggleBtn)
+
+    expect(passwordInput).toHaveAttribute('type', 'text')
+    expect(screen.getByRole('button', { name: 'إخفاء كلمة المرور' })).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'إخفاء كلمة المرور' }))
+    expect(passwordInput).toHaveAttribute('type', 'password')
+  })
+
+  it('validates email before sending reset password link', async () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    const forgotBtn = screen.getByRole('button', { name: 'نسيت كلمة المرور؟' })
+    fireEvent.click(forgotBtn)
+
+    expect(screen.getByText('يرجى إدخال البريد الإلكتروني أولاً لاستعادة كلمة المرور')).toBeDefined()
+    expect(mockResetPassword).not.toHaveBeenCalled()
+  })
+
+  it('sends password reset link and shows success message', async () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByLabelText('البريد الإلكتروني'), {
+      target: { value: 'user@example.com' },
+    })
+
+    const forgotBtn = screen.getByRole('button', { name: 'نسيت كلمة المرور؟' })
+    fireEvent.click(forgotBtn)
+
+    await waitFor(() => {
+      expect(mockResetPassword).toHaveBeenCalledWith('user@example.com')
+      expect(
+        screen.getByText('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح.')
+      ).toBeDefined()
+    })
+  })
+
+  it('shows appropriate error message when resetPassword fails with auth/user-not-found', async () => {
+    mockResetPassword.mockRejectedValueOnce({ code: 'auth/user-not-found' })
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByLabelText('البريد الإلكتروني'), {
+      target: { value: 'unknown@example.com' },
+    })
+
+    const forgotBtn = screen.getByRole('button', { name: 'نسيت كلمة المرور؟' })
+    fireEvent.click(forgotBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('لا يوجد حساب مسجل بهذا البريد الإلكتروني.')).toBeDefined()
     })
   })
 })

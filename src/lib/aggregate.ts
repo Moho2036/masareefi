@@ -66,16 +66,30 @@ export function filterTransactions(
         }
       }
 
-      // Check amount matching (in standard currency units e.g. 25, 25.5, or fils e.g. 25000)
+      // Check amount matching in standard currency units (e.g. 25, 25.000, 12.500, 1,000)
       let matchesAmount = false
       if (normalizedQuery) {
         const units = fromFils(tx.amountFils)
         const unitsStr = String(units)
-        const filsStr = String(tx.amountFils)
-        matchesAmount =
-          unitsStr.includes(normalizedQuery) ||
-          filsStr.includes(normalizedQuery) ||
-          unitsStr.replace('.', ',').includes(normalizedQuery)
+        const fixed3 = units.toFixed(3)
+        const fixed2 = units.toFixed(2)
+
+        const cleanQuery = normalizedQuery.replace(/[,،]/g, '')
+
+        const formatted3 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(units)
+        const formatted2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(units)
+        const formattedBasic = new Intl.NumberFormat('en-US').format(units)
+
+        if (cleanQuery) {
+          matchesAmount =
+            unitsStr.includes(cleanQuery) ||
+            fixed3.includes(cleanQuery) ||
+            fixed2.includes(cleanQuery) ||
+            formatted3.includes(normalizedQuery) ||
+            formatted2.includes(normalizedQuery) ||
+            formattedBasic.includes(normalizedQuery) ||
+            (normalizedQuery.includes(',') && !normalizedQuery.match(/,\d{3}/) && unitsStr.includes(normalizedQuery.replace(',', '.')))
+        }
       }
 
       const matches =
@@ -149,11 +163,16 @@ export function groupByDay(txs: Transaction[]): DayGroup[] {
 
   return sortedKeys.map((key) => {
     const g = groupsMap.get(key)!
-    // Sort transactions within day descending by time
+    // Sort transactions within day descending by time, then createdAt descending
     g.transactions.sort((a, b) => {
       const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
       const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
-      return timeB - timeA
+      if (timeB !== timeA) {
+        return timeB - timeA
+      }
+      const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+      const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+      return createdB - createdA
     })
     return {
       dateKey: key,

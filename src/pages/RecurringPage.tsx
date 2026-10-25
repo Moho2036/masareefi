@@ -73,6 +73,21 @@ export const RecurringPage: React.FC = () => {
     return calculateMonthlyEquivalent(recurringItems, new Date())
   }, [recurringItems])
 
+  // Sorted recurring items: active (active !== false) first, paused (active === false) last.
+  // Within each group, closest upcoming nextDate ascending first.
+  const sortedRecurringItems = useMemo(() => {
+    return [...recurringItems].sort((a, b) => {
+      const aActive = a.active !== false
+      const bActive = b.active !== false
+      if (aActive !== bActive) {
+        return aActive ? -1 : 1
+      }
+      const aTime = a.nextDate instanceof Date ? a.nextDate.getTime() : new Date(a.nextDate).getTime()
+      const bTime = b.nextDate instanceof Date ? b.nextDate.getTime() : new Date(b.nextDate).getTime()
+      return aTime - bTime
+    })
+  }, [recurringItems])
+
   const handleScheduleCircle = async (circle: (typeof circles)[0]) => {
     if (!user) return
     const isAlreadyScheduled = Boolean(
@@ -390,7 +405,7 @@ export const RecurringPage: React.FC = () => {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {recurringItems.map((item) => {
+          {sortedRecurringItems.map((item) => {
             const cat = categoryMap.get(item.categoryId)
             const icon = cat?.icon ?? '➕'
             const color = cat?.color ?? '#94A3B8'

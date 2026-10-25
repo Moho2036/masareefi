@@ -249,6 +249,16 @@ export async function processDueRecurring(
 
     if (dates.length > 0) {
       for (const occDate of dates) {
+        if (rec.circleId && circleMap.has(rec.circleId)) {
+          const circle = circleMap.get(rec.circleId)!
+          const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
+          if (userMember?.paymentsByMonth?.[String(cycleIndex)] === false) {
+            // User explicitly cancelled/unpaid this month; do not auto-generate transaction
+            continue
+          }
+        }
+
         const txId = getDeterministicTxId(rec.id, occDate)
         const txRef = doc(db, 'users', uid, 'transactions', txId)
         pendingTxs.push({ txId, txRef, occDate, rec })

@@ -44,6 +44,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [editDateStr, setEditDateStr] = useState('')
   const [editNote, setEditNote] = useState('')
   const [editSyncTx, setEditSyncTx] = useState(true)
+  const [checkingEditSync, setCheckingEditSync] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [isCompacting, setIsCompacting] = useState(false)
@@ -53,6 +54,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setDeletePaymentTx(true)
     setEditingPaymentId(null)
     setEditSyncTx(true)
+    setCheckingEditSync(false)
     setEditError(null)
     onClose()
   }
@@ -96,23 +98,30 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setEditSyncTx(isSynced)
 
     if (user && !p.transactionId) {
+      setCheckingEditSync(true)
       checkDebtPaymentTransactionExists(user.uid, debt, p)
         .then((exists) => {
           setEditSyncTx(exists)
         })
         .catch(() => {})
+        .finally(() => {
+          setCheckingEditSync(false)
+        })
+    } else {
+      setCheckingEditSync(false)
     }
   }
 
   const handleCancelEdit = () => {
     setEditingPaymentId(null)
     setEditSyncTx(true)
+    setCheckingEditSync(false)
     setEditError(null)
   }
 
   const handleSaveEdit = async (p: DebtPayment) => {
     if (!user) return
-    const amountFils = toFils(editAmountStr, config.decimals)
+    let amountFils = toFils(editAmountStr, config.decimals)
     if (amountFils <= 0) {
       setEditError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -124,6 +133,16 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       .filter((item) => item.id !== p.id)
       .reduce((sum, item) => sum + item.amountFils, 0)
     const maxAllowed = Math.max(0, debt.amountFils - (otherPaymentsTotal + untrackedPaidFils))
+
+    if (config.decimals === 2 && amountFils > maxAllowed) {
+      const diff = amountFils - maxAllowed
+      const roundedMaxStr = fromFils(maxAllowed).toFixed(2)
+      const inputStr = toWesternDigits(editAmountStr.trim())
+      if (diff <= 5 || inputStr === roundedMaxStr) {
+        amountFils = maxAllowed
+      }
+    }
+
     if (amountFils > maxAllowed) {
       setEditError(`مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي (${formatCurrency(maxAllowed)})`)
       return
@@ -272,10 +291,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ</label>
                             <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800">
                               <input
-                                type="number"
-                                step="any"
+                                type="text"
+                                inputMode="decimal"
                                 value={editAmountStr}
-                                onChange={(e) => setEditAmountStr(e.target.value)}
+                                onChange={(e) => setEditAmountStr(toWesternDigits(e.target.value))}
                                 className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
                                 required
                               />
@@ -308,9 +327,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
                             <input
                               type="checkbox"
+                              disabled={checkingEditSync || isSavingEdit}
                               checked={editSyncTx}
                               onChange={(e) => setEditSyncTx(e.target.checked)}
-                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                             <span>ربط الدفعة بالرصيد (تأثير مالي في سجل المعاملات)</span>
                           </label>
@@ -327,10 +347,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleSaveEdit(p)}
-                            disabled={isSavingEdit}
-                            className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+                            disabled={isSavingEdit || checkingEditSync}
+                            className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isSavingEdit ? 'جاري الحفظ...' : 'حفظ التعديل'}
+                            {isSavingEdit ? 'جارٍ الحفظ...' : checkingEditSync ? 'جارٍ التحقق...' : 'حفظ التعديل'}
                           </button>
                         </div>
                       </div>

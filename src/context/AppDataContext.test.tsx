@@ -5,7 +5,7 @@ import * as transactionsService from '../services/transactions'
 import type { UserSettings } from '../types'
 import React from 'react'
 
-const mockUser = { uid: 'user-456' }
+let mockUser: { uid: string } | null = { uid: 'user-456' }
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: mockUser,
@@ -67,6 +67,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('AppDataContext rolloverBalanceFils consistency', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUser = { uid: 'user-456' }
     mockSettingsCb = null
     mockPriorBalanceCb = null
   })
@@ -107,5 +108,22 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
 
     expect(mockUnsubPrior).toHaveBeenCalled()
     expect(result.current?.rolloverBalanceFils).toBe(0)
+  })
+
+  it('resets all data state and loading flags when user signs out (!userId)', () => {
+    mockUser = null
+    const { result } = renderHook(() => useAppData(), { wrapper })
+
+    expect(result.current?.settings).toBeNull()
+    expect(result.current?.categories).toEqual([])
+    expect(result.current?.debts).toEqual([])
+    expect(result.current?.recurring).toEqual([])
+    expect(result.current?.moneyCircles).toEqual([])
+    expect(result.current?.rolloverBalanceFils).toBe(0)
+    expect(result.current?.settingsLoading).toBe(false)
+    expect(result.current?.categoriesLoading).toBe(false)
+    expect(result.current?.debtsLoading).toBe(false)
+    expect(result.current?.recurringLoading).toBe(false)
+    expect(result.current?.moneyCirclesLoading).toBe(false)
   })
 })

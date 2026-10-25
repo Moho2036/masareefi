@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
-import { Check, Trash2, AlertCircle, ArrowLeft, Copy } from 'lucide-react'
+import { Check, Trash2, AlertCircle, ArrowLeft, Copy, Users } from 'lucide-react'
 import { Link } from 'react-router'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
@@ -20,6 +20,7 @@ import {
 } from '../services/transactions'
 import { addRecurring, processDueRecurring } from '../services/recurring'
 import { updateDebtPayment, removeDebtPayment } from '../services/debts'
+import { removeCircleInstallmentPayment } from '../services/moneyCircles'
 import { toFils, fromFils } from '../lib/money'
 import { parseLocalDateInput, formatDateInput } from '../lib/dates'
 import { findLinkedDebtPayment } from '../lib/debts'
@@ -90,14 +91,24 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       circles.some((c) => c.id === circleId || initialTransaction.id.startsWith(`circle_payout_${c.id}`))
   )
 
+  const circleInstallmentMatch = initialTransaction?.id.match(/^circle_(.+)_m(\d+)$/)
+  const isLinkedToCircleInstallment = Boolean(circleInstallmentMatch)
+  const circleInstallmentId = circleInstallmentMatch ? circleInstallmentMatch[1] : null
+  const circleInstallmentMonth = circleInstallmentMatch ? parseInt(circleInstallmentMatch[2], 10) : null
+  const linkedCircleInstallment = circleInstallmentId ? circles.find((c) => c.id === circleInstallmentId) : null
+  const isCircleInstallmentExists = Boolean(linkedCircleInstallment)
+
+  const isMergedPaymentTx = Boolean(linkedDebtPayment?.payment?.isMerged)
+
   const isSourceMissing =
     isSourceDeleted ??
     ((isLinkedToDebtInit && !isDebtExists) || (isLinkedToCircle && !isCircleExists))
 
   // Only completely lock amount & date for debt_init_ and circle_payout_ if their source still exists!
+  // Also completely lock merged debt payment transactions.
   // If the source debt/circle was deleted, the orphaned transaction is unlocked.
   const isLockedTransaction =
-    !isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle)
+    !isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle || isMergedPaymentTx)
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -119,10 +130,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   })
 
   const isBrowsingDifferentMonth = useMemo(() => {
-    if (initialTransaction || duplicateFrom) return false
+    if (initialTransaction) return false
     const now = new Date()
     return now < range.start || now >= range.end
-  }, [initialTransaction, duplicateFrom, range])
+  }, [initialTransaction, range])
 
   const [dateStr, setDateStr] = useState<string>(() => {
     if (initialTransaction?.date) {
@@ -130,13 +141,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         initialTransaction.date instanceof Date
           ? initialTransaction.date
           : new Date(initialTransaction.date)
-      return formatDateInput(d)
-    }
-    if (duplicateFrom?.date) {
-      const d =
-        duplicateFrom.date instanceof Date
-          ? duplicateFrom.date
-          : new Date(duplicateFrom.date)
       return formatDateInput(d)
     }
     const now = new Date()
@@ -217,6 +221,33 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       if (isEditing && initialTransaction) {
         if (isLinkedToDebtPayment && linkedDebtPayment) {
+          if (linkedDebtPayment.payment.isMerged) {
+            setError('لا يمكن تعديل دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
+            setSubmitting(false)
+            return
+          }
+
+          const debtStartDate =
+            linkedDebtPayment.debt.startDate instanceof Date
+              ? linkedDebtPayment.debt.startDate
+              : new Date(linkedDebtPayment.debt.startDate)
+          const debtStartDay = new Date(
+            debtStartDate.getFullYear(),
+            debtStartDate.getMonth(),
+            debtStartDate.getDate(),
+            0, 0, 0, 0
+          )
+          const paymentDay = new Date(
+            parsedDate.getFullYear(),
+            parsedDate.getMonth(),
+            parsedDate.getDate(),
+            0, 0, 0, 0
+          )
+          if (paymentDay < debtStartDay) {
+            setError('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+            setSubmitting(false)
+            return
+          }
           const previousPaymentsSum = (linkedDebtPayment.debt.payments || []).reduce(
             (acc, p) => acc + p.amountFils,
             0
@@ -299,22 +330,29 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           active: true,
         })
 
+        let processedCount = 0
         if (!isFuture) {
-          await processDueRecurring(user.uid)
+          processedCount = await processDueRecurring(user.uid)
         }
 
         recordCategoryUsage(activeCategoryId)
 
-        showToast(
-          isFuture
-            ? (isOutsideMonth
-                ? 'تمت جدولة المعاملة المتكررة والانتقال إلى شهر المعاملة'
-                : 'تمت جدولة المعاملة المتكررة بنجاح')
-            : (isOutsideMonth
-                ? 'تمت إضافة المعاملة وتفعيل التكرار والانتقال إلى شهر المعاملة'
-                : 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'),
-          'success'
-        )
+        let recurringToastMessage: string
+        if (isFuture) {
+          recurringToastMessage = isOutsideMonth
+            ? 'تمت جدولة المعاملة المتكررة والانتقال إلى شهر المعاملة'
+            : 'تمت جدولة المعاملة المتكررة بنجاح'
+        } else if (processedCount > 1) {
+          recurringToastMessage = isOutsideMonth
+            ? `تمت إضافة ${processedCount} معاملات متكررة مستحقة وتفعيل التكرار والانتقال إلى شهر المعاملة`
+            : `تمت إضافة ${processedCount} معاملات متكررة مستحقة وتفعيل التكرار بنجاح`
+        } else {
+          recurringToastMessage = isOutsideMonth
+            ? 'تمت إضافة المعاملة وتفعيل التكرار والانتقال إلى شهر المعاملة'
+            : 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
+        }
+
+        showToast(recurringToastMessage, 'success')
       } else {
         await addTransaction(user.uid, {
           type,
@@ -347,7 +385,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       onClose()
     } catch (err: unknown) {
       console.error('Failed to save transaction:', err)
-      setError('تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.')
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -439,7 +481,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       }, 50)
     } catch (err: unknown) {
       console.error('Failed to save transaction:', err)
-      setError('تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.')
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -448,6 +494,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleDelete = async () => {
     if (!user || !initialTransaction) return
     if (isLinkedToDebtPayment && linkedDebtPayment) {
+      if (linkedDebtPayment.payment.isMerged) {
+        setError('لا يمكن حذف دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
+        return
+      }
       setDeleting(true)
       try {
         await removeDebtPayment(user.uid, linkedDebtPayment.debt, linkedDebtPayment.payment.id)
@@ -473,6 +523,23 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
       return
     }
+    if (circleInstallmentMatch && user) {
+      const circleId = circleInstallmentMatch[1]
+      const monthNum = parseInt(circleInstallmentMatch[2], 10)
+      setDeleting(true)
+      try {
+        await removeCircleInstallmentPayment(user.uid, circleId, monthNum)
+        showToast('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
+        onSuccess?.()
+        onClose()
+      } catch (err) {
+        console.error('Failed to remove circle installment:', err)
+        setError('تعذر حذف قسط الجمعية')
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
     setDeleting(true)
     try {
       await deleteTransaction(user.uid, initialTransaction.id)
@@ -489,22 +556,33 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleDuplicateCurrent = async () => {
     if (!initialTransaction) return
+    const parsedFils = toFils(amountStr, currencyConfig.decimals)
+    const finalFils = parsedFils > 0 ? parsedFils : initialTransaction.amountFils
+
+    const currentData: Transaction = {
+      ...initialTransaction,
+      type,
+      amountFils: finalFils,
+      categoryId: activeCategoryId,
+      title: title.trim() || undefined,
+      note: note.trim().slice(0, 500),
+      date: new Date(),
+    }
+
     if (onDuplicate) {
-      onDuplicate(initialTransaction)
+      onDuplicate(currentData)
       return
     }
     if (!user) return
     setSubmitting(true)
     try {
-      const parsedFils = toFils(amountStr, currencyConfig.decimals)
-      const finalFils = parsedFils > 0 ? parsedFils : initialTransaction.amountFils
       await addTransaction(user.uid, {
-        type,
-        amountFils: finalFils,
-        categoryId: activeCategoryId,
-        date: new Date(),
-        title: title.trim() || undefined,
-        note: note.trim().slice(0, 500),
+        type: currentData.type,
+        amountFils: currentData.amountFils,
+        categoryId: currentData.categoryId,
+        date: currentData.date,
+        title: currentData.title,
+        note: currentData.note,
       })
       showToast('تم تكرار المعاملة بنجاح', 'success')
       onSuccess?.()
@@ -547,19 +625,39 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Linked Debt Payment Warning Banner */}
       {isLinkedToDebtPayment && (
-        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
-            <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>
-              {linkedDebtPayment
-                ? `معاملة مرتبطة بدفعة سداد دين لـ (${linkedDebtPayment.debt.personName})`
-                : 'معاملة مرتبطة بدفعة سداد دين'}
-            </span>
+        linkedDebtPayment?.payment?.isMerged ? (
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>معاملة مرتبطة بدفعة دين مدمجة لـ ({linkedDebtPayment.debt.personName})</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+              هذه المعاملة تمثل رصيد دفعات سابقة تم دمجها في سجل الدين. لا يمكن تعديل مبلغها أو حذفها من هنا، يرجى إدارتها من صفحة الديون.
+            </p>
+            <Link
+              to="/debts"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+            >
+              <span>الانتقال إلى سجل الديون</span>
+              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+            </Link>
           </div>
-          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
-            عند تعديل المبلغ أو حذف هذه المعاملة، سيتم تلقائياً تحديث دفعة السداد في سجل الدين وإعادة احتساب رصيد الدين وحالة الإغلاق.
-          </p>
-        </div>
+        ) : (
+          <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+              <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                {linkedDebtPayment
+                  ? `معاملة مرتبطة بدفعة سداد دين لـ (${linkedDebtPayment.debt.personName})`
+                  : 'معاملة مرتبطة بدفعة سداد دين'}
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
+              عند تعديل المبلغ أو حذف هذه المعاملة، سيتم تلقائياً تحديث دفعة السداد في سجل الدين وإعادة احتساب رصيد الدين وحالة الإغلاق.
+            </p>
+          </div>
+        )
       )}
 
       {/* Linked Circle Payout Warning Banner */}
@@ -580,6 +678,19 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <span>الانتقال إلى صفحة الجمعيات</span>
             <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
           </Link>
+        </div>
+      )}
+
+      {/* Linked Circle Installment Warning Banner */}
+      {isLinkedToCircleInstallment && isCircleInstallmentExists && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+            <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>معاملة مرتبطة بقسط جمعية ({linkedCircleInstallment?.name || 'جمعية'}) - شهر {circleInstallmentMonth}</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-emerald-700/90 dark:text-emerald-300/80 pe-1">
+            عند حذف هذه المعاملة، سيتم تلقائياً تحديث حالة القسط في جدول الجمعية وإلغاء تسجيل الدفع.
+          </p>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import * as categoriesService from '../services/categories'
 vi.mock('../services/categories', () => ({
   deleteCategory: vi.fn().mockResolvedValue(undefined),
   archiveCategory: vi.fn().mockResolvedValue(undefined),
+  updateCategory: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -292,5 +293,49 @@ describe('CategoriesPage component category protection', () => {
 
     // cat-unused has no transactions and should have delete button
     expect(screen.getByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeInTheDocument()
+  })
+
+  it('swaps category orders using Move Up and Move Down buttons', async () => {
+    render(<CategoriesPage />)
+
+    // First category cannot move up
+    const firstUpBtn = screen.getByLabelText('تحريك تصنيف طعام وبقالة للأعلى') as HTMLButtonElement
+    expect(firstUpBtn.disabled).toBe(true)
+
+    // Last category cannot move down
+    const lastDownBtn = screen.getByLabelText('تحريك تصنيف تصنيف فارغ للأسفل') as HTMLButtonElement
+    expect(lastDownBtn.disabled).toBe(true)
+
+    // Move second category up
+    const secondUpBtn = screen.getByLabelText('تحريك تصنيف اشتراك نت للأعلى')
+    fireEvent.click(secondUpBtn)
+
+    await waitFor(() => {
+      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-rec', { order: 0 })
+      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-tx', { order: 1 })
+    })
+  })
+
+  it('recognizes circle usage when evaluating category deletion safety', async () => {
+    mockCategories = [
+      { id: 'cat-circle-only', name: 'تصنيف جمعية', type: 'expense', icon: '👥', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 1 },
+    ]
+    mockTransactions = []
+    mockRecurring = []
+    mockCircles = [
+      {
+        id: 'circle-1',
+        name: 'جمعية الأسرة',
+        status: 'active',
+        expenseCategoryId: 'cat-circle-only',
+      },
+    ]
+
+    render(<CategoriesPage />)
+
+    // cat-circle-only is recognized as in-use, so delete button is hidden
+    expect(screen.queryByLabelText('حذف تصنيف تصنيف جمعية نهائياً')).toBeNull()
+    expect(screen.getByText(/جمعية مالية مرتبطة/i)).toBeInTheDocument()
   })
 })

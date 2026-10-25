@@ -111,6 +111,10 @@ export const SettingsPage: React.FC = () => {
       showToast('يرجى إدخال اسم صالح', 'error')
       return
     }
+    if (trimmed === effectiveDisplayName) {
+      setIsEditingName(false)
+      return
+    }
     setSavingName(true)
     try {
       await updateSettings({ displayName: trimmed })
@@ -143,11 +147,31 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveCustomCurrency = async () => {
     const trimmed = customCurrencyInput.trim()
-    if (!trimmed || trimmed === activeCurrency) return
+    if (!trimmed) return
+    const resolved = getCurrencyConfig(trimmed)
+    if (PRESET_CURRENCIES[resolved.code]) {
+      setIsCustomCurrency(false)
+      setCustomCurrencyInput('')
+      if (resolved.code === activeCurrency) return
+      setSavingCurrency(true)
+      try {
+        await updateSettings({ currency: resolved.code })
+        showToast(`تم تغيير العملة إلى ${PRESET_CURRENCIES[resolved.code]?.name || resolved.code} بنجاح`, 'success')
+      } catch (err) {
+        console.error('Failed to update currency:', err)
+        showToast('تعذر تغيير العملة', 'error')
+      } finally {
+        setSavingCurrency(false)
+      }
+      return
+    }
+
+    if (trimmed === activeCurrency) return
     setSavingCurrency(true)
     try {
       await updateSettings({ currency: trimmed })
       showToast(`تم تعيين العملة المخصصة: ${trimmed}`, 'success')
+      setIsCustomCurrency(true)
     } catch (err) {
       console.error('Failed to save custom currency:', err)
       showToast('تعذر حفظ العملة المخصصة', 'error')

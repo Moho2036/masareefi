@@ -147,7 +147,15 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         ) : (
           <SegmentedControl<TxType>
             value={type}
-            onChange={setType}
+            onChange={(newType) => {
+              setType(newType)
+              if (icon === '🛒' || icon === '💼') {
+                setIcon(newType === 'income' ? '💼' : '🛒')
+              }
+              if (color === '#F59E0B' || color === '#10B981') {
+                setColor(newType === 'income' ? '#10B981' : '#F59E0B')
+              }
+            }}
             options={[
               { value: 'expense', label: 'مصروف' },
               { value: 'income', label: 'دخل' },

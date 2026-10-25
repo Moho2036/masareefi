@@ -9,7 +9,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
-import { db } from '../lib/firebase'
+import { db, auth } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
 import { addDefaultCategoriesToBatch } from './seed'
@@ -26,6 +26,8 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
   const snap = await getDoc(userRef)
 
+  const candidateName = (user.displayName || auth?.currentUser?.displayName || '').trim()
+
   if (snap.exists()) {
     const data = snap.data()
     // Self-healing race condition fix:
@@ -33,20 +35,39 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
     // but the incoming user has a real non-empty displayName, update Firestore to reflect it.
     if (
       (!data.displayName || data.displayName === 'مستخدم') &&
-      user.displayName &&
-      user.displayName.trim() &&
-      user.displayName.trim() !== 'مستخدم'
+      candidateName &&
+      candidateName !== 'مستخدم'
     ) {
-      const realName = user.displayName.trim().slice(0, 100)
+      const realName = candidateName.slice(0, 100)
       await updateDoc(doc(db, 'users', user.uid), { displayName: realName })
       return { ...data, displayName: realName }
     }
     return data
   }
 
+  const rawUserDoc = doc(db, 'users', user.uid)
+
+  // Re-verify before batch creation in case a concurrent call created the doc
+  const reCheckSnap = await getDoc(userRef)
+  if (reCheckSnap.exists()) {
+    const existingData = reCheckSnap.data()
+    if (
+      (!existingData.displayName || existingData.displayName === 'مستخدم') &&
+      candidateName &&
+      candidateName !== 'مستخدم'
+    ) {
+      const realName = candidateName.slice(0, 100)
+      await updateDoc(rawUserDoc, { displayName: realName })
+      return { ...existingData, displayName: realName }
+    }
+    return existingData
+  }
+
+  const effectiveDisplayName = (candidateName || DEFAULT_SETTINGS.displayName).slice(0, 100)
+
   const initialSettings: UserSettings = {
     uid: user.uid,
-    displayName: (user.displayName || DEFAULT_SETTINGS.displayName).slice(0, 100),
+    displayName: effectiveDisplayName,
     currency: DEFAULT_SETTINGS.currency,
     monthStartDay: DEFAULT_SETTINGS.monthStartDay,
     theme: DEFAULT_SETTINGS.theme,
@@ -55,7 +76,6 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
 
   // Atomically create user profile document AND seed default categories in ONE writeBatch
   const batch = writeBatch(db)
-  const rawUserDoc = doc(db, 'users', user.uid)
   batch.set(rawUserDoc, {
     displayName: initialSettings.displayName,
     currency: initialSettings.currency,

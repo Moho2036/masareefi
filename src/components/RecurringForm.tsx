@@ -16,7 +16,7 @@ import { updateMoneyCircle } from '../services/moneyCircles'
 import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
-import { calculateNextDateOnEdit, advanceDateWithTargetDay } from '../lib/recurring'
+import { calculateNextDateOnEdit, advanceDateWithTargetDay, getNextCircleDueDate } from '../lib/recurring'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -289,6 +289,18 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         await processDueRecurring(user.uid)
         showToast('تم تعديل المعاملة المتكررة بنجاح', 'success')
       } else {
+        const linkedCircle = circleId ? circles.find((c) => c.id === circleId) : null
+        const userMember = linkedCircle?.members.find((m) => m.turnMonth === linkedCircle.myTurnMonth)
+        const initialNextDate = linkedCircle
+          ? getNextCircleDueDate(
+              parsedStartDate,
+              linkedCircle.membersCount,
+              linkedCircle.myTurnMonth,
+              userMember?.paidMonths || [],
+              userMember?.paymentsByMonth
+            )
+          : parsedStartDate
+
         const recId = await addRecurring(user.uid, {
           type,
           amountFils,
@@ -297,7 +309,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           note: note.trim().slice(0, 500),
           frequency,
           startDate: parsedStartDate,
-          nextDate: parsedStartDate,
+          nextDate: initialNextDate,
           endDate: parsedEndDate ?? undefined,
           active: true,
           circleId: circleId || undefined,
@@ -307,6 +319,14 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         // Two-way sync with money circles
         if (circleId) {
           await updateMoneyCircle(user.uid, circleId, { recurringId: recId }).catch(() => {})
+
+          // Synchronize circle amounts if recurring installment amount changed
+          if (linkedCircle && linkedCircle.monthlyAmountFils !== amountFils) {
+            await updateMoneyCircle(user.uid, linkedCircle.id, {
+              monthlyAmountFils: amountFils,
+              totalAmountFils: amountFils * linkedCircle.membersCount,
+            }).catch(() => {})
+          }
         }
 
         await processDueRecurring(user.uid)
@@ -475,14 +495,16 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       {/* Money Circle Link / Skip Month */}
       {type === 'expense' && availableCircles.length > 0 && (
         <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+          <label htmlFor="recurring-circle-select" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
             ربط مع جمعية نشطة (تخطي الخصم في شهر الاستلام):
           </label>
           <select
+            id="recurring-circle-select"
             value={circleId}
             disabled={isCircleLinked}
             onChange={(e) => {
               const selectedId = e.target.value
+              const prevCircleId = circleId
               setCircleId(selectedId)
               if (selectedId) {
                 const c = availableCircles.find((circ) => circ.id === selectedId)
@@ -499,6 +521,13 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 }
               } else {
                 setSkipMonth(undefined)
+                setHasEndDate(false)
+                setEndDateStr('')
+                setStartDateStr(format(new Date(), 'yyyy-MM-dd'))
+                const prevCircle = availableCircles.find((circ) => circ.id === prevCircleId)
+                if (prevCircle && title === `قسط ${prevCircle.name}`) {
+                  setTitle('')
+                }
               }
             }}
             className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"

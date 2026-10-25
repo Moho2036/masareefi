@@ -283,10 +283,11 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
   // Psychological impact tier
   const impactTier = useMemo(() => {
+    if (salary <= 0 || itemPrice <= 0) return 'none'
     if (requiredHours <= 4) return 'light'
     if (requiredHours <= 24) return 'medium'
     return 'heavy'
-  }, [requiredHours])
+  }, [salary, itemPrice, requiredHours])
 
   return (
     <div className="space-y-6">
@@ -421,6 +422,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                 <span
                   className={cn(
                     'inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full',
+                    impactTier === 'none' &&
+                      'bg-slate-100 dark:bg-slate-750 text-slate-500 dark:text-slate-400',
                     impactTier === 'light' &&
                       'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300',
                     impactTier === 'medium' &&
@@ -432,12 +435,14 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   <span
                     className={cn(
                       'w-2 h-2 rounded-full shrink-0',
+                      impactTier === 'none' && 'bg-slate-400',
                       impactTier === 'light' && 'bg-emerald-500',
                       impactTier === 'medium' && 'bg-amber-500',
                       impactTier === 'heavy' && 'bg-rose-500'
                     )}
                   />
                   <span>
+                    {impactTier === 'none' && 'بانتظار البيانات'}
                     {impactTier === 'light' && 'عبء خفيف'}
                     {impactTier === 'medium' && 'عبء متوسط'}
                     {impactTier === 'heavy' && 'عبء مرتفع'}
@@ -446,34 +451,42 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               </div>
 
               {/* Main hours counter */}
-              <div className="py-2 text-center space-y-2">
-                <p className="text-xs font-semibold text-slate-400">
-                  لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر {format(toFils(itemPrice))}، تحتاج إلى:
-                </p>
+              {salary <= 0 || itemPrice <= 0 ? (
+                <div className="py-8 text-center space-y-2">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                    يرجى إدخال راتب شهري وسعر سلعة أكبر من الصفر لاحتساب ساعات العمل المطلوبة
+                  </p>
+                </div>
+              ) : (
+                <div className="py-2 text-center space-y-2">
+                  <p className="text-xs font-semibold text-slate-400">
+                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر {format(toFils(itemPrice))}، تحتاج إلى:
+                  </p>
 
-                <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
-                  {fullHours}{' '}
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                    ساعة
-                  </span>
-                  {remainingMinutes > 0 && (
-                    <span className="text-2xl sm:text-3xl font-extrabold text-slate-400 ms-2">
-                      و {remainingMinutes} دقيقة
+                  <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
+                    {fullHours}{' '}
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                      ساعة
                     </span>
-                  )}
-                </div>
+                    {remainingMinutes > 0 && (
+                      <span className="text-2xl sm:text-3xl font-extrabold text-slate-400 ms-2">
+                        و {remainingMinutes} دقيقة
+                      </span>
+                    )}
+                  </div>
 
-                <div className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5 pt-1">
-                  <Briefcase className="w-4 h-4 text-emerald-500" />
-                  <span>
-                    ما يعادل تقريباً{' '}
-                    <strong className="text-emerald-600 dark:text-emerald-400 font-black">
-                      {equivalentWorkDays}
-                    </strong>{' '}
-                    يوم دوام عملي
-                  </span>
+                  <div className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5 pt-1">
+                    <Briefcase className="w-4 h-4 text-emerald-500" />
+                    <span>
+                      ما يعادل تقريباً{' '}
+                      <strong className="text-emerald-600 dark:text-emerald-400 font-black">
+                        {equivalentWorkDays}
+                      </strong>{' '}
+                      يوم دوام عملي
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Direct Metrics Breakdown */}
               <div className="grid grid-cols-2 gap-3 pt-2">

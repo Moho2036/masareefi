@@ -120,6 +120,64 @@ describe('SettingsPage Component redundant update prevention', () => {
 
     expect(mockUpdateSettings).not.toHaveBeenCalled()
   })
+
+  it('does NOT trigger updateSettings or make network calls when saving display name identical to current effectiveDisplayName', async () => {
+    render(<SettingsPage />)
+
+    const editBtn = screen.getByRole('button', { name: 'تعديل الاسم' })
+    fireEvent.click(editBtn)
+
+    const nameInput = screen.getByPlaceholderText('أدخل اسمك') as HTMLInputElement
+    expect(nameInput.value).toBe('محمد')
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(saveBtn)
+
+    expect(mockUpdateSettings).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
+    // Edit mode should close
+    expect(screen.queryByPlaceholderText('أدخل اسمك')).toBeNull()
+  })
+
+  it('resolves custom currency to preset if entered alias/symbol matches preset, e.g. "ر.س" -> "SAR"', async () => {
+    render(<SettingsPage />)
+
+    const customBtn = screen.getByRole('button', { name: /عملة أخرى/i })
+    fireEvent.click(customBtn)
+
+    const customInput = screen.getByPlaceholderText(/مثال: ج\.م أو د\.ك أو QAR أو ليرة/)
+    fireEvent.change(customInput, { target: { value: 'ر.س' } })
+
+    const applyBtn = screen.getByRole('button', { name: 'تطبيق العملة' })
+    fireEvent.click(applyBtn)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ currency: 'SAR' })
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('تم تغيير العملة إلى ريال سعودي'),
+        'success'
+      )
+    })
+  })
+
+  it('does NOT trigger updateSettings if resolved preset currency is already the active currency', async () => {
+    render(<SettingsPage />)
+
+    const customBtn = screen.getByRole('button', { name: /عملة أخرى/i })
+    fireEvent.click(customBtn)
+
+    // Active currency in mock is JOD, symbol is 'د.أ'
+    const customInput = screen.getByPlaceholderText(/مثال: ج\.م أو د\.ك أو QAR أو ليرة/)
+    fireEvent.change(customInput, { target: { value: 'د.أ' } })
+
+    const applyBtn = screen.getByRole('button', { name: 'تطبيق العملة' })
+    fireEvent.click(applyBtn)
+
+    expect(mockUpdateSettings).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
+    // Switches away from custom currency view
+    expect(screen.queryByPlaceholderText(/مثال: ج\.م أو د\.ك أو QAR أو ليرة/)).toBeNull()
+  })
 })
 
 describe('SettingsPage Backup and Restore modal', () => {

@@ -346,6 +346,14 @@ describe('recurring pure logic', () => {
       // Dates before start date return actual diffMonths without clamping
       expect(getOccurrenceMonthIndex(start, new Date(2025, 11, 1))).toBe(0)
       expect(getOccurrenceMonthIndex(start, new Date(2025, 10, 1))).toBe(-1)
+
+      // Mid-month start date respects actual monthly cycle boundaries
+      const midMonthStart = new Date(2026, 0, 20) // Jan 20, 2026
+      expect(getOccurrenceMonthIndex(midMonthStart, new Date(2026, 0, 20))).toBe(1)
+      expect(getOccurrenceMonthIndex(midMonthStart, new Date(2026, 1, 5))).toBe(1)
+      expect(getOccurrenceMonthIndex(midMonthStart, new Date(2026, 1, 20))).toBe(2)
+      expect(getOccurrenceMonthIndex(midMonthStart, new Date(2026, 2, 10))).toBe(2)
+      expect(getOccurrenceMonthIndex(midMonthStart, new Date(2026, 2, 20))).toBe(3)
     })
 
     it('identifies when an occurrence is the skipped turn month', () => {
@@ -483,6 +491,27 @@ describe('recurring pure logic', () => {
 
       it('supports paymentsByMonth record', () => {
         expect(getNextCircleDueMonth(6, 4, [], { '1': true, '2': true })).toBe(3)
+      })
+
+      it('skips explicitly cancelled past or current months (paymentsByMonth === false)', () => {
+        const circleStart = new Date('2026-01-01')
+        const testToday = new Date('2026-03-15')
+        // Month 1 paid, month 2 cancelled (false), turn is month 5
+        // Month 2 is past (Feb 1 <= Mar 15), so it should be skipped
+        expect(
+          getNextCircleDueMonth(6, 5, [1], { '2': false }, circleStart, testToday)
+        ).toBe(3)
+
+        const dueDate = getNextCircleDueDate(
+          circleStart,
+          6,
+          5,
+          [1],
+          { '2': false },
+          testToday
+        )
+        // Month 3 due date: Jan + 2 months = Mar 1, 2026
+        expect(dueDate.getMonth()).toBe(2) // March
       })
 
       it('returns null for dueMonth and last month date when all non-exempt months are paid', () => {

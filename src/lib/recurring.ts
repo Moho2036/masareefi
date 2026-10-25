@@ -76,10 +76,25 @@ export interface DueOccurrencesResult {
 export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): number {
   const start = startDate instanceof Date ? startDate : new Date(startDate)
   const occ = occurrenceDate instanceof Date ? occurrenceDate : new Date(occurrenceDate)
-  const diffMonths =
-    (occ.getFullYear() - start.getFullYear()) * 12 +
-    (occ.getMonth() - start.getMonth())
-  return diffMonths + 1
+
+  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0)
+  const t = new Date(occ.getFullYear(), occ.getMonth(), occ.getDate(), 12, 0, 0)
+
+  if (t < s) {
+    const diffMonths =
+      (occ.getFullYear() - start.getFullYear()) * 12 +
+      (occ.getMonth() - start.getMonth())
+    return diffMonths + 1
+  }
+
+  let approxMonths = (t.getFullYear() - s.getFullYear()) * 12 + (t.getMonth() - s.getMonth())
+  while (addMonths(s, approxMonths) > t) {
+    approxMonths--
+  }
+  while (addMonths(s, approxMonths + 1) <= t) {
+    approxMonths++
+  }
+  return approxMonths + 1
 }
 
 /**
@@ -188,10 +203,22 @@ export function getNextCircleDueMonth(
   membersCount: number,
   myTurnMonth: number,
   paidMonths: number[] = [],
-  paymentsByMonth?: Record<string | number, boolean>
+  paymentsByMonth?: Record<string | number, boolean>,
+  startDate?: Date,
+  today: Date = new Date()
 ): number | null {
+  const start = startDate ? (startDate instanceof Date ? startDate : new Date(startDate)) : null
+
   for (let m = 1; m <= membersCount; m++) {
     if (m === myTurnMonth) continue
+
+    // If this month was explicitly cancelled/unpaid by the user and its date is <= today, skip it so recurring doesn't immediately re-deduct it
+    if (start && (paymentsByMonth?.[m] === false || paymentsByMonth?.[String(m)] === false)) {
+      const monthDate = addMonths(start, m - 1)
+      if (monthDate <= today) {
+        continue
+      }
+    }
 
     const isPaid =
       paidMonths.includes(m) ||
@@ -215,10 +242,18 @@ export function getNextCircleDueDate(
   membersCount: number,
   myTurnMonth: number,
   paidMonths: number[] = [],
-  paymentsByMonth?: Record<string | number, boolean>
+  paymentsByMonth?: Record<string | number, boolean>,
+  today: Date = new Date()
 ): Date {
   const start = startDate instanceof Date ? startDate : new Date(startDate)
-  const dueMonth = getNextCircleDueMonth(membersCount, myTurnMonth, paidMonths, paymentsByMonth)
+  const dueMonth = getNextCircleDueMonth(
+    membersCount,
+    myTurnMonth,
+    paidMonths,
+    paymentsByMonth,
+    start,
+    today
+  )
 
   if (dueMonth !== null) {
     return addMonths(start, dueMonth - 1)

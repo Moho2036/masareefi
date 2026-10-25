@@ -142,14 +142,11 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     }
   }
 
-  const rolloverBalance = params.rolloverBalanceFils ?? 0
-  const monthNet = currentIncome - currentExpense
-  const availableBalance = rolloverBalance + monthNet
-  const availablePool = currentIncome + rolloverBalance
-
   // 2. Upcoming recurring expenses and income in this cycle (accumulate all occurrences within [rangeStart, rangeEnd))
+  // and intermediate active recurring transactions between now and rangeStart for future months
   let upcomingRecurringExpenses = 0
   let upcomingRecurringIncome = 0
+  let intermediateRecurringNet = 0
   if (params.recurring && (isCurrentMonth || isFutureMonth)) {
     const existingTxIds = new Set(
       params.transactions
@@ -168,7 +165,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
           : new Date(rec.endDate)
         : null
 
-      // Iterate through all occurrences within this financial month
+      // Iterate through all occurrences until rangeEnd
       while (toStartOfDay(curr) < rangeEnd) {
         if (recEnd && toStartOfDay(curr) > toStartOfDay(recEnd)) break
         const occStart = toStartOfDay(curr)
@@ -181,6 +178,15 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
               upcomingRecurringIncome += rec.amountFils || 0
             }
           }
+        } else if (isFutureMonth && occStart >= now && occStart < rangeStart) {
+          const isRecorded = existingTxIds.has(getDeterministicTxId(rec.id, curr))
+          if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
+            if (rec.type === 'expense') {
+              intermediateRecurringNet -= rec.amountFils || 0
+            } else if (rec.type === 'income') {
+              intermediateRecurringNet += rec.amountFils || 0
+            }
+          }
         }
         const next = advanceDateWithTargetDay(curr, rec.frequency, targetDay)
         if (next.getTime() <= curr.getTime()) break
@@ -188,6 +194,15 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       }
     }
   }
+
+  const baseRollover = params.rolloverBalanceFils ?? 0
+  const rolloverBalance =
+    isFutureMonth && params.rolloverBalanceFils !== undefined
+      ? baseRollover + intermediateRecurringNet
+      : baseRollover
+  const monthNet = currentIncome - currentExpense
+  const availableBalance = rolloverBalance + monthNet
+  const availablePool = currentIncome + rolloverBalance
 
   // 3. Upcoming debts owed by user ('borrowed') due within this cycle [rangeStart, rangeEnd)
   let upcomingDebtObligations = 0
@@ -200,7 +215,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       if (debt.dueDate) {
         const dueDate = debt.dueDate instanceof Date ? debt.dueDate : new Date(debt.dueDate)
         const dueDay = toStartOfDay(dueDate)
-        if (dueDay < rangeEnd) {
+        const isDueInWindow = isFutureMonth
+          ? dueDay >= rangeStart && dueDay < rangeEnd
+          : dueDay < rangeEnd
+        if (isDueInWindow) {
           upcomingDebtObligations += remainingUnpaid
         }
       }
@@ -279,7 +297,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       (upcomingRecurringExpenses > 0 || upcomingDebtObligations > 0 || currentExpense > 0))
   ) {
     healthStatus = 'danger'
-  } else if (actualDailySpendFils > dailySafeFils) {
+  } else if (
+    actualDailySpendFils > dailySafeFils ||
+    (isCurrentMonth && availableBalance < 0 && upcomingRecurringIncome > 0 && freeBalance > 0)
+  ) {
     healthStatus = 'warning'
   } else {
     healthStatus = 'safe'

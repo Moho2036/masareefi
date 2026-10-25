@@ -73,6 +73,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [rolloverBalanceFils, setRolloverBalanceFils] = useState<number>(0)
 
   const userId = user?.uid
+  const [prevUserId, setPrevUserId] = useState(userId)
+
+  // Reset all data states and errors immediately on user change or sign-out during render
+  if (prevUserId !== userId) {
+    setPrevUserId(userId)
+    setSettings(null)
+    setSettingsError(null)
+
+    setCategories([])
+    setCategoriesError(null)
+
+    setDebts([])
+    setDebtsError(null)
+
+    setRecurring([])
+    setRecurringError(null)
+
+    setMoneyCircles([])
+    setMoneyCirclesError(null)
+
+    setRolloverBalanceFils(0)
+
+    setSettingsLoading(Boolean(userId))
+    setCategoriesLoading(Boolean(userId))
+    setDebtsLoading(Boolean(userId))
+    setRecurringLoading(Boolean(userId))
+    setMoneyCirclesLoading(Boolean(userId))
+  }
 
   useEffect(() => {
     if (!userId) {

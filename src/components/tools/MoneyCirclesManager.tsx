@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { format as formatDate } from 'date-fns'
 import {
   Users,
@@ -42,7 +42,8 @@ import {
   toggleCircleMemberPayment,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
-import { parseLocalDateInput } from '../../lib/dates'
+import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
+import { getNextCircleDueDate } from '../../lib/recurring'
 import { cn } from '../../lib/cn'
 import type { MoneyCircle, CircleMember } from '../../types'
 
@@ -55,6 +56,20 @@ export const MoneyCirclesManager: React.FC = () => {
   const { data: categories } = useCategories()
   const { format, config } = useCurrency()
   const { showToast } = useToast()
+
+  // Sorted circles: active circles first, completed last. Within each group, newest startDate first.
+  const sortedCircles = useMemo(() => {
+    return [...circles].sort((a, b) => {
+      const aCompleted = a.status === 'completed'
+      const bCompleted = b.status === 'completed'
+      if (aCompleted !== bCompleted) {
+        return aCompleted ? 1 : -1
+      }
+      const aTime = a.startDate instanceof Date ? a.startDate.getTime() : new Date(a.startDate).getTime()
+      const bTime = b.startDate instanceof Date ? b.startDate.getTime() : new Date(b.startDate).getTime()
+      return bTime - aTime
+    })
+  }, [circles])
 
   const defaultExpenseCategory = categories.find((c) => c.type === 'expense' && !c.archived)
   const defaultIncomeCategory =
@@ -162,10 +177,19 @@ export const MoneyCirclesManager: React.FC = () => {
       )
     : undefined
 
+  const initialDueDate = editingCircle
+    ? getNextCircleDueDate(
+        editingCircle.startDate,
+        editingCircle.membersCount,
+        editingCircle.myTurnMonth,
+        []
+      )
+    : undefined
+
   const hasRecurringProgressed = Boolean(
     existingRecForEditing &&
-      new Date(existingRecForEditing.nextDate).getTime() >
-        new Date(existingRecForEditing.startDate).getTime()
+      initialDueDate &&
+      new Date(existingRecForEditing.nextDate).getTime() > initialDueDate.getTime()
   )
 
   const editingCircleAny = editingCircle as unknown as {
@@ -534,7 +558,11 @@ export const MoneyCirclesManager: React.FC = () => {
   }
 
   const handleScheduleCircle = async (circle: MoneyCircle) => {
-    if (!user || !defaultExpenseCategory) return
+    if (!user) return
+    if (!defaultExpenseCategory) {
+      showToast('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
+      return
+    }
     const isAlreadyScheduled = isCircleScheduled(circle)
     if (isAlreadyScheduled) {
       showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
@@ -700,15 +728,25 @@ export const MoneyCirclesManager: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-4">
-          {circles.map((circle) => {
+          {sortedCircles.map((circle) => {
             const now = new Date()
             const start = new Date(circle.startDate)
             const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
             const isStarted = diffMonths >= 0
             const isCompleted = circle.status === 'completed' || diffMonths >= circle.membersCount
             const hasUserDeposited = depositedCircleIds.has(circle.id)
+            const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
+            const hasUserPaidAll = userMember
+              ? Array.from({ length: circle.membersCount }, (_, i) => i + 1)
+                  .filter((m) => m !== circle.myTurnMonth)
+                  .every((m) => userMember.paidMonths.includes(m))
+              : false
             const isObligationsCompleted =
-              circle.status === 'active' && isCircleFullyPaid(circle) && hasUserDeposited
+              circle.status === 'active' &&
+              hasUserDeposited &&
+              (circle.isManager
+                ? isCircleFullyPaid(circle)
+                : diffMonths >= circle.membersCount || hasUserPaidAll)
             const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
             const isUserTurn = isStarted && !isCompleted && !isObligationsCompleted && isUserTurnMonth(circle, now, monthStartDay)
             const isExpanded = expandedCircleId === circle.id
@@ -828,7 +866,7 @@ export const MoneyCirclesManager: React.FC = () => {
                       مكتملة ✓
                     </span>
                   </div>
-                ) : isObligationsCompleted ? (
+                ) : (isObligationsCompleted || (isCompleted && hasUserDeposited)) && circle.status === 'active' ? (
                   <div className="mt-3.5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-2.5 text-xs font-bold">
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -1199,11 +1237,10 @@ export const MoneyCirclesManager: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <Input
               label={`القسط الشهري (${config.symbol})`}
-              type="number"
-              min="1"
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={monthlyAmountStr}
-              onChange={(e) => setMonthlyAmountStr(e.target.value)}
+              onChange={(e) => setMonthlyAmountStr(toWesternDigits(e.target.value))}
               required
             />
 

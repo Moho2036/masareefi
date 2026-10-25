@@ -45,8 +45,15 @@ import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/re
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
 import { isOccurrenceSkipped } from '../lib/recurring'
-import { toWesternDigits, formatDayHeader, getFiscalMonthKey, formatMonthLabel } from '../lib/dates'
-import { format as formatDate, addMonths } from 'date-fns'
+import {
+  toWesternDigits,
+  formatDayHeader,
+  getFiscalMonthKey,
+  getPreviousFinancialMonth,
+  getFinancialMonthRange,
+  formatFinancialMonthLabel,
+} from '../lib/dates'
+import { format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { cn } from '../lib/cn'
 
@@ -102,8 +109,10 @@ export const DashboardPage: React.FC = () => {
     : 0
 
   const prevMonthLabel = useMemo(() => {
-    return formatMonthLabel(addMonths(range.start, -1))
-  }, [range.start])
+    const prevFinancialMonth = getPreviousFinancialMonth(range.start, monthStartDay)
+    const prevRange = getFinancialMonthRange(prevFinancialMonth, monthStartDay)
+    return formatFinancialMonthLabel(prevRange, monthStartDay)
+  }, [range.start, monthStartDay])
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
@@ -117,9 +126,9 @@ export const DashboardPage: React.FC = () => {
       debts,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils: effectiveRollover,
+      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
     })
-  }, [rawTransactions, recurringList, debts, monthStartDay, range, effectiveRollover])
+  }, [rawTransactions, recurringList, debts, monthStartDay, range, effectiveRollover, isRolloverEnabled])
 
   // Calculate active debts summary
   const debtSummary = useMemo(() => calculateDebtSummary(debts), [debts])
@@ -145,11 +154,21 @@ export const DashboardPage: React.FC = () => {
     [rawTransactions, range.start, range.end]
   )
 
-  // Up to 5 most recent transactions
-  const recentTransactions = useMemo(
-    () => rawTransactions.slice(0, 5),
-    [rawTransactions]
-  )
+  // Up to 5 most recent transactions sorted by date descending, then createdAt descending
+  const recentTransactions = useMemo(() => {
+    return [...rawTransactions]
+      .sort((a, b) => {
+        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        if (timeB !== timeA) {
+          return timeB - timeA
+        }
+        const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+        const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+        return createdB - createdA
+      })
+      .slice(0, 5)
+  }, [rawTransactions])
 
   // Up to 5 upcoming active recurring items
   const upcomingRecurring = useMemo(() => {

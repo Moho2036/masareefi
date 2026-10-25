@@ -1087,5 +1087,67 @@ describe('backupRestore module', () => {
       expect(circleCall![1].members[0].paymentsByMonth).toEqual({ '1': true })
       expect(circleCall![1].members[1].paymentsByMonth).toEqual({ '1': true, '2': true })
     })
+
+    it('preserves workDaysMode and debt payment merged metadata (isMerged, mergedTransactionIds)', async () => {
+      mockSet.mockClear()
+      mockCommit.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithMergedData = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [],
+          debts: [
+            {
+              id: 'debt_merged_test',
+              personName: 'خالد',
+              amountFils: 50000,
+              paidFils: 30000,
+              startDate: new Date('2026-09-01'),
+              settled: false,
+              payments: [
+                {
+                  id: 'p_merged_1',
+                  amountFils: 30000,
+                  date: new Date('2026-09-10'),
+                  note: 'دفعات مدمجة سابقة',
+                  isMerged: true,
+                  mergedTransactionIds: ['tx_1', 'tx_2'],
+                  createdAt: new Date('2026-09-10'),
+                },
+              ],
+            },
+          ],
+          recurring: [],
+          circles: [],
+          workHoursPrefs: {
+            currencyCode: 'SAR',
+            salary: '6000',
+            dailyHours: '8',
+            workDays: '5',
+            workDaysMode: 'week',
+          },
+        },
+      }
+
+      const valRes = validateBackup(JSON.stringify(backupWithMergedData))
+      expect(valRes.valid).toBe(true)
+      expect(valRes.data?.data.workHoursPrefs?.workDaysMode).toBe('week')
+      const validatedPayment = valRes.data?.data.debts[0].payments[0]
+      expect(validatedPayment?.isMerged).toBe(true)
+      expect(validatedPayment?.mergedTransactionIds).toEqual(['tx_1', 'tx_2'])
+
+      await restoreBackup('user-test-uid', valRes.data!)
+      const debtCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/user-test-uid/debts/debt_merged_test'
+      )
+      expect(debtCall).toBeDefined()
+      const restoredPayment = debtCall![1].payments[0]
+      expect(restoredPayment.isMerged).toBe(true)
+      expect(restoredPayment.mergedTransactionIds).toEqual(['tx_1', 'tx_2'])
+    })
   })
 })

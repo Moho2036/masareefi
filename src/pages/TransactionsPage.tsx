@@ -33,6 +33,7 @@ import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
 import { deleteTransaction } from '../services/transactions'
 import { removeDebtPayment } from '../services/debts'
+import { removeCircleInstallmentPayment } from '../services/moneyCircles'
 import { formatDayHeader } from '../lib/dates'
 import { findLinkedDebtPayment } from '../lib/debts'
 import { exportTransactionsToCsv } from '../lib/exportCsv'
@@ -40,8 +41,7 @@ import {
   getCategoryUsageMap,
   sortCategoriesByUsage,
   buildUsageFromTransactions,
-  mergeUsageMaps,
-  saveCategoryUsageMap,
+  syncCategoryUsageCache,
 } from '../lib/categoryUsage'
 import { filterTransactions, sumByType, groupByDay } from '../lib/aggregate'
 import { cn } from '../lib/cn'
@@ -49,12 +49,12 @@ import type { Transaction, TxType } from '../types'
 
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
-  const { selectedDate, range } = useSelectedMonth()
+  const { range, manualNavKey = 0 } = useSelectedMonth()
   const [allMonths, setAllMonths] = useState(false)
-  const [prevSelectedTime, setPrevSelectedTime] = useState(selectedDate.getTime())
+  const [prevManualNavKey, setPrevManualNavKey] = useState(manualNavKey)
 
-  if (prevSelectedTime !== selectedDate.getTime()) {
-    setPrevSelectedTime(selectedDate.getTime())
+  if (prevManualNavKey !== manualNavKey) {
+    setPrevManualNavKey(manualNavKey)
     if (allMonths) {
       setAllMonths(false)
     }
@@ -108,18 +108,21 @@ export const TransactionsPage: React.FC = () => {
     return map
   }, [categories])
 
-  // Track category usage from transactions in memory (read-only calculation during render)
+  // Track category usage:
+  // When allMonths is true, build from all user transactions (single source of truth) and sync cache in effect
+  // When allMonths is false, read existing cache for sorting without overwriting with partial data
   const usageMap = useMemo(() => {
-    const txMap = buildUsageFromTransactions(rawTransactions)
-    return mergeUsageMaps(txMap, getCategoryUsageMap())
-  }, [rawTransactions])
-
-  // Save merged category usage in localStorage outside render in an effect
-  useEffect(() => {
-    if (rawTransactions.length > 0) {
-      saveCategoryUsageMap(usageMap)
+    if (allMonths) {
+      return buildUsageFromTransactions(rawTransactions)
     }
-  }, [rawTransactions.length, usageMap])
+    return getCategoryUsageMap()
+  }, [allMonths, rawTransactions])
+
+  useEffect(() => {
+    if (allMonths && rawTransactions.length > 0) {
+      syncCategoryUsageCache(rawTransactions)
+    }
+  }, [allMonths, rawTransactions])
 
   // Relevant categories for horizontal chips (sorted by usage frequency)
   // Shows unarchived categories PLUS any archived category that has transactions in the current month
@@ -207,6 +210,11 @@ export const TransactionsPage: React.FC = () => {
     if (!user || !txToDelete) return
 
     if (linkedDebtPayment) {
+      if (linkedDebtPayment.payment.isMerged) {
+        showToast('لا يمكن حذف دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.', 'error')
+        setTxToDelete(null)
+        return
+      }
       setDeleting(true)
       try {
         await removeDebtPayment(user.uid, linkedDebtPayment.debt, linkedDebtPayment.payment.id)
@@ -241,6 +249,23 @@ export const TransactionsPage: React.FC = () => {
         setTxToDelete(null)
         return
       }
+    }
+    const circleInstallmentMatch = txToDelete.id.match(/^circle_(.+)_m(\d+)$/)
+    if (circleInstallmentMatch) {
+      const circleId = circleInstallmentMatch[1]
+      const monthNum = parseInt(circleInstallmentMatch[2], 10)
+      setDeleting(true)
+      try {
+        await removeCircleInstallmentPayment(user.uid, circleId, monthNum)
+        showToast('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
+        setTxToDelete(null)
+      } catch (err) {
+        console.error('Failed to remove circle installment:', err)
+        showToast('تعذر حذف قسط الجمعية', 'error')
+      } finally {
+        setDeleting(false)
+      }
+      return
     }
     setDeleting(true)
     try {
@@ -586,7 +611,7 @@ export const TransactionsPage: React.FC = () => {
                                       <span>دين</span>
                                     </span>
                                   )}
-                                  {tx.id.startsWith('circle_payout_') && (
+                                  {(tx.id.startsWith('circle_payout_') || /^circle_(.+)_m(\d+)$/.test(tx.id)) && (
                                     <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 font-bold shrink-0">
                                       <Users className="w-2.5 h-2.5" />
                                       <span>جمعية</span>
@@ -628,6 +653,9 @@ export const TransactionsPage: React.FC = () => {
                               {/* Action Buttons: visible on mobile, smooth group hover on desktop */}
                               <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 {(() => {
+                                  const linkedPaymentItem = findLinkedDebtPayment(tx.id, debts)
+                                  const isMergedDebtPayment = Boolean(linkedPaymentItem?.payment?.isMerged)
+
                                   const isDebtInit = tx.id.startsWith('debt_init_')
                                   const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
                                   const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
@@ -639,7 +667,7 @@ export const TransactionsPage: React.FC = () => {
                                       circles.some((c) => c.id === circleId || tx.id.startsWith(`circle_payout_${c.id}`))
                                   )
 
-                                  const isLockedDebt = isDebtInit && isDebtExists
+                                  const isLockedDebt = (isDebtInit && isDebtExists) || isMergedDebtPayment
                                   const isLockedCircle = isCirclePayout && isCircleExists
 
                                   return (
@@ -676,7 +704,11 @@ export const TransactionsPage: React.FC = () => {
                                           onClick={(e) => e.stopPropagation()}
                                           className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
                                           aria-label="الانتقال إلى صفحة الديون"
-                                          title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
+                                          title={
+                                            isMergedDebtPayment
+                                              ? 'مرتبط بدفعة دين مدمجة - افتح صفحة الديون للإدارة'
+                                              : 'مرتبط بسجل الديون - افتح صفحة الديون للإدارة'
+                                          }
                                         >
                                           <ExternalLink className="w-3.5 h-3.5" />
                                         </Link>

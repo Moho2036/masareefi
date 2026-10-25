@@ -69,6 +69,9 @@ rules_version = '2';
 //   - recurringId: string (optional, 1..128)
 //   - isManager: bool (optional)
 //   - createdAt: timestamp (required, immutable)
+//   - expenseCategoryId: string (optional, 1..128)
+//   - incomeCategoryId: string (optional, 1..128)
+//   - categoryId: string (optional, 1..128)
 //
 // ===============================================================
 
@@ -171,7 +174,7 @@ service cloud.firestore {
     }
 
     function isValidMoneyCircle(data) {
-      return data.keys().hasOnly(['name', 'monthlyAmountFils', 'membersCount', 'totalAmountFils', 'myTurnMonth', 'startDate', 'members', 'status', 'createdAt', 'recurringId', 'isManager'])
+      return data.keys().hasOnly(['name', 'monthlyAmountFils', 'membersCount', 'totalAmountFils', 'myTurnMonth', 'startDate', 'members', 'status', 'createdAt', 'recurringId', 'isManager', 'expenseCategoryId', 'incomeCategoryId', 'categoryId'])
         && data.keys().hasAll(['name', 'monthlyAmountFils', 'membersCount', 'totalAmountFils', 'myTurnMonth', 'startDate', 'members', 'status', 'createdAt'])
         && isStr(data.name, 1, 100)
         && isValidAmount(data.monthlyAmountFils)
@@ -183,6 +186,9 @@ service cloud.firestore {
         && data.status in ['active', 'completed']
         && (!('recurringId' in data) || isStr(data.recurringId, 1, 128))
         && (!('isManager' in data) || data.isManager is bool)
+        && (!('expenseCategoryId' in data) || isStr(data.expenseCategoryId, 1, 128))
+        && (!('incomeCategoryId' in data) || isStr(data.incomeCategoryId, 1, 128))
+        && (!('categoryId' in data) || isStr(data.categoryId, 1, 128))
         && data.createdAt is timestamp;
     }
 

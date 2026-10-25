@@ -480,4 +480,108 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     const endDateToggle = screen.getByRole('switch', { name: /تحديد تاريخ انتهاء/i })
     expect(endDateToggle).toBeDisabled()
   })
+
+  it('resets fields and clears circle title when switching back to unlinked', () => {
+    mockCirclesData = [
+      {
+        id: 'c-test-unlink',
+        name: 'جمعية التطوير',
+        status: 'active',
+        monthlyAmountFils: 150000,
+        totalAmountFils: 1500000,
+        myTurnMonth: 3,
+        startDate: new Date('2026-05-01'),
+        membersCount: 10,
+        members: [],
+        createdAt: new Date('2026-05-01'),
+      },
+    ]
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    )
+
+    const circleSelect = screen.getByLabelText(/ربط مع جمعية نشطة/i)
+    fireEvent.change(circleSelect, { target: { value: 'c-test-unlink' } })
+
+    const titleInput = screen.getByLabelText(/عنوان المعاملة/i) as HTMLInputElement
+    expect(titleInput.value).toBe('قسط جمعية التطوير')
+
+    // Now switch back to unlinked
+    fireEvent.change(circleSelect, { target: { value: '' } })
+
+    expect(titleInput.value).toBe('')
+    const endDateToggle = screen.getByRole('switch', { name: /تحديد تاريخ انتهاء/i })
+    expect(endDateToggle).not.toBeChecked()
+  })
+
+  it('computes nextDate via getNextCircleDueDate and synchronizes circle amount when creating new linked recurring rule', async () => {
+    mockCirclesData = [
+      {
+        id: 'c-test-create-sync',
+        name: 'جمعية التوفير',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 1, // User turn is month 1! So nextDate must skip month 1 and point to month 2!
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [
+          { id: 'm-1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+        ],
+        createdAt: new Date('2026-01-01'),
+      },
+    ]
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    )
+
+    // Select category
+    const catBtn = screen.getByRole('button', { name: /إيجار وسكن/ })
+    fireEvent.click(catBtn)
+
+    // Select circle
+    const circleSelect = screen.getByLabelText(/ربط مع جمعية نشطة/i)
+    fireEvent.change(circleSelect, { target: { value: 'c-test-create-sync' } })
+
+    // Change amount to 120 (120000 fils)
+    const amountInput = screen.getByLabelText(/المبلغ/i)
+    fireEvent.change(amountInput, { target: { value: '120' } })
+
+    const submitBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.addRecurring).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          circleId: 'c-test-create-sync',
+          amountFils: 120000,
+          nextDate: expect.any(Date),
+          skipMonth: 1,
+        })
+      )
+    })
+
+    const callArgs = vi.mocked(recurringServices.addRecurring).mock.calls[0][1]
+    // Month 1 is user's turn, so nextDate points to Month 2 (Feb, index 1)
+    expect(callArgs.nextDate.getMonth()).toBe(1)
+
+    // Expect circle amount to be synchronized
+    expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+      'user-123',
+      'c-test-create-sync',
+      {
+        monthlyAmountFils: 120000,
+        totalAmountFils: 120000 * 5,
+      }
+    )
+  })
 })

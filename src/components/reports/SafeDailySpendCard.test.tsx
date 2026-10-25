@@ -173,4 +173,60 @@ describe('SafeDailySpendCard Component', () => {
     expect(screen.getByText(/شهر مستقبلي \(متبقي كامل الدورة 30 يوماً\)/)).toBeInTheDocument()
     expect(screen.getByText('حد الصرف اليومي المقترح')).toBeInTheDocument()
   })
+
+  it('renders amber temporary liquidity notice when current month has cash deficit but free balance is positive due to scheduled recurring income', () => {
+    const temporaryLiquidityForecast: ForecastResult = {
+      ...baseForecast,
+      currentIncome: 0,
+      currentExpense: 50000,
+      monthNet: -50000,
+      availableBalance: -50000,
+      upcomingRecurringIncome: 500000,
+      freeBalance: 450000,
+      dailySafeFils: 28125,
+      healthStatus: 'warning',
+      isDeficitProjected: false,
+    }
+
+    render(<SafeDailySpendCard forecast={temporaryLiquidityForecast} />)
+
+    expect(screen.getByText('تنبيه سيولة مؤقتة')).toBeInTheDocument()
+    expect(screen.getByText(/رصيدك النقدي الحالي قبل نزول الدخل المتكرر القادم هو/)).toBeInTheDocument()
+    expect(screen.getByText(/المسار المستقبلي آمن باحتساب الدخل القادم/)).toBeInTheDocument()
+    // Does NOT render "مسارك المالي ممتاز!" when liquidity is in deficit
+    expect(screen.queryByText('مسارك المالي ممتاز!')).not.toBeInTheDocument()
+  })
+
+  it('renders projected deficit warning banner and red free balance when browsing future month with deficit', () => {
+    const futureDeficitForecast: ForecastResult = {
+      ...baseForecast,
+      isCurrentMonth: false,
+      isPastMonth: false,
+      isFutureMonth: true,
+      remainingDays: 30,
+      totalDays: 30,
+      currentIncome: 0,
+      currentExpense: 0,
+      monthNet: 0,
+      rolloverBalance: 0,
+      availableBalance: 0,
+      upcomingRecurringExpenses: 400000,
+      upcomingRecurringIncome: 250000,
+      freeBalance: -150000,
+      dailySafeFils: 0,
+      isDeficitProjected: true,
+      deficitAmount: 150000,
+      healthStatus: 'danger',
+    }
+
+    render(<SafeDailySpendCard forecast={futureDeficitForecast} />)
+
+    expect(screen.getByText('تحذير من عجز متوقع:')).toBeInTheDocument()
+    expect(screen.getByText(/الالتزامات المجدولة تفوق الدخل والرصيد المتوقع بعجز قدره/)).toBeInTheDocument()
+    expect(screen.queryByText('تخطيط استباقي:')).not.toBeInTheDocument()
+
+    // Assert freeBalance text has red color styling class
+    const freeBalanceEl = screen.getByText('-150.000 د.أ')
+    expect(freeBalanceEl).toHaveClass('text-red-500')
+  })
 })

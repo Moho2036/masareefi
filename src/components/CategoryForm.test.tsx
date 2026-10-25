@@ -73,6 +73,52 @@ describe('CategoryForm Custom Emoji Input', () => {
     expect(emojiInput.value).toBe('')
   })
 
+  it('updates default icon and color when switching type from expense to income and vice versa', () => {
+    render(
+      <CategoryForm
+        isOpen={true}
+        onClose={vi.fn()}
+        defaultType="expense"
+      />
+    )
+
+    const emojiInput = screen.getByPlaceholderText(/أو اكتب\/الصق إيموجي مخصص/i) as HTMLInputElement
+    expect(emojiInput.value).toBe('🛒')
+
+    // Switch to income
+    const incomeOption = screen.getByRole('radio', { name: 'دخل' })
+    fireEvent.click(incomeOption)
+
+    expect(emojiInput.value).toBe('💼')
+
+    // Switch back to expense
+    const expenseOption = screen.getByRole('radio', { name: 'مصروف' })
+    fireEvent.click(expenseOption)
+
+    expect(emojiInput.value).toBe('🛒')
+  })
+
+  it('preserves customized icon and color when switching type', () => {
+    render(
+      <CategoryForm
+        isOpen={true}
+        onClose={vi.fn()}
+        defaultType="expense"
+      />
+    )
+
+    const emojiInput = screen.getByPlaceholderText(/أو اكتب\/الصق إيموجي مخصص/i) as HTMLInputElement
+    fireEvent.change(emojiInput, { target: { value: '🍕' } })
+    expect(emojiInput.value).toBe('🍕')
+
+    // Switch to income
+    const incomeOption = screen.getByRole('radio', { name: 'دخل' })
+    fireEvent.click(incomeOption)
+
+    // Customized emoji should NOT be overwritten
+    expect(emojiInput.value).toBe('🍕')
+  })
+
   describe('Duplicate Category Name and Type Validation', () => {
     beforeEach(() => {
       vi.clearAllMocks()

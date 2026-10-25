@@ -1,6 +1,8 @@
 import type { Debt, DebtType } from '../types'
 export { normalizeArabic } from './aggregate'
 import { normalizeArabic } from './aggregate'
+import { toWesternDigits } from './dates'
+import { fromFils } from './money'
 
 /**
  * Calculates remaining fils to be paid for a debt.
@@ -126,7 +128,28 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
       if (normalizedQuery) {
         const nameNorm = normalizeArabic(debt.personName)
         const noteNorm = normalizeArabic(debt.note || '')
-        if (!nameNorm.includes(normalizedQuery) && !noteNorm.includes(normalizedQuery)) {
+
+        const rawSearch = search.trim()
+        const westernQuery = toWesternDigits(rawSearch).replace(/,/g, '')
+        const remainingFils = getDebtRemainingFils(debt)
+
+        const matchesAmount = Boolean(
+          westernQuery &&
+            (debt.amountFils.toString().includes(westernQuery) ||
+              debt.paidFils.toString().includes(westernQuery) ||
+              remainingFils.toString().includes(westernQuery) ||
+              fromFils(debt.amountFils).toString().includes(westernQuery) ||
+              fromFils(debt.paidFils).toString().includes(westernQuery) ||
+              fromFils(remainingFils).toString().includes(westernQuery) ||
+              fromFils(debt.amountFils).toFixed(2).includes(westernQuery) ||
+              fromFils(debt.paidFils).toFixed(2).includes(westernQuery) ||
+              fromFils(remainingFils).toFixed(2).includes(westernQuery) ||
+              fromFils(debt.amountFils).toFixed(3).includes(westernQuery) ||
+              fromFils(debt.paidFils).toFixed(3).includes(westernQuery) ||
+              fromFils(remainingFils).toFixed(3).includes(westernQuery))
+        )
+
+        if (!nameNorm.includes(normalizedQuery) && !noteNorm.includes(normalizedQuery) && !matchesAmount) {
           return false
         }
       }
@@ -162,7 +185,11 @@ export function findLinkedDebtPayment(
   for (const debt of debts) {
     if (!debt.payments || debt.payments.length === 0) continue
     for (const p of debt.payments) {
-      if (p.transactionId === txId || txId === `debt_pay_${p.id}`) {
+      if (
+        p.transactionId === txId ||
+        txId === `debt_pay_${p.id}` ||
+        (Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.includes(txId))
+      ) {
         return { debt, payment: p }
       }
     }

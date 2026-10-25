@@ -714,6 +714,40 @@ describe('debts service with accounting link', () => {
       })
     })
 
+    it('preserves init transaction note if debt note was not modified', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ personName: 'سامي', type: 'lent', paidFils: 0, note: 'ملاحظة الدين القديمة' }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        amountFils: 80000,
+        note: 'ملاحظة الدين القديمة',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2)
+      const txUpdates = mockBatchUpdate.mock.calls[1][1]
+      expect(txUpdates.amountFils).toBe(80000)
+      expect(txUpdates.note).toBeUndefined()
+    })
+
+    it('updates init transaction note when debt note has changed', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ personName: 'سامي', type: 'lent', paidFils: 0, note: 'ملاحظة قديمة' }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        amountFils: 80000,
+        note: 'ملاحظة جديدة تماماً',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(2)
+      const txUpdates = mockBatchUpdate.mock.calls[1][1]
+      expect(txUpdates.amountFils).toBe(80000)
+      expect(txUpdates.note).toBe('ملاحظة جديدة تماماً')
+    })
+
     it('synchronizes type change from lent to borrowed and resolves correct category', async () => {
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -1031,6 +1065,38 @@ describe('debts service with accounting link', () => {
         'tx-3',
         'tx-4',
         'tx-5',
+      ])
+    })
+
+    it('falls back to debt_pay_${p.id} when unmerged payment lacks transactionId', async () => {
+      const mockPayments = Array.from({ length: 15 }, (_, i) => ({
+        id: `p-${i + 1}`,
+        amountFils: 2000,
+        date: new Date(2026, 9, i + 1),
+        createdAt: new Date(2026, 9, i + 1),
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-4',
+          amountFils: 100000,
+          paidFils: 30000,
+          settled: false,
+          payments: mockPayments,
+        }),
+      })
+
+      const result = await compactDebtPayments('user-1', 'debt-compact-4')
+      expect(result.mergedCount).toBe(5)
+
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      expect(updatedData.payments[0].mergedTransactionIds).toEqual([
+        'debt_pay_p-1',
+        'debt_pay_p-2',
+        'debt_pay_p-3',
+        'debt_pay_p-4',
+        'debt_pay_p-5',
       ])
     })
 

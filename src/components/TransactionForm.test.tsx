@@ -5,7 +5,8 @@ import { TransactionForm } from './TransactionForm'
 import * as txServices from '../services/transactions'
 import * as recurringServices from '../services/recurring'
 import * as debtServices from '../services/debts'
-import type { Transaction } from '../types'
+import * as circleServices from '../services/moneyCircles'
+import type { Transaction, Debt } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -24,6 +25,10 @@ vi.mock('../services/recurring', () => ({
 vi.mock('../services/debts', () => ({
   updateDebtPayment: vi.fn().mockResolvedValue(undefined),
   removeDebtPayment: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../services/moneyCircles', () => ({
+  removeCircleInstallmentPayment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -55,7 +60,7 @@ vi.mock('../hooks/useToast', () => ({
   }),
 }))
 
-let mockDebts = [
+let mockDebts: Debt[] = [
   {
     id: 'debt123',
     personName: 'أبو أحمد',
@@ -515,6 +520,44 @@ describe('TransactionForm Component', () => {
     expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
   })
 
+  it('renders linked circle installment warning banner and calls removeCircleInstallmentPayment when deleted', async () => {
+    const installmentTx: Transaction = {
+      id: 'circle_circle-789_m2',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'c-food',
+      date: new Date('2026-10-01T00:00:00Z'),
+      title: 'قسط جمعية الأقارب (شهر 2)',
+      note: 'قسط شهر 2',
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={installmentTx}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText(/معاملة مرتبطة بقسط جمعية \(جمعية الأقارب\) - شهر 2/)).toBeInTheDocument()
+
+    const deleteBtn = screen.getByRole('button', { name: 'حذف المعاملة' })
+    fireEvent.click(deleteBtn)
+
+    const confirmBtn = screen.getByRole('button', { name: 'نعم، احذف المعاملة' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(circleServices.removeCircleInstallmentPayment).toHaveBeenCalledWith(
+        'user-123',
+        'circle-789',
+        2
+      )
+      expect(mockShowToast).toHaveBeenCalledWith('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
+    })
+  })
+
   it('shows clear Toast and updates selected month when saving a transaction outside the active month', async () => {
     const onClose = vi.fn()
     const onSuccess = vi.fn()
@@ -573,7 +616,15 @@ describe('TransactionForm Component', () => {
     expect(duplicateBtn).toBeInTheDocument()
 
     fireEvent.click(duplicateBtn)
-    expect(onDuplicate).toHaveBeenCalledWith(initialTx)
+    expect(onDuplicate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: initialTx.type,
+        amountFils: initialTx.amountFils,
+        categoryId: initialTx.categoryId,
+        title: initialTx.title,
+        note: initialTx.note,
+      })
+    )
   })
 
   it('preserves archived category when editing transaction originally categorized under it and labels it (مؤرشف)', () => {
@@ -781,6 +832,176 @@ describe('TransactionForm Component', () => {
         expect.objectContaining({
           title: 'دفعة سداد معدلة ومحسوبة',
         })
+      )
+    })
+  })
+
+  it('validates that debt payment date cannot precede debt start date', async () => {
+    const debtPaymentTx: Transaction = {
+      id: 'debt_pay_pay_123',
+      type: 'income',
+      amountFils: 20000,
+      categoryId: 'c-salary',
+      date: new Date('2026-10-05T00:00:00Z'),
+      title: 'دفعة سداد',
+      note: '',
+      createdAt: new Date('2026-10-05T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={debtPaymentTx}
+        onClose={vi.fn()}
+      />
+    )
+
+    // Change date to before debt start date (2026-10-01)
+    const dateInput = screen.getByLabelText(/^التاريخ/) as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-09-25' } })
+
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' })
+    fireEvent.click(submitBtn)
+
+    expect(await screen.findByText('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')).toBeInTheDocument()
+    expect(debtServices.updateDebtPayment).not.toHaveBeenCalled()
+  })
+
+  it('locks amount and date, displays banner, and prevents deletion for merged debt payment transactions', async () => {
+    mockDebts = [
+      {
+        id: 'debt_with_merged',
+        personName: 'سمير',
+        type: 'lent' as const,
+        amountFils: 100000,
+        paidFils: 40000,
+        settled: false,
+        startDate: new Date('2026-10-01T00:00:00Z'),
+        note: '',
+        payments: [
+          {
+            id: 'compacted_999',
+            amountFils: 40000,
+            date: new Date('2026-10-03T00:00:00Z'),
+            isMerged: true,
+            mergedTransactionIds: ['debt_pay_merged_999'],
+            createdAt: new Date('2026-10-03T00:00:00Z'),
+          },
+        ],
+        createdAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    ]
+
+    const mergedTx: Transaction = {
+      id: 'debt_pay_merged_999',
+      type: 'income',
+      amountFils: 40000,
+      categoryId: 'c-salary',
+      date: new Date('2026-10-03T00:00:00Z'),
+      title: 'رصيد دفعات سابقة مدمجة',
+      note: '',
+      createdAt: new Date('2026-10-03T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={mergedTx}
+        onClose={vi.fn()}
+      />
+    )
+
+    // Warning banner should be displayed
+    expect(screen.getByText(/معاملة مرتبطة بدفعة دين مدمجة لـ \(سمير\)/)).toBeInTheDocument()
+    expect(screen.getByText('الانتقال إلى سجل الديون')).toBeInTheDocument()
+
+    // Amount input is locked/disabled
+    const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(amountInput.disabled).toBe(true)
+
+    // Date input is locked/disabled
+    const dateInput = screen.getByLabelText(/^التاريخ/) as HTMLInputElement
+    expect(dateInput.disabled).toBe(true)
+
+    // Delete button is completely hidden for locked merged transactions
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
+
+    // Submitting also blocks
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' })
+    fireEvent.click(submitBtn)
+
+    expect(await screen.findByText('لا يمكن تعديل دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')).toBeInTheDocument()
+    expect(txServices.updateTransaction).not.toHaveBeenCalled()
+    expect(debtServices.updateDebtPayment).not.toHaveBeenCalled()
+  })
+
+  it('passes modified field values when user edits a transaction and clicks "تكرار هذه المعاملة"', () => {
+    const onDuplicate = vi.fn()
+    const onClose = vi.fn()
+
+    const existingTx: Transaction = {
+      id: 'tx-orig',
+      type: 'expense',
+      amountFils: 20000, // 20 JOD
+      categoryId: 'c-fuel',
+      date: new Date('2026-10-02T00:00:00Z'),
+      title: 'بنزين قديم',
+      note: 'ملاحظة قديمة',
+      createdAt: new Date('2026-10-02T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={existingTx}
+        onDuplicate={onDuplicate}
+        onClose={onClose}
+      />
+    )
+
+    // Modify amount to 30 JOD
+    const amountInput = screen.getByPlaceholderText('0.000')
+    fireEvent.change(amountInput, { target: { value: '30' } })
+
+    // Modify title
+    const titleInput = screen.getByPlaceholderText('مثال: فاتورة كهرباء، مشتريات تموينية...')
+    fireEvent.change(titleInput, { target: { value: 'بنزين معدل للتكرار' } })
+
+    // Click "تكرار هذه المعاملة"
+    const duplicateBtn = screen.getByRole('button', { name: 'تكرار هذه المعاملة' })
+    fireEvent.click(duplicateBtn)
+
+    expect(onDuplicate).toHaveBeenCalledTimes(1)
+    expect(onDuplicate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'expense',
+        amountFils: 30000,
+        title: 'بنزين معدل للتكرار',
+        categoryId: 'c-fuel',
+      })
+    )
+  })
+
+  it('displays count of retroactively processed recurring transactions in toast message when count > 1', async () => {
+    vi.mocked(recurringServices.processDueRecurring).mockResolvedValueOnce(3)
+
+    const onClose = vi.fn()
+    const onSuccess = vi.fn()
+
+    renderWithRouter(<TransactionForm onClose={onClose} onSuccess={onSuccess} />)
+
+    const amountInput = screen.getByPlaceholderText('0.000')
+    fireEvent.change(amountInput, { target: { value: '50' } })
+
+    // Toggle recurring switch
+    const recurringSwitch = screen.getByRole('switch')
+    fireEvent.click(recurringSwitch)
+
+    // Submit form
+    const submitBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'تمت إضافة 3 معاملات متكررة مستحقة وتفعيل التكرار بنجاح',
+        'success'
       )
     })
   })

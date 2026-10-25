@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getCurrentCircleMonth,
+  getCircleCycleIndex,
   isUserTurnMonth,
   isCircleFullyPaid,
   circleConverter,
@@ -9,6 +10,7 @@ import {
   updateMoneyCircle,
   checkCircleHasTransactions,
   toggleCircleMemberPayment,
+  removeCircleInstallmentPayment,
 } from './moneyCircles'
 import type { MoneyCircle } from '../types'
 
@@ -124,6 +126,13 @@ describe('moneyCircles service', () => {
       expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 1, 20), 25)).toBe(1)
       // Feb 25, 2026 -> enters month 2
       expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 1, 25), 25)).toBe(2)
+
+      // On Jan 10, 2026: since circle started Jan 1, 2026, it must NOT be postponed to future Jan 25
+      // It must be in month 1 and cycle index 0, not -1
+      expect(getCircleCycleIndex(sampleCircle.startDate, new Date(2026, 0, 10), 25)).toBe(0)
+      expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 0, 10), 25)).toBe(1)
+      expect(getCircleCycleIndex(sampleCircle.startDate, new Date(2026, 0, 1), 25)).toBe(0)
+      expect(getCurrentCircleMonth(sampleCircle, new Date(2026, 0, 1), 25)).toBe(1)
     })
   })
 
@@ -268,6 +277,22 @@ describe('moneyCircles service', () => {
       expect(deletedPaths).toContain('users/uid-1/recurring/rec-assoc-1')
       expect(deletedPaths).not.toContain('users/uid-1/transactions/circle_payout_circle-2')
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('deletes manual installment transactions circle_{id}_m1 through m{membersCount} when deleteTransactions is true', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ recurringId: 'rec-1', membersCount: 3 }),
+      })
+      mockGetDocs.mockResolvedValueOnce({ docs: [] }) // query recurring
+      mockGetDocs.mockResolvedValueOnce({ docs: [] }) // query txs for rec-1
+
+      await deleteMoneyCircle('uid-1', 'circle-10', { deleteTransactions: true })
+
+      const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-10_m1')
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-10_m2')
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-10_m3')
     })
   })
 
@@ -610,6 +635,63 @@ describe('moneyCircles service', () => {
       expect(recPayload.nextDate).toBeDefined()
       expect(recPayload.endDate).toBeDefined()
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('updates recurring rule nextDate when myTurnMonth changes without changing startDate', async () => {
+      // 1. circle doc exists with existing recurringId
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 1, // initially turn 1, so nextDate was month 2
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+          ],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recurring rule doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية الأسرة',
+          amountFils: 100000,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+        }),
+      })
+      // 3. payout doc does not exist
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      // Change myTurnMonth from 1 to 4 without changing startDate
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        {
+          myTurnMonth: 4,
+          members: [
+            { id: 'm1', name: 'أنت', turnMonth: 4, paidMonths: [] },
+          ],
+        },
+        { monthStartDay: 1 }
+      )
+
+      const recCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-1')
+      )
+      expect(recCall).toBeDefined()
+      const recPayload = recCall![1]
+      expect(recPayload.nextDate).toBeDefined()
+      expect(recPayload.skipMonth).toBe(4)
     })
 
     it('recreates recurring rule via batch.set when rule document was deleted but createRecurringRule is true', async () => {
@@ -1033,11 +1115,12 @@ describe('moneyCircles service', () => {
       expect(res.isUser).toBe(true)
       expect(res.paid).toBe(true)
 
-      // Tx created
+      // Tx created without invalid fields like circleId
       expect(mockBatchSet).toHaveBeenCalledTimes(1)
       const txCall = mockBatchSet.mock.calls[0]
       expect(txCall[0].id).toBe('circle_circle-1_m1')
       expect(txCall[1].amountFils).toBe(50000)
+      expect(txCall[1].circleId).toBeUndefined()
 
       // Recurring nextDate updated to month 2 (Feb 2026) since month 1 is now paid and month 3 is exempt turn
       const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
@@ -1086,11 +1169,71 @@ describe('moneyCircles service', () => {
 
       // Deletes transaction
       expect(mockBatchDelete).toHaveBeenCalled()
+      // Circle update call records paymentsByMonth with '1': false
+      const circleUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/circle-1')
+      )
+      expect(circleUpdateCall).toBeDefined()
+      expect(circleUpdateCall![1].members[0].paymentsByMonth).toEqual({ '1': false })
+
       // Rewinds nextDate to month 1 (Jan 2026)
       const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
         call[0].path?.includes('recurring/rec-1')
       )
       expect(recUpdateCall).toBeDefined()
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('removeCircleInstallmentPayment', () => {
+    beforeEach(() => {
+      mockBatchSet.mockClear()
+      mockBatchUpdate.mockClear()
+      mockBatchDelete.mockClear()
+      mockBatchCommit.mockClear()
+      mockGetDoc.mockReset()
+    })
+
+    it('removes month payment from circle member and deletes deterministic and recurring tx', async () => {
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 50000,
+          membersCount: 4,
+          totalAmountFils: 200000,
+          myTurnMonth: 2,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-1', name: 'أنت', turnMonth: 2, paidMonths: [1, 3], paymentsByMonth: { '1': true, '3': true } },
+          ],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recRef check -> exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({ title: 'قسط' }),
+      })
+
+      await removeCircleInstallmentPayment('uid-1', 'circle-1', 1)
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      const circleUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/circle-1')
+      )
+      expect(circleUpdateCall).toBeDefined()
+      expect(circleUpdateCall![1].members[0].paidMonths).toEqual([3])
+      expect(circleUpdateCall![1].members[0].paymentsByMonth).toEqual({ '1': false, '3': true })
+
+      // Batch delete called for manual and recurring tx
+      const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-1_m1')
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })

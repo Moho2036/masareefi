@@ -131,6 +131,8 @@ describe('debts domain logic', () => {
         id: 'd2',
         personName: 'خالد عمر',
         type: 'borrowed',
+        amountFils: 50000,
+        paidFils: 10000,
         note: 'مشتريات سيارة',
         settled: false,
         dueDate: null,
@@ -140,6 +142,8 @@ describe('debts domain logic', () => {
         id: 'd3',
         personName: 'محمد علي',
         type: 'lent',
+        amountFils: 20000,
+        paidFils: 20000,
         settled: true,
       },
     ]
@@ -169,6 +173,23 @@ describe('debts domain logic', () => {
       expect(resultNote).toHaveLength(1)
       expect(resultNote[0].id).toBe('d2')
     })
+
+    it('searches debts by amount using Western or Eastern Arabic digits matching amount, paid, or remaining', () => {
+      // d1: amount 100000, paid 30000, remaining 70000
+      // d2: amount 50000, paid 0, remaining 50000
+      // d3: amount 20000, paid 20000, remaining 0
+      const matchRemaining = filterDebts(list, { search: '70' })
+      expect(matchRemaining).toHaveLength(1)
+      expect(matchRemaining[0].id).toBe('d1')
+
+      const matchEastern = filterDebts(list, { search: '٥٠' }) // 50
+      expect(matchEastern).toHaveLength(1)
+      expect(matchEastern[0].id).toBe('d2')
+
+      const matchPaid = filterDebts(list, { search: '30' })
+      expect(matchPaid).toHaveLength(1)
+      expect(matchPaid[0].id).toBe('d1')
+    })
   })
 
   describe('findLinkedDebtPayment', () => {
@@ -179,9 +200,18 @@ describe('debts domain logic', () => {
       transactionId: 'tx-payment-1',
       createdAt: new Date('2026-09-10'),
     }
+    const mergedPayment = {
+      id: 'compacted_123',
+      amountFils: 50000,
+      date: new Date('2026-09-05'),
+      note: 'رصيد دفعات سابقة مدمجة',
+      createdAt: new Date('2026-09-05'),
+      isMerged: true,
+      mergedTransactionIds: ['tx-old-1', 'debt_pay_old-p2'],
+    }
     const debtWithPayment: Debt = {
       ...baseDebt,
-      payments: [payment],
+      payments: [payment, mergedPayment],
     }
 
     it('returns null for empty or undefined txId', () => {
@@ -201,6 +231,16 @@ describe('debts domain logic', () => {
       expect(match).not.toBeNull()
       expect(match?.debt.id).toBe(debtWithPayment.id)
       expect(match?.payment.id).toBe(payment.id)
+    })
+
+    it('matches by mergedTransactionIds array in compacted payment', () => {
+      const match1 = findLinkedDebtPayment('tx-old-1', [debtWithPayment])
+      expect(match1).not.toBeNull()
+      expect(match1?.payment.id).toBe('compacted_123')
+
+      const match2 = findLinkedDebtPayment('debt_pay_old-p2', [debtWithPayment])
+      expect(match2).not.toBeNull()
+      expect(match2?.payment.id).toBe('compacted_123')
     })
 
     it('returns null when no debt has a matching payment', () => {

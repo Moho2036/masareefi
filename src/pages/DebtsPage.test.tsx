@@ -202,4 +202,31 @@ describe('DebtsPage Component', () => {
       expect(checkbox).toBeInTheDocument()
     })
   })
+
+  it('renders updated informational banner and overdue count pill', () => {
+    render(<DebtsPage />)
+    expect(
+      screen.getByText(
+        'دفتر الديون يتيح لك تتبع الحقوق والالتزامات، مع إمكانية اختيار ربط الدين أو دفعاته برصيد المعاملات الشهرية تلقائياً عند الإضافة أو السداد.'
+      )
+    ).toBeInTheDocument()
+
+    // overdueCount: mockDebts has debt-1 (dueDate: 2026-11-01) which is not overdue in 2026-10, so 0 overdue
+    expect(screen.getByRole('button', { name: /المتأخرة عن الموعد \(0\)/i })).toBeInTheDocument()
+  })
+
+  it('filters debts when searching by amount in Western or Eastern numerals', () => {
+    render(<DebtsPage />)
+    const searchInput = screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i) as HTMLInputElement
+
+    // Remaining of debt-1 is 60 JOD (60000 fils)
+    fireEvent.change(searchInput, { target: { value: '60' } })
+    expect(screen.getByText('أحمد محمود')).toBeInTheDocument()
+    expect(screen.queryByText('عمر ياسين')).not.toBeInTheDocument()
+
+    // Search by Eastern Arabic digits for debt-3 (30 JOD = ٣٠)
+    fireEvent.change(searchInput, { target: { value: '٣٠' } })
+    expect(screen.getByText('عمر ياسين')).toBeInTheDocument()
+    expect(screen.queryByText('أحمد محمود')).not.toBeInTheDocument()
+  })
 })

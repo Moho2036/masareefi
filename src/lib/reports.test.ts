@@ -493,6 +493,23 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(res.activeMonthsCount).toBe(2)
       expect(res.averageMonthlyExpenseFils).toBe(150000)
       expect(res.isCurrentMonthOnly).toBe(false)
+      expect(res.note).toBe('محسوب للأشهر المكتملة فقط دون الشهر الجاري')
+    })
+
+    it('in current year, if current month has 0 expenses while past months have expenses, note is undefined', () => {
+      const breakdown = createEmptyBreakdown()
+      // Jan (index 0): 100 JOD expense
+      breakdown[0].expense = 100000
+      // Feb (index 1): 200 JOD expense
+      breakdown[1].expense = 200000
+      // Current month April (index 3): 0 expense
+      breakdown[3].expense = 0
+
+      const res = calculateAnnualSummary(breakdown, 2026, 2026, 3)
+
+      expect(res.activeMonthsCount).toBe(2)
+      expect(res.averageMonthlyExpenseFils).toBe(150000)
+      expect(res.isCurrentMonthOnly).toBe(false)
       expect(res.note).toBeUndefined()
     })
 

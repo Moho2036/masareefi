@@ -119,4 +119,26 @@ describe('Modal Component', () => {
 
     expect(handleClose).toHaveBeenCalledTimes(1)
   })
+
+  it('does not trigger history.back or close when re-rendered with a new onClose reference while open', () => {
+    const historyBackSpy = vi.spyOn(window.history, 'back')
+    const handleClose1 = vi.fn()
+    const { rerender } = render(
+      <Modal isOpen={true} onClose={handleClose1} title="نافذة اختبار">
+        <input data-testid="test-input" defaultValue="أ" />
+      </Modal>
+    )
+
+    // Re-render with a fresh inline arrow function reference as parent state changes on typing
+    const handleClose2 = vi.fn()
+    rerender(
+      <Modal isOpen={true} onClose={handleClose2} title="نافذة اختبار">
+        <input data-testid="test-input" defaultValue="أحمد" />
+      </Modal>
+    )
+
+    expect(historyBackSpy).not.toHaveBeenCalled()
+    expect(handleClose1).not.toHaveBeenCalled()
+    expect(handleClose2).not.toHaveBeenCalled()
+  })
 })

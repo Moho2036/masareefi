@@ -4,6 +4,7 @@ import { updateUserSettings, ensureUserProfile, DEFAULT_SETTINGS } from './userP
 
 vi.mock('../lib/firebase', () => ({
   db: {},
+  auth: { currentUser: null },
 }))
 
 const mockGetDoc = vi.fn()
@@ -136,6 +137,35 @@ describe('userProfile service', () => {
 
       expect(mockUpdateDoc).not.toHaveBeenCalled()
       expect(result.displayName).toBe('أحمد')
+    })
+
+    it('handles race condition when doc was created concurrently before batch commit', async () => {
+      // First getDoc returns false (doc does not exist initially)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      // Second getDoc (reCheckSnap before batch commit) finds document was created concurrently
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          uid: 'u-race',
+          displayName: 'سارة',
+          currency: 'JOD',
+          monthStartDay: 1,
+          theme: 'system',
+          rolloverBalance: true,
+        }),
+      })
+
+      const mockUser = {
+        uid: 'u-race',
+        displayName: 'سارة',
+      } as User
+
+      const result = await ensureUserProfile(mockUser)
+
+      expect(mockBatchCommit).not.toHaveBeenCalled()
+      expect(result.displayName).toBe('سارة')
     })
   })
 })

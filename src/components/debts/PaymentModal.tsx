@@ -11,7 +11,7 @@ import { addDebtPayment, compactDebtPayments } from '../../services/debts'
 import { toFils, fromFils } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
-import { parseLocalDateInput } from '../../lib/dates'
+import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
 import { cn } from '../../lib/cn'
 import type { Debt } from '../../types'
 
@@ -51,7 +51,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
   const isMaxPaymentsReached = paymentsCount >= 100
 
   const handleFillFullRemaining = () => {
-    setAmountStr(String(fromFils(remainingFils)))
+    setAmountStr(String(Number(fromFils(remainingFils).toFixed(config.decimals))))
     setError(null)
   }
 
@@ -84,10 +84,19 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr, config.decimals)
+    let amountFils = toFils(amountStr, config.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
+    }
+
+    if (config.decimals === 2 && amountFils > remainingFils) {
+      const diff = amountFils - remainingFils
+      const roundedRemainingStr = fromFils(remainingFils).toFixed(2)
+      const inputStr = toWesternDigits(amountStr.trim())
+      if (diff <= 5 || inputStr === roundedRemainingStr) {
+        amountFils = remainingFils
+      }
     }
 
     if (amountFils > remainingFils) {

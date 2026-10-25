@@ -1077,4 +1077,177 @@ describe('forecast lib', () => {
     expect(res.deficitAmount).toBe(650000)
     expect(res.healthStatus).toBe('danger')
   })
+
+  it('restricts due debts in future months strictly to the future month window [rangeStart, rangeEnd)', () => {
+    // Current date: Oct 15, 2026
+    const refDate = new Date(2026, 9, 15)
+    // Viewing December 2026
+    const decRange = {
+      start: new Date(2026, 11, 1),
+      end: new Date(2027, 0, 1),
+    }
+
+    // Debt 1: was due in October (prior to December)
+    const octDebt: Debt = {
+      id: 'debt-oct',
+      personName: 'عمر',
+      type: 'borrowed',
+      amountFils: 100000,
+      paidFils: 0,
+      startDate: new Date(2026, 9, 1),
+      dueDate: new Date(2026, 9, 20),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(2026, 9, 1),
+    }
+
+    // Debt 2: due in December (within December range)
+    const decDebt: Debt = {
+      id: 'debt-dec',
+      personName: 'سمير',
+      type: 'borrowed',
+      amountFils: 80000,
+      paidFils: 0,
+      startDate: new Date(2026, 9, 1),
+      dueDate: new Date(2026, 11, 15),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(2026, 9, 1),
+    }
+
+    // Debt 3: due in January 2027 (after December range)
+    const janDebt: Debt = {
+      id: 'debt-jan',
+      personName: 'طارق',
+      type: 'borrowed',
+      amountFils: 50000,
+      paidFils: 0,
+      startDate: new Date(2026, 9, 1),
+      dueDate: new Date(2027, 0, 10),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      debts: [octDebt, decDebt, janDebt],
+      monthStartDay: 1,
+      referenceDate: refDate,
+      periodRange: decRange,
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    // Only decDebt (80,000 fils) should be included; octDebt and janDebt must NOT be included!
+    expect(res.upcomingDebtObligations).toBe(80000)
+  })
+
+  it('accumulates intermediate active recurring items between now and rangeStart into rolloverBalance for future months', () => {
+    // Current date: Oct 20, 2026
+    const refDate = new Date(2026, 9, 20)
+    // Viewing December 2026
+    const decRange = {
+      start: new Date(2026, 11, 1),
+      end: new Date(2027, 0, 1),
+    }
+
+    // Recurring salary: monthly on the 25th (500 JOD)
+    // Oct 25 (intermediate) and Nov 25 (intermediate) occur before Dec 1!
+    // Dec 25 occurs inside December!
+    const salaryRec: Recurring = {
+      id: 'rec-salary',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-sal',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 25),
+      nextDate: new Date(2026, 9, 25),
+      active: true,
+      note: 'راتب',
+    }
+
+    // Recurring rent: monthly on the 1st (200 JOD)
+    // Nov 1 (intermediate) occurs before Dec 1!
+    // Dec 1 occurs inside December!
+    const rentRec: Recurring = {
+      id: 'rec-rent',
+      type: 'expense',
+      amountFils: 200000,
+      categoryId: 'cat-rent',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 1),
+      nextDate: new Date(2026, 10, 1), // Nov 1
+      active: true,
+      note: 'إيجار',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [salaryRec, rentRec],
+      monthStartDay: 1,
+      referenceDate: refDate,
+      periodRange: decRange,
+      rolloverBalanceFils: 100000, // Starts with +100 JOD base prior balance
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    // Intermediate net between Oct 20 and Dec 1:
+    // Income: Oct 25 (+500,000) + Nov 25 (+500,000) = +1,000,000
+    // Expense: Nov 1 (-200,000)
+    // Intermediate net = +800,000 fils
+    // Effective rolloverBalance = 100,000 + 800,000 = 900,000 fils
+    expect(res.rolloverBalance).toBe(900000)
+    expect(res.availableBalance).toBe(900000)
+
+    // Inside December:
+    // Income: Dec 25 (+500,000)
+    // Expense: Dec 1 (-200,000)
+    expect(res.upcomingRecurringIncome).toBe(500000)
+    expect(res.upcomingRecurringExpenses).toBe(200000)
+
+    // Free balance = 900,000 + 500,000 - 200,000 = 1,200,000 fils
+    expect(res.freeBalance).toBe(1200000)
+  })
+
+  it('marks healthStatus as warning when current month has cash deficit but free balance is positive due to scheduled recurring income', () => {
+    // Current date: Oct 5. No income transaction yet, only 50 JOD expense.
+    const earlyExpense: Transaction = {
+      id: 'tx-early',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-1',
+      date: new Date(2026, 9, 3),
+      note: 'مشتريات',
+      createdAt: new Date(),
+    }
+
+    // Salary expected on Oct 25 (500 JOD)
+    const upcomingSalary: Recurring = {
+      id: 'rec-salary',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-sal',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 25),
+      nextDate: new Date(2026, 9, 25),
+      active: true,
+      note: 'راتب شهري',
+    }
+
+    const res = calculateForecast({
+      transactions: [earlyExpense],
+      recurring: [upcomingSalary],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 5),
+    })
+
+    expect(res.isCurrentMonth).toBe(true)
+    expect(res.availableBalance).toBe(-50000)
+    expect(res.freeBalance).toBe(450000)
+    expect(res.isDeficitProjected).toBe(false)
+    expect(res.healthStatus).toBe('warning')
+  })
 })

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { TransactionsPage } from './TransactionsPage'
 import * as exportCsvModule from '../lib/exportCsv'
 import * as debtsServices from '../services/debts'
+import * as circleServices from '../services/moneyCircles'
 import type { Transaction, Category, Debt, MoneyCircle } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -18,6 +19,7 @@ let mockAllTransactions: Transaction[] = []
 let mockDebts: Debt[] = []
 let mockCircles: MoneyCircle[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
+let mockManualNavKey = 0
 
 vi.mock('../services/transactions', () => ({
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
@@ -26,6 +28,10 @@ vi.mock('../services/transactions', () => ({
 vi.mock('../services/debts', () => ({
   removeDebtPayment: vi.fn().mockResolvedValue(undefined),
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../services/moneyCircles', () => ({
+  removeCircleInstallmentPayment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -71,6 +77,7 @@ vi.mock('../hooks/useSelectedMonth', () => ({
     range: mockRange,
     selectedDate: mockRange.start,
     setSelectedDate: vi.fn(),
+    manualNavKey: mockManualNavKey,
   }),
 }))
 
@@ -110,6 +117,7 @@ describe('TransactionsPage Component', () => {
     vi.clearAllMocks()
     localStorage.clear()
     mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
+    mockManualNavKey = 0
     mockTransactions = []
     mockAllTransactions = []
     mockDebts = []
@@ -349,7 +357,7 @@ describe('TransactionsPage Component', () => {
     )
   })
 
-  it('automatically exits allMonths mode when selectedDate changes', () => {
+  it('keeps allMonths mode when selectedDate changes programmatically, and exits when manualNavKey changes', () => {
     const { rerender } = renderWithRouter(<TransactionsPage />)
 
     // Turn on allMonths
@@ -358,11 +366,18 @@ describe('TransactionsPage Component', () => {
 
     expect(screen.getByText(/البحث في كامل السجل \(كل الأشهر\)/i)).toBeInTheDocument()
 
-    // Change selectedDate / range
+    // Change selectedDate / range programmatically (e.g. from adding transaction)
     mockRange = { start: new Date('2026-11-01'), end: new Date('2026-12-01') }
     rerender(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-    // allMonths banner should be gone because selectedDate changed
+    // allMonths banner should STILL be in the document!
+    expect(screen.getByText(/البحث في كامل السجل \(كل الأشهر\)/i)).toBeInTheDocument()
+
+    // Simulate manual month navigation in top bar
+    mockManualNavKey = 1
+    rerender(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+    // Now allMonths banner should be gone because manual navigation occurred
     expect(screen.queryByText(/البحث في كامل السجل \(كل الأشهر\)/i)).not.toBeInTheDocument()
   })
 
@@ -432,6 +447,171 @@ describe('TransactionsPage Component', () => {
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith('تم حذف المعاملة بنجاح', 'info')
+    })
+  })
+
+  it('renders circle badge for circle installment transactions and calls removeCircleInstallmentPayment when deleted', async () => {
+    mockTransactions = [
+      {
+        id: 'circle_circle999_m3',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-15T00:00:00Z'),
+        title: 'قسط جمعية الأسرة (شهر 3)',
+        note: '',
+        createdAt: new Date('2026-10-15T00:00:00Z'),
+      },
+    ]
+    mockCircles = [
+      {
+        id: 'circle999',
+        name: 'جمعية الأسرة',
+        monthlyAmountFils: 50000,
+        membersCount: 5,
+        totalAmountFils: 250000,
+        myTurnMonth: 1,
+        startDate: new Date('2026-08-01'),
+        members: [],
+        status: 'active',
+        createdAt: new Date('2026-08-01'),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Verify "جمعية" badge is displayed
+    expect(screen.getByText('جمعية')).toBeInTheDocument()
+
+    const deleteBtn = screen.getByTitle('حذف المعاملة')
+    fireEvent.click(deleteBtn)
+
+    expect(screen.getByText('تأكيد حذف المعاملة')).toBeInTheDocument()
+
+    const allDeleteBtns = screen.getAllByRole('button', { name: 'حذف المعاملة' })
+    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1]
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(circleServices.removeCircleInstallmentPayment).toHaveBeenCalledWith(
+        'user-123',
+        'circle999',
+        3
+      )
+      expect(mockShowToast).toHaveBeenCalledWith('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
+    })
+  })
+
+  it('renders link to debts page instead of delete button for merged debt payment transactions', () => {
+    mockTransactions = [
+      {
+        id: 'debt_pay_merged_xyz',
+        type: 'income',
+        amountFils: 60000,
+        categoryId: 'c-salary',
+        date: new Date('2026-10-10T00:00:00Z'),
+        title: 'رصيد دفعات سابقة مدمجة',
+        note: '',
+        createdAt: new Date('2026-10-10T00:00:00Z'),
+      },
+    ]
+    mockDebts = [
+      {
+        id: 'debt_merged_test',
+        personName: 'خالد',
+        type: 'lent' as const,
+        amountFils: 100000,
+        paidFils: 60000,
+        settled: false,
+        startDate: new Date('2026-08-01'),
+        note: '',
+        payments: [
+          {
+            id: 'compacted_123',
+            amountFils: 60000,
+            date: new Date('2026-10-10T00:00:00Z'),
+            isMerged: true,
+            mergedTransactionIds: ['debt_pay_merged_xyz'],
+            createdAt: new Date('2026-10-10T00:00:00Z'),
+          },
+        ],
+        createdAt: new Date('2026-08-01'),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Delete button should NOT be available
+    expect(screen.queryByTitle('حذف المعاملة')).not.toBeInTheDocument()
+
+    // External link to debts page should be displayed
+    const debtLink = screen.getByTitle('مرتبط بدفعة دين مدمجة - افتح صفحة الديون للإدارة')
+    expect(debtLink).toBeInTheDocument()
+    expect(debtLink.closest('a')).toHaveAttribute('href', '/debts')
+  })
+
+  it('keeps allMonths active when selectedDate changes programmatically, and disables it when manualNavKey changes', () => {
+    const { rerender } = renderWithRouter(<TransactionsPage />)
+
+    // Initially allMonths is false
+    const allMonthsBtn = screen.getByRole('button', { name: /كل الأشهر/ })
+    expect(allMonthsBtn).toHaveAttribute('aria-pressed', 'false')
+
+    // Click "كل الأشهر" to activate
+    fireEvent.click(allMonthsBtn)
+    expect(allMonthsBtn).toHaveAttribute('aria-pressed', 'true')
+
+    // Simulate programmatic change of selectedDate (e.g. from adding transaction in different month)
+    mockRange = { start: new Date('2026-09-01'), end: new Date('2026-10-01') }
+    rerender(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+    // allMonths should STILL be true!
+    expect(screen.getByRole('button', { name: /كل الأشهر/ })).toHaveAttribute('aria-pressed', 'true')
+
+    // Simulate manual month navigation in top bar (increments mockManualNavKey)
+    mockManualNavKey = 1
+    rerender(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+    // Now allMonths should be reset to false!
+    expect(screen.getByRole('button', { name: /كل الأشهر/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('syncs category usage cache when allMonths is active, but does not overwrite with Math.max in monthly mode', async () => {
+    mockAllTransactions = [
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 10000,
+        categoryId: 'c-food',
+        date: new Date('2026-08-01'),
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-2',
+        type: 'expense',
+        amountFils: 20000,
+        categoryId: 'c-food',
+        date: new Date('2026-09-01'),
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // In monthly mode, category usage is not overwritten
+    expect(localStorage.getItem('masareefi_category_usage')).toBeNull()
+
+    // Activate allMonths
+    const allMonthsBtn = screen.getByRole('button', { name: /كل الأشهر/ })
+    fireEvent.click(allMonthsBtn)
+
+    await waitFor(() => {
+      const stored = localStorage.getItem('masareefi_category_usage')
+      expect(stored).not.toBeNull()
+      const parsed = JSON.parse(stored!)
+      expect(parsed['c-food']).toBe(2)
     })
   })
 })

@@ -82,6 +82,11 @@ export const Modal: React.FC<ModalProps> = ({
 
   const isPushedRef = useRef(false)
   const isClosingFromPopStateRef = useRef(false)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   // Hardware Back Button / popstate handling
   useEffect(() => {
@@ -100,7 +105,7 @@ export const Modal: React.FC<ModalProps> = ({
       if (isPushedRef.current) {
         isPushedRef.current = false
         isClosingFromPopStateRef.current = true
-        onClose()
+        onCloseRef.current()
       }
     }
 
@@ -119,7 +124,7 @@ export const Modal: React.FC<ModalProps> = ({
         }
       }
     }
-  }, [isOpen, onClose, enableHistoryBack, modalId])
+  }, [isOpen, enableHistoryBack, modalId])
 
   // Handle ESC key press
   useEffect(() => {
@@ -127,13 +132,13 @@ export const Modal: React.FC<ModalProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+  }, [isOpen])
 
   // Prevent background scrolling when open & focus dialog
   useEffect(() => {

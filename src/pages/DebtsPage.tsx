@@ -23,7 +23,7 @@ import { useDebts } from '../hooks/useDebts'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
 import { deleteDebt, checkDebtInitialTransactionExists } from '../services/debts'
-import { calculateDebtSummary, filterDebts } from '../lib/debts'
+import { calculateDebtSummary, filterDebts, isDebtOverdue } from '../lib/debts'
 import { cn } from '../lib/cn'
 import type { Debt, DebtType } from '../types'
 
@@ -58,6 +58,10 @@ export const DebtsPage: React.FC = () => {
   // Summary KPIs
   const summary = useMemo(() => {
     return calculateDebtSummary(debts)
+  }, [debts])
+
+  const overdueCount = useMemo(() => {
+    return debts.filter((d) => isDebtOverdue(d)).length
   }, [debts])
 
   // Filtered debts (using deferredSearch to prevent keyboard freeze on mobile)
@@ -158,7 +162,7 @@ export const DebtsPage: React.FC = () => {
       <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-500 dark:text-slate-400">
         <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
         <span>
-          دفتر الديون مخصص لتتبع الحقوق والالتزامات بشكل مستقل ولا يخصم أو يضيف تلقائياً إلى رصيد المعاملات الشهرية.
+          دفتر الديون يتيح لك تتبع الحقوق والالتزامات، مع إمكانية اختيار ربط الدين أو دفعاته برصيد المعاملات الشهرية تلقائياً عند الإضافة أو السداد.
         </span>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -336,7 +340,7 @@ export const DebtsPage: React.FC = () => {
               : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
           )}
         >
-          المتأخرة عن الموعد
+          المتأخرة عن الموعد ({overdueCount})
         </button>
         <button
           type="button"

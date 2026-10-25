@@ -106,4 +106,20 @@ describe('PaymentModal Component', () => {
     const submitBtn = screen.getByRole('button', { name: 'الحد الأقصى مكتمل (100 دفعة)' })
     expect(submitBtn).toBeDisabled()
   })
+
+  it('fills full remaining amount when clicking fill remaining button', () => {
+    render(
+      <PaymentModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={sampleDebt} // remaining: 80 JOD
+      />
+    )
+
+    const fillBtn = screen.getByRole('button', { name: /سداد كامل المبلغ المتبقي/i })
+    fireEvent.click(fillBtn)
+
+    const input = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(input.value).toBe('80')
+  })
 })

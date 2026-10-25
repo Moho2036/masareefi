@@ -35,6 +35,7 @@ export interface WorkHoursPrefsBackup {
   isCustomItemPrice?: boolean
   dailyHours?: string
   workDays?: string
+  workDaysMode?: 'month' | 'week'
   itemName?: string
 }
 
@@ -272,6 +273,10 @@ export function validateBackup(jsonText: string): BackupValidationResult {
             id: p.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             amountFils: Math.round(Number(p.amountFils || 0)),
             note: typeof p.note === 'string' && p.note.trim() ? p.note.trim().slice(0, 500) : 'دفعة سداد',
+            ...(p.isMerged ? { isMerged: true } : {}),
+            ...(Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0
+              ? { mergedTransactionIds: p.mergedTransactionIds.filter(Boolean).map(String) }
+              : {}),
           }))
           .slice(0, 100)
 
@@ -323,6 +328,7 @@ export function validateBackup(jsonText: string): BackupValidationResult {
         ...(typeof p.isCustomItemPrice === 'boolean' ? { isCustomItemPrice: p.isCustomItemPrice } : {}),
         ...(typeof p.dailyHours === 'string' ? { dailyHours: p.dailyHours.slice(0, 10) } : {}),
         ...(typeof p.workDays === 'string' ? { workDays: p.workDays.slice(0, 10) } : {}),
+        ...(p.workDaysMode === 'month' || p.workDaysMode === 'week' ? { workDaysMode: p.workDaysMode } : {}),
         ...(typeof p.itemName === 'string' ? { itemName: p.itemName.slice(0, 100) } : {}),
       }
     }
@@ -631,7 +637,16 @@ export async function restoreBackup(
       .map((p) => {
         const pAmount = Math.round(Number(p.amountFils || 0))
         if (pAmount <= 0) return null
-        const item: { id: string; amountFils: number; date: Date; note: string; transactionId?: string; createdAt: Date } = {
+        const item: {
+          id: string
+          amountFils: number
+          date: Date
+          note: string
+          transactionId?: string
+          createdAt: Date
+          isMerged?: boolean
+          mergedTransactionIds?: string[]
+        } = {
           id: p.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           amountFils: pAmount,
           date: parseDate(p.date),
@@ -644,6 +659,10 @@ export async function restoreBackup(
             typeof p.transactionId === 'string' && p.transactionId.trim()
               ? p.transactionId.trim()
               : undefined,
+          ...(p.isMerged ? { isMerged: true } : {}),
+          ...(Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0
+            ? { mergedTransactionIds: p.mergedTransactionIds.filter(Boolean).map(String) }
+            : {}),
         }
         return item
       })

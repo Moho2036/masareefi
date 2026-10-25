@@ -330,6 +330,7 @@ export function calculateAnnualSummary(
         averageMonthlyExpenseFils: Math.round(totalExpense / count),
         activeMonthsCount: count,
         isCurrentMonthOnly: false,
+        note: hasCurrentMonthExpense ? 'محسوب للأشهر المكتملة فقط دون الشهر الجاري' : undefined,
       }
     }
 

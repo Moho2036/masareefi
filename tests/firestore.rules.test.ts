@@ -802,6 +802,29 @@ describe('money circle validation', () => {
     );
   });
 
+  it('validates optional expenseCategoryId, incomeCategoryId, and categoryId', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_categories_valid`), {
+        ...validCircle(),
+        expenseCategoryId: 'cat-exp-123',
+        incomeCategoryId: 'cat-inc-456',
+        categoryId: 'cat-general',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_categories_invalid_type`), {
+        ...validCircle(),
+        expenseCategoryId: 12345,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_categories_empty`), {
+        ...validCircle(),
+        categoryId: '',
+      }),
+    );
+  });
+
   it('allows owner to update circle while preserving createdAt', async () => {
     await assertSucceeds(
       setDoc(doc(aliceDb(), `users/${ALICE}/circles/c0`), {

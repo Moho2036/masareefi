@@ -30,26 +30,31 @@ interface SelectedMonthContextValue {
   monthStartDay: number
   rangeLabel: string
   isCurrentMonth: boolean
+  manualNavKey?: number
 }
 
 export const SelectedMonthContext = createContext<SelectedMonthContextValue | null>(null)
 
 export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [manualNavKey, setManualNavKey] = useState<number>(0)
   const [refreshKey, setRefreshKey] = useState<number>(0)
   const { data: settings } = useUserSettings()
 
   const monthStartDay = settings?.monthStartDay ?? 1
 
   const goToPreviousMonth = useCallback(() => {
+    setManualNavKey((k) => k + 1)
     setSelectedDate((prev) => getPreviousFinancialMonth(prev, monthStartDay))
   }, [monthStartDay])
 
   const goToNextMonth = useCallback(() => {
+    setManualNavKey((k) => k + 1)
     setSelectedDate((prev) => getNextFinancialMonth(prev, monthStartDay))
   }, [monthStartDay])
 
   const goToCurrentMonth = useCallback(() => {
+    setManualNavKey((k) => k + 1)
     setSelectedDate(new Date())
   }, [])
 
@@ -90,6 +95,7 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       monthStartDay,
       rangeLabel,
       isCurrentMonth,
+      manualNavKey,
     }),
     [
       selectedDate,
@@ -103,6 +109,7 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
       monthStartDay,
       rangeLabel,
       isCurrentMonth,
+      manualNavKey,
     ]
   )
 

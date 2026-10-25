@@ -152,9 +152,9 @@ export const ReportsPage: React.FC = () => {
       debts,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils: effectiveRollover,
+      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
     })
-  }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover])
+  }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover, isRolloverEnabled])
 
   // Yearly data hooks
   const defaultYear = useMemo(() => range.start.getFullYear(), [range.start])
@@ -247,17 +247,17 @@ export const ReportsPage: React.FC = () => {
 
   const yearOptions = useMemo(() => {
     const calendarYear = new Date().getFullYear()
-    const maxYear = Math.max(calendarYear, currentYear, userSelectedYear ?? 0)
+    const maxYear = Math.max(calendarYear, currentYear, selectedYear)
     const baseYears = [maxYear, maxYear - 1, maxYear - 2, maxYear - 3, maxYear - 4]
-    if (userSelectedYear && !baseYears.includes(userSelectedYear)) {
-      baseYears.push(userSelectedYear)
+    if (!baseYears.includes(selectedYear)) {
+      baseYears.push(selectedYear)
       baseYears.sort((a, b) => b - a)
     }
     return baseYears.map((y) => ({
       value: String(y),
       label: `سنة ${y}`,
     }))
-  }, [currentYear, userSelectedYear])
+  }, [currentYear, selectedYear])
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -329,24 +329,30 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div className="mt-1">
                 {monthIncomeComparison ? (
-                  <span
-                    className={cn(
-                      'text-[11px] font-bold inline-flex items-center gap-0.5',
-                      monthIncomeComparison.isIncrease
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-red-500 dark:text-red-400'
-                    )}
-                  >
-                    {monthIncomeComparison.isIncrease ? (
-                      <ArrowUpRight className="w-3 h-3" />
-                    ) : (
-                      <ArrowDownRight className="w-3 h-3" />
-                    )}
-                    <span>
-                      {monthIncomeComparison.isIncrease ? 'أعلى' : 'أقل'} بـ{' '}
-                      {monthIncomeComparison.percent}% عن الشهر السابق
+                  monthIncomeComparison.percent === 0 ? (
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      مساوٍ للشهر السابق (0%)
                     </span>
-                  </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        'text-[11px] font-bold inline-flex items-center gap-0.5',
+                        monthIncomeComparison.isIncrease
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-500 dark:text-red-400'
+                      )}
+                    >
+                      {monthIncomeComparison.isIncrease ? (
+                        <ArrowUpRight className="w-3 h-3" />
+                      ) : (
+                        <ArrowDownRight className="w-3 h-3" />
+                      )}
+                      <span>
+                        {monthIncomeComparison.isIncrease ? 'أعلى' : 'أقل'} بـ{' '}
+                        {monthIncomeComparison.percent}% عن الشهر السابق
+                      </span>
+                    </span>
+                  )
                 ) : (
                   <span className="text-[11px] text-slate-400 dark:text-slate-500">
                     {monthSums.income === 0
@@ -374,24 +380,30 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div className="mt-1">
                 {monthComparison ? (
-                  <span
-                    className={cn(
-                      'text-[11px] font-bold inline-flex items-center gap-0.5',
-                      monthComparison.isIncrease
-                        ? 'text-red-500 dark:text-red-400'
-                        : 'text-emerald-600 dark:text-emerald-400'
-                    )}
-                  >
-                    {monthComparison.isIncrease ? (
-                      <ArrowUpRight className="w-3 h-3" />
-                    ) : (
-                      <ArrowDownRight className="w-3 h-3" />
-                    )}
-                    <span>
-                      {monthComparison.isIncrease ? 'أكثر' : 'أقل'} بـ{' '}
-                      {monthComparison.percent}% عن الشهر السابق
+                  monthComparison.percent === 0 ? (
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      مساوٍ للشهر السابق (0%)
                     </span>
-                  </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        'text-[11px] font-bold inline-flex items-center gap-0.5',
+                        monthComparison.isIncrease
+                          ? 'text-red-500 dark:text-red-400'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      )}
+                    >
+                      {monthComparison.isIncrease ? (
+                        <ArrowUpRight className="w-3 h-3" />
+                      ) : (
+                        <ArrowDownRight className="w-3 h-3" />
+                      )}
+                      <span>
+                        {monthComparison.isIncrease ? 'أكثر' : 'أقل'} بـ{' '}
+                        {monthComparison.percent}% عن الشهر السابق
+                      </span>
+                    </span>
+                  )
                 ) : (
                   <span className="text-[11px] text-slate-400 dark:text-slate-500">
                     {monthSums.expense === 0
@@ -437,16 +449,27 @@ export const ReportsPage: React.FC = () => {
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   نسبة الادخار
                 </span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-lg flex items-center justify-center',
+                    monthSums.balance < 0
+                      ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                      : monthSums.income === 0 && monthSums.expense === 0
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                        : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                  )}
+                >
                   <Percent className="w-3.5 h-3.5" />
                 </div>
               </div>
               <div
                 className={cn(
                   'text-lg sm:text-2xl font-black select-none',
-                  monthSavingsRate >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
+                  monthSums.balance < 0
+                    ? 'text-red-500 dark:text-red-400'
+                    : monthSums.income === 0 && monthSums.expense === 0
+                      ? 'text-slate-400 dark:text-slate-500'
+                      : 'text-emerald-600 dark:text-emerald-400'
                 )}
               >
                 %{monthSavingsRate}
@@ -639,16 +662,27 @@ export const ReportsPage: React.FC = () => {
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   نسبة الادخار السنوية
                 </span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-lg flex items-center justify-center',
+                    yearSums.balance < 0
+                      ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                      : yearSums.income === 0 && yearSums.expense === 0
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                        : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                  )}
+                >
                   <Percent className="w-3.5 h-3.5" />
                 </div>
               </div>
               <div
                 className={cn(
                   'text-lg sm:text-2xl font-black select-none',
-                  yearlySavingsRate >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
+                  yearSums.balance < 0
+                    ? 'text-red-500 dark:text-red-400'
+                    : yearSums.income === 0 && yearSums.expense === 0
+                      ? 'text-slate-400 dark:text-slate-500'
+                      : 'text-emerald-600 dark:text-emerald-400'
                 )}
               >
                 %{yearlySavingsRate}

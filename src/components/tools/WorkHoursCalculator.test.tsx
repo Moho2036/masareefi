@@ -162,4 +162,32 @@ describe('WorkHoursCalculator component', () => {
     // With 1000 salary (not 1!), item 500 is half of monthly hours (176 / 2 = 88)
     expect(screen.getByText('88')).toBeDefined()
   })
+
+  it('handles zero or empty salary and price with neutral badge and guidance message', () => {
+    render(<WorkHoursCalculator />)
+
+    const salaryInput = screen.getByLabelText(/صافي راتبك الشهري/)
+    fireEvent.change(salaryInput, { target: { value: '0' } })
+
+    expect(screen.getByText('بانتظار البيانات')).toBeDefined()
+    expect(screen.queryByText('عبء خفيف')).toBeNull()
+    expect(
+      screen.getByText('يرجى إدخال راتب شهري وسعر سلعة أكبر من الصفر لاحتساب ساعات العمل المطلوبة')
+    ).toBeDefined()
+    expect(screen.queryByText('يوم دوام عملي')).toBeNull()
+    expect(screen.queryByText(/تحتاج إلى:/)).toBeNull()
+
+    // Reset salary to 500, but set itemPrice to 0
+    fireEvent.change(salaryInput, { target: { value: '500' } })
+    const priceInput = screen.getByLabelText(/سعر السلعة/)
+    fireEvent.change(priceInput, { target: { value: '' } })
+
+    expect(screen.getByText('بانتظار البيانات')).toBeDefined()
+    expect(screen.queryByText('عبء خفيف')).toBeNull()
+    expect(
+      screen.getByText('يرجى إدخال راتب شهري وسعر سلعة أكبر من الصفر لاحتساب ساعات العمل المطلوبة')
+    ).toBeDefined()
+    expect(screen.queryByText('يوم دوام عملي')).toBeNull()
+    expect(screen.queryByText(/تحتاج إلى:/)).toBeNull()
+  })
 })

@@ -1,8 +1,22 @@
 import React, { useState } from 'react'
 import { Navigate } from 'react-router'
-import { Wallet, AlertCircle, User as UserIcon, Mail, Lock } from 'lucide-react'
+import {
+  Wallet,
+  AlertCircle,
+  CheckCircle2,
+  User as UserIcon,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+} from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/auth'
+import {
+  signInWithGoogle,
+  signInWithEmail,
+  signUpWithEmail,
+  resetPassword,
+} from '../services/auth'
 
 export const LoginPage: React.FC = () => {
   const { user, loading } = useAuth()
@@ -10,9 +24,12 @@ export const LoginPage: React.FC = () => {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [signingInGoogle, setSigningInGoogle] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   if (loading) {
     return (
@@ -30,6 +47,7 @@ export const LoginPage: React.FC = () => {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccessMessage(null)
 
     const trimmedEmail = email.trim()
     const trimmedName = name.trim()
@@ -84,8 +102,38 @@ export const LoginPage: React.FC = () => {
     }
   }
 
+  const handleForgotPassword = async () => {
+    setError(null)
+    setSuccessMessage(null)
+
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setError('يرجى إدخال البريد الإلكتروني أولاً لاستعادة كلمة المرور')
+      return
+    }
+
+    setResettingPassword(true)
+    try {
+      await resetPassword(trimmedEmail)
+      setSuccessMessage('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح.')
+    } catch (err: unknown) {
+      console.error('Password reset error:', err)
+      const errCode = (err as { code?: string })?.code || ''
+      if (errCode === 'auth/user-not-found') {
+        setError('لا يوجد حساب مسجل بهذا البريد الإلكتروني.')
+      } else if (errCode === 'auth/invalid-email') {
+        setError('البريد الإلكتروني المدخل غير صالح.')
+      } else {
+        setError('تعذر إرسال رابط إعادة تعيين كلمة المرور. يرجى التحقق من البريد الإلكتروني والمحاولة لاحقاً.')
+      }
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
   const handleGoogleSignIn = async () => {
     setError(null)
+    setSuccessMessage(null)
     setSigningInGoogle(true)
     try {
       await signInWithGoogle()
@@ -124,6 +172,7 @@ export const LoginPage: React.FC = () => {
             onClick={() => {
               setMode('login')
               setError(null)
+              setSuccessMessage(null)
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'login'
@@ -140,6 +189,7 @@ export const LoginPage: React.FC = () => {
             onClick={() => {
               setMode('signup')
               setError(null)
+              setSuccessMessage(null)
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'signup'
@@ -150,6 +200,14 @@ export const LoginPage: React.FC = () => {
             حساب جديد
           </button>
         </div>
+
+        {/* Success message */}
+        {successMessage && (
+          <div className="flex items-center gap-2 p-3 text-start rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 text-xs">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>{successMessage}</span>
+          </div>
+        )}
 
         {/* Error message */}
         {error && (
@@ -207,16 +265,36 @@ export const LoginPage: React.FC = () => {
             <div className="relative">
               <input
                 id="login-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 dir="ltr"
                 required
-                className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-start"
+                className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-start"
               />
               <Lock className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
+            {mode === 'login' && (
+              <div className="flex justify-end pt-1.5">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={resettingPassword || submitting || signingInGoogle}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {resettingPassword ? 'جاري إرسال الرابط...' : 'نسيت كلمة المرور؟'}
+                </button>
+              </div>
+            )}
           </div>
 
           <button

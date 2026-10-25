@@ -37,6 +37,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     availableBalance,
     availablePool,
     upcomingRecurringExpenses,
+    upcomingRecurringIncome,
     upcomingDebtObligations,
     isDeficitProjected,
     deficitAmount,
@@ -290,7 +291,9 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                     'text-lg font-black',
                     freeBalance > 0
                       ? 'text-slate-800 dark:text-slate-200'
-                      : 'text-slate-500 dark:text-slate-400'
+                      : freeBalance < 0
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-slate-500 dark:text-slate-400'
                   )}
                 >
                   {format(freeBalance)}
@@ -326,13 +329,26 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
         </div>
 
-        {/* Forecast Banner */}
-        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-200 flex items-center gap-2.5 text-xs">
-          <ShieldCheck className="w-5 h-5 text-blue-500 shrink-0" />
-          <div>
-            <span className="font-bold">تخطيط استباقي:</span> تم احتساب ميزانية هذا الشهر بناءً على الفواتير المتكررة والديون المستحقة خلال كامل الدورة ({totalDays} يوماً).
+        {/* Forecast / Deficit Banner */}
+        {isDeficitProjected ? (
+          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+            <div>
+              <span className="font-bold">تحذير من عجز متوقع:</span> الالتزامات المجدولة تفوق الدخل والرصيد المتوقع بعجز قدره{' '}
+              <strong className="font-black text-red-600 dark:text-red-400">
+                {format(deficitAmount)}
+              </strong>
+              . يرجى مراجعة وتعديل التزاماتك أو توفير سيولة إضافية.
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-200 flex items-center gap-2.5 text-xs">
+            <ShieldCheck className="w-5 h-5 text-blue-500 shrink-0" />
+            <div>
+              <span className="font-bold">تخطيط استباقي:</span> تم احتساب ميزانية هذا الشهر بناءً على الفواتير المتكررة والديون المستحقة خلال كامل الدورة ({totalDays} يوماً).
+            </div>
+          </div>
+        )}
       </Card>
     )
   }
@@ -505,6 +521,31 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                   </span>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : availableBalance < 0 && freeBalance > 0 && upcomingRecurringIncome > 0 ? (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200">
+          <div className="flex items-start gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="leading-relaxed space-y-1">
+              <div className="font-bold text-amber-800 dark:text-amber-300">
+                تنبيه سيولة مؤقتة
+              </div>
+              <p>
+                رصيدك النقدي الحالي قبل نزول الدخل المتكرر القادم هو (
+                <strong className="font-black text-amber-700 dark:text-amber-400">
+                  {format(availableBalance)}
+                </strong>
+                )، وتعتمد ميزانية الصرف الآمن على الدخل المتكرر المجدول بقيمة (
+                <strong className="font-black text-emerald-600 dark:text-emerald-400">
+                  {format(upcomingRecurringIncome)}
+                </strong>
+                ).
+              </p>
+              <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+                المسار المستقبلي آمن باحتساب الدخل القادم، لكن هناك عجز مؤقت في السيولة النقدية حتى وصول ذلك الدخل.
+              </p>
             </div>
           </div>
         </div>

@@ -125,13 +125,15 @@ vi.mock('../../hooks/useRecurring', () => ({
   }),
 }))
 
+let mockCategoriesData = [
+  { id: 'cat-default-expense', name: 'مصاريف عامة', type: 'expense', icon: '📁', color: '#10b981', archived: false, order: 0 },
+  { id: 'cat-custom-circle', name: 'جمعيات خاصة', type: 'expense', icon: '👥', color: '#3b82f6', archived: false, order: 1 },
+  { id: 'cat-income', name: 'دخل', type: 'income', icon: '💵', color: '#10b981', archived: false, order: 2 },
+]
+
 vi.mock('../../hooks/useCategories', () => ({
   useCategories: () => ({
-    data: [
-      { id: 'cat-default-expense', name: 'مصاريف عامة', type: 'expense', icon: '📁', color: '#10b981', archived: false, order: 0 },
-      { id: 'cat-custom-circle', name: 'جمعيات خاصة', type: 'expense', icon: '👥', color: '#3b82f6', archived: false, order: 1 },
-      { id: 'cat-income', name: 'دخل', type: 'income', icon: '💵', color: '#10b981', archived: false, order: 2 },
-    ],
+    data: mockCategoriesData,
     loading: false,
     error: null,
   }),
@@ -162,6 +164,11 @@ describe('MoneyCirclesManager Component', () => {
     vi.clearAllMocks()
     mockCircles = [sampleCircle]
     mockRecurring = [sampleRecurring]
+    mockCategoriesData = [
+      { id: 'cat-default-expense', name: 'مصاريف عامة', type: 'expense', icon: '📁', color: '#10b981', archived: false, order: 0 },
+      { id: 'cat-custom-circle', name: 'جمعيات خاصة', type: 'expense', icon: '👥', color: '#3b82f6', archived: false, order: 1 },
+      { id: 'cat-income', name: 'دخل', type: 'income', icon: '💵', color: '#10b981', archived: false, order: 2 },
+    ]
   })
 
   it('renders circles and opens delete modal with deleteTransactions toggle', async () => {
@@ -263,6 +270,22 @@ describe('MoneyCirclesManager Component', () => {
         })
       )
     })
+  })
+
+  it('shows error toast when scheduling a circle without an expense category', async () => {
+    mockCategoriesData = [
+      { id: 'cat-income', name: 'دخل', type: 'income', icon: '💵', color: '#10b981', archived: false, order: 0 },
+    ]
+    mockRecurring = []
+    mockCircles = [{ ...sampleCircle, recurringId: undefined }]
+
+    render(<MoneyCirclesManager />)
+
+    const scheduleBtn = screen.getByRole('button', { name: /جدولة القسط تلقائياً/i })
+    fireEvent.click(scheduleBtn)
+
+    expect(mockShowToast).toHaveBeenCalledWith('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
+    expect(circleServices.updateMoneyCircle).not.toHaveBeenCalled()
   })
 
   it('deletes recurring rule and unlinks recurringId when autoSchedule is toggled off during edit', async () => {
@@ -856,5 +879,113 @@ describe('MoneyCirclesManager Component', () => {
     await waitFor(() => {
       expect(circleServices.toggleCircleMemberPayment).toHaveBeenCalled()
     })
+  })
+
+  it('does not display false warning when editing a new circle whose turn is in month 1', async () => {
+    const turn1Circle: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-turn1',
+      myTurnMonth: 1,
+      startDate: new Date('2026-05-01'),
+      membersCount: 5,
+      members: [
+        { id: 'mem_1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+        { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [] },
+        { id: 'mem_3', name: 'عضو 3', turnMonth: 3, paidMonths: [] },
+        { id: 'mem_4', name: 'عضو 4', turnMonth: 4, paidMonths: [] },
+        { id: 'mem_5', name: 'عضو 5', turnMonth: 5, paidMonths: [] },
+      ],
+      recurringId: 'rec-turn1',
+    }
+    mockCircles = [turn1Circle]
+    // Month 1 turn means initial dueDate is month 2 (2026-06-01)
+    mockRecurring = [
+      {
+        ...sampleRecurring,
+        id: 'rec-turn1',
+        circleId: 'circle-turn1',
+        startDate: new Date('2026-05-01'),
+        nextDate: new Date('2026-06-01'),
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    // Change monthly amount
+    const amountInput = screen.getByLabelText(/القسط الشهري/i)
+    fireEvent.change(amountInput, { target: { value: '150' } })
+
+    // Ensure the warning about previously recorded payments is NOT shown
+    expect(screen.queryByText(/تحتوي هذه الجمعية على أقساط أو دفعات مسجلة مسبقاً/i)).toBeNull()
+  })
+
+  it('renders celebratory completion banner with finish button for non-manager circle when time is completed and payout is deposited', async () => {
+    vi.mocked(circleServices.checkCirclePayoutExists).mockResolvedValueOnce(true)
+    const completedNonManagerCircle: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-completed-non-manager',
+      isManager: false,
+      status: 'active',
+      startDate: new Date('2024-01-01'), // Long past
+      membersCount: 5,
+    }
+    mockCircles = [completedNonManagerCircle]
+
+    render(<MoneyCirclesManager />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف/i)
+      ).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /إنهاء الجمعية/i }).length).toBeGreaterThan(0)
+    })
+  })
+
+  it('sorts circles: active circles first, completed last; newest startDate first within groups', () => {
+    const c1: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-completed-old',
+      name: 'جمعية مكتملة قديمة',
+      status: 'completed',
+      startDate: new Date('2025-01-01'),
+    }
+    const c2: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-active-older',
+      name: 'جمعية نشطة أقدم',
+      status: 'active',
+      startDate: new Date('2026-01-01'),
+    }
+    const c3: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-active-newer',
+      name: 'جمعية نشطة أحدث',
+      status: 'active',
+      startDate: new Date('2026-06-01'),
+    }
+    const c4: MoneyCircle = {
+      ...sampleCircle,
+      id: 'circle-completed-newer',
+      name: 'جمعية مكتملة أحدث',
+      status: 'completed',
+      startDate: new Date('2025-06-01'),
+    }
+
+    mockCircles = [c1, c2, c3, c4]
+    render(<MoneyCirclesManager />)
+
+    const titles = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)
+    // Expected order:
+    // 1. circle-active-newer ('جمعية نشطة أحدث')
+    // 2. circle-active-older ('جمعية نشطة أقدم')
+    // 3. circle-completed-newer ('جمعية مكتملة أحدث')
+    // 4. circle-completed-old ('جمعية مكتملة قديمة')
+    expect(titles[0]).toContain('جمعية نشطة أحدث')
+    expect(titles[1]).toContain('جمعية نشطة أقدم')
+    expect(titles[2]).toContain('جمعية مكتملة أحدث')
+    expect(titles[3]).toContain('جمعية مكتملة قديمة')
   })
 })

@@ -366,7 +366,7 @@ export async function updateDebt(
     if (data.startDate !== undefined) {
       txUpdates.date = data.startDate instanceof Date ? Timestamp.fromDate(data.startDate) : data.startDate
     }
-    if (data.note !== undefined) {
+    if (data.note !== undefined && data.note.trim() !== (currentDebt?.note || '').trim()) {
       txUpdates.note = data.note.slice(0, 500)
     }
 
@@ -1021,6 +1021,11 @@ export async function compactDebtPayments(
     if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
       if (!mergedTxIds.includes(p.transactionId.trim())) {
         mergedTxIds.push(p.transactionId.trim())
+      }
+    } else if (!p.isMerged && p.id) {
+      const defaultTxId = `debt_pay_${p.id}`
+      if (!mergedTxIds.includes(defaultTxId)) {
+        mergedTxIds.push(defaultTxId)
       }
     }
     if (Array.isArray(p.mergedTransactionIds)) {
