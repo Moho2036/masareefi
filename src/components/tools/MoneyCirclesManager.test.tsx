@@ -589,14 +589,16 @@ describe('MoneyCirclesManager Component', () => {
   })
 
   it('displays emerald completion banner when active circle has all obligations fulfilled and allows completing it', async () => {
+    vi.spyOn(circleServices, 'checkCirclePayoutExists').mockResolvedValue(true)
     mockCircles = [
       {
         ...sampleCircle,
         membersCount: 2,
-        startDate: new Date(),
+        myTurnMonth: 1,
+        startDate: new Date('2025-01-01'),
         members: [
-          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [2] },
-          { id: 'mem_2', name: 'أنت', turnMonth: 2, paidMonths: [1] },
+          { id: 'mem_1', name: 'أنت', turnMonth: 1, paidMonths: [2] },
+          { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [1] },
         ],
         status: 'active',
       },
@@ -604,9 +606,11 @@ describe('MoneyCirclesManager Component', () => {
 
     render(<MoneyCirclesManager />)
 
-    expect(
-      screen.getByText(/🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف \(مكتملة\)\./i)
-    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen.getByText(/🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف \(مكتملة\)\./i)
+      ).toBeInTheDocument()
+    })
 
     const completeBtn = screen.getAllByRole('button', { name: /إنهاء الجمعية/i })[0]
     fireEvent.click(completeBtn)
@@ -669,6 +673,144 @@ describe('MoneyCirclesManager Component', () => {
         }),
         expect.any(Object)
       )
+    })
+  })
+
+  it('shows deposit net payout button when circle has elapsed duration if user has not deposited yet', async () => {
+    vi.spyOn(circleServices, 'checkCirclePayoutExists').mockResolvedValue(false)
+    mockCircles = [
+      {
+        ...sampleCircle,
+        membersCount: 2,
+        myTurnMonth: 1,
+        startDate: new Date('2024-01-01'), // Long elapsed
+        status: 'active',
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Button should be visible despite diffMonths >= membersCount!
+    expect(screen.getByRole('button', { name: /إيداع صافي الجمعية في الرصيد/i })).toBeInTheDocument()
+  })
+
+  it('swaps user and member data cleanly when myTurnMonth is changed on edit', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+        membersCount: 3,
+        myTurnMonth: 1,
+        startDate: new Date('2026-01-01'),
+        members: [
+          { id: 'mem_user', name: 'أنت', turnMonth: 1, paidMonths: [2, 3] },
+          { id: 'mem_ali', name: 'علي', turnMonth: 2, paidMonths: [1, 3] },
+          { id: 'mem_omar', name: 'عمر', turnMonth: 3, paidMonths: [1, 2] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    // Change my turn from 1 to 2
+    const turnSelect = screen.getByLabelText(/دورك في الاستلام/i)
+    fireEvent.change(turnSelect, { target: { value: '2' } })
+
+    const submitBtn = screen.getByRole('button', { name: /حفظ التعديلات/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        expect.objectContaining({
+          myTurnMonth: 2,
+          members: expect.arrayContaining([
+            // Seat 2 (user's new turn): took user member data, stripped month 2 (turn)
+            expect.objectContaining({
+              id: 'mem_user',
+              name: 'أنت',
+              turnMonth: 2,
+              paidMonths: [3],
+            }),
+            // Seat 1 (swapped with Ali): took Ali's data, stripped month 1 (seat 1 turn)
+            expect.objectContaining({
+              id: 'mem_ali',
+              turnMonth: 1,
+              paidMonths: [3],
+            }),
+            // Seat 3 (Omar): preserved
+            expect.objectContaining({
+              id: 'mem_omar',
+              name: 'عمر',
+              turnMonth: 3,
+              paidMonths: [1, 2],
+            }),
+          ]),
+        }),
+        expect.any(Object)
+      )
+    })
+  })
+
+  it('displays paused recurring status and allows resuming when recurring rule active is false', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        recurringId: 'rec-paused-1',
+      },
+    ]
+    mockRecurring = [
+      {
+        ...sampleRecurring,
+        id: 'rec-paused-1',
+        circleId: 'circle-1',
+        active: false,
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    expect(screen.getByText(/الجدولة التلقائية متوقفة مؤقتاً/i)).toBeInTheDocument()
+    const resumeBtn = screen.getByRole('button', { name: /تفعيل الجدولة/i })
+    expect(resumeBtn).toBeInTheDocument()
+  })
+
+  it('calls toggleCircleMemberPayment when toggling user payment in manager view', async () => {
+    vi.spyOn(circleServices, 'toggleCircleMemberPayment').mockResolvedValue({
+      isUser: true,
+      paid: true,
+    })
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+        membersCount: 3,
+        myTurnMonth: 2,
+        members: [
+          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [] },
+          { id: 'mem_user', name: 'أنت', turnMonth: 2, paidMonths: [] },
+          { id: 'mem_3', name: 'عضو 3', turnMonth: 3, paidMonths: [] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Expand manager table
+    const expandBtn = screen.getByRole('button', { name: /تتبع دفعات الأعضاء/i })
+    fireEvent.click(expandBtn)
+
+    // Find the toggle button for user (seat 2, viewing month 1)
+    // Month 1 receiver is mem_1. mem_user is not receiver in month 1, so button is active.
+    const unpaidButtons = screen.getAllByRole('button', { name: /لم يدفع|دفع/i })
+    fireEvent.click(unpaidButtons[0])
+
+    await waitFor(() => {
+      expect(circleServices.toggleCircleMemberPayment).toHaveBeenCalled()
     })
   })
 })

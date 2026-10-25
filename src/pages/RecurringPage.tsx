@@ -30,7 +30,7 @@ import { useToast } from '../hooks/useToast'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../services/recurring'
 import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle, getCircleCycleIndex } from '../services/moneyCircles'
-import { calculateMonthlyEquivalent, isOccurrenceSkipped, calculateNextDateOnEdit } from '../lib/recurring'
+import { calculateMonthlyEquivalent, isOccurrenceSkipped, getNextCircleDueDate } from '../lib/recurring'
 import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Recurring, Frequency } from '../types'
@@ -76,7 +76,11 @@ export const RecurringPage: React.FC = () => {
   const handleScheduleCircle = async (circle: (typeof circles)[0]) => {
     if (!user) return
     const isAlreadyScheduled = Boolean(
-      circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
+      recurringItems.some(
+        (r) =>
+          (r.id === circle.recurringId || r.circleId === circle.id) &&
+          r.active !== false
+      )
     )
     if (isAlreadyScheduled) {
       showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
@@ -88,7 +92,14 @@ export const RecurringPage: React.FC = () => {
       return
     }
     try {
-      const nextDate = calculateNextDateOnEdit(circle.startDate, 'monthly')
+      const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+      const nextDate = getNextCircleDueDate(
+        circle.startDate,
+        circle.membersCount,
+        circle.myTurnMonth,
+        userMember?.paidMonths || [],
+        userMember?.paymentsByMonth
+      )
       const recId = await addRecurring(user.uid, {
         type: 'expense',
         amountFils: circle.monthlyAmountFils,
@@ -109,6 +120,18 @@ export const RecurringPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to schedule circle:', err)
       showToast('تعذر جدولة القسط', 'error')
+    }
+  }
+
+  const handleResumeRecurring = async (recId: string) => {
+    if (!user) return
+    try {
+      await updateRecurring(user.uid, recId, { active: true })
+      await processDueRecurring(user.uid)
+      showToast('تمت إعادة تفعيل الجدولة التلقائية للقسط', 'success')
+    } catch (err) {
+      console.error('Failed to resume recurring:', err)
+      showToast('تعذر إعادة تفعيل الجدولة', 'error')
     }
   }
 
@@ -239,9 +262,11 @@ export const RecurringPage: React.FC = () => {
               const isStarted = diffMonths >= 0
               const isUserTurn = isStarted && isUserTurnMonth(circle, now, monthStartDay)
               const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
-              const isScheduled = Boolean(
-                circle.recurringId || recurringItems.some((r) => r.circleId === circle.id)
+              const linkedRec = recurringItems.find(
+                (r) => r.id === circle.recurringId || r.circleId === circle.id
               )
+              const isScheduledActive = Boolean(linkedRec && linkedRec.active !== false)
+              const isScheduledPaused = Boolean(linkedRec && linkedRec.active === false)
               return (
                 <div
                   key={circle.id}
@@ -298,11 +323,21 @@ export const RecurringPage: React.FC = () => {
 
                   {/* Recurring Schedule Link / Status */}
                   <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                    {isScheduled ? (
+                    {isScheduledActive ? (
                       <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span>مجدولة بالمعاملات</span>
+                        <span>مجدولة بالمعاملات ✓</span>
                       </span>
+                    ) : isScheduledPaused && linkedRec ? (
+                      <button
+                        type="button"
+                        onClick={() => handleResumeRecurring(linkedRec.id)}
+                        className="text-xs text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                        title="الجدولة التلقائية متوقفة مؤقتاً"
+                      >
+                        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                        <span>تفعيل الجدولة</span>
+                      </button>
                     ) : (
                       <button
                         type="button"

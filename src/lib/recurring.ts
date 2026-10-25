@@ -178,6 +178,55 @@ export function calculateNextDateOnEdit(
   return candidate
 }
 
+/**
+ * Calculates the 1-based index of the first unpaid, non-exempt month of a money circle.
+ * - Month indices range from 1 to membersCount.
+ * - The user's turn month (`myTurnMonth`) is exempt and skipped.
+ * - Returns null if all non-exempt months have been paid.
+ */
+export function getNextCircleDueMonth(
+  membersCount: number,
+  myTurnMonth: number,
+  paidMonths: number[] = [],
+  paymentsByMonth?: Record<string | number, boolean>
+): number | null {
+  for (let m = 1; m <= membersCount; m++) {
+    if (m === myTurnMonth) continue
+
+    const isPaid =
+      paidMonths.includes(m) ||
+      paymentsByMonth?.[m] === true ||
+      paymentsByMonth?.[String(m)] === true
+
+    if (!isPaid) {
+      return m
+    }
+  }
+  return null
+}
+
+/**
+ * Calculates the next due date for a money circle recurring installment.
+ * Points directly to the first unpaid non-exempt month (e.g. month 1 if unpaid, even if startDate < today).
+ * If all non-exempt months are paid, returns the date of the last month of the circle.
+ */
+export function getNextCircleDueDate(
+  startDate: Date,
+  membersCount: number,
+  myTurnMonth: number,
+  paidMonths: number[] = [],
+  paymentsByMonth?: Record<string | number, boolean>
+): Date {
+  const start = startDate instanceof Date ? startDate : new Date(startDate)
+  const dueMonth = getNextCircleDueMonth(membersCount, myTurnMonth, paidMonths, paymentsByMonth)
+
+  if (dueMonth !== null) {
+    return addMonths(start, dueMonth - 1)
+  }
+
+  return addMonths(start, Math.max(0, membersCount - 1))
+}
+
 export interface MonthlyEquivalentResult {
   monthlyIncome: number
   monthlyExpense: number

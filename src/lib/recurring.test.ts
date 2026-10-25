@@ -7,6 +7,8 @@ import {
   calculateNextDateOnEdit,
   getOccurrenceMonthIndex,
   isOccurrenceSkipped,
+  getNextCircleDueMonth,
+  getNextCircleDueDate,
 } from './recurring'
 import type { Recurring } from '../types'
 
@@ -452,6 +454,44 @@ describe('recurring pure logic', () => {
       const sep25RangeStart = new Date(2026, 8, 25, 0, 0, 0, 0)
       const res = calculateMonthlyEquivalent([circleRec], sep25RangeStart)
       expect(res.monthlyExpense).toBe(0)
+    })
+
+    describe('getNextCircleDueMonth & getNextCircleDueDate', () => {
+      const startDate = new Date(2026, 9, 1) // Oct 1, 2026
+
+      it('returns month 1 when nothing has been paid and turn is later month (e.g. month 5)', () => {
+        expect(getNextCircleDueMonth(10, 5, [])).toBe(1)
+        const dueDate = getNextCircleDueDate(startDate, 10, 5, [])
+        expect(dueDate.getFullYear()).toBe(2026)
+        expect(dueDate.getMonth()).toBe(9) // Oct
+        expect(dueDate.getDate()).toBe(1)
+      })
+
+      it('skips month 1 if month 1 is user turn (exempt recipient), returns month 2', () => {
+        expect(getNextCircleDueMonth(10, 1, [])).toBe(2)
+        const dueDate = getNextCircleDueDate(startDate, 10, 1, [])
+        expect(dueDate.getMonth()).toBe(10) // Nov (month 2)
+      })
+
+      it('returns the first unpaid month when some earlier months are paid', () => {
+        // User turn is month 3. Month 1 and 2 are paid. Next unpaid is month 4!
+        expect(getNextCircleDueMonth(10, 3, [1, 2])).toBe(4)
+        const dueDate = getNextCircleDueDate(startDate, 10, 3, [1, 2])
+        expect(dueDate.getMonth()).toBe(0) // Jan 2027 (Oct + 3 months = Jan)
+        expect(dueDate.getFullYear()).toBe(2027)
+      })
+
+      it('supports paymentsByMonth record', () => {
+        expect(getNextCircleDueMonth(6, 4, [], { '1': true, '2': true })).toBe(3)
+      })
+
+      it('returns null for dueMonth and last month date when all non-exempt months are paid', () => {
+        // 5 members, turn is month 2. Paid: 1, 3, 4, 5.
+        expect(getNextCircleDueMonth(5, 2, [1, 3, 4, 5])).toBeNull()
+        const dueDate = getNextCircleDueDate(startDate, 5, 2, [1, 3, 4, 5])
+        expect(dueDate.getMonth()).toBe(1) // Oct + 4 months = Feb 2027 (month 5)
+        expect(dueDate.getFullYear()).toBe(2027)
+      })
     })
   })
 })

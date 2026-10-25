@@ -1,5 +1,5 @@
-import { addMonths } from 'date-fns'
-import { calculateNextDateOnEdit } from '../lib/recurring'
+import { addMonths, format } from 'date-fns'
+import { getNextCircleDueDate } from '../lib/recurring'
 import {
   collection,
   doc,
@@ -265,11 +265,20 @@ export async function updateMoneyCircle(
     const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
     const recSnap = await getDoc(recRef)
     if (recSnap.exists()) {
+      const recData = recSnap.data()
       const recUpdates: Record<string, unknown> = {
-        title: `قسط ${effectiveName}`.slice(0, 100),
         amountFils: effectiveMonthly,
         skipMonth: effectiveTurn,
-        note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
+      }
+
+      // Only update title/note if circle name explicitly changed or if rule had no title/note
+      const circleNameChanged =
+        partial.name !== undefined && partial.name.trim() !== currentCircle.name.trim()
+      if (circleNameChanged || !recData?.title) {
+        recUpdates.title = `قسط ${effectiveName}`.slice(0, 100)
+      }
+      if (circleNameChanged || !recData?.note) {
+        recUpdates.note = `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500)
       }
 
       if (options?.createRecurringRule) {
@@ -284,8 +293,18 @@ export async function updateMoneyCircle(
         }
       }
 
+      const userMember = (partial.members || currentCircle.members || []).find(
+        (m) => m.turnMonth === effectiveTurn
+      )
+
       if (startDateChanged) {
-        const newNextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+        const newNextDate = getNextCircleDueDate(
+          effectiveStartDate,
+          effectiveMembersCount,
+          effectiveTurn,
+          userMember?.paidMonths || [],
+          userMember?.paymentsByMonth
+        )
         recUpdates.startDate = Timestamp.fromDate(effectiveStartDate)
         recUpdates.nextDate = Timestamp.fromDate(newNextDate)
         recUpdates.endDate = Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1))
@@ -301,7 +320,16 @@ export async function updateMoneyCircle(
       // Document DOES NOT EXIST in Firestore!
       if (options?.createRecurringRule) {
         const newRecRef = doc(collection(db, 'users', uid, 'recurring'))
-        const nextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+        const userMember = (partial.members || currentCircle.members || []).find(
+          (m) => m.turnMonth === effectiveTurn
+        )
+        const nextDate = getNextCircleDueDate(
+          effectiveStartDate,
+          effectiveMembersCount,
+          effectiveTurn,
+          userMember?.paidMonths || [],
+          userMember?.paymentsByMonth
+        )
         const categoryId = options.defaultCategoryId || 'cat-custom-circle'
 
         batch.set(newRecRef, {
@@ -326,7 +354,16 @@ export async function updateMoneyCircle(
     }
   } else if (options?.createRecurringRule && options?.defaultCategoryId) {
     const newRecRef = doc(collection(db, 'users', uid, 'recurring'))
-    const nextDate = calculateNextDateOnEdit(effectiveStartDate, 'monthly')
+    const userMember = (partial.members || currentCircle.members || []).find(
+      (m) => m.turnMonth === effectiveTurn
+    )
+    const nextDate = getNextCircleDueDate(
+      effectiveStartDate,
+      effectiveMembersCount,
+      effectiveTurn,
+      userMember?.paidMonths || [],
+      userMember?.paymentsByMonth
+    )
 
     batch.set(newRecRef, {
       type: 'expense',
@@ -536,6 +573,138 @@ export async function depositCircleNetPayout(
 export async function deleteCirclePayout(uid: string, circleId: string): Promise<void> {
   const txRef = doc(db, 'users', uid, 'transactions', `circle_payout_${circleId}`)
   await deleteDoc(txRef).catch(() => {})
+}
+
+/**
+ * Toggles a member's payment status for a specific month.
+ * If the member is the current user (member.turnMonth === circle.myTurnMonth):
+ * - Paid -> Unpaid: deletes linked transaction (`circle_${circle.id}_m${monthNum}`), rewinds recurring rule nextDate if applicable.
+ * - Unpaid -> Paid: creates deterministic expense transaction (`circle_${circle.id}_m${monthNum}`), advances recurring rule nextDate to next unpaid month.
+ */
+export async function toggleCircleMemberPayment(
+  uid: string,
+  circleId: string,
+  memberId: string,
+  monthNum: number,
+  defaultCategoryId?: string
+): Promise<{ isUser: boolean; paid: boolean }> {
+  const circleRef = doc(db, 'users', uid, 'circles', circleId)
+  const circleSnap = await getDoc(circleRef)
+  if (!circleSnap.exists()) {
+    throw new Error('الجمعية غير موجودة')
+  }
+
+  const circle = circleConverter.fromFirestore(circleSnap as QueryDocumentSnapshot)
+  const targetMember = circle.members.find((m) => m.id === memberId)
+  if (!targetMember) {
+    throw new Error('العضو غير موجود')
+  }
+
+  // The receiver for monthNum is exempt and cannot be toggled
+  if (targetMember.turnMonth === monthNum) {
+    return { isUser: targetMember.turnMonth === circle.myTurnMonth, paid: false }
+  }
+
+  const hasPaid =
+    targetMember.paidMonths.includes(monthNum) ||
+    targetMember.paymentsByMonth?.[String(monthNum)] === true
+
+  const newPaid = !hasPaid
+  const isUser = targetMember.turnMonth === circle.myTurnMonth
+
+  const updatedMembers = circle.members.map((m) => {
+    if (m.id !== memberId) return m
+    const newPaidMonths = hasPaid
+      ? m.paidMonths.filter((mn) => mn !== monthNum)
+      : [...m.paidMonths.filter((mn) => mn !== monthNum), monthNum]
+    const newPaymentsByMonth = { ...(m.paymentsByMonth || {}) }
+    if (hasPaid) {
+      delete newPaymentsByMonth[String(monthNum)]
+    } else {
+      newPaymentsByMonth[String(monthNum)] = true
+    }
+    return {
+      ...m,
+      paidMonths: newPaidMonths,
+      paymentsByMonth: newPaymentsByMonth,
+    }
+  })
+
+  const batch = writeBatch(db)
+  batch.update(circleRef, {
+    members: updatedMembers.map((m) => ({
+      id: m.id,
+      name: m.name.trim().slice(0, 50),
+      turnMonth: Math.round(m.turnMonth),
+      paidMonths: (m.paidMonths || []).map(Number),
+      ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
+    })),
+  })
+
+  if (isUser) {
+    const targetDate = addMonths(
+      circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+      monthNum - 1
+    )
+    const deterministicTxId = `circle_${circle.id}_m${monthNum}`
+    const txRef = doc(db, 'users', uid, 'transactions', deterministicTxId)
+
+    if (newPaid) {
+      const txSnap = await getDoc(txRef)
+      if (!txSnap.exists()) {
+        batch.set(txRef, {
+          type: 'expense',
+          amountFils: circle.monthlyAmountFils,
+          categoryId: circle.expenseCategoryId || defaultCategoryId || 'cat-custom-circle',
+          title: `قسط ${circle.name} (شهر ${monthNum})`.slice(0, 100),
+          note: `تسجيل قسط الجمعية يدوياً لشهر ${monthNum}`.slice(0, 500),
+          date: Timestamp.fromDate(targetDate),
+          createdAt: serverTimestamp(),
+          circleId: circle.id,
+          ...(circle.recurringId ? { recurringId: circle.recurringId } : {}),
+        })
+      }
+    } else {
+      // Delete manual transaction if exists
+      const txSnap = await getDoc(txRef)
+      if (txSnap.exists()) {
+        batch.delete(txRef)
+      }
+      // Also check if recurring tx exists for this date and delete it
+      if (circle.recurringId) {
+        const dateKey = format(targetDate, 'yyyy-MM-dd')
+        const recurringTxId = `${circle.recurringId}_${dateKey}`
+        const recTxRef = doc(db, 'users', uid, 'transactions', recurringTxId)
+        const recTxSnap = await getDoc(recTxRef)
+        if (recTxSnap.exists()) {
+          batch.delete(recTxRef)
+        }
+      }
+    }
+
+    // Keep linked recurring rule's nextDate aligned with the first unpaid month
+    const candidateRecId = circle.recurringId
+    if (candidateRecId) {
+      const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
+      const recSnap = await getDoc(recRef)
+      if (recSnap.exists()) {
+        const updatedUserMember = updatedMembers.find((m) => m.turnMonth === circle.myTurnMonth)
+        const newNextDate = getNextCircleDueDate(
+          circle.startDate,
+          circle.membersCount,
+          circle.myTurnMonth,
+          updatedUserMember?.paidMonths || [],
+          updatedUserMember?.paymentsByMonth
+        )
+        batch.update(recRef, {
+          nextDate: Timestamp.fromDate(newNextDate),
+        })
+      }
+    }
+  }
+
+  await batch.commit()
+  return { isUser, paid: newPaid }
 }
 
 export async function deleteMoneyCircle(

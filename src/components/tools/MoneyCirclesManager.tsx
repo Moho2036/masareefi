@@ -26,7 +26,7 @@ import { useMoneyCircles } from '../../hooks/useMoneyCircles'
 import { useRecurring } from '../../hooks/useRecurring'
 import { useCategories } from '../../hooks/useCategories'
 import { useToast } from '../../hooks/useToast'
-import { processDueRecurring } from '../../services/recurring'
+import { processDueRecurring, updateRecurring } from '../../services/recurring'
 import { getOrCreateDebtCategory } from '../../services/debts'
 import {
   addMoneyCircle,
@@ -39,6 +39,7 @@ import {
   depositCircleNetPayout,
   getCircleCycleIndex,
   isCircleFullyPaid,
+  toggleCircleMemberPayment,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
@@ -67,12 +68,15 @@ export const MoneyCirclesManager: React.FC = () => {
   const [depositedCircleIds, setDepositedCircleIds] = useState<Set<string>>(new Set())
   const checkedCirclesRef = useRef<Set<string>>(new Set())
 
-  const isCircleScheduled = (circle: MoneyCircle) => {
-    return recurringList.some(
-      (r) =>
-        (r.id === circle.recurringId || r.circleId === circle.id) &&
-        r.active !== false
+  const getLinkedRecurring = (circle: MoneyCircle) => {
+    return recurringList.find(
+      (r) => r.id === circle.recurringId || r.circleId === circle.id
     )
+  }
+
+  const isCircleScheduled = (circle: MoneyCircle) => {
+    const linked = getLinkedRecurring(circle)
+    return Boolean(linked && linked.active !== false)
   }
 
   const getInitialStartDateStr = (startDay: number = monthStartDay) => {
@@ -321,15 +325,41 @@ export const MoneyCirclesManager: React.FC = () => {
       const startDate = parseLocalDateInput(startDateStr)
 
       if (editingCircle) {
+        const oldTurnMonth = editingCircle.myTurnMonth
+        const newTurnMonth = myTurnMonth
+        const oldUserMember = editingCircle.members?.find(
+          (m) => m.turnMonth === oldTurnMonth || m.name === 'أنت'
+        )
+
         const members: CircleMember[] = []
         for (let i = 1; i <= membersCount; i++) {
-          const defaultName = i === myTurnMonth ? 'أنت' : `عضو ${i}`
+          const defaultName = i === newTurnMonth ? 'أنت' : `عضو ${i}`
           const enteredName = isManager ? (customMembers[i - 1] || '').trim() : ''
           const memberName = enteredName || defaultName
 
-          const existingMember =
-            editingCircle.members?.find((m) => m.name === memberName) ||
-            editingCircle.members?.find((m) => m.turnMonth === i)
+          let existingMember: CircleMember | undefined
+
+          if (i === newTurnMonth) {
+            existingMember = oldUserMember
+          } else if (i === oldTurnMonth) {
+            existingMember = editingCircle.members?.find(
+              (m) => m.turnMonth === newTurnMonth && m.id !== oldUserMember?.id
+            )
+            if (!existingMember) {
+              existingMember = editingCircle.members?.find(
+                (m) => m.name === memberName && m.id !== oldUserMember?.id
+              )
+            }
+          } else {
+            existingMember = editingCircle.members?.find(
+              (m) => m.turnMonth === i && m.id !== oldUserMember?.id
+            )
+            if (!existingMember) {
+              existingMember = editingCircle.members?.find(
+                (m) => m.name === memberName && m.id !== oldUserMember?.id
+              )
+            }
+          }
 
           const rawPaid = existingMember?.paidMonths || []
           // Ensure member's payout month (i) is stripped and any month exceeding membersCount is removed
@@ -506,6 +536,18 @@ export const MoneyCirclesManager: React.FC = () => {
     }
   }
 
+  const handleResumeRecurring = async (recId: string) => {
+    if (!user) return
+    try {
+      await updateRecurring(user.uid, recId, { active: true })
+      await processDueRecurring(user.uid)
+      showToast('تمت إعادة تفعيل الجدولة التلقائية للقسط', 'success')
+    } catch (err) {
+      console.error('Failed to resume recurring:', err)
+      showToast('تعذر إعادة تفعيل الجدولة', 'error')
+    }
+  }
+
   // Toggle member paid status for a given month
   const handleToggleMemberPayment = async (
     circle: MoneyCircle,
@@ -517,36 +559,25 @@ export const MoneyCirclesManager: React.FC = () => {
     // The receiver for monthNum is exempt and cannot be toggled
     if (targetMember && targetMember.turnMonth === monthNum) return
 
-    const updatedMembers = circle.members.map((m) => {
-      if (m.id !== memberId) return m
-      const hasPaid =
-        m.paidMonths.includes(monthNum) ||
-        m.paymentsByMonth?.[String(monthNum)] === true
-      const newPaid = hasPaid
-        ? m.paidMonths.filter((mn) => mn !== monthNum)
-        : [...m.paidMonths.filter((mn) => mn !== monthNum), monthNum]
-      const newPaymentsByMonth = { ...(m.paymentsByMonth || {}) }
-      if (hasPaid) {
-        delete newPaymentsByMonth[String(monthNum)]
-      } else {
-        newPaymentsByMonth[String(monthNum)] = true
-      }
-      return {
-        ...m,
-        paidMonths: newPaid,
-        paymentsByMonth: newPaymentsByMonth,
-      }
-    })
-
     try {
-      await updateMoneyCircle(
+      const res = await toggleCircleMemberPayment(
         user.uid,
         circle.id,
-        { members: updatedMembers },
-        { monthStartDay }
+        memberId,
+        monthNum,
+        defaultExpenseCategory?.id
       )
+      if (res.isUser) {
+        showToast(
+          res.paid
+            ? 'تم تسجيل القسط وخصمه من الرصيد'
+            : 'تم إلغاء القسط واسترداد المبلغ للرصيد',
+          res.paid ? 'success' : 'info'
+        )
+      }
     } catch (err) {
       console.error('Failed to toggle member payment:', err)
+      showToast('تعذر تحديث حالة الدفع', 'error')
     }
   }
 
@@ -632,19 +663,21 @@ export const MoneyCirclesManager: React.FC = () => {
             const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
             const isStarted = diffMonths >= 0
             const isCompleted = circle.status === 'completed' || diffMonths >= circle.membersCount
+            const hasUserDeposited = depositedCircleIds.has(circle.id)
             const isObligationsCompleted =
-              circle.status === 'active' &&
-              (diffMonths >= circle.membersCount || isCircleFullyPaid(circle))
+              circle.status === 'active' && isCircleFullyPaid(circle) && hasUserDeposited
             const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
             const isUserTurn = isStarted && !isCompleted && !isObligationsCompleted && isUserTurnMonth(circle, now, monthStartDay)
             const isExpanded = expandedCircleId === circle.id
             const viewingMonth = selectedCircleMonth[circle.id] || currentMonth
 
             // Check if user has already received / deposited net turn payout
-            const hasUserDeposited = depositedCircleIds.has(circle.id)
-            const canDepositNet = isStarted && !isCompleted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
+            const canDepositNet = isStarted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
             const netAmountFils = circle.totalAmountFils - circle.monthlyAmountFils
-            const isScheduled = isCircleScheduled(circle)
+            const linkedRec = getLinkedRecurring(circle)
+            const isScheduledActive = Boolean(linkedRec && linkedRec.active !== false)
+            const isScheduledPaused = Boolean(linkedRec && linkedRec.active === false)
+            const isScheduled = isScheduledActive
 
             // Calculate payments for viewing month: non-receivers who paid + 1 (the exempt receiver)
             const nonReceiverPaidCount = circle.members.filter(
@@ -849,10 +882,26 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Recurring Schedule Status */}
                 <div className="mt-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/40 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs">
-                  {isScheduled ? (
+                  {isScheduledActive ? (
                     <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
                       <Zap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                       <span>مجدولة في المعاملات المتكررة (معفاة من الخصم في الشهر {circle.myTurnMonth})</span>
+                    </div>
+                  ) : isScheduledPaused && linkedRec ? (
+                    <div className="flex items-center justify-between w-full gap-2">
+                      <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold">
+                        <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>الجدولة التلقائية متوقفة مؤقتاً</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        icon={<Zap className="w-3 h-3 text-amber-500" />}
+                        onClick={() => handleResumeRecurring(linkedRec.id)}
+                      >
+                        تفعيل الجدولة
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between w-full gap-2">
