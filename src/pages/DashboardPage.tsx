@@ -44,7 +44,7 @@ import { sumByType } from '../lib/aggregate'
 import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/reports'
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
-import { isOccurrenceSkipped } from '../lib/recurring'
+import { isOccurrenceSkipped, advanceDateWithTargetDay } from '../lib/recurring'
 import {
   toWesternDigits,
   formatDayHeader,
@@ -56,6 +56,7 @@ import {
 import { format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { cn } from '../lib/cn'
+import type { Recurring } from '../types'
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth()
@@ -172,18 +173,35 @@ export const DashboardPage: React.FC = () => {
 
   // Up to 5 upcoming active recurring items
   const upcomingRecurring = useMemo(() => {
-    return recurringList
-      .filter((r) => {
-        if (!r.active) return false
-        const nextD = r.nextDate instanceof Date ? r.nextDate : new Date(r.nextDate)
-        if (isOccurrenceSkipped(r, nextD)) return false
-        return true
-      })
-      .sort((a, b) => {
-        const dateA = a.nextDate instanceof Date ? a.nextDate : new Date(a.nextDate)
-        const dateB = b.nextDate instanceof Date ? b.nextDate : new Date(b.nextDate)
-        return dateA.getTime() - dateB.getTime()
-      })
+    const todayMidnight = new Date()
+    todayMidnight.setHours(0, 0, 0, 0)
+
+    const list: (Recurring & { nextDate: Date })[] = []
+
+    for (const r of recurringList) {
+      if (!r.active) continue
+
+      let nextD = r.nextDate instanceof Date ? r.nextDate : new Date(r.nextDate)
+
+      if (isOccurrenceSkipped(r, nextD)) {
+        const startD = r.startDate instanceof Date ? r.startDate : new Date(r.startDate)
+        nextD = advanceDateWithTargetDay(nextD, r.frequency, startD.getDate())
+      }
+
+      if (r.endDate) {
+        const endD = r.endDate instanceof Date ? r.endDate : new Date(r.endDate)
+        const endMidnight = new Date(endD)
+        endMidnight.setHours(23, 59, 59, 999)
+        if (nextD.getTime() > endMidnight.getTime() || endMidnight.getTime() < todayMidnight.getTime()) {
+          continue
+        }
+      }
+
+      list.push({ ...r, nextDate: nextD })
+    }
+
+    return list
+      .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
       .slice(0, 5)
   }, [recurringList])
 
@@ -219,7 +237,10 @@ export const DashboardPage: React.FC = () => {
     sums.income === 0 &&
     sums.expense === 0 &&
     (!isRolloverEnabled || effectiveRollover === 0)
-  const isSpendingWithoutIncome = effectiveAvailableIncome <= 0 && sums.expense > 0
+  const isTemporaryLiquidityDeficit =
+    displayBalance < 0 && forecast.freeBalance > 0 && forecast.upcomingRecurringIncome > 0
+  const isSpendingWithoutIncome =
+    effectiveAvailableIncome <= 0 && sums.expense > 0 && !isTemporaryLiquidityDeficit
   const consumptionRatio =
     effectiveAvailableIncome > 0 ? sums.expense / effectiveAvailableIncome : 0
   const isHighConsumption = effectiveAvailableIncome > 0 && consumptionRatio >= 0.8
@@ -232,6 +253,8 @@ export const DashboardPage: React.FC = () => {
     let status: 'safe' | 'warning' | 'danger'
     if (isInitialOrLoading) {
       status = 'safe'
+    } else if (isTemporaryLiquidityDeficit) {
+      status = 'warning'
     } else if (
       displayBalance < 0 ||
       forecast.freeBalance < 0 ||
@@ -268,7 +291,11 @@ export const DashboardPage: React.FC = () => {
           'bg-gradient-to-br from-amber-600 via-amber-700 to-yellow-800 border-amber-400/40 shadow-xl shadow-amber-900/15',
         walletBg: 'bg-white/20 text-white',
         badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
-        badgeText: isHighConsumption ? 'استهلكت 80% من الدخل' : 'انتبه للوتيرة',
+        badgeText: isTemporaryLiquidityDeficit
+          ? 'سيولة مؤقتة بانتظار الدخل'
+          : isHighConsumption
+            ? `استهلكت ${Math.round(consumptionRatio * 100)}% من الدخل`
+            : 'انتبه للوتيرة',
         subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
         subLabel: 'text-amber-100',
         stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
@@ -292,8 +319,10 @@ export const DashboardPage: React.FC = () => {
   }, [
     isInitialOrLoading,
     isZeroState,
+    isTemporaryLiquidityDeficit,
     isSpendingWithoutIncome,
     isHighConsumption,
+    consumptionRatio,
     forecast.healthStatus,
     forecast.freeBalance,
     displayBalance,

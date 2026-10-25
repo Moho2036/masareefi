@@ -412,7 +412,14 @@ export const RecurringPage: React.FC = () => {
             const name = cat?.name ?? 'غير مصنف'
             const isExpense = item.type === 'expense'
             const isCircleItem = Boolean(item.circleId || item.skipMonth)
-            const isCurrentMonthTurn = isCircleItem && isOccurrenceSkipped(item, new Date())
+            const linkedCircle = isCircleItem
+              ? circles.find((c) => c.id === item.circleId || c.recurringId === item.id)
+              : undefined
+            const isCurrentMonthTurn =
+              isCircleItem &&
+              (linkedCircle
+                ? isUserTurnMonth(linkedCircle, new Date(), monthStartDay)
+                : isOccurrenceSkipped(item, new Date()))
 
             const nextDateFormatted = toWesternDigits(
               formatDate(

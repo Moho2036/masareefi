@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { addMonths, subDays, format as formatDate } from 'date-fns'
+import { subDays, format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
   TrendingUp,
@@ -44,6 +44,7 @@ import {
   getFiscalMonthKey,
   getFiscalMonthInfo,
   toWesternDigits,
+  getPreviousFinancialMonth,
 } from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
@@ -107,7 +108,7 @@ export const ReportsPage: React.FC = () => {
 
   // Previous month range for monthly comparison
   const prevMonthRange = useMemo(() => {
-    const prevDate = addMonths(range.start, -1)
+    const prevDate = getPreviousFinancialMonth(range.start, monthStartDay)
     return getFinancialMonthRange(prevDate, monthStartDay)
   }, [range.start, monthStartDay])
 
@@ -158,12 +159,17 @@ export const ReportsPage: React.FC = () => {
 
   // Yearly data hooks
   const defaultYear = useMemo(() => range.start.getFullYear(), [range.start])
+  const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
+  const [prevDefaultYear, setPrevDefaultYear] = useState(defaultYear)
+  if (defaultYear !== prevDefaultYear) {
+    setPrevDefaultYear(defaultYear)
+    setUserSelectedYear(null)
+  }
   const currentFiscalInfo = useMemo(
     () => getFiscalMonthInfo(new Date(), monthStartDay),
     [monthStartDay]
   )
   const currentYear = currentFiscalInfo.year
-  const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
   const selectedYear = userSelectedYear ?? defaultYear
   const setSelectedYear = (year: number) => setUserSelectedYear(year)
 

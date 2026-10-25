@@ -93,6 +93,7 @@ export const Modal: React.FC<ModalProps> = ({
     if (!isOpen || enableHistoryBack === false) return
 
     isClosingFromPopStateRef.current = false
+    const openedPath = window.location.pathname + window.location.search
 
     try {
       window.history.pushState({ modalOpen: true, modalId }, '')
@@ -116,7 +117,10 @@ export const Modal: React.FC<ModalProps> = ({
       if (isPushedRef.current && !isClosingFromPopStateRef.current) {
         isPushedRef.current = false
         try {
-          if (window.history.state?.modalId === modalId) {
+          if (
+            window.location.pathname + window.location.search === openedPath &&
+            window.history.state?.modalId === modalId
+          ) {
             window.history.back()
           }
         } catch {

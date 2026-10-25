@@ -92,19 +92,22 @@ function getFormatter(decimals: number): Intl.NumberFormat {
  * Optionally accepts currency code or decimal places to distinguish thousands commas from decimals.
  */
 export function toFils(input: string | number, decimalsOrCurrency?: number | string): number {
-  if (typeof input === 'number') {
-    if (isNaN(input) || !isFinite(input)) return 0
-    return Math.round(input * 1000)
-  }
-
-  if (typeof input !== 'string') return 0
-
   let decimals: number | undefined
   if (typeof decimalsOrCurrency === 'number') {
     decimals = decimalsOrCurrency
   } else if (typeof decimalsOrCurrency === 'string') {
     decimals = getCurrencyConfig(decimalsOrCurrency).decimals
   }
+
+  if (typeof input === 'number') {
+    if (isNaN(input) || !isFinite(input)) return 0
+    if (decimals === 2) {
+      return Math.round(input * 100) * 10
+    }
+    return Math.round(input * 1000)
+  }
+
+  if (typeof input !== 'string') return 0
 
   // Normalize Eastern Arabic / Persian numerals to Latin
   const normalized = input
@@ -164,6 +167,9 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
 
   const num = parseFloat(clean)
   if (isNaN(num) || !isFinite(num)) return 0
+  if (decimals === 2) {
+    return Math.round(num * 100) * 10
+  }
   return Math.round(num * 1000)
 }
 

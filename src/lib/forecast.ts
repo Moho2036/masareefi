@@ -104,6 +104,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   let currentIncome = 0
   let currentExpense = 0
   let pastDiscretionaryExpense = 0
+  let futureDatedManualIncome = 0
 
   const linkedDebtTxIds = new Set<string>()
   if (params.debts) {
@@ -115,8 +116,12 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   }
 
   for (const tx of params.transactions) {
+    const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
     if (tx.type === 'income') {
       currentIncome += tx.amountFils || 0
+      if (isCurrentMonth && toStartOfDay(txDate) > now) {
+        futureDatedManualIncome += tx.amountFils || 0
+      }
     } else if (tx.type === 'expense') {
       const amount = tx.amountFils || 0
       currentExpense += amount
@@ -130,7 +135,6 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
               linkedDebtTxIds.has(tx.id)))
       )
       if (!isFixedCommitment) {
-        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
         // Only count discretionary spending that actually occurred on or before today
         // towards past daily pace; future-dated transactions within the cycle should not inflate daily rate.
         if (isCurrentMonth && toStartOfDay(txDate) <= now) {
@@ -195,17 +199,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     }
   }
 
-  const baseRollover = params.rolloverBalanceFils ?? 0
-  const rolloverBalance =
-    isFutureMonth && params.rolloverBalanceFils !== undefined
-      ? baseRollover + intermediateRecurringNet
-      : baseRollover
-  const monthNet = currentIncome - currentExpense
-  const availableBalance = rolloverBalance + monthNet
-  const availablePool = currentIncome + rolloverBalance
-
   // 3. Upcoming debts owed by user ('borrowed') due within this cycle [rangeStart, rangeEnd)
+  // and intermediate unpaid borrowed debts due before rangeStart for future months
   let upcomingDebtObligations = 0
+  let intermediateDebtObligations = 0
   if (params.debts && (isCurrentMonth || isFutureMonth)) {
     for (const debt of params.debts) {
       if (debt.type !== 'borrowed' || debt.settled) continue
@@ -220,10 +217,21 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
           : dueDay < rangeEnd
         if (isDueInWindow) {
           upcomingDebtObligations += remainingUnpaid
+        } else if (isFutureMonth && params.rolloverBalanceFils !== undefined && dueDay < rangeStart) {
+          intermediateDebtObligations += remainingUnpaid
         }
       }
     }
   }
+
+  const baseRollover = params.rolloverBalanceFils ?? 0
+  const rolloverBalance =
+    isFutureMonth && params.rolloverBalanceFils !== undefined
+      ? baseRollover + intermediateRecurringNet - intermediateDebtObligations
+      : baseRollover
+  const monthNet = currentIncome - currentExpense
+  const availableBalance = rolloverBalance + monthNet
+  const availablePool = currentIncome + rolloverBalance
 
   // Free balance available for discretionary daily spending
   const freeBalance =
@@ -265,8 +273,24 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   // Estimate when the deficit will occur
   let estimatedDeficitDay: number | undefined
   if (isCurrentMonth && isDeficitProjected) {
-    if (freeBalance <= 0) {
+    if (availableBalance <= 0) {
       estimatedDeficitDay = now.getDate()
+    } else if (freeBalance <= 0) {
+      if (actualDailySpendFils > 0) {
+        const daysUntilCashDepletion = Math.floor(availableBalance / actualDailySpendFils)
+        const depletionDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + daysUntilCashDepletion
+        )
+        if (depletionDate < rangeEnd) {
+          estimatedDeficitDay = depletionDate.getDate()
+        } else {
+          estimatedDeficitDay = now.getDate()
+        }
+      } else {
+        estimatedDeficitDay = now.getDate()
+      }
     } else if (actualDailySpendFils > 0) {
       const daysUntilDepletion = Math.floor(freeBalance / actualDailySpendFils)
       const depletionDate = new Date(
@@ -299,7 +323,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     healthStatus = 'danger'
   } else if (
     actualDailySpendFils > dailySafeFils ||
-    (isCurrentMonth && availableBalance < 0 && upcomingRecurringIncome > 0 && freeBalance > 0)
+    (isCurrentMonth &&
+      availableBalance - futureDatedManualIncome < 0 &&
+      upcomingRecurringIncome + futureDatedManualIncome > 0 &&
+      freeBalance > 0)
   ) {
     healthStatus = 'warning'
   } else {

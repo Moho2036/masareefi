@@ -138,7 +138,12 @@ export async function updateTransaction(
     payload.note = typeof tx.note === 'string' ? tx.note.slice(0, 500) : ''
   }
   if (tx.recurringId !== undefined) {
-    payload.recurringId = tx.recurringId
+    const trimmedRecId = typeof tx.recurringId === 'string' ? tx.recurringId.trim() : ''
+    if (trimmedRecId === '') {
+      payload.recurringId = deleteField()
+    } else {
+      payload.recurringId = trimmedRecId.slice(0, 128)
+    }
   }
 
   if (Object.keys(payload).length > 0) {

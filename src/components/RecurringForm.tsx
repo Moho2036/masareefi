@@ -512,7 +512,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   setSkipMonth(c.myTurnMonth)
                   setFrequency('monthly')
                   if (!title) setTitle(`قسط ${c.name}`)
-                  if (!amountStr || parseFloat(amountStr) === 0) setAmountStr(String(fromFils(c.monthlyAmountFils)))
+                  setAmountStr(String(fromFils(c.monthlyAmountFils)))
                   const cStart = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
                   setStartDateStr(format(cStart, 'yyyy-MM-dd'))
                   const cEnd = addMonths(cStart, c.membersCount - 1)

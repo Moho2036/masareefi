@@ -16,7 +16,7 @@ import { subscribeDebts } from '../services/debts'
 import { subscribeRecurring } from '../services/recurring'
 import { subscribeMoneyCircles } from '../services/moneyCircles'
 import { subscribePriorBalance } from '../services/transactions'
-import { getFinancialMonthRange } from '../lib/dates'
+import { getFinancialMonthRange, formatDateInput } from '../lib/dates'
 import type { UserSettings, Category, Debt, Recurring, MoneyCircle } from '../types'
 
 export interface AppDataContextValue {
@@ -201,6 +201,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const monthStartDay = settings?.monthStartDay ?? 1
   const hasSettings = settings !== null
 
+  const [currentDayKey, setCurrentDayKey] = useState(() => formatDateInput(new Date()))
+
+  useEffect(() => {
+    const handleDayCheck = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return
+      }
+      setCurrentDayKey(formatDateInput(new Date()))
+    }
+
+    window.addEventListener('focus', handleDayCheck)
+    document.addEventListener('visibilitychange', handleDayCheck)
+
+    return () => {
+      window.removeEventListener('focus', handleDayCheck)
+      document.removeEventListener('visibilitychange', handleDayCheck)
+    }
+  }, [])
+
   // Real-time rollover prior balance sync: calculates cumulative balance before financial cycle start
   useEffect(() => {
     if (!userId || !hasSettings || !isRolloverEnabled) {
@@ -222,7 +241,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       unsub()
     }
-  }, [userId, hasSettings, isRolloverEnabled, monthStartDay])
+  }, [userId, hasSettings, isRolloverEnabled, monthStartDay, currentDayKey])
 
   const handleSetRolloverBalanceFils = useCallback(
     (amount: number) => {

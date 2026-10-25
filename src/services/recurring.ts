@@ -253,8 +253,12 @@ export async function processDueRecurring(
           const circle = circleMap.get(rec.circleId)!
           const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
           const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
-          if (userMember?.paymentsByMonth?.[String(cycleIndex)] === false) {
-            // User explicitly cancelled/unpaid this month; do not auto-generate transaction
+          if (
+            userMember?.paymentsByMonth?.[String(cycleIndex)] === false ||
+            userMember?.paymentsByMonth?.[String(cycleIndex)] === true ||
+            (Array.isArray(userMember?.paidMonths) && userMember.paidMonths.includes(cycleIndex))
+          ) {
+            // User explicitly cancelled/unpaid or already paid this month; do not auto-generate transaction
             continue
           }
         }

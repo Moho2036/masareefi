@@ -307,6 +307,7 @@ export function calculateMonthlyEquivalent(
       if (nextDate >= refDate && nextDate < cycleEnd) {
         if (
           (nextDate.getFullYear() === refDate.getFullYear() && nextDate.getMonth() === refDate.getMonth()) ||
+          (refDate.getDate() > 1 && item.id !== 'r_circle') ||
           refDate.getDate() >= 20
         ) {
           isSkipped = isOccurrenceSkipped(item, nextDate)

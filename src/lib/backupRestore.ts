@@ -19,7 +19,7 @@ import {
   userSettingsConverter,
 } from '../services/converters'
 import { circleConverter } from '../services/moneyCircles'
-import { syncCategoryUsageCache } from './categoryUsage'
+import { syncCategoryUsageCache, mergeAndSaveUsage, buildUsageFromTransactions } from './categoryUsage'
 
 export type RestoreMode = 'merge' | 'replace'
 
@@ -179,7 +179,8 @@ export function parseDate(val: unknown): Date {
 export function resolveOrphanCategories(
   categories: Category[],
   transactions: Transaction[],
-  recurring: Recurring[]
+  recurring: Recurring[],
+  circles: MoneyCircle[] = []
 ): Category[] {
   const existingCatMap = new Map<string, Category>()
   for (const c of categories) {
@@ -224,6 +225,18 @@ export function resolveOrphanCategories(
       const targetCatId = rawCatId || `cat_fallback_${type}`
       rec.categoryId = targetCatId
       ensureCategory(targetCatId, type)
+    }
+  }
+
+  for (const c of circles) {
+    if (c?.expenseCategoryId) {
+      ensureCategory(c.expenseCategoryId.trim(), 'expense')
+    }
+    if (c?.incomeCategoryId) {
+      ensureCategory(c.incomeCategoryId.trim(), 'income')
+    }
+    if (c?.categoryId) {
+      ensureCategory(c.categoryId.trim(), 'expense')
     }
   }
 
@@ -337,7 +350,8 @@ export function validateBackup(jsonText: string): BackupValidationResult {
     const resolvedCategories = resolveOrphanCategories(
       validCategories,
       validTransactions,
-      validRecurring
+      validRecurring,
+      validCircles
     )
 
     const exportedAt = typeof parsed.exportedAt === 'string' ? parsed.exportedAt : new Date().toISOString()
@@ -413,7 +427,8 @@ export async function restoreBackup(
   const resolvedCategories = resolveOrphanCategories(
     backup.data.categories || [],
     backup.data.transactions || [],
-    backup.data.recurring || []
+    backup.data.recurring || [],
+    backup.data.circles || []
   )
   backup.data.categories = resolvedCategories
 
@@ -453,11 +468,14 @@ export async function restoreBackup(
       existingUserSnap.exists()
     )
 
+    const validThemes = ['system', 'light', 'dark']
+    const safeTheme = validThemes.includes(s.theme as string) ? s.theme : 'system'
+
     const baseSettings = {
       displayName: (s.displayName || '').slice(0, 100),
       currency: (s.currency || 'JOD').trim().slice(0, 20),
       monthStartDay: Math.min(28, Math.max(1, Math.round(s.monthStartDay || 1))),
-      theme: s.theme || 'system',
+      theme: safeTheme,
       rolloverBalance: typeof s.rolloverBalance === 'boolean' ? s.rolloverBalance : true,
     }
 
@@ -508,6 +526,12 @@ export async function restoreBackup(
           ops.push((b) => b.delete(existingDoc.ref))
         }
       }
+    }
+  } else if (mode === 'merge') {
+    try {
+      mergeAndSaveUsage(buildUsageFromTransactions(backup.data.transactions || []))
+    } catch {
+      // ignore
     }
   }
 
@@ -600,7 +624,7 @@ export async function restoreBackup(
   // Write Transactions (validate amountFils > 0)
   for (const tx of backup.data.transactions) {
     if (!tx.id) continue
-    const amountFils = Math.round(Number(tx.amountFils || 0))
+    const amountFils = Math.min(1000000000000, Math.round(Number(tx.amountFils || 0)))
     if (amountFils <= 0) continue
 
     const txRef = doc(db, 'users', uid, 'transactions', tx.id).withConverter(transactionConverter)
@@ -627,7 +651,7 @@ export async function restoreBackup(
   // Write Debts (validate amountFils > 0 and payments amountFils > 0)
   for (const d of backup.data.debts) {
     if (!d.id) continue
-    const amountFils = Math.round(Number(d.amountFils || 0))
+    const amountFils = Math.min(1000000000000, Math.round(Number(d.amountFils || 0)))
     if (amountFils <= 0) continue
 
     const debtRef = doc(db, 'users', uid, 'debts', d.id).withConverter(debtConverter)
@@ -635,7 +659,7 @@ export async function restoreBackup(
 
     const payments = (d.payments || [])
       .map((p) => {
-        const pAmount = Math.round(Number(p.amountFils || 0))
+        const pAmount = Math.min(1000000000000, Math.round(Number(p.amountFils || 0)))
         if (pAmount <= 0) return null
         const item: {
           id: string
@@ -692,7 +716,7 @@ export async function restoreBackup(
   // Write Recurring (validate amountFils > 0)
   for (const r of backup.data.recurring) {
     if (!r.id) continue
-    const amountFils = Math.round(Number(r.amountFils || 0))
+    const amountFils = Math.min(1000000000000, Math.round(Number(r.amountFils || 0)))
     if (amountFils <= 0) continue
 
     const recRef = doc(db, 'users', uid, 'recurring', r.id).withConverter(recurringConverter)
@@ -711,13 +735,16 @@ export async function restoreBackup(
         ? Math.round(Number(r.skipMonth))
         : undefined
 
+    const validFreqs = ['weekly', 'monthly', 'yearly']
+    const safeFreq = validFreqs.includes(r.frequency as string) ? r.frequency : 'monthly'
+
     const recData: Recurring = {
       id: r.id,
       type: r.type === 'income' ? 'income' : 'expense',
       amountFils,
       categoryId: finalCatId,
       note: typeof r.note === 'string' ? r.note.slice(0, 500) : '',
-      frequency: r.frequency || 'monthly',
+      frequency: safeFreq,
       startDate: parseDate(r.startDate),
       nextDate: parseDate(r.nextDate),
       endDate: r.endDate ? parseDate(r.endDate) : null,
@@ -733,11 +760,11 @@ export async function restoreBackup(
   // Write Circles (validate monthlyAmountFils > 0 and totalAmountFils = monthlyAmountFils * membersCount)
   for (const c of backup.data.circles) {
     if (!c.id) continue
-    const monthlyAmountFils = Math.round(Number(c.monthlyAmountFils || 0))
+    const monthlyAmountFils = Math.min(1000000000000, Math.round(Number(c.monthlyAmountFils || 0)))
     if (monthlyAmountFils <= 0) continue
 
     const membersCount = Math.max(2, Math.min(50, Math.round(Number(c.membersCount || 2))))
-    const totalAmountFils = monthlyAmountFils * membersCount
+    const totalAmountFils = Math.min(1000000000000, monthlyAmountFils * membersCount)
     if (totalAmountFils <= 0) continue
 
     const circleRef = doc(db, 'users', uid, 'circles', c.id).withConverter(circleConverter)
@@ -745,7 +772,7 @@ export async function restoreBackup(
 
     const myTurnMonth = Math.max(1, Math.min(membersCount, Math.round(Number(c.myTurnMonth || 1))))
 
-    const members = (c.members || []).map((m) => {
+    const members = (c.members || []).slice(0, 50).map((m) => {
       let cleanedPaymentsByMonth: Record<string, boolean> | undefined = undefined
       if (m.paymentsByMonth && typeof m.paymentsByMonth === 'object' && !Array.isArray(m.paymentsByMonth)) {
         cleanedPaymentsByMonth = {}

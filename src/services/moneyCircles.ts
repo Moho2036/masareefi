@@ -174,6 +174,9 @@ export async function addMoneyCircle(
     status: circle.status || 'active',
     ...(circle.recurringId ? { recurringId: circle.recurringId } : {}),
     ...(circle.isManager !== undefined ? { isManager: Boolean(circle.isManager) } : {}),
+    ...(circle.expenseCategoryId ? { expenseCategoryId: circle.expenseCategoryId } : {}),
+    ...(circle.incomeCategoryId ? { incomeCategoryId: circle.incomeCategoryId } : {}),
+    ...(circle.categoryId ? { categoryId: circle.categoryId } : {}),
     createdAt: new Date(),
   }
 
@@ -213,6 +216,12 @@ export async function updateMoneyCircle(
   if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
   if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
   if (partial.status !== undefined) updates.status = partial.status
+  if (partial.expenseCategoryId !== undefined) updates.expenseCategoryId = partial.expenseCategoryId
+  if (partial.incomeCategoryId !== undefined) updates.incomeCategoryId = partial.incomeCategoryId
+  if (partial.categoryId !== undefined) updates.categoryId = partial.categoryId
+  if (options?.defaultCategoryId && !currentCircle.expenseCategoryId && partial.expenseCategoryId === undefined) {
+    updates.expenseCategoryId = options.defaultCategoryId
+  }
   if (partial.startDate !== undefined) {
     updates.startDate =
       partial.startDate instanceof Date
@@ -355,7 +364,11 @@ export async function updateMoneyCircle(
           userMember?.paidMonths || [],
           userMember?.paymentsByMonth
         )
-        const categoryId = options.defaultCategoryId || 'cat-custom-circle'
+        const categoryId =
+          options?.defaultCategoryId ||
+          currentCircle.expenseCategoryId ||
+          currentCircle.categoryId ||
+          'cat-custom-circle'
 
         batch.set(newRecRef, {
           type: 'expense',
@@ -377,7 +390,7 @@ export async function updateMoneyCircle(
         updates.recurringId = deleteField()
       }
     }
-  } else if (options?.createRecurringRule && options?.defaultCategoryId) {
+  } else if (options?.createRecurringRule) {
     const newRecRef = doc(collection(db, 'users', uid, 'recurring'))
     const userMember = (partial.members || currentCircle.members || []).find(
       (m) => m.turnMonth === effectiveTurn
@@ -389,11 +402,16 @@ export async function updateMoneyCircle(
       userMember?.paidMonths || [],
       userMember?.paymentsByMonth
     )
+    const categoryId =
+      options.defaultCategoryId ||
+      currentCircle.expenseCategoryId ||
+      currentCircle.categoryId ||
+      'cat-custom-circle'
 
     batch.set(newRecRef, {
       type: 'expense',
       amountFils: effectiveMonthly,
-      categoryId: options.defaultCategoryId,
+      categoryId,
       title: `قسط ${effectiveName}`.slice(0, 100),
       note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
       frequency: 'monthly',
@@ -508,14 +526,28 @@ export async function updateMoneyCircle(
         for (const txDoc of txSnap.docs) {
           const verifiedTx = await getDoc(txDoc.ref)
           if (verifiedTx.exists()) {
+            const txData = typeof verifiedTx.data === 'function' ? verifiedTx.data() : undefined
+            const rawDate = txData?.date
+            const txDate =
+              rawDate && typeof rawDate.toDate === 'function'
+                ? rawDate.toDate()
+                : rawDate instanceof Date
+                  ? rawDate
+                  : null
+            const now = new Date()
+            const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+            const isPastMonthTx = txDate !== null && txDate < startOfCurrentMonth
+
             const txUpdates: Record<string, unknown> = {}
-            if (amountChanged) {
+            if (amountChanged && !isPastMonthTx) {
               txUpdates.amountFils = effectiveMonthly
             }
             if (nameChanged) {
-              txUpdates.title = `قسط ${effectiveName}`.slice(0, 100)
+              txUpdates.title = ('قسط ' + effectiveName).slice(0, 100)
             }
-            batch.update(txDoc.ref, txUpdates)
+            if (Object.keys(txUpdates).length > 0) {
+              batch.update(txDoc.ref, txUpdates)
+            }
           }
         }
       } catch {
@@ -556,6 +588,12 @@ export async function checkCircleHasTransactions(
       if (!txSnap.empty) {
         return true
       }
+    }
+
+    // 3. Check manual installment transactions
+    const manualSnap = await getDoc(doc(db, 'users', uid, 'transactions', 'circle_' + circleId + '_m1'))
+    if (manualSnap?.exists?.()) {
+      return true
     }
 
     return false

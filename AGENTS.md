@@ -70,6 +70,10 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 ## 4. بروتوكول التحقق الذاتي قبل تسليم أي مهمة (Pre-Completion Verification)
 قبل أن تنهي ردك، اسأل نفسك: "لو كنت مستخدماً حقيقياً وجربت إضافة ثم تعديل ثم حذف هذا العنصر، أو جربته في أول يوم من الشهر/السنة، أو جربته مع رصيد سالب، هل سيحدث أي سلوك غريب؟" ثم شغّل فحص الأنواع (`typecheck`)، الـ `lint`، الاختبارات (`test`)، والبناء (`build`).
 
+## 5. ضابط رفع ونشر الكود إلى الموقع (Deployment & Production Release Protocol)
+- يُمنع منعاً باتاً نشر أو رفع الكود إلى الموقع الحي (`firebase deploy` / Production) تلقائياً أو بمبادرة ذاتية من الوكيل.
+- **الاستثناء المعتمد:** يُسمح برفع الكود ونشره إلى الموقع إذا طلب المستخدم ذلك صراحة ووضوحاً فقط (Explicit User Request). وفيما عدا ذلك، يقتصر عمل الوكيل على التطوير المحلي والاختبارات وبيئة المحاكي (`Firebase Emulator Suite`).
+
 ---
 
 ## Stack (do not substitute)
@@ -110,6 +114,6 @@ npm run build
 All must pass. Report exact output summary.
 
 ## Do NOT
-- Run `firebase login`, create real Firebase projects, or deploy. Use the Firebase Emulator Suite only.
+- Deploy to production (Firebase Hosting / `firebase deploy`), run `firebase login`, or modify live projects UNLESS explicitly requested by the user. Otherwise, use local checks and the Firebase Emulator Suite only.
 - Write `firestore.rules` yourself (the manager handles it via a specialist).
 - Start long-running dev servers without stopping them.

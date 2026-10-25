@@ -115,6 +115,38 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         return
       }
 
+      if (
+        isEditing &&
+        initialDebt &&
+        Array.isArray(initialDebt.payments) &&
+        initialDebt.payments.length > 0
+      ) {
+        const paymentDates = initialDebt.payments
+          .map((p) => (p.date instanceof Date ? p.date : new Date(p.date)))
+          .filter((d) => !isNaN(d.getTime()))
+
+        if (paymentDates.length > 0) {
+          const earliestPayment = new Date(Math.min(...paymentDates.map((d) => d.getTime())))
+          const startDateDay = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            startDate.getDate(),
+            0, 0, 0, 0
+          )
+          const earliestPaymentDay = new Date(
+            earliestPayment.getFullYear(),
+            earliestPayment.getMonth(),
+            earliestPayment.getDate(),
+            0, 0, 0, 0
+          )
+          if (startDateDay > earliestPaymentDay) {
+            setError('تاريخ الدين لا يمكن أن يكون بعد تاريخ أقدم دفعة مسجلة')
+            setLoading(false)
+            return
+          }
+        }
+      }
+
       if (isEditing && initialDebt) {
         const paidFils = initialDebt.paidFils ?? 0
         const settled = amountFils === paidFils

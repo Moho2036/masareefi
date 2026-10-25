@@ -174,8 +174,12 @@ export const CategoriesPage: React.FC = () => {
     let adjacentOrder = adjacentCat.order ?? 0
 
     if (currentOrder === adjacentOrder) {
-      currentOrder = currentIndex
-      adjacentOrder = targetIndex
+      if (direction === 'up') {
+        adjacentOrder = currentOrder
+        currentOrder = currentOrder + 1
+      } else {
+        adjacentOrder = currentOrder + 1
+      }
     }
 
     try {

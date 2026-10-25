@@ -37,6 +37,7 @@ import { removeCircleInstallmentPayment } from '../services/moneyCircles'
 import { formatDayHeader } from '../lib/dates'
 import { findLinkedDebtPayment } from '../lib/debts'
 import { exportTransactionsToCsv } from '../lib/exportCsv'
+import { getOccurrenceMonthIndex } from '../lib/recurring'
 import {
   getCategoryUsageMap,
   sortCategoriesByUsage,
@@ -119,10 +120,10 @@ export const TransactionsPage: React.FC = () => {
   }, [allMonths, rawTransactions])
 
   useEffect(() => {
-    if (allMonths && rawTransactions.length > 0) {
+    if (allMonths && !txLoading) {
       syncCategoryUsageCache(rawTransactions)
     }
-  }, [allMonths, rawTransactions])
+  }, [allMonths, rawTransactions, txLoading])
 
   // Relevant categories for horizontal chips (sorted by usage frequency)
   // Shows unarchived categories PLUS any archived category that has transactions in the current month
@@ -266,6 +267,26 @@ export const TransactionsPage: React.FC = () => {
         setDeleting(false)
       }
       return
+    }
+    if (!circleInstallmentMatch && txToDelete.recurringId) {
+      const linkedCircle = circles.find((c) => c.recurringId === txToDelete.recurringId)
+      if (linkedCircle) {
+        const monthNum = getOccurrenceMonthIndex(linkedCircle.startDate, txToDelete.date)
+        if (monthNum >= 1 && monthNum <= linkedCircle.membersCount) {
+          setDeleting(true)
+          try {
+            await removeCircleInstallmentPayment(user.uid, linkedCircle.id, monthNum)
+            showToast('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
+            setTxToDelete(null)
+          } catch (err) {
+            console.error('Failed to remove circle installment:', err)
+            showToast('تعذر حذف قسط الجمعية', 'error')
+          } finally {
+            setDeleting(false)
+          }
+          return
+        }
+      }
     }
     setDeleting(true)
     try {
@@ -611,7 +632,9 @@ export const TransactionsPage: React.FC = () => {
                                       <span>دين</span>
                                     </span>
                                   )}
-                                  {(tx.id.startsWith('circle_payout_') || /^circle_(.+)_m(\d+)$/.test(tx.id)) && (
+                                  {(tx.id.startsWith('circle_payout_') ||
+                                    /^circle_(.+)_m(\d+)$/.test(tx.id) ||
+                                    Boolean(tx.recurringId && circles.some((c) => c.recurringId === tx.recurringId))) && (
                                     <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 font-bold shrink-0">
                                       <Users className="w-2.5 h-2.5" />
                                       <span>جمعية</span>

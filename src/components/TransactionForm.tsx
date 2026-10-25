@@ -109,6 +109,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   // If the source debt/circle was deleted, the orphaned transaction is unlocked.
   const isLockedTransaction =
     !isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle || isMergedPaymentTx)
+  const [duplicateCleared, setDuplicateCleared] = useState(false)
+  const activeDuplicateFrom = duplicateCleared ? null : duplicateFrom
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -222,73 +224,78 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       if (isEditing && initialTransaction) {
         if (isLinkedToDebtPayment && linkedDebtPayment) {
           if (linkedDebtPayment.payment.isMerged) {
-            setError('لا يمكن تعديل دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
-            setSubmitting(false)
-            return
-          }
-
-          const debtStartDate =
-            linkedDebtPayment.debt.startDate instanceof Date
-              ? linkedDebtPayment.debt.startDate
-              : new Date(linkedDebtPayment.debt.startDate)
-          const debtStartDay = new Date(
-            debtStartDate.getFullYear(),
-            debtStartDate.getMonth(),
-            debtStartDate.getDate(),
-            0, 0, 0, 0
-          )
-          const paymentDay = new Date(
-            parsedDate.getFullYear(),
-            parsedDate.getMonth(),
-            parsedDate.getDate(),
-            0, 0, 0, 0
-          )
-          if (paymentDay < debtStartDay) {
-            setError('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
-            setSubmitting(false)
-            return
-          }
-          const previousPaymentsSum = (linkedDebtPayment.debt.payments || []).reduce(
-            (acc, p) => acc + p.amountFils,
-            0
-          )
-          const untrackedPaidFils = Math.max(
-            0,
-            (linkedDebtPayment.debt.paidFils || 0) - previousPaymentsSum
-          )
-          const otherPaymentsTotal = (linkedDebtPayment.debt.payments || [])
-            .filter((p) => p.id !== linkedDebtPayment.payment.id)
-            .reduce((sum, p) => sum + p.amountFils, 0)
-          const remainingAllowed = Math.max(
-            0,
-            linkedDebtPayment.debt.amountFils - (otherPaymentsTotal + untrackedPaidFils)
-          )
-          if (amountFils > remainingAllowed) {
-            setError('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
-            setSubmitting(false)
-            return
-          }
-
-          await updateDebtPayment(
-            user.uid,
-            linkedDebtPayment.debt,
-            linkedDebtPayment.payment.id,
-            {
-              amountFils,
-              date: parsedDate,
-              note: note.trim().slice(0, 500),
-              categoryId: activeCategoryId,
-              title: trimmedTitle,
+            const catOrNoteChanged =
+              activeCategoryId !== initialTransaction.categoryId ||
+              note.trim() !== (initialTransaction.note || '').trim()
+            if (!catOrNoteChanged) {
+              setError('لا يمكن تعديل دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
+              setSubmitting(false)
+              return
             }
-          )
-          recordCategoryUsage(activeCategoryId)
-          showToast('تم تعديل دفعة الدين وتحديث سجل الدين بنجاح', 'success')
-          if (isOutsideMonth) {
-            setSelectedDate(parsedDate)
+          } else {
+            const debtStartDate =
+              linkedDebtPayment.debt.startDate instanceof Date
+                ? linkedDebtPayment.debt.startDate
+                : new Date(linkedDebtPayment.debt.startDate)
+            const debtStartDay = new Date(
+              debtStartDate.getFullYear(),
+              debtStartDate.getMonth(),
+              debtStartDate.getDate(),
+              0, 0, 0, 0
+            )
+            const paymentDay = new Date(
+              parsedDate.getFullYear(),
+              parsedDate.getMonth(),
+              parsedDate.getDate(),
+              0, 0, 0, 0
+            )
+            if (paymentDay < debtStartDay) {
+              setError('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
+              setSubmitting(false)
+              return
+            }
+            const previousPaymentsSum = (linkedDebtPayment.debt.payments || []).reduce(
+              (acc, p) => acc + p.amountFils,
+              0
+            )
+            const untrackedPaidFils = Math.max(
+              0,
+              (linkedDebtPayment.debt.paidFils || 0) - previousPaymentsSum
+            )
+            const otherPaymentsTotal = (linkedDebtPayment.debt.payments || [])
+              .filter((p) => p.id !== linkedDebtPayment.payment.id)
+              .reduce((sum, p) => sum + p.amountFils, 0)
+            const remainingAllowed = Math.max(
+              0,
+              linkedDebtPayment.debt.amountFils - (otherPaymentsTotal + untrackedPaidFils)
+            )
+            if (amountFils > remainingAllowed) {
+              setError('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
+              setSubmitting(false)
+              return
+            }
+
+            await updateDebtPayment(
+              user.uid,
+              linkedDebtPayment.debt,
+              linkedDebtPayment.payment.id,
+              {
+                amountFils,
+                date: parsedDate,
+                note: note.trim().slice(0, 500),
+                categoryId: activeCategoryId,
+                title: trimmedTitle,
+              }
+            )
+            recordCategoryUsage(activeCategoryId)
+            showToast('تم تعديل دفعة الدين وتحديث سجل الدين بنجاح', 'success')
+            if (isOutsideMonth) {
+              setSelectedDate(parsedDate)
+            }
+            onSuccess?.()
+            onClose()
+            return
           }
-          onSuccess?.()
-          onClose()
-          return
         }
 
         const finalType = isLockedTransaction ? initialTransaction.type : type
@@ -366,7 +373,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         recordCategoryUsage(activeCategoryId)
 
         showToast(
-          duplicateFrom
+          activeDuplicateFrom
             ? (isOutsideMonth
                 ? 'تم حفظ المعاملة المكررة والانتقال إلى شهر المعاملة'
                 : 'تم حفظ المعاملة المكررة بنجاح')
@@ -475,6 +482,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       setTitle('')
       setNote('')
       setIsRecurring(false)
+      setDuplicateCleared(true)
 
       setTimeout(() => {
         amountInputRef.current?.focus()
@@ -728,7 +736,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         <div
           className={cn(
             'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
-            error && amountStr && toFils(amountStr) <= 0
+            error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
               : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20',
             isLockedTransaction && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
@@ -1012,7 +1020,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               ? 'جاري الحفظ...'
               : isEditing
                 ? 'تعديل المعاملة'
-                : duplicateFrom
+                : activeDuplicateFrom
                   ? 'حفظ النسخة'
                   : 'حفظ'}
           </Button>

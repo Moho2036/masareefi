@@ -133,20 +133,22 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
         const westernQuery = toWesternDigits(rawSearch).replace(/,/g, '')
         const remainingFils = getDebtRemainingFils(debt)
 
+        const isPureDigits = /^\d+$/.test(westernQuery)
         const matchesAmount = Boolean(
           westernQuery &&
-            (debt.amountFils.toString().includes(westernQuery) ||
-              debt.paidFils.toString().includes(westernQuery) ||
-              remainingFils.toString().includes(westernQuery) ||
-              fromFils(debt.amountFils).toString().includes(westernQuery) ||
-              fromFils(debt.paidFils).toString().includes(westernQuery) ||
-              fromFils(remainingFils).toString().includes(westernQuery) ||
-              fromFils(debt.amountFils).toFixed(2).includes(westernQuery) ||
-              fromFils(debt.paidFils).toFixed(2).includes(westernQuery) ||
-              fromFils(remainingFils).toFixed(2).includes(westernQuery) ||
-              fromFils(debt.amountFils).toFixed(3).includes(westernQuery) ||
-              fromFils(debt.paidFils).toFixed(3).includes(westernQuery) ||
-              fromFils(remainingFils).toFixed(3).includes(westernQuery))
+            (isPureDigits
+              ? String(fromFils(debt.amountFils)).includes(westernQuery) ||
+                String(fromFils(debt.paidFils)).includes(westernQuery) ||
+                String(fromFils(remainingFils)).includes(westernQuery)
+              : fromFils(debt.amountFils).toString().includes(westernQuery) ||
+                fromFils(debt.paidFils).toString().includes(westernQuery) ||
+                fromFils(remainingFils).toString().includes(westernQuery) ||
+                fromFils(debt.amountFils).toFixed(2).includes(westernQuery) ||
+                fromFils(debt.paidFils).toFixed(2).includes(westernQuery) ||
+                fromFils(remainingFils).toFixed(2).includes(westernQuery) ||
+                fromFils(debt.amountFils).toFixed(3).includes(westernQuery) ||
+                fromFils(debt.paidFils).toFixed(3).includes(westernQuery) ||
+                fromFils(remainingFils).toFixed(3).includes(westernQuery))
         )
 
         if (!nameNorm.includes(normalizedQuery) && !noteNorm.includes(normalizedQuery) && !matchesAmount) {
