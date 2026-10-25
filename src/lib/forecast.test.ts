@@ -813,4 +813,268 @@ describe('forecast lib', () => {
     expect(res.healthStatus).toBe('danger')
     expect(res.isDeficitProjected).toBe(true)
   })
+
+  it('does NOT inflate projected expense when viewing a future month with recorded transactions', () => {
+    // Current date is Oct 15, 2026; viewing future month of November 2026
+    const novRange = {
+      start: new Date(2026, 10, 1),
+      end: new Date(2026, 11, 1),
+    }
+
+    // A single 10 JOD expense in November
+    const novExpense: Transaction = {
+      id: 'tx-nov-1',
+      type: 'expense',
+      amountFils: 10000, // 10 JOD
+      categoryId: 'cat-exp',
+      date: new Date(2026, 10, 5),
+      note: 'فاتورة قادمة',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [novExpense],
+      monthStartDay: 1,
+      referenceDate: midMonthDate, // Oct 15, 2026
+      periodRange: novRange,
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    expect(res.elapsedDays).toBe(0)
+    expect(res.actualDailySpendFils).toBe(0)
+    // Projected expense should ONLY be the recorded 10 JOD, NOT multiplied by 30 days into 310 JOD!
+    expect(res.projectedExpense).toBe(10000)
+  })
+
+  it('does NOT inflate daily spending rate in current month when transactions are future-dated', () => {
+    // Reference date is day 5 of the month (Oct 5, 2026)
+    const day5Ref = new Date(2026, 9, 5)
+
+    // Expense on day 3: 15 JOD
+    const pastExpense: Transaction = {
+      id: 'tx-past-3',
+      type: 'expense',
+      amountFils: 15000,
+      categoryId: 'cat-exp',
+      date: new Date(2026, 9, 3),
+      note: 'مصروف ماضي',
+      createdAt: new Date(),
+    }
+
+    // Expense on day 25 (future-dated within this month): 50 JOD
+    const futureDatedExpense: Transaction = {
+      id: 'tx-future-25',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-exp',
+      date: new Date(2026, 9, 25),
+      note: 'شيك مؤجل أو فاتورة نهاية الشهر',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [pastExpense, futureDatedExpense],
+      monthStartDay: 1,
+      referenceDate: day5Ref,
+    })
+
+    expect(res.isCurrentMonth).toBe(true)
+    expect(res.elapsedDays).toBe(5)
+    // actualDailySpendFils should only divide the past 15,000 fils by 5 days = 3,000 fils/day,
+    // NOT (15,000 + 50,000) / 5 = 13,000 fils/day!
+    expect(res.actualDailySpendFils).toBe(3000)
+  })
+
+  it('treats manual circle transactions and linked debt payments as fixed commitments, excluding them from variable spending pace', () => {
+    // Reference date: Day 10 of current month
+    const day10Ref = new Date(2026, 9, 10)
+
+    // Ordinary variable expense: 20 JOD over 10 days = 2,000 fils/day
+    const variableExpense: Transaction = {
+      id: 'tx-var-1',
+      type: 'expense',
+      amountFils: 20000,
+      categoryId: 'cat-groceries',
+      date: new Date(2026, 9, 5),
+      note: 'مشتريات بقالة',
+      createdAt: new Date(),
+    }
+
+    // Manual money circle installment: 100 JOD (fixed commitment)
+    const circleExpense: Transaction = {
+      id: 'circle_installment_oct',
+      type: 'expense',
+      amountFils: 100000,
+      categoryId: 'cat-circle',
+      date: new Date(2026, 9, 3),
+      note: 'قسط جمعية',
+      createdAt: new Date(),
+    }
+
+    // Custom debt payment: 50 JOD (linked to a debt payment)
+    const customDebtTx: Transaction = {
+      id: 'custom_debt_pay_abc',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-debt',
+      date: new Date(2026, 9, 7),
+      note: 'دفعة سداد',
+      createdAt: new Date(),
+    }
+
+    const debtWithLinkedTx: Debt = {
+      id: 'debt-linked-1',
+      personName: 'خالد',
+      type: 'borrowed',
+      amountFils: 100000,
+      paidFils: 50000,
+      startDate: new Date(2026, 8, 1),
+      note: 'سلف',
+      settled: false,
+      payments: [
+        {
+          id: 'pay-1',
+          amountFils: 50000,
+          date: new Date(2026, 9, 7),
+          transactionId: 'custom_debt_pay_abc',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [variableExpense, circleExpense, customDebtTx],
+      debts: [debtWithLinkedTx],
+      monthStartDay: 1,
+      referenceDate: day10Ref,
+    })
+
+    expect(res.isCurrentMonth).toBe(true)
+    expect(res.elapsedDays).toBe(10)
+    // Total expense is 20,000 + 100,000 + 50,000 = 170,000 fils
+    expect(res.currentExpense).toBe(170000)
+    // But actualDailySpendFils (discretionary variable pace) should ONLY count variableExpense (20,000 / 10 = 2,000 fils/day)
+    expect(res.actualDailySpendFils).toBe(2000)
+  })
+
+  it('correctly forecasts upcoming recurring income, expenses, and debts in a future month without multiplying by days', () => {
+    // Reference date: Oct 15, 2026. Target period: December 2026 (31 days)
+    const refDate = new Date(2026, 9, 15)
+    const decRange = {
+      start: new Date(2026, 11, 1),
+      end: new Date(2027, 0, 1),
+    }
+
+    const recurringSalary: Recurring = {
+      id: 'rec-salary',
+      type: 'income',
+      amountFils: 800000, // 800 JOD
+      categoryId: 'cat-salary',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 1),
+      nextDate: new Date(2026, 11, 1), // Dec 1, 2026
+      active: true,
+      note: 'راتب شهري',
+    }
+
+    const recurringBill: Recurring = {
+      id: 'rec-bill',
+      type: 'expense',
+      amountFils: 180000, // 180 JOD
+      categoryId: 'cat-bills',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 5),
+      nextDate: new Date(2026, 11, 5), // Dec 5, 2026
+      active: true,
+      note: 'إيجار شهري',
+    }
+
+    const debtDueInDec: Debt = {
+      id: 'debt-dec',
+      personName: 'عمر',
+      type: 'borrowed',
+      amountFils: 120000, // 120 JOD
+      paidFils: 20000, // 100 JOD remaining unpaid
+      startDate: new Date(2026, 8, 1),
+      dueDate: new Date(2026, 11, 20), // Dec 20, 2026
+      settled: false,
+      note: 'سداد دفعة حاسوب',
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [recurringSalary, recurringBill],
+      debts: [debtDueInDec],
+      monthStartDay: 1,
+      referenceDate: refDate,
+      periodRange: decRange,
+      rolloverBalanceFils: 50000, // 50 JOD surplus carried over
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    expect(res.totalDays).toBe(31)
+    expect(res.elapsedDays).toBe(0)
+    expect(res.remainingDays).toBe(31)
+    expect(res.actualDailySpendFils).toBe(0)
+    expect(res.upcomingRecurringIncome).toBe(800000)
+    expect(res.upcomingRecurringExpenses).toBe(180000)
+    expect(res.upcomingDebtObligations).toBe(100000) // 120,000 - 20,000 = 100,000
+
+    // Available balance = rollover (50,000) + monthNet (0) = 50,000
+    expect(res.availableBalance).toBe(50000)
+    // Free balance = availableBalance (50,000) + recurringIncome (800,000) - recurringExpenses (180,000) - debt (100,000) = 570,000
+    expect(res.freeBalance).toBe(570000)
+
+    // Daily safe budget divided over all 31 days: floor(570,000 / 31) = 18,387 fils/day
+    expect(res.dailySafeFils).toBe(Math.floor(570000 / 31))
+
+    // Projected expense is only the upcoming commitments (280,000), not multiplied by days
+    expect(res.projectedExpense).toBe(280000)
+    expect(res.projectedNet).toBe(50000 + 800000 - 280000) // 570,000
+    expect(res.isDeficitProjected).toBe(false)
+    expect(res.healthStatus).toBe('safe')
+  })
+
+  it('detects deficit in future month when upcoming obligations exceed income and rollover', () => {
+    const refDate = new Date(2026, 9, 15)
+    const novRange = {
+      start: new Date(2026, 10, 1),
+      end: new Date(2026, 11, 1),
+    }
+
+    // Heavy recurring obligation in November
+    const heavyRecurring: Recurring = {
+      id: 'rec-heavy',
+      type: 'expense',
+      amountFils: 600000, // 600 JOD
+      categoryId: 'cat-tuition',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 10),
+      nextDate: new Date(2026, 10, 10),
+      active: true,
+      note: 'قسط جامعي',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [heavyRecurring],
+      monthStartDay: 1,
+      referenceDate: refDate,
+      periodRange: novRange,
+      rolloverBalanceFils: -50000, // -50 JOD deficit carried over!
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    expect(res.upcomingRecurringExpenses).toBe(600000)
+    expect(res.availableBalance).toBe(-50000)
+    // Free balance = -50,000 - 600,000 = -650,000
+    expect(res.freeBalance).toBe(-650000)
+    expect(res.dailySafeFils).toBe(0)
+    expect(res.isDeficitProjected).toBe(true)
+    expect(res.deficitAmount).toBe(650000)
+    expect(res.healthStatus).toBe('danger')
+  })
 })

@@ -5,6 +5,7 @@ import {
   clampWorkHoursPerDay,
   clampWorkDaysPerWeek,
   clampWorkDaysPerMonth,
+  parseNumeric,
 } from '../../lib/workHours'
 
 describe('WorkHoursCalculator component', () => {
@@ -128,5 +129,37 @@ describe('WorkHoursCalculator component', () => {
     expect(clampWorkDaysPerMonth(40)).toBe(31)
     expect(clampWorkDaysPerMonth(0)).toBe(1)
     expect(clampWorkDaysPerMonth(22)).toBe(22)
+  })
+
+  it('correctly handles thousand separators (,) and Arabic decimal commas in parseNumeric', () => {
+    // Thousand commas followed by 3 digits
+    expect(parseNumeric('1,000')).toBe(1000)
+    expect(parseNumeric('1,500')).toBe(1500)
+    expect(parseNumeric('12,500')).toBe(12500)
+    expect(parseNumeric('1,000,000')).toBe(1000000)
+
+    // Decimal commas
+    expect(parseNumeric('0,5')).toBe(0.5)
+    expect(parseNumeric('12,5')).toBe(12.5)
+    expect(parseNumeric('12.5')).toBe(12.5)
+    expect(parseNumeric('1,250.50')).toBe(1250.5)
+
+    // Arabic comma and Eastern Arabic numerals
+    expect(parseNumeric('1٫5')).toBe(1.5)
+    expect(parseNumeric('١,٠٠٠')).toBe(1000)
+    expect(parseNumeric('١,٥٠٠')).toBe(1500)
+  })
+
+  it('correctly calculates work hours when salary has thousand separator like 1,000', () => {
+    render(<WorkHoursCalculator />)
+
+    const salaryInput = screen.getByLabelText(/صافي راتبك الشهري/)
+    fireEvent.change(salaryInput, { target: { value: '1,000' } }) // 1000
+
+    const priceInput = screen.getByLabelText(/سعر السلعة/)
+    fireEvent.change(priceInput, { target: { value: '500' } }) // 500
+
+    // With 1000 salary (not 1!), item 500 is half of monthly hours (176 / 2 = 88)
+    expect(screen.getByText('88')).toBeDefined()
   })
 })

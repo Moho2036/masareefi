@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DebtsPage } from './DebtsPage'
-import { deleteDebt } from '../services/debts'
+import { deleteDebt, checkDebtInitialTransactionExists } from '../services/debts'
 import type { Debt } from '../types'
 
 vi.mock('../lib/firebase', () => ({
@@ -34,6 +34,19 @@ const mockDebts: Debt[] = [
     settled: true,
     payments: [],
     createdAt: new Date('2026-08-01'),
+  },
+  {
+    id: 'debt-3',
+    personName: 'عمر ياسين',
+    type: 'lent',
+    amountFils: 30000,
+    paidFils: 0,
+    startDate: new Date('2026-07-01'),
+    dueDate: null,
+    note: 'دين بدون دفعات بعد',
+    settled: false,
+    payments: [],
+    createdAt: new Date('2026-07-01'),
   },
 ]
 
@@ -73,11 +86,13 @@ vi.mock('../services/debts', () => ({
   updateDebt: vi.fn().mockResolvedValue(undefined),
   recordDebtPayment: vi.fn().mockResolvedValue('pay-id'),
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
+  checkDebtInitialTransactionExists: vi.fn().mockResolvedValue(false),
 }))
 
 describe('DebtsPage Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(checkDebtInitialTransactionExists).mockResolvedValue(false)
   })
 
   it('renders search input and debt cards', () => {
@@ -139,7 +154,7 @@ describe('DebtsPage Component', () => {
 
     expect(screen.getByText(/تأكيد حذف الدين/i)).toBeInTheDocument()
     const checkbox = screen.getByRole('checkbox', {
-      name: /حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً/i,
+      name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
     }) as HTMLInputElement
     expect(checkbox).toBeInTheDocument()
     expect(checkbox.checked).toBe(false)
@@ -159,7 +174,7 @@ describe('DebtsPage Component', () => {
     fireEvent.click(deleteButtons[0])
 
     const checkbox = screen.getByRole('checkbox', {
-      name: /حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً/i,
+      name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
     }) as HTMLInputElement
     fireEvent.click(checkbox)
     expect(checkbox.checked).toBe(true)
@@ -169,6 +184,22 @@ describe('DebtsPage Component', () => {
 
     await waitFor(() => {
       expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: true })
+    })
+  })
+
+  it('shows deleteTransactions checkbox for zero-payment debt when checkDebtInitialTransactionExists returns true', async () => {
+    vi.mocked(checkDebtInitialTransactionExists).mockResolvedValue(true)
+
+    render(<DebtsPage />)
+    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
+    // debt-3 has paidFils: 0 and payments: [] (index 1 after debt-1)
+    fireEvent.click(deleteButtons[1])
+
+    await waitFor(() => {
+      const checkbox = screen.getByRole('checkbox', {
+        name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
+      })
+      expect(checkbox).toBeInTheDocument()
     })
   })
 })

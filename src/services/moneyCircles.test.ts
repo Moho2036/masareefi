@@ -399,7 +399,7 @@ describe('moneyCircles service', () => {
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
-    it('depositCircleNetPayout sets payout transaction and adds myTurnMonth to member paidMonths', async () => {
+    it('depositCircleNetPayout sets payout transaction without adding myTurnMonth to member paidMonths', async () => {
       const { depositCircleNetPayout } = await import('./moneyCircles')
 
       // Payout does not exist yet
@@ -429,9 +429,8 @@ describe('moneyCircles service', () => {
       expect(mockBatchSet).toHaveBeenCalledTimes(1)
       expect(mockBatchSet.mock.calls[0][1].amountFils).toBe(400000) // 500,000 - 100,000
 
-      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
-      const updatedMembers = mockBatchUpdate.mock.calls[0][1].members
-      expect(updatedMembers[1].paidMonths).toEqual([2])
+      // Does not mutate member paidMonths since turn month is exempt by definition
+      expect(mockBatchUpdate).not.toHaveBeenCalled()
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
@@ -820,6 +819,171 @@ describe('moneyCircles service', () => {
       expect(recUpdateCall![1].title).toBeUndefined()
       expect(recUpdateCall![1].note).toBeUndefined()
       expect(recUpdateCall![1].amountFils).toBe(100000)
+    })
+
+    it('deactivates linked recurring rule and other rules with circleId == id when circle status is updated to completed', async () => {
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 5,
+          totalAmountFils: 500000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recurring doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية الأسرة',
+          active: true,
+        }),
+      })
+      // 3. query for recurring rules with circleId == id
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'rec-2',
+            ref: { id: 'rec-2', path: 'users/uid-1/recurring/rec-2' },
+          },
+        ],
+      })
+      // 4. payout doc does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        { status: 'completed' }
+      )
+
+      // rec-1 deactivated
+      const rec1Update = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-1')
+      )
+      expect(rec1Update).toBeDefined()
+      expect(rec1Update![1].active).toBe(false)
+
+      // rec-2 deactivated via circleId query
+      const rec2Update = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-2')
+      )
+      expect(rec2Update).toBeDefined()
+      expect(rec2Update![1].active).toBe(false)
+    })
+
+    it('unlinks recurring rule and deletes any rules matching circleId == id when recurringId is set to empty string', async () => {
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 5,
+          totalAmountFils: 500000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. old recurring doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({}),
+      })
+      // 3. query for recurring rules with circleId == id finds rec-2
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'rec-2',
+            ref: { id: 'rec-2', path: 'users/uid-1/recurring/rec-2' },
+          },
+        ],
+      })
+      // 4. payout doc
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        { recurringId: '' }
+      )
+
+      // Both rec-1 and rec-2 deleted
+      const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
+      expect(deletedPaths).toContain('users/uid-1/recurring/rec-1')
+      expect(deletedPaths).toContain('users/uid-1/recurring/rec-2')
+    })
+
+    it('updates title on linked installment transactions when circle name is updated', async () => {
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية قديمة',
+          monthlyAmountFils: 100000,
+          membersCount: 5,
+          totalAmountFils: 500000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recurring doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية قديمة',
+        }),
+      })
+      // 3. payout doc
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 4. query recurring for circleId == id
+      mockGetDocs.mockResolvedValueOnce({ docs: [] })
+      // 5. query transactions for recurringId == rec-1
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            ref: { id: 'tx-1', path: 'users/uid-1/transactions/tx-1' },
+          },
+        ],
+      })
+      // 6. verifiedTx getDoc
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ title: 'قسط جمعية قديمة' }),
+      })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        { name: 'جمعية الأصدقاء الجديدة' }
+      )
+
+      const txUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('transactions/tx-1')
+      )
+      expect(txUpdateCall).toBeDefined()
+      expect(txUpdateCall![1].title).toBe('قسط جمعية الأصدقاء الجديدة')
     })
   })
 

@@ -472,13 +472,19 @@ export async function restoreBackup(
 
   // 2. Categories
   const existingCatsMap = new Map<string, Category>()
+  const existingCatsByNameAndType = new Map<string, Category>()
   if (existingCatsSnap && existingCatsSnap.docs) {
     for (const d of existingCatsSnap.docs) {
-      existingCatsMap.set(d.id, d.data())
+      const c = d.data()
+      existingCatsMap.set(d.id, c)
+      const key = `${c.type}:${c.name.trim().toLowerCase()}`
+      if (!existingCatsByNameAndType.has(key)) {
+        existingCatsByNameAndType.set(key, c)
+      }
     }
   }
 
-  // Remappings from deleted existingCat.id -> targetRestoredCat.id
+  // Remappings from backup categoryId -> target categoryId in Firestore
   const categoryIdRemap = new Map<string, string>()
 
   if (mode === 'replace') {
@@ -543,6 +549,27 @@ export async function restoreBackup(
   // Write Categories
   for (const cat of backup.data.categories) {
     if (!cat.id) continue
+
+    if (mode === 'merge') {
+      // In merge mode: Check if category already exists in user account by ID or by name + type
+      const matchedExisting =
+        existingCatsMap.get(cat.id) ||
+        existingCatsByNameAndType.get(`${cat.type || 'expense'}:${(cat.name || '').trim().toLowerCase()}`)
+
+      if (matchedExisting) {
+        // Remap backup categoryId to the existing category's ID
+        categoryIdRemap.set(cat.id, matchedExisting.id)
+        // If the ID in backup differs from existing category in Firestore, do NOT create duplicate document!
+        if (matchedExisting.id !== cat.id) {
+          continue
+        }
+      } else {
+        categoryIdRemap.set(cat.id, cat.id)
+        existingCatsMap.set(cat.id, cat)
+        existingCatsByNameAndType.set(`${cat.type || 'expense'}:${(cat.name || '').trim().toLowerCase()}`, cat)
+      }
+    }
+
     const catRef = doc(db, 'users', uid, 'categories', cat.id).withConverter(categoryConverter)
     const existingCat = existingCatsMap.get(cat.id)
     // Prevent changing type if category already exists with this ID in Firestore (firestore.rules requires fieldUnchanged('type'))
@@ -699,12 +726,36 @@ export async function restoreBackup(
 
     const myTurnMonth = Math.max(1, Math.min(membersCount, Math.round(Number(c.myTurnMonth || 1))))
 
-    const members = (c.members || []).map((m) => ({
-      id: m.id,
-      name: (m.name || '').trim().slice(0, 50),
-      turnMonth: Math.round(m.turnMonth),
-      paidMonths: (m.paidMonths || []).map(Number),
-    }))
+    const members = (c.members || []).map((m) => {
+      let cleanedPaymentsByMonth: Record<string, boolean> | undefined = undefined
+      if (m.paymentsByMonth && typeof m.paymentsByMonth === 'object' && !Array.isArray(m.paymentsByMonth)) {
+        cleanedPaymentsByMonth = {}
+        for (const [key, val] of Object.entries(m.paymentsByMonth)) {
+          if (val) {
+            cleanedPaymentsByMonth[key] = true
+          }
+        }
+      }
+      return {
+        id: m.id,
+        name: (m.name || '').trim().slice(0, 50),
+        turnMonth: Math.round(m.turnMonth),
+        paidMonths: (m.paidMonths || []).map(Number),
+        ...(cleanedPaymentsByMonth && Object.keys(cleanedPaymentsByMonth).length > 0
+          ? { paymentsByMonth: cleanedPaymentsByMonth }
+          : {}),
+      }
+    })
+
+    const expenseCategoryId = typeof c.expenseCategoryId === 'string' && c.expenseCategoryId.trim()
+      ? (categoryIdRemap.get(c.expenseCategoryId.trim()) || c.expenseCategoryId.trim())
+      : undefined
+    const incomeCategoryId = typeof c.incomeCategoryId === 'string' && c.incomeCategoryId.trim()
+      ? (categoryIdRemap.get(c.incomeCategoryId.trim()) || c.incomeCategoryId.trim())
+      : undefined
+    const categoryId = typeof c.categoryId === 'string' && c.categoryId.trim()
+      ? (categoryIdRemap.get(c.categoryId.trim()) || c.categoryId.trim())
+      : undefined
 
     const circleData: MoneyCircle = {
       id: c.id,
@@ -719,6 +770,9 @@ export async function restoreBackup(
       createdAt: c.createdAt ? parseDate(c.createdAt) : new Date(),
       ...(recurringId !== undefined ? { recurringId } : {}),
       ...(c.isManager !== undefined ? { isManager: Boolean(c.isManager) } : {}),
+      ...(expenseCategoryId !== undefined ? { expenseCategoryId } : {}),
+      ...(incomeCategoryId !== undefined ? { incomeCategoryId } : {}),
+      ...(categoryId !== undefined ? { categoryId } : {}),
     }
     ops.push((b) => b.set(circleRef, circleData))
   }

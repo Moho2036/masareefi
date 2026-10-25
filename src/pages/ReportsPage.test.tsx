@@ -135,4 +135,17 @@ describe('ReportsPage month switching and period header', () => {
     // Year select dropdown is present
     expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
+
+  it('displays descriptive empty state subtext when current month has 0 expense or 0 income', () => {
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // Subtext for 0 income
+    expect(screen.getByText('لا توجد مداخيل مسجلة في هذا الشهر')).toBeInTheDocument()
+    // Subtext for 0 expense
+    expect(screen.getByText('لا توجد مصاريف مسجلة في هذا الشهر')).toBeInTheDocument()
+  })
 })

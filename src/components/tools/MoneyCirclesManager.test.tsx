@@ -779,6 +779,50 @@ describe('MoneyCirclesManager Component', () => {
     expect(resumeBtn).toBeInTheDocument()
   })
 
+  it('preserves paused recurring rule and does not send recurringId: "" when editing circle without touching autoSchedule toggle', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        id: 'circle-1',
+        recurringId: 'rec-paused-1',
+      },
+    ]
+    mockRecurring = [
+      {
+        ...sampleRecurring,
+        id: 'rec-paused-1',
+        circleId: 'circle-1',
+        active: false,
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const editBtn = screen.getByTitle('تعديل الجمعية')
+    fireEvent.click(editBtn)
+
+    // User edits the name only, without touching the autoSchedule toggle
+    const nameInput = screen.getByLabelText(/اسم الجمعية/i)
+    fireEvent.change(nameInput, { target: { value: 'جمعية الرواد المعدلة' } })
+
+    const submitBtn = screen.getByRole('button', { name: /حفظ التعديلات/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        expect.objectContaining({
+          name: 'جمعية الرواد المعدلة',
+          recurringId: 'rec-paused-1',
+        }),
+        expect.objectContaining({
+          createRecurringRule: false,
+        })
+      )
+    })
+  })
+
   it('calls toggleCircleMemberPayment when toggling user payment in manager view', async () => {
     vi.spyOn(circleServices, 'toggleCircleMemberPayment').mockResolvedValue({
       isUser: true,

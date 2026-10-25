@@ -425,6 +425,7 @@ describe('debts service with accounting link', () => {
       await updateDebtPayment('user-1', sampleDebtWithPayments, 'pay-1', {
         amountFils: 30000,
         date: new Date('2026-10-06'),
+        title: 'دفعة معدلة بالعنوان',
         note: 'دفعة معدلة',
       })
 
@@ -439,6 +440,7 @@ describe('debts service with accounting link', () => {
 
       const txPayload = mockBatchUpdate.mock.calls[1][1]
       expect(txPayload.amountFils).toBe(30000)
+      expect(txPayload.title).toBe('دفعة معدلة بالعنوان')
       expect(txPayload.note).toBe('دفعة معدلة')
     })
 
@@ -621,6 +623,68 @@ describe('debts service with accounting link', () => {
       await deleteDebt('user-1', 'debt-123', { deleteTransactions: true })
       // 1 debt + 1 initTx + 1 payTx (tx-custom-1) + 1 payTx (debt_pay_p1) = 4 delete calls
       expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('deletes legacy init and payment transactions when found during deleteDebt with deleteTransactions: true', async () => {
+      mockBatchDelete.mockClear()
+      mockBatchCommit.mockClear()
+
+      mockGetDoc.mockResolvedValueOnce({
+        data: () => ({
+          personName: 'أبو أحمد',
+          type: 'lent',
+          amountFils: 50000,
+          paidFils: 10000,
+          startDate: new Date('2026-10-01'),
+          payments: [{ id: 'p1', amountFils: 10000, date: new Date('2026-10-05') }],
+        }),
+      })
+
+      // mockGetDocs for legacyInitId
+      mockGetDocs.mockResolvedValueOnce({
+        empty: false,
+        docs: [
+          {
+            id: 'legacy-init-tx-999',
+            data: () => ({
+              amountFils: 50000,
+              date: new Date('2026-10-01'),
+              title: 'إقراض أبو أحمد',
+            }),
+          },
+        ],
+      })
+      // mockGetDocs for legacyPayId
+      mockGetDocs.mockResolvedValueOnce({
+        empty: false,
+        docs: [
+          {
+            id: 'legacy-pay-tx-888',
+            data: () => ({
+              amountFils: 10000,
+              date: new Date('2026-10-05'),
+              title: 'سداد من أبو أحمد',
+            }),
+          },
+        ],
+      })
+
+      await deleteDebt('user-1', 'debt-123', true)
+
+      // Expected deleted paths:
+      // 1. users/user-1/debts/debt-123
+      // 2. users/user-1/transactions/debt_init_debt-123
+      // 3. users/user-1/transactions/debt_pay_p1
+      // 4. users/user-1/transactions/legacy-init-tx-999
+      // 5. users/user-1/transactions/legacy-pay-tx-888
+      expect(mockBatchDelete).toHaveBeenCalledTimes(5)
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/legacy-init-tx-999' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/legacy-pay-tx-888' })
+      )
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
@@ -929,10 +993,163 @@ describe('debts service with accounting link', () => {
       expect(updatedData.payments[0].amountFils).toBe(30000)
       expect(updatedData.payments[0].note).toBe('رصيد دفعات سابقة مدمجة (15 دفعة)')
       expect(updatedData.payments[0].transactionId).toBeUndefined()
+      expect(updatedData.payments[0].isMerged).toBe(true)
+      expect(updatedData.payments[0].id).toMatch(/^compacted_/)
       // Kept payments remain unchanged
       expect(updatedData.payments[1].id).toBe('p-16')
       expect(updatedData.payments[10].id).toBe('p-25')
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('collects transactionIds into mergedTransactionIds during compaction', async () => {
+      const mockPayments = Array.from({ length: 15 }, (_, i) => ({
+        id: `p-${i + 1}`,
+        amountFils: 2000,
+        date: new Date(2026, 9, i + 1),
+        createdAt: new Date(2026, 9, i + 1),
+        transactionId: i < 5 ? `tx-${i + 1}` : undefined,
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-3',
+          amountFils: 100000,
+          paidFils: 30000,
+          settled: false,
+          payments: mockPayments,
+        }),
+      })
+
+      const result = await compactDebtPayments('user-1', 'debt-compact-3')
+      expect(result.mergedCount).toBe(5)
+
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      expect(updatedData.payments[0].mergedTransactionIds).toEqual([
+        'tx-1',
+        'tx-2',
+        'tx-3',
+        'tx-4',
+        'tx-5',
+      ])
+    })
+
+    it('deletes all mergedTransactionIds when deleting a merged payment', async () => {
+      const debtWithMergedPayment: Debt = {
+        id: 'debt-merged-1',
+        personName: 'خالد',
+        type: 'lent',
+        amountFils: 100000,
+        paidFils: 50000,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'compacted_123',
+            amountFils: 50000,
+            date: new Date('2026-10-05'),
+            createdAt: new Date('2026-10-05'),
+            isMerged: true,
+            mergedTransactionIds: ['tx-a', 'tx-b', 'tx-c'],
+          },
+        ],
+        createdAt: new Date('2026-10-01'),
+      }
+
+      await deleteDebtPayment('user-1', debtWithMergedPayment, 'compacted_123')
+
+      // Should delete tx-a, tx-b, tx-c
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/tx-a' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/tx-b' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/tx-c' })
+      )
+    })
+
+    it('deletes all mergedTransactionIds when deleteDebt is called with deleteTransactions = true', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        data: () => ({
+          payments: [
+            {
+              id: 'compacted_999',
+              isMerged: true,
+              mergedTransactionIds: ['merged-tx-1', 'merged-tx-2'],
+            },
+            {
+              id: 'p-single',
+              transactionId: 'single-tx-1',
+            },
+          ],
+        }),
+      })
+
+      await deleteDebt('user-1', 'debt-with-compacted', { deleteTransactions: true })
+
+      // initTx + single-tx-1 + merged-tx-1 + merged-tx-2 + debt doc = 5 deletes
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/merged-tx-1' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/merged-tx-2' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/single-tx-1' })
+      )
+    })
+
+    it('updates payment title to matching format and preserves custom note on personName change in updateDebt', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              personName: 'عمر',
+              type: 'lent',
+              paidFils: 20000,
+              amountFils: 50000,
+              payments: [
+                {
+                  id: 'pay-custom-note',
+                  amountFils: 20000,
+                  transactionId: 'tx-custom-note',
+                  note: 'دفعة نقدية مميزة من عمر',
+                },
+              ],
+            }),
+          }
+        }
+        if (ref.path.includes('tx-custom-note')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              title: 'استرداد دفعة دين: عمر',
+              note: 'دفعة نقدية مميزة من عمر',
+            }),
+          }
+        }
+        return {
+          exists: () => true,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        personName: 'عمر الجديد',
+      })
+
+      // Check payment tx update call
+      const payTxUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/tx-custom-note'
+      )
+      expect(payTxUpdateCall).toBeDefined()
+      expect(payTxUpdateCall![1].title).toBe('استرداد دفعة دين: عمر الجديد')
+      // Custom note must be preserved, not overwritten with generic prefix
+      expect(payTxUpdateCall![1].note).toBe('دفعة نقدية مميزة من عمر')
     })
   })
 })

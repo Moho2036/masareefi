@@ -64,6 +64,8 @@ export interface DebtPayment {
   note?: string
   transactionId?: string
   createdAt: Date
+  isMerged?: boolean
+  mergedTransactionIds?: string[]
 }
 
 export interface Debt {

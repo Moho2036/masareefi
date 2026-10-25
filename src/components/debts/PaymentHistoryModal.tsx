@@ -249,6 +249,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               .slice()
               .reverse()
               .map((p) => {
+                const isMerged = Boolean(p.isMerged || p.id.startsWith('compacted_'))
                 const formattedDate = toWesternDigits(
                   format(p.date, 'd MMMM yyyy', { locale: ar })
                 )
@@ -337,15 +338,22 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <div
-                              className={cn(
-                                'text-sm font-black',
-                                isLent
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-amber-600 dark:text-amber-400'
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={cn(
+                                  'text-sm font-black',
+                                  isLent
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                                )}
+                              >
+                                {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
+                              </div>
+                              {isMerged && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 shrink-0">
+                                  دفعات مدمجة
+                                </span>
                               )}
-                            >
-                              {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
                             </div>
                             <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
                               {formattedDate}
@@ -367,7 +375,11 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               onChange={(e) => setDeletePaymentTx(e.target.checked)}
                               className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
                             />
-                            <span>حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً</span>
+                            <span>
+                              {isMerged
+                                ? 'حذف المعاملات المالية المدمجة المرتبطة من سجل المعاملات أيضاً'
+                                : 'حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً'}
+                            </span>
                           </label>
 
                           <div className="flex items-center justify-end gap-2 pt-1">
@@ -396,15 +408,22 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     ) : (
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div
-                            className={cn(
-                              'text-sm font-black',
-                              isLent
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400'
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={cn(
+                                'text-sm font-black',
+                                isLent
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400'
+                              )}
+                            >
+                              {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
+                            </div>
+                            {isMerged && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 shrink-0">
+                                دفعات مدمجة
+                              </span>
                             )}
-                          >
-                            {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
                           </div>
                           <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
                             {formattedDate}
@@ -413,15 +432,17 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            disabled={Boolean(deletingId) || isSavingEdit}
-                            onClick={() => handleStartEdit(p)}
-                            className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                            title="تعديل هذه الدفعة"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                          {!isMerged && (
+                            <button
+                              type="button"
+                              disabled={Boolean(deletingId) || isSavingEdit}
+                              onClick={() => handleStartEdit(p)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              title="تعديل هذه الدفعة"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={Boolean(deletingId) || isSavingEdit}

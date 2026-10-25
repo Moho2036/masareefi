@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { TransactionForm } from './TransactionForm'
 import * as txServices from '../services/transactions'
 import * as recurringServices from '../services/recurring'
+import * as debtServices from '../services/debts'
 import type { Transaction } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -18,6 +19,11 @@ vi.mock('../services/transactions', () => ({
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
   processDueRecurring: vi.fn().mockResolvedValue(1),
+}))
+
+vi.mock('../services/debts', () => ({
+  updateDebtPayment: vi.fn().mockResolvedValue(undefined),
+  removeDebtPayment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -49,6 +55,72 @@ vi.mock('../hooks/useToast', () => ({
   }),
 }))
 
+let mockDebts = [
+  {
+    id: 'debt123',
+    personName: 'أبو أحمد',
+    type: 'lent' as const,
+    amountFils: 50000,
+    paidFils: 0,
+    settled: false,
+    startDate: new Date('2026-10-10T00:00:00Z'),
+    note: '',
+    payments: [],
+    createdAt: new Date('2026-10-10T00:00:00Z'),
+  },
+  {
+    id: 'debt_with_pay',
+    personName: 'سمير',
+    type: 'lent' as const,
+    amountFils: 60000,
+    paidFils: 20000,
+    settled: false,
+    startDate: new Date('2026-10-01T00:00:00Z'),
+    note: '',
+    payments: [
+      {
+        id: 'pay_123',
+        amountFils: 20000,
+        date: new Date('2026-10-05T00:00:00Z'),
+        transactionId: 'debt_pay_pay_123',
+        createdAt: new Date('2026-10-05T00:00:00Z'),
+      },
+    ],
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+  },
+]
+
+let mockCircles = [
+  {
+    id: 'circle-789',
+    name: 'جمعية الأقارب',
+    monthlyAmountFils: 50000,
+    membersCount: 10,
+    totalAmountFils: 500000,
+    myTurnMonth: 1,
+    startDate: new Date('2026-10-01T00:00:00Z'),
+    members: [],
+    status: 'active' as const,
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+  },
+]
+
+vi.mock('../hooks/useDebts', () => ({
+  useDebts: () => ({
+    data: mockDebts,
+    loading: false,
+    error: null,
+  }),
+}))
+
+vi.mock('../hooks/useMoneyCircles', () => ({
+  useMoneyCircles: () => ({
+    data: mockCircles,
+    loading: false,
+    error: null,
+  }),
+}))
+
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
 const mockSetSelectedDate = vi.fn()
 
@@ -62,6 +134,54 @@ vi.mock('../hooks/useSelectedMonth', () => ({
 
 describe('TransactionForm Component', () => {
   beforeEach(() => {
+    mockDebts = [
+      {
+        id: 'debt123',
+        personName: 'أبو أحمد',
+        type: 'lent' as const,
+        amountFils: 50000,
+        paidFils: 0,
+        settled: false,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        note: '',
+        payments: [],
+        createdAt: new Date('2026-10-10T00:00:00Z'),
+      },
+      {
+        id: 'debt_with_pay',
+        personName: 'سمير',
+        type: 'lent' as const,
+        amountFils: 60000,
+        paidFils: 20000,
+        settled: false,
+        startDate: new Date('2026-10-01T00:00:00Z'),
+        note: '',
+        payments: [
+          {
+            id: 'pay_123',
+            amountFils: 20000,
+            date: new Date('2026-10-05T00:00:00Z'),
+            transactionId: 'debt_pay_pay_123',
+            createdAt: new Date('2026-10-05T00:00:00Z'),
+          },
+        ],
+        createdAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    ]
+    mockCircles = [
+      {
+        id: 'circle-789',
+        name: 'جمعية الأقارب',
+        monthlyAmountFils: 50000,
+        membersCount: 10,
+        totalAmountFils: 500000,
+        myTurnMonth: 1,
+        startDate: new Date('2026-10-01T00:00:00Z'),
+        members: [],
+        status: 'active' as const,
+        createdAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    ]
     mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
     vi.clearAllMocks()
   })
@@ -504,5 +624,164 @@ describe('TransactionForm Component', () => {
     expect(
       screen.queryByText(/تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً/)
     ).not.toBeInTheDocument()
+  })
+
+  it('unlocks debt_init_ transaction and allows editing/deleting when linked debt is deleted', async () => {
+    // Empty debts so debt123 does not exist
+    mockDebts = []
+
+    const orphanedDebtTx: Transaction = {
+      id: 'debt_init_deletedDebt',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'c-fuel',
+      date: new Date('2026-10-10T00:00:00Z'),
+      title: 'سلفة قديمة محذوفة',
+      note: 'ملاحظة',
+      createdAt: new Date('2026-10-10T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={orphanedDebtTx}
+        onClose={vi.fn()}
+      />
+    )
+
+    // Should NOT show locked warning or external link to debts
+    expect(screen.queryByText('معاملة أصل الدين متزامنة مع سجل الديون')).not.toBeInTheDocument()
+    expect(screen.getByText(/تم فك قفل هذه المعاملة/)).toBeInTheDocument()
+
+    // Amount input should now be enabled
+    const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(amountInput.disabled).toBe(false)
+
+    // Should allow deleting
+    const deleteBtn = screen.getByRole('button', { name: 'حذف المعاملة' })
+    fireEvent.click(deleteBtn)
+
+    const confirmDeleteBtn = screen.getByRole('button', { name: 'نعم، احذف المعاملة' })
+    fireEvent.click(confirmDeleteBtn)
+
+    await waitFor(() => {
+      expect(txServices.deleteTransaction).toHaveBeenCalledWith('user-123', 'debt_init_deletedDebt')
+    })
+  })
+
+  it('unlocks circle_payout_ transaction and allows deleting when linked circle is deleted', async () => {
+    // Empty circles so circle-789 does not exist
+    mockCircles = []
+
+    const orphanedCircleTx: Transaction = {
+      id: 'circle_payout_deletedCircle',
+      type: 'income',
+      amountFils: 450000,
+      categoryId: 'c-salary',
+      date: new Date('2026-10-01T00:00:00Z'),
+      title: 'استلام جمعية محذوفة',
+      note: '',
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={orphanedCircleTx}
+        onClose={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByText('معاملة مرتبطة بإيداع جمعية مالية')).not.toBeInTheDocument()
+    expect(screen.getByText(/تم فك قفل هذه المعاملة/)).toBeInTheDocument()
+
+    const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
+    expect(amountInput.disabled).toBe(false)
+  })
+
+  it('passes empty title to updateTransaction when user clears title input', async () => {
+    const existingTxWithTitle: Transaction = {
+      id: 'tx-with-title',
+      type: 'expense',
+      amountFils: 15000,
+      categoryId: 'c-food',
+      date: new Date('2026-10-10T00:00:00Z'),
+      title: 'عنوان قديم للتجربة',
+      note: 'ملاحظة',
+      createdAt: new Date('2026-10-10T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={existingTxWithTitle}
+        onClose={vi.fn()}
+      />
+    )
+
+    // Title input has the old title
+    const titleInput = screen.getByPlaceholderText(/فاتورة كهرباء/) as HTMLInputElement
+    expect(titleInput.value).toBe('عنوان قديم للتجربة')
+
+    // User clears the title
+    fireEvent.change(titleInput, { target: { value: '' } })
+    expect(titleInput.value).toBe('')
+
+    // Save
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(txServices.updateTransaction).toHaveBeenCalledWith(
+        'user-123',
+        'tx-with-title',
+        expect.objectContaining({
+          title: '',
+        })
+      )
+    })
+  })
+
+  it('hides duplicate button and passes title to updateDebtPayment when editing a debt payment transaction', async () => {
+    const debtPaymentTx: Transaction = {
+      id: 'debt_pay_pay_123',
+      type: 'income',
+      amountFils: 20000,
+      categoryId: 'c-salary',
+      date: new Date('2026-10-05T00:00:00Z'),
+      title: 'دفعة سداد قديمة',
+      note: 'ملاحظة السداد',
+      createdAt: new Date('2026-10-05T00:00:00Z'),
+    }
+
+    renderWithRouter(
+      <TransactionForm
+        initialTransaction={debtPaymentTx}
+        onClose={vi.fn()}
+      />
+    )
+
+    // 1. Duplicate button should NOT be visible for debt payment transactions
+    expect(screen.queryByText(/تكرار هذه المعاملة/)).not.toBeInTheDocument()
+
+    // 2. Title input should be editable and hold existing title
+    const titleInput = screen.getByDisplayValue('دفعة سداد قديمة') as HTMLInputElement
+    expect(titleInput).toBeInTheDocument()
+
+    // Change title
+    fireEvent.change(titleInput, { target: { value: 'دفعة سداد معدلة ومحسوبة' } })
+    expect(titleInput.value).toBe('دفعة سداد معدلة ومحسوبة')
+
+    // Save
+    const submitBtn = screen.getByRole('button', { name: 'تعديل المعاملة' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(debtServices.updateDebtPayment).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({ id: 'debt_with_pay' }),
+        'pay_123',
+        expect.objectContaining({
+          title: 'دفعة سداد معدلة ومحسوبة',
+        })
+      )
+    })
   })
 })

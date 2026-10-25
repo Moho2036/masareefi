@@ -208,36 +208,11 @@ export async function processDueRecurring(
     rec: Recurring
   }
 
-  const pendingTxs: PendingTx[] = []
-  const recurringUpdates: { recRef: ReturnType<typeof doc>; payload: Record<string, unknown> }[] = []
-
-  for (const docSnap of snap.docs) {
-    const rec = docSnap.data()
-    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, endOfToday)
-
-    if (dates.length > 0) {
-      for (const occDate of dates) {
-        const txId = getDeterministicTxId(rec.id, occDate)
-        const txRef = doc(db, 'users', uid, 'transactions', txId)
-        pendingTxs.push({ txId, txRef, occDate, rec })
-      }
-    }
-
-    const recRef = doc(db, 'users', uid, 'recurring', rec.id)
-    const updatePayload: Record<string, unknown> = {
-      nextDate: Timestamp.fromDate(newNextDate),
-    }
-    if (shouldDeactivate) {
-      updatePayload.active = false
-    }
-    recurringUpdates.push({ recRef, payload: updatePayload })
-  }
-
-  // Pre-fetch any linked circles for recurring items to prevent double deduction
+  // Pre-fetch any linked circles for recurring items to prevent deductions on completed circles or double deduction
   const circleIds = Array.from(
     new Set(
-      pendingTxs
-        .map((p) => p.rec.circleId)
+      snap.docs
+        .map((d) => d.data().circleId)
         .filter((cid): cid is string => typeof cid === 'string' && cid.trim().length > 0)
     )
   )
@@ -252,6 +227,41 @@ export async function processDueRecurring(
     if (cDoc.exists()) {
       circleMap.set(cDoc.id, cDoc.data())
     }
+  }
+
+  const pendingTxs: PendingTx[] = []
+  const recurringUpdates: { recRef: ReturnType<typeof doc>; payload: Record<string, unknown> }[] = []
+
+  for (const docSnap of snap.docs) {
+    const rec = docSnap.data()
+    const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+
+    // Defense-in-depth: If linked to a completed circle, immediately deactivate recurring rule and skip
+    if (rec.circleId && circleMap.has(rec.circleId)) {
+      const circle = circleMap.get(rec.circleId)!
+      if (circle.status === 'completed') {
+        recurringUpdates.push({ recRef, payload: { active: false } })
+        continue
+      }
+    }
+
+    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, endOfToday)
+
+    if (dates.length > 0) {
+      for (const occDate of dates) {
+        const txId = getDeterministicTxId(rec.id, occDate)
+        const txRef = doc(db, 'users', uid, 'transactions', txId)
+        pendingTxs.push({ txId, txRef, occDate, rec })
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      nextDate: Timestamp.fromDate(newNextDate),
+    }
+    if (shouldDeactivate) {
+      updatePayload.active = false
+    }
+    recurringUpdates.push({ recRef, payload: updatePayload })
   }
 
   const circleModified = new Set<string>()

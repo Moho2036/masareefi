@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { TransactionsPage } from './TransactionsPage'
 import * as exportCsvModule from '../lib/exportCsv'
 import * as debtsServices from '../services/debts'
-import type { Transaction, Category, Debt } from '../types'
+import type { Transaction, Category, Debt, MoneyCircle } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -16,6 +16,7 @@ const mockCategories: Category[] = [
 let mockTransactions: Transaction[] = []
 let mockAllTransactions: Transaction[] = []
 let mockDebts: Debt[] = []
+let mockCircles: MoneyCircle[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
 
 vi.mock('../services/transactions', () => ({
@@ -52,6 +53,14 @@ vi.mock('../hooks/useTransactions', () => ({
 vi.mock('../hooks/useDebts', () => ({
   useDebts: () => ({
     data: mockDebts,
+    loading: false,
+    error: null,
+  }),
+}))
+
+vi.mock('../hooks/useMoneyCircles', () => ({
+  useMoneyCircles: () => ({
+    data: mockCircles,
     loading: false,
     error: null,
   }),
@@ -104,6 +113,7 @@ describe('TransactionsPage Component', () => {
     mockTransactions = []
     mockAllTransactions = []
     mockDebts = []
+    mockCircles = []
   })
 
   it('paginates transactions at 30 items per page and allows navigating between pages', () => {
@@ -337,5 +347,91 @@ describe('TransactionsPage Component', () => {
       'تم تصدير المعاملات المحددة لكافة الأشهر بنجاح',
       'success'
     )
+  })
+
+  it('automatically exits allMonths mode when selectedDate changes', () => {
+    const { rerender } = renderWithRouter(<TransactionsPage />)
+
+    // Turn on allMonths
+    const allMonthsBtn = screen.getByRole('button', { name: /كل الأشهر/i })
+    fireEvent.click(allMonthsBtn)
+
+    expect(screen.getByText(/البحث في كامل السجل \(كل الأشهر\)/i)).toBeInTheDocument()
+
+    // Change selectedDate / range
+    mockRange = { start: new Date('2026-11-01'), end: new Date('2026-12-01') }
+    rerender(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+    // allMonths banner should be gone because selectedDate changed
+    expect(screen.queryByText(/البحث في كامل السجل \(كل الأشهر\)/i)).not.toBeInTheDocument()
+  })
+
+  it('allows deleting orphaned debt_init_ transaction when debt has been deleted', async () => {
+    // Transaction exists, but mockDebts is empty
+    mockTransactions = [
+      {
+        id: 'debt_init_deleted123',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-15T00:00:00Z'),
+        title: 'سلفة قديمة',
+        note: '',
+        createdAt: new Date('2026-10-15T00:00:00Z'),
+      },
+    ]
+    mockDebts = []
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Should NOT show external link to debts, should show delete button
+    expect(screen.queryByTitle(/مرتبط بسجل الديون/)).not.toBeInTheDocument()
+    const deleteBtn = screen.getByTitle('حذف المعاملة')
+    expect(deleteBtn).toBeInTheDocument()
+
+    // Clicking delete opens modal
+    fireEvent.click(deleteBtn)
+    expect(screen.getByText('تأكيد حذف المعاملة')).toBeInTheDocument()
+
+    const allDeleteBtns = screen.getAllByRole('button', { name: 'حذف المعاملة' })
+    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1]
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith('تم حذف المعاملة بنجاح', 'info')
+    })
+  })
+
+  it('allows deleting orphaned circle_payout_ transaction when circle has been deleted', async () => {
+    mockTransactions = [
+      {
+        id: 'circle_payout_deletedCircle123',
+        type: 'income',
+        amountFils: 300000,
+        categoryId: 'c-salary',
+        date: new Date('2026-10-15T00:00:00Z'),
+        title: 'استلام جمعية محذوفة',
+        note: '',
+        createdAt: new Date('2026-10-15T00:00:00Z'),
+      },
+    ]
+    mockCircles = []
+
+    renderWithRouter(<TransactionsPage />)
+
+    expect(screen.queryByTitle(/مرتبط بنظام الجمعيات/)).not.toBeInTheDocument()
+    const deleteBtn = screen.getByTitle('حذف المعاملة')
+    expect(deleteBtn).toBeInTheDocument()
+
+    fireEvent.click(deleteBtn)
+    expect(screen.getByText('تأكيد حذف المعاملة')).toBeInTheDocument()
+
+    const allDeleteBtns = screen.getAllByRole('button', { name: 'حذف المعاملة' })
+    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1]
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith('تم حذف المعاملة بنجاح', 'info')
+    })
   })
 })

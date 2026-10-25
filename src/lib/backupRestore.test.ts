@@ -902,5 +902,190 @@ describe('backupRestore module', () => {
       expect(recSetCall).toBeDefined()
       expect(recSetCall![1].skipMonth).toBeUndefined()
     })
+
+    it('prevents duplicating categories with matching name and type in merge mode and remaps categoryId', async () => {
+      mockSet.mockClear()
+      // Existing categories in user Firestore account (e.g. seeded defaults)
+      const existingCategory = {
+        id: 'seed_expense_0',
+        name: 'طعام',
+        type: 'expense' as const,
+        icon: '🛒',
+        color: '#10B981',
+        archived: false,
+        order: 0,
+      }
+
+      mockGetDocs.mockImplementation((col) => {
+        const colPath = (col as { path?: string })?.path || ''
+        if (colPath.includes('categories')) {
+          return Promise.resolve({
+            docs: [
+              {
+                id: existingCategory.id,
+                ref: { path: `users/u1/categories/${existingCategory.id}` },
+                data: () => existingCategory,
+              },
+            ],
+          })
+        }
+        return Promise.resolve({ docs: [] })
+      })
+
+      const backupToMerge: MasareefiBackup = {
+        version: 1,
+        app: 'masareefi',
+        exportedAt: '2026-10-15T12:00:00.000Z',
+        data: {
+          categories: [
+            {
+              id: 'backup_cat_food',
+              name: 'طعام', // Same name and type, different ID
+              type: 'expense',
+              icon: '🍽️',
+              color: '#10B981',
+              archived: false,
+              order: 0,
+            },
+          ],
+          transactions: [
+            {
+              id: 'tx_food_1',
+              type: 'expense',
+              amountFils: 7500,
+              categoryId: 'backup_cat_food',
+              date: new Date('2026-10-10'),
+              note: 'غداء عمل',
+              createdAt: new Date('2026-10-10'),
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec_food_1',
+              type: 'expense',
+              amountFils: 20000,
+              categoryId: 'backup_cat_food',
+              note: 'وجبات أسبوعية',
+              frequency: 'weekly',
+              startDate: new Date('2026-10-01'),
+              nextDate: new Date('2026-10-08'),
+              active: true,
+              createdAt: new Date('2026-10-01'),
+            },
+          ],
+          circles: [
+            {
+              id: 'circle_1',
+              name: 'صندوق غداء',
+              monthlyAmountFils: 5000,
+              membersCount: 4,
+              totalAmountFils: 20000,
+              myTurnMonth: 1,
+              startDate: new Date('2026-10-01'),
+              members: [],
+              status: 'active',
+              createdAt: new Date('2026-10-01'),
+              expenseCategoryId: 'backup_cat_food',
+            },
+          ],
+          debts: [],
+        },
+      }
+
+      await restoreBackup('u1', backupToMerge, 'merge')
+
+      // 1. Should NOT write a duplicate category document for 'backup_cat_food'
+      const duplicateCatCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/categories/backup_cat_food'
+      )
+      expect(duplicateCatCall).toBeUndefined()
+
+      // 2. Transaction categoryId should be remapped to existing 'seed_expense_0'
+      const txCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/transactions/tx_food_1'
+      )
+      expect(txCall).toBeDefined()
+      expect(txCall![1].categoryId).toBe('seed_expense_0')
+
+      // 3. Recurring categoryId should be remapped to existing 'seed_expense_0'
+      const recCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/recurring/rec_food_1'
+      )
+      expect(recCall).toBeDefined()
+      expect(recCall![1].categoryId).toBe('seed_expense_0')
+
+      // 4. Circle expenseCategoryId should be remapped to existing 'seed_expense_0'
+      const circleCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/circles/circle_1'
+      )
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].expenseCategoryId).toBe('seed_expense_0')
+    })
+
+    it('preserves paymentsByMonth on circle members during restoreBackup', async () => {
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: [] }) // categories
+        .mockResolvedValueOnce({ docs: [] }) // transactions
+        .mockResolvedValueOnce({ docs: [] }) // debts
+        .mockResolvedValueOnce({ docs: [] }) // recurring
+        .mockResolvedValueOnce({ docs: [] }) // circles
+
+      const backup: MasareefiBackup = {
+        version: 1,
+        app: 'masareefi',
+        exportedAt: new Date().toISOString(),
+        data: {
+          settings: {
+            displayName: 'محمد',
+            currency: 'JOD',
+            monthStartDay: 1,
+            theme: 'system',
+            rolloverBalance: false,
+          },
+          categories: [],
+          transactions: [],
+          recurring: [],
+          debts: [],
+          circles: [
+            {
+              id: 'circle_with_pbm',
+              name: 'جمعية تجريبية',
+              monthlyAmountFils: 10000,
+              membersCount: 3,
+              totalAmountFils: 30000,
+              myTurnMonth: 1,
+              startDate: new Date('2026-10-01'),
+              members: [
+                {
+                  id: 'm1',
+                  name: 'أنا',
+                  turnMonth: 1,
+                  paidMonths: [1],
+                  paymentsByMonth: { '1': true, '2': false },
+                },
+                {
+                  id: 'm2',
+                  name: 'أحمد',
+                  turnMonth: 2,
+                  paidMonths: [1, 2],
+                  paymentsByMonth: { '1': true, '2': true },
+                },
+              ],
+              status: 'active',
+              createdAt: new Date('2026-10-01'),
+            },
+          ],
+        },
+      }
+
+      await restoreBackup('u1', backup, 'merge')
+
+      const circleCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/circles/circle_with_pbm'
+      )
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].members[0].paymentsByMonth).toEqual({ '1': true })
+      expect(circleCall![1].members[1].paymentsByMonth).toEqual({ '1': true, '2': true })
+    })
   })
 })

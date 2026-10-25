@@ -9,6 +9,7 @@ import { Toggle } from './ui/Toggle'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useDebts } from '../hooks/useDebts'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
@@ -37,6 +38,7 @@ export interface TransactionFormProps {
   onClose: () => void
   onSuccess?: () => void
   onDuplicate?: (tx: Transaction) => void
+  isSourceDeleted?: boolean
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -46,10 +48,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   onClose,
   onSuccess,
   onDuplicate,
+  isSourceDeleted,
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
   const { data: debts } = useDebts()
+  const { data: circles } = useMoneyCircles()
   const { setSelectedDate, range } = useSelectedMonth()
   const { showToast } = useToast()
   const { config: currencyConfig } = useCurrency()
@@ -62,16 +66,38 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const isLinkedToDebtInit = Boolean(
     initialTransaction?.id && initialTransaction.id.startsWith('debt_init_')
   )
+  const debtId = isLinkedToDebtInit && initialTransaction ? initialTransaction.id.replace('debt_init_', '') : null
+  const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
+
   const isLinkedToDebtPayment = Boolean(
     linkedDebtPayment ||
-      (initialTransaction?.id && initialTransaction.id.startsWith('debt_pay_'))
+      (initialTransaction?.id &&
+        initialTransaction.id.startsWith('debt_pay_') &&
+        debts.some((d) =>
+          (d.payments || []).some(
+            (p) => p.id === initialTransaction.id.replace('debt_pay_', '') || p.transactionId === initialTransaction.id
+          )
+        ))
   )
+
   const isLinkedToCircle = Boolean(
     initialTransaction?.id && initialTransaction.id.startsWith('circle_payout_')
   )
-  // Only completely lock amount & date for debt_init_ and circle_payout_
-  // Debt payments allow editing amount, category, date, and note!
-  const isLockedTransaction = isLinkedToDebtInit || isLinkedToCircle
+  const circleId = isLinkedToCircle && initialTransaction ? initialTransaction.id.replace('circle_payout_', '') : null
+  const isCircleExists = Boolean(
+    isLinkedToCircle &&
+      initialTransaction &&
+      circles.some((c) => c.id === circleId || initialTransaction.id.startsWith(`circle_payout_${c.id}`))
+  )
+
+  const isSourceMissing =
+    isSourceDeleted ??
+    ((isLinkedToDebtInit && !isDebtExists) || (isLinkedToCircle && !isCircleExists))
+
+  // Only completely lock amount & date for debt_init_ and circle_payout_ if their source still exists!
+  // If the source debt/circle was deleted, the orphaned transaction is unlocked.
+  const isLockedTransaction =
+    !isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle)
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -221,6 +247,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               date: parsedDate,
               note: note.trim().slice(0, 500),
               categoryId: activeCategoryId,
+              title: trimmedTitle,
             }
           )
           recordCategoryUsage(activeCategoryId)
@@ -245,7 +272,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           amountFils: finalAmountFils,
           categoryId: activeCategoryId,
           date: finalDate,
-          ...(finalTitle ? { title: finalTitle } : {}),
+          title: finalTitle ?? '',
           note: note.trim().slice(0, 500),
         })
         recordCategoryUsage(activeCategoryId)
@@ -438,11 +465,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       }
       return
     }
-    if (isLinkedToDebtInit) {
+    if (isLinkedToDebtInit && isDebtExists && !isSourceDeleted) {
       setError('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
       return
     }
-    if (isLinkedToCircle) {
+    if (isLinkedToCircle && isCircleExists && !isSourceDeleted) {
       setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
       return
     }
@@ -498,7 +525,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Linked Debt Init Warning Banner */}
-      {isLinkedToDebtInit && (
+      {isLinkedToDebtInit && isDebtExists && !isSourceDeleted && (
         <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
           <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
             <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -536,7 +563,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* Linked Circle Payout Warning Banner */}
-      {isLinkedToCircle && (
+      {isLinkedToCircle && isCircleExists && !isSourceDeleted && (
         <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-2">
           <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
             <AlertCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -553,6 +580,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <span>الانتقال إلى صفحة الجمعيات</span>
             <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
           </Link>
+        </div>
+      )}
+
+      {/* Orphaned Unlocked Banner */}
+      {isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle) && (
+        <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+          <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
         </div>
       )}
 
@@ -883,7 +918,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </Button>
           )}
 
-          {isEditing && !isLockedTransaction && (
+          {isEditing && !isLockedTransaction && !isLinkedToDebtPayment && (
             <Button
               type="button"
               variant="outline"

@@ -261,6 +261,19 @@ export async function updateMoneyCircle(
         batch.delete(oldRecRef)
       }
     }
+    // Also clean up any recurring rules linked via circleId
+    try {
+      const recQuerySnap = await getDocs(
+        query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
+      )
+      for (const d of recQuerySnap.docs) {
+        if (d.id !== currentCircle.recurringId) {
+          batch.delete(d.ref)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to clean up recurring rules matching circleId:', err)
+    }
   } else if (candidateRecId) {
     const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
     const recSnap = await getDoc(recRef)
@@ -283,6 +296,9 @@ export async function updateMoneyCircle(
 
       if (options?.createRecurringRule) {
         recUpdates.active = true
+      }
+      if (partial.status === 'completed') {
+        recUpdates.active = false
       }
 
       let startDateChanged = false
@@ -383,6 +399,20 @@ export async function updateMoneyCircle(
     updates.recurringId = newRecRef.id
   }
 
+  // If circle status is marked as completed, deactivate all recurring rules linked to this circle
+  if (partial.status === 'completed') {
+    try {
+      const recQuerySnap = await getDocs(
+        query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
+      )
+      for (const d of recQuerySnap.docs) {
+        batch.update(d.ref, { active: false })
+      }
+    } catch (err) {
+      console.error('Failed to deactivate recurring items linked to completed circle:', err)
+    }
+  }
+
   // 2. Sync circle payout transaction if it exists
   const payoutRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
   try {
@@ -430,9 +460,12 @@ export async function updateMoneyCircle(
     console.error('Failed to sync circle payout transaction:', err)
   }
 
-  // 3. Update installment transactions if monthly amount changed
+  // 3. Update installment transactions if monthly amount or circle name changed
   const oldMonthly = currentCircle.monthlyAmountFils
-  if (partial.monthlyAmountFils !== undefined && effectiveMonthly !== oldMonthly) {
+  const amountChanged = partial.monthlyAmountFils !== undefined && effectiveMonthly !== oldMonthly
+  const nameChanged = partial.name !== undefined && partial.name.trim() !== currentCircle.name.trim()
+
+  if (amountChanged || nameChanged) {
     const allRecIds = new Set<string>()
     if (currentCircle.recurringId) allRecIds.add(currentCircle.recurringId)
     if (candidateRecId) allRecIds.add(candidateRecId)
@@ -453,7 +486,14 @@ export async function updateMoneyCircle(
         for (const txDoc of txSnap.docs) {
           const verifiedTx = await getDoc(txDoc.ref)
           if (verifiedTx.exists()) {
-            batch.update(txDoc.ref, { amountFils: effectiveMonthly })
+            const txUpdates: Record<string, unknown> = {}
+            if (amountChanged) {
+              txUpdates.amountFils = effectiveMonthly
+            }
+            if (nameChanged) {
+              txUpdates.title = `قسط ${effectiveName}`.slice(0, 100)
+            }
+            batch.update(txDoc.ref, txUpdates)
           }
         }
       } catch {
@@ -540,30 +580,6 @@ export async function depositCircleNetPayout(
     date: Timestamp.fromDate(txDate),
     createdAt: Timestamp.fromDate(now),
   })
-
-  // Mark user member as having paid their installment for their turn month
-  if (circle.members && circle.myTurnMonth) {
-    const myTurn = circle.myTurnMonth
-    let membersChanged = false
-    const updatedMembers = circle.members.map((m) => {
-      if (m.turnMonth === myTurn) {
-        const currentPaid = m.paidMonths || []
-        if (!currentPaid.includes(myTurn)) {
-          membersChanged = true
-          return {
-            ...m,
-            paidMonths: [...currentPaid, myTurn],
-          }
-        }
-      }
-      return m
-    })
-
-    if (membersChanged) {
-      const circleRef = doc(db, 'users', uid, 'circles', circle.id)
-      batch.update(circleRef, { members: updatedMembers })
-    }
-  }
 
   await batch.commit()
 

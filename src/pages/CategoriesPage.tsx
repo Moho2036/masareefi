@@ -38,7 +38,7 @@ export const CategoriesPage: React.FC = () => {
   const recurring = useMemo(() => appData?.recurring ?? [], [appData?.recurring])
   const moneyCircles = useMemo(() => appData?.moneyCircles ?? [], [appData?.moneyCircles])
   const { range } = useSelectedMonth()
-  const { data: transactions } = useTransactions(range)
+  const { data: transactions, loading: txLoading } = useTransactions()
   const { showToast } = useToast()
 
   const [categoryType, setCategoryType] = useState<TxType>('expense')
@@ -50,10 +50,14 @@ export const CategoriesPage: React.FC = () => {
 
   // Transaction count per category for current financial month
   const currentMonthTxCounts = useMemo(() => {
-    return countByCategory(transactions)
-  }, [transactions])
+    const currentMonthTxs = transactions.filter((tx) => {
+      const txTime = tx.date instanceof Date ? tx.date.getTime() : new Date(tx.date).getTime()
+      return txTime >= range.start.getTime() && txTime < range.end.getTime()
+    })
+    return countByCategory(currentMonthTxs)
+  }, [transactions, range])
 
-  // Track category usage frequencies from current transactions (Single Source of Truth)
+  // Track category usage frequencies from all-time transactions (Single Source of Truth)
   const usageMap = useMemo(() => {
     return buildUsageFromTransactions(transactions)
   }, [transactions])
@@ -127,10 +131,12 @@ export const CategoriesPage: React.FC = () => {
     }
   }
 
-  // Save category usage in localStorage outside render in an effect
+  // Save category usage in localStorage outside render in an effect (synced with all-time transactions)
   useEffect(() => {
-    syncCategoryUsageCache(transactions)
-  }, [transactions])
+    if (!txLoading) {
+      syncCategoryUsageCache(transactions)
+    }
+  }, [transactions, txLoading])
 
   // Active categories for the selected type, sorted consistently by natural order (a.order - b.order)
   const activeCategories = useMemo(() => {
@@ -228,7 +234,10 @@ export const CategoriesPage: React.FC = () => {
       else if (currentMonthCount <= 10) parts.push(`${currentMonthCount} معاملات هذا الشهر`)
       else parts.push(`${currentMonthCount} معاملة هذا الشهر`)
     } else if (details.txCount > 0) {
-      parts.push(`${details.txCount} معاملة سابقة`)
+      if (details.txCount === 1) parts.push('معاملة واحدة سابقة')
+      else if (details.txCount === 2) parts.push('معاملتان سابقتان')
+      else if (details.txCount <= 10) parts.push(`${details.txCount} معاملات سابقة`)
+      else parts.push(`${details.txCount} معاملة سابقة`)
     }
 
     if (details.recurringCount > 0) {

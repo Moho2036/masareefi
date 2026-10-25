@@ -259,6 +259,44 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     expect(screen.queryByText(/جمعية مرتبطة مسبقاً/i)).not.toBeInTheDocument()
   })
 
+  it('disables hasEndDate toggle and endDate input and displays guidance banner when selecting a circle from dropdown', async () => {
+    mockCirclesData = [
+      {
+        id: 'circle-dropdown-test',
+        name: 'جمعية الدوام',
+        status: 'active',
+        monthlyAmountFils: 100000,
+        totalAmountFils: 500000,
+        myTurnMonth: 3,
+        startDate: new Date('2026-01-01'),
+        membersCount: 5,
+        members: [],
+        createdAt: new Date('2026-01-01'),
+      },
+    ]
+    mockRecurringData = []
+
+    render(<RecurringForm isOpen={true} onClose={vi.fn()} defaultType="expense" />)
+
+    const select = screen.getByRole('combobox')
+    fireEvent.change(select, { target: { value: 'circle-dropdown-test' } })
+
+    // Info banner should appear
+    expect(
+      screen.getByText(
+        /تاريخ البدء، تاريخ الانتهاء، التكرار الشهري، وشهر الإعفاء يتم ضبطها وإدارتها تلقائياً بناءً على إعدادات الجمعية المالية المختارة/i
+      )
+    ).toBeInTheDocument()
+
+    // hasEndDate toggle should be disabled
+    const endDateToggle = screen.getByRole('switch', { name: /تحديد تاريخ انتهاء/i })
+    expect(endDateToggle).toBeDisabled()
+
+    // endDate input should be disabled
+    const endDateInput = screen.getByLabelText(/تاريخ الانتهاء/i)
+    expect(endDateInput).toBeDisabled()
+  })
+
   it('preserves currently linked money circle in select options and shows info banner when editing', () => {
     mockCirclesData = [
       {
@@ -311,7 +349,7 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     // Info banner is displayed
     expect(
       screen.getByText(
-        /هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات/i
+        /تاريخ البدء، تاريخ الانتهاء، التكرار الشهري، وشهر الإعفاء يتم ضبطها وإدارتها تلقائياً بناءً على إعدادات الجمعية المالية المختارة/i
       )
     ).toBeInTheDocument()
   })
@@ -420,7 +458,7 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     // Banner is visible
     expect(
       screen.getByText(
-        /هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات/i
+        /تاريخ البدء، تاريخ الانتهاء، التكرار الشهري، وشهر الإعفاء يتم ضبطها وإدارتها تلقائياً بناءً على إعدادات الجمعية المالية المختارة/i
       )
     ).toBeInTheDocument()
 
@@ -437,5 +475,9 @@ describe('RecurringForm component nextDate calculation on edit', () => {
     // Start date input is disabled
     const startDateInput = screen.getByLabelText(/تاريخ البداية/i)
     expect(startDateInput).toBeDisabled()
+
+    // End date toggle is disabled
+    const endDateToggle = screen.getByRole('switch', { name: /تحديد تاريخ انتهاء/i })
+    expect(endDateToggle).toBeDisabled()
   })
 })

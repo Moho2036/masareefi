@@ -91,8 +91,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       Math.round((rangeEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     )
   } else if (isFutureMonth) {
-    // Future month (cycle has not started yet - full cycle remains)
-    elapsedDays = 1
+    // Future month (cycle has not started yet - 0 days elapsed, full cycle remains)
+    elapsedDays = 0
     remainingDays = totalDays
   } else {
     // Past month (cycle has ended)
@@ -103,7 +103,16 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   // 1. Current income and expenses (separating flexible daily spending from paid fixed commitments)
   let currentIncome = 0
   let currentExpense = 0
-  let paidFixedExpenses = 0
+  let pastDiscretionaryExpense = 0
+
+  const linkedDebtTxIds = new Set<string>()
+  if (params.debts) {
+    for (const d of params.debts) {
+      for (const p of d.payments || []) {
+        if (p.transactionId) linkedDebtTxIds.add(p.transactionId)
+      }
+    }
+  }
 
   for (const tx of params.transactions) {
     if (tx.type === 'income') {
@@ -115,15 +124,24 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       const isFixedCommitment = Boolean(
         tx.recurringId ||
           (typeof tx.id === 'string' &&
-            (tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_')))
+            (tx.id.startsWith('debt_init_') ||
+              tx.id.startsWith('debt_pay_') ||
+              tx.id.startsWith('circle_') ||
+              linkedDebtTxIds.has(tx.id)))
       )
-      if (isFixedCommitment) {
-        paidFixedExpenses += amount
+      if (!isFixedCommitment) {
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+        // Only count discretionary spending that actually occurred on or before today
+        // towards past daily pace; future-dated transactions within the cycle should not inflate daily rate.
+        if (isCurrentMonth && toStartOfDay(txDate) <= now) {
+          pastDiscretionaryExpense += amount
+        } else if (isPastMonth) {
+          pastDiscretionaryExpense += amount
+        }
       }
     }
   }
 
-  const discretionaryExpense = Math.max(0, currentExpense - paidFixedExpenses)
   const rolloverBalance = params.rolloverBalanceFils ?? 0
   const monthNet = currentIncome - currentExpense
   const availableBalance = rolloverBalance + monthNet
@@ -197,10 +215,10 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
 
   // 4. Daily Safe Budget & Actual Flexible Daily Spending
   const dailySafeFils = remainingDays > 0 && freeBalance > 0 ? Math.floor(freeBalance / remainingDays) : 0
-  const actualDailySpendFils = Math.round(discretionaryExpense / elapsedDays)
+  const actualDailySpendFils = elapsedDays > 0 ? Math.round(pastDiscretionaryExpense / elapsedDays) : 0
 
   // 5. Month-End Forecast
-  const projectedDiscretionary = isPastMonth ? 0 : actualDailySpendFils * remainingDays
+  const projectedDiscretionary = isPastMonth || isFutureMonth ? 0 : actualDailySpendFils * remainingDays
   const projectedExpense =
     currentExpense +
     projectedDiscretionary +

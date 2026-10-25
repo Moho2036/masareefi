@@ -137,6 +137,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
 
   const isCircleLinked = Boolean(initialRecurring?.circleId)
+  const hasSelectedCircle = Boolean(circleId || isCircleLinked)
 
   // Filter available categories for current transaction type
   // Preserve recurring item's category even if archived
@@ -336,11 +337,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Linked Circle Info Banner */}
-      {isCircleLinked && (
+      {hasSelectedCircle && (
         <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-xs flex items-center gap-2">
           <Info className="w-4 h-4 shrink-0" />
           <span>
-            هذه القاعدة مرتبطة بجمعية مالية — يتم التحكم في تاريخ البدء، التكرار الشهري، وشهر الإعفاء تلقائياً من صفحة الجمعيات
+            تاريخ البدء، تاريخ الانتهاء، التكرار الشهري، وشهر الإعفاء يتم ضبطها وإدارتها تلقائياً بناءً على إعدادات الجمعية المالية المختارة
           </span>
         </div>
       )}
@@ -355,7 +356,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             setError(null)
           }}
           options={typeOptions}
-          disabled={isCircleLinked}
+          disabled={hasSelectedCircle}
           className="w-full"
         />
       </div>
@@ -466,7 +467,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           value={frequency}
           onChange={setFrequency}
           options={frequencyOptions}
-          disabled={isCircleLinked}
+          disabled={hasSelectedCircle}
           className="w-full"
         />
       </div>
@@ -524,7 +525,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           label="تاريخ البداية"
           value={startDateStr}
           onChange={(e) => setStartDateStr(e.target.value)}
-          disabled={isCircleLinked}
+          disabled={hasSelectedCircle}
           required
         />
 
@@ -534,6 +535,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             label="تاريخ الانتهاء"
             value={endDateStr}
             onChange={(e) => setEndDateStr(e.target.value)}
+            disabled={hasSelectedCircle}
             required={hasEndDate}
           />
         ) : null}
@@ -544,6 +546,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         <Toggle
           checked={hasEndDate}
           onChange={setHasEndDate}
+          disabled={hasSelectedCircle}
           label="تحديد تاريخ انتهاء"
           description="تتوقف المعاملة المتكررة تلقائياً بعد هذا التاريخ"
         />

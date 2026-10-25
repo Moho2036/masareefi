@@ -198,7 +198,7 @@ export const ReportsPage: React.FC = () => {
   )
 
   const monthComparison = useMemo(() => {
-    if (prevMonthSums.expense === 0) return null
+    if (prevMonthSums.expense === 0 || monthSums.expense === 0) return null
     const diff = monthSums.expense - prevMonthSums.expense
     const percent = Math.round((Math.abs(diff) / prevMonthSums.expense) * 100)
     return {
@@ -209,7 +209,7 @@ export const ReportsPage: React.FC = () => {
   }, [monthSums.expense, prevMonthSums.expense])
 
   const monthIncomeComparison = useMemo(() => {
-    if (prevMonthSums.income === 0) return null
+    if (prevMonthSums.income === 0 || monthSums.income === 0) return null
     const diff = monthSums.income - prevMonthSums.income
     const percent = Math.round((Math.abs(diff) / prevMonthSums.income) * 100)
     return {
@@ -349,9 +349,11 @@ export const ReportsPage: React.FC = () => {
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    {prevMonthSums.income === 0 && monthSums.income > 0
-                      ? 'لا توجد بيانات في الشهر السابق للمقارنة'
-                      : 'الدخل المحصل في هذا الشهر'}
+                    {monthSums.income === 0
+                      ? 'لا توجد مداخيل مسجلة في هذا الشهر'
+                      : prevMonthSums.income === 0
+                        ? 'لا توجد بيانات في الشهر السابق للمقارنة'
+                        : 'الدخل المحصل في هذا الشهر'}
                   </span>
                 )}
               </div>
@@ -392,9 +394,11 @@ export const ReportsPage: React.FC = () => {
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    {prevMonthSums.expense === 0 && monthSums.expense > 0
-                      ? 'لا توجد بيانات في الشهر السابق للمقارنة'
-                      : 'إجمالي ما تم صرفه'}
+                    {monthSums.expense === 0
+                      ? 'لا توجد مصاريف مسجلة في هذا الشهر'
+                      : prevMonthSums.expense === 0
+                        ? 'لا توجد بيانات في الشهر السابق للمقارنة'
+                        : 'إجمالي ما تم صرفه'}
                   </span>
                 )}
               </div>

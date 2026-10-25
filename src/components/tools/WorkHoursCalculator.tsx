@@ -15,16 +15,8 @@ import {
   clampWorkHoursPerDay,
   clampWorkDaysPerWeek,
   clampWorkDaysPerMonth,
+  parseNumeric,
 } from '../../lib/workHours'
-
-function parseNumeric(val: string): number {
-  const western = toWesternDigits(val)
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
-    .replace(/,/g, '.')
-    .trim()
-  const parsed = parseFloat(western)
-  return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed
-}
 
 const STORAGE_KEY = 'masareefi_work_hours_prefs'
 

@@ -169,6 +169,63 @@ describe('recurring service - deleteRecurring', () => {
     expect(mockBatchUpdate.mock.calls[0][1].recurringId).toBe(mockDeleteFieldSentinel)
     expect(mockBatchCommit).toHaveBeenCalledTimes(1)
   })
+
+  it('deactivates recurring item and skips transaction creation when linked circle has status === "completed"', async () => {
+    const today = new Date(2026, 1, 15) // Feb 15, 2026
+
+    // 1. Query for active due recurring
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          data: () => ({
+            id: 'rec-c-completed',
+            type: 'expense',
+            amountFils: 100000,
+            categoryId: 'cat-1',
+            title: 'قسط الجمعية المنتهية',
+            frequency: 'monthly',
+            startDate: new Date(2026, 0, 1),
+            nextDate: new Date(2026, 1, 1), // due!
+            active: true,
+            circleId: 'circle-completed-1',
+            skipMonth: 4,
+          }),
+        },
+      ],
+    })
+
+    // 2. Fetch linked circle doc: status is 'completed'
+    mockGetDoc.mockResolvedValueOnce({
+      id: 'circle-completed-1',
+      exists: () => true,
+      data: () => ({
+        id: 'circle-completed-1',
+        name: 'جمعية منتهية',
+        monthlyAmountFils: 100000,
+        membersCount: 10,
+        totalAmountFils: 1000000,
+        myTurnMonth: 4,
+        startDate: new Date(2026, 0, 1),
+        status: 'completed',
+        members: [],
+      }),
+    })
+
+    const count = await processDueRecurring('uid-1', today)
+
+    // 0 transactions created!
+    expect(count).toBe(0)
+    expect(mockBatchSet).not.toHaveBeenCalled()
+
+    // Recurring rule updated with active: false
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+    const recUpdateCall = mockBatchUpdate.mock.calls[0]
+    expect(recUpdateCall[0].path).toBe('users/uid-1/recurring/rec-c-completed')
+    expect(recUpdateCall[1].active).toBe(false)
+
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('recurring service - processDueRecurring', () => {

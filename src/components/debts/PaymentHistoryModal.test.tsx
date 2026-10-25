@@ -410,4 +410,46 @@ describe('PaymentHistoryModal', () => {
       expect(mockOnSuccess).toHaveBeenCalled()
     })
   })
+
+  it('renders merged payment badge and hides edit button for isMerged payment', () => {
+    const debtWithMerged: Debt = {
+      id: 'd-merged',
+      personName: 'مازن',
+      type: 'lent',
+      amountFils: 100000,
+      paidFils: 70000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [
+        {
+          id: 'compacted_123',
+          amountFils: 70000,
+          date: new Date('2026-01-20'),
+          note: 'رصيد دفعات سابقة مدمجة (20 دفعة)',
+          createdAt: new Date(),
+          isMerged: true,
+          mergedTransactionIds: ['tx-1', 'tx-2'],
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={debtWithMerged}
+      />
+    )
+
+    // Merged badge appears
+    expect(screen.getByText('دفعات مدمجة')).toBeInTheDocument()
+
+    // Edit button must NOT be rendered for merged payments
+    expect(screen.queryByTitle('تعديل هذه الدفعة')).not.toBeInTheDocument()
+
+    // Delete button IS available
+    expect(screen.getByTitle('حذف هذه الدفعة')).toBeInTheDocument()
+  })
 })

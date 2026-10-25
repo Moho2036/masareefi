@@ -196,6 +196,12 @@ function serializePayment(p: DebtPayment): Record<string, unknown> {
   if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
     item.transactionId = p.transactionId.trim()
   }
+  if (p.isMerged) {
+    item.isMerged = true
+  }
+  if (Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0) {
+    item.mergedTransactionIds = p.mergedTransactionIds.filter(Boolean)
+  }
   return item
 }
 
@@ -217,7 +223,10 @@ async function findLegacyInitTransactionId(
       if (typeof d?.id === 'string' && d.id.startsWith('debt_pay_')) continue
       const tx = typeof d?.data === 'function' ? d.data() : (d as unknown as Record<string, unknown>)
       if (!tx) continue
-      const txDate = tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date as string | number | Date)
+      const txDate =
+        tx.date && typeof (tx.date as { toDate?: unknown }).toDate === 'function'
+          ? (tx.date as { toDate: () => Date }).toDate()
+          : new Date(tx.date as string | number | Date)
       const dayDiff = Math.abs(txDate.getTime() - dTime)
       const isSameDay = dayDiff < 24 * 60 * 60 * 1000
 
@@ -269,23 +278,6 @@ export async function checkDebtPaymentTransactionExists(
 
   const legacyId = await findLegacyPaymentTransactionId(uid, payment, debt)
   return Boolean(legacyId)
-}
-
-function updatePaymentTxNote(
-  existingNote: string | undefined,
-  effectiveType: 'lent' | 'borrowed',
-  effectivePersonName: string
-): string | undefined {
-  if (typeof existingNote !== 'string') return undefined
-
-  const prefixRegex = /^(سداد دين|تحصيل دين|سداد دفعة دين|استرداد دفعة دين|دفعة سداد دين|دفعة استرداد دين)\s*(\([^)]*\)|:\s*[^•\n]+)?/
-  if (prefixRegex.test(existingNote)) {
-    const action = effectiveType === 'lent' ? 'تحصيل دين' : 'سداد دين'
-    const newPrefix = `${action} (${effectivePersonName})`
-    return existingNote.replace(prefixRegex, newPrefix).slice(0, 500)
-  }
-
-  return undefined
 }
 
 export async function updateDebt(
@@ -461,9 +453,12 @@ export async function updateDebt(
         }
 
         if (payTxRef && payTxSnap && payTxSnap.exists()) {
-          const txData = payTxSnap.data() as Record<string, unknown>
           const payTxUpdates: Record<string, unknown> = {
-            title: (effectiveType === 'lent' ? `تحصيل دين: ${effectivePersonName}` : `سداد دين: ${effectivePersonName}`).slice(0, 100),
+            title: (
+              effectiveType === 'lent'
+                ? `استرداد دفعة دين: ${effectivePersonName}`
+                : `سداد دفعة دين: ${effectivePersonName}`
+            ).slice(0, 100),
           }
           if (typeChanged) {
             payTxUpdates.type = payTxType
@@ -471,11 +466,12 @@ export async function updateDebt(
               payTxUpdates.categoryId = newPayCatId
             }
           }
-          if (typeof txData?.note === 'string') {
-            const updatedNote = updatePaymentTxNote(txData.note, effectiveType, effectivePersonName)
-            if (updatedNote !== undefined) {
-              payTxUpdates.note = updatedNote
-            }
+          const defaultNotes = ['دفعة استرداد دين', 'دفعة سداد دين', 'دفعة سداد']
+          const hasCustomNote = p.note && !defaultNotes.includes(p.note.trim())
+          if (hasCustomNote) {
+            payTxUpdates.note = p.note!.trim().slice(0, 500)
+          } else if (typeChanged) {
+            payTxUpdates.note = effectiveType === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
           }
           batch.update(payTxRef, payTxUpdates)
         }
@@ -491,7 +487,7 @@ export async function deleteDebt(
   id: string,
   optionsOrFlag?: { deleteTransactions?: boolean } | boolean
 ): Promise<void> {
-  const debtRef = doc(db, 'users', uid, 'debts', id)
+  const debtRef = doc(db, 'users', uid, 'debts', id).withConverter(debtConverter)
   const snap = await getDoc(debtRef)
   const debt = snap.data()
   const payments: DebtPayment[] = debt?.payments || []
@@ -505,18 +501,37 @@ export async function deleteDebt(
       : (optionsOrFlag?.deleteTransactions ?? false)
 
   if (shouldDeleteTransactions) {
-    // Synchronize: Delete initial transaction
+    // Synchronize: Delete initial transaction (deterministic and legacy)
     const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
     batch.delete(initTxRef)
+    if (debt) {
+      const legacyInitId = await findLegacyInitTransactionId(uid, id, debt)
+      if (legacyInitId && legacyInitId !== `debt_init_${id}`) {
+        batch.delete(doc(db, 'users', uid, 'transactions', legacyInitId))
+      }
+    }
 
     // Synchronize: Delete all payment transactions
     for (const p of payments) {
       if (p.transactionId) {
         batch.delete(doc(db, 'users', uid, 'transactions', p.transactionId))
       }
-      if (p.id && p.id !== p.transactionId) {
+      if (p.id && p.id !== p.transactionId && !p.isMerged && !p.id.startsWith('compacted_')) {
         const payTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${p.id}`)
         batch.delete(payTxRef)
+      }
+      if (Array.isArray(p.mergedTransactionIds)) {
+        for (const mId of p.mergedTransactionIds) {
+          if (mId) {
+            batch.delete(doc(db, 'users', uid, 'transactions', mId))
+          }
+        }
+      }
+      if (debt) {
+        const legacyPayId = await findLegacyPaymentTransactionId(uid, p, debt)
+        if (legacyPayId && legacyPayId !== p.transactionId && legacyPayId !== `debt_pay_${p.id}`) {
+          batch.delete(doc(db, 'users', uid, 'transactions', legacyPayId))
+        }
       }
     }
   }
@@ -640,8 +655,12 @@ async function findLegacyPaymentTransactionId(
     const pTime = pDate.getTime()
 
     for (const d of snap.docs) {
-      const tx = d.data()
-      const txDate = tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date)
+      const tx = typeof d?.data === 'function' ? d.data() : (d as unknown as Record<string, unknown>)
+      if (!tx) continue
+      const txDate =
+        tx.date && typeof (tx.date as { toDate?: unknown }).toDate === 'function'
+          ? (tx.date as { toDate: () => Date }).toDate()
+          : new Date(tx.date as string | number | Date)
       const dayDiff = Math.abs(txDate.getTime() - pTime)
       const isSameDay = dayDiff < 24 * 60 * 60 * 1000
 
@@ -698,13 +717,25 @@ export async function deleteDebtPayment(
 
   // Synchronize: Delete payment transaction if options?.deleteTransaction !== false
   if (options?.deleteTransaction !== false) {
+    const isMerged = Boolean(targetPayment?.isMerged || paymentId.startsWith('compacted_'))
     const txId = targetPayment?.transactionId || `debt_pay_${paymentId}`
-    const payTxRef = doc(db, 'users', uid, 'transactions', txId)
-    batch.delete(payTxRef)
+
+    if (targetPayment?.transactionId || (!isMerged && !paymentId.startsWith('compacted_'))) {
+      const payTxRef = doc(db, 'users', uid, 'transactions', txId)
+      batch.delete(payTxRef)
+    }
+
+    if (Array.isArray(targetPayment?.mergedTransactionIds)) {
+      for (const mId of targetPayment.mergedTransactionIds) {
+        if (mId) {
+          batch.delete(doc(db, 'users', uid, 'transactions', mId))
+        }
+      }
+    }
 
     // Legacy fallback: if targetPayment had no transactionId and deterministic doc might not match,
     // search by note/title/amount/date
-    if (!targetPayment?.transactionId && targetPayment) {
+    if (!targetPayment?.transactionId && !isMerged && targetPayment) {
       try {
         const legacyTxId = await findLegacyPaymentTransactionId(uid, debt.id, debt, targetPayment)
         if (legacyTxId && legacyTxId !== txId) {
@@ -734,6 +765,7 @@ export async function updateDebtPayment(
     amountFils: number
     date: Date
     note?: string
+    title?: string
     syncTransaction?: boolean
     categoryId?: string
   },
@@ -826,6 +858,8 @@ export async function updateDebtPayment(
       amountFils: number
       date: Timestamp | Date
       note: string
+      title?: string
+      categoryId?: string
     }
   } | null = null
   let newTxData: {
@@ -848,6 +882,18 @@ export async function updateDebtPayment(
     finalTransactionId = undefined
   } else if (syncTxOption === true || (syncTxOption === undefined && existingTxRef)) {
     if (existingTxRef) {
+      const defaultTitle = (
+        debt.type === 'lent'
+          ? `استرداد دفعة دين: ${debt.personName}`
+          : `سداد دفعة دين: ${debt.personName}`
+      ).slice(0, 100)
+
+      const titleUpdate: { title?: string } = {}
+      if (updatedData.title !== undefined) {
+        const trimmedTitle = updatedData.title.trim()
+        titleUpdate.title = trimmedTitle ? trimmedTitle.slice(0, 100) : defaultTitle
+      }
+
       txToUpdate = {
         ref: existingTxRef,
         data: {
@@ -855,6 +901,7 @@ export async function updateDebtPayment(
           date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
           note: finalPaymentNote,
           ...(updatedData.categoryId ? { categoryId: updatedData.categoryId } : {}),
+          ...titleUpdate,
         },
       }
       finalTransactionId = existingTxId || existingPayment.transactionId || `debt_pay_${paymentId}`
@@ -866,11 +913,15 @@ export async function updateDebtPayment(
         updatedData.categoryId ||
         options?.categoryId ||
         (await getOrCreateDebtCategory(uid, txType))
-      const title = (
+      const defaultTitle = (
         debt.type === 'lent'
           ? `استرداد دفعة دين: ${debt.personName}`
           : `سداد دفعة دين: ${debt.personName}`
       ).slice(0, 100)
+      const effectiveTitle =
+        updatedData.title !== undefined && updatedData.title.trim()
+          ? updatedData.title.trim().slice(0, 100)
+          : defaultTitle
 
       newTxData = {
         ref: newTxRef,
@@ -879,7 +930,7 @@ export async function updateDebtPayment(
           amountFils: amount,
           categoryId,
           date: updatedData.date instanceof Date ? Timestamp.fromDate(updatedData.date) : updatedData.date,
-          title,
+          title: effectiveTitle,
           note: finalPaymentNote,
           createdAt: serverTimestamp(),
         },
@@ -965,12 +1016,30 @@ export async function compactDebtPayments(
       ? lastMergedPayment.date
       : new Date(lastMergedPayment.date)
 
+  const mergedTxIds: string[] = []
+  for (const p of toMerge) {
+    if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
+      if (!mergedTxIds.includes(p.transactionId.trim())) {
+        mergedTxIds.push(p.transactionId.trim())
+      }
+    }
+    if (Array.isArray(p.mergedTransactionIds)) {
+      for (const mId of p.mergedTransactionIds) {
+        if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
+          mergedTxIds.push(mId.trim())
+        }
+      }
+    }
+  }
+
   const consolidatedPayment: DebtPayment = {
-    id: generatePaymentId(),
+    id: `compacted_${generatePaymentId()}`,
     amountFils: mergedAmountFils,
     date: mergedDate,
     note: `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`,
     createdAt: new Date(),
+    isMerged: true,
+    mergedTransactionIds: mergedTxIds,
   }
 
   const newPayments = [consolidatedPayment, ...toKeep]

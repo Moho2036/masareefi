@@ -150,6 +150,8 @@ export const MoneyCirclesManager: React.FC = () => {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [hasLinkedTx, setHasLinkedTx] = useState(false)
+  const [wasPausedOnOpen, setWasPausedOnOpen] = useState(false)
+  const [autoScheduleTouched, setAutoScheduleTouched] = useState(false)
 
   // Warning when modifying monthly amount or members count of a circle with previously recorded payments
   const existingRecForEditing = editingCircle
@@ -252,6 +254,8 @@ export const MoneyCirclesManager: React.FC = () => {
     setMembersCount(10)
     setMyTurnMonth(1)
     setAutoSchedule(true)
+    setWasPausedOnOpen(false)
+    setAutoScheduleTouched(false)
     setIsManager(false)
     setStartDateStr(getInitialStartDateStr(monthStartDay))
     const initialNames: string[] = []
@@ -281,13 +285,15 @@ export const MoneyCirclesManager: React.FC = () => {
     }
     setCustomMembers(initialNames)
 
-    const linkedRecId =
-      circle.recurringId || recurringList.find((r) => r.circleId === circle.id)?.id
-    const isActivelyScheduled = recurringList.some(
-      (r) =>
-        (r.id === circle.recurringId || r.circleId === circle.id) &&
-        r.active !== false
+    const linkedRec = recurringList.find(
+      (r) => (circle.recurringId && r.id === circle.recurringId) || r.circleId === circle.id
     )
+    const linkedRecId = circle.recurringId || linkedRec?.id
+    const isPaused = Boolean(linkedRec && linkedRec.active === false)
+    const isActivelyScheduled = Boolean(linkedRec && linkedRec.active !== false)
+
+    setWasPausedOnOpen(isPaused)
+    setAutoScheduleTouched(false)
     setAutoSchedule(isActivelyScheduled)
     setHasLinkedTx(false)
     if (user?.uid) {
@@ -327,6 +333,7 @@ export const MoneyCirclesManager: React.FC = () => {
       if (editingCircle) {
         const oldTurnMonth = editingCircle.myTurnMonth
         const newTurnMonth = myTurnMonth
+        const isTurnChanged = oldTurnMonth !== newTurnMonth
         const oldUserMember = editingCircle.members?.find(
           (m) => m.turnMonth === oldTurnMonth || m.name === 'أنت'
         )
@@ -362,10 +369,20 @@ export const MoneyCirclesManager: React.FC = () => {
           }
 
           const rawPaid = existingMember?.paidMonths || []
-          // Ensure member's payout month (i) is stripped and any month exceeding membersCount is removed
-          const cleanedPaid = rawPaid.filter((mNum) => mNum <= membersCount && mNum !== i)
+          // Ensure member's payout month (i) is stripped, any month exceeding membersCount is removed,
+          // and if this is the user member and their turn changed, strip both newTurnMonth and oldTurnMonth!
+          const isUserMember = i === newTurnMonth || existingMember?.id === oldUserMember?.id
+          const cleanedPaid = rawPaid.filter((mNum) => {
+            if (mNum > membersCount) return false
+            if (mNum === i) return false
+            if (isTurnChanged && isUserMember && mNum === oldTurnMonth) {
+              return false
+            }
+            return true
+          })
 
           // Clean paymentsByMonth: retain only valid months (1 <= monthKey <= membersCount) and strip payout month i
+          // If user member and turn changed, strip oldTurnMonth as well!
           const rawPaymentsByMonth = existingMember?.paymentsByMonth
           let cleanedPaymentsByMonth: Record<string, boolean> | undefined = undefined
           if (rawPaymentsByMonth) {
@@ -377,6 +394,7 @@ export const MoneyCirclesManager: React.FC = () => {
                 monthKeyNum >= 1 &&
                 monthKeyNum <= membersCount &&
                 monthKeyNum !== i &&
+                (!isTurnChanged || !isUserMember || monthKeyNum !== oldTurnMonth) &&
                 Boolean(val)
               ) {
                 cleanedPaymentsByMonth[key] = true
@@ -393,6 +411,35 @@ export const MoneyCirclesManager: React.FC = () => {
           })
         }
 
+        let recurringPayload: { recurringId?: string } = {}
+        let shouldCreateOrReactivate = false
+
+        if (autoSchedule) {
+          const effectiveRecId =
+            editingCircle.recurringId ||
+            recurringList.find((r) => r.circleId === editingCircle.id)?.id
+          if (effectiveRecId) {
+            recurringPayload = { recurringId: effectiveRecId }
+          }
+          shouldCreateOrReactivate = true
+        } else {
+          if (wasPausedOnOpen && !autoScheduleTouched) {
+            // Rule was paused when modal opened, and user did NOT touch the toggle!
+            // Preserve existing recurringId so updateMoneyCircle keeps it paused and doesn't delete it
+            const effectiveRecId =
+              editingCircle.recurringId ||
+              recurringList.find((r) => r.circleId === editingCircle.id)?.id
+            if (effectiveRecId) {
+              recurringPayload = { recurringId: effectiveRecId }
+            }
+            shouldCreateOrReactivate = false
+          } else {
+            // User explicitly disabled auto-scheduling (or no prior rule)
+            recurringPayload = { recurringId: '' }
+            shouldCreateOrReactivate = false
+          }
+        }
+
         await updateMoneyCircle(
           user.uid,
           editingCircle.id,
@@ -405,15 +452,11 @@ export const MoneyCirclesManager: React.FC = () => {
             startDate,
             members,
             isManager,
-            ...(autoSchedule
-              ? editingCircle.recurringId
-                ? { recurringId: editingCircle.recurringId }
-                : {}
-              : { recurringId: '' }),
+            ...recurringPayload,
           },
           {
             monthStartDay,
-            createRecurringRule: autoSchedule,
+            createRecurringRule: shouldCreateOrReactivate,
             defaultCategoryId: defaultExpenseCategory?.id,
           }
         )
@@ -1219,7 +1262,10 @@ export const MoneyCirclesManager: React.FC = () => {
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-750/50 border border-slate-200/80 dark:border-slate-700/60">
             <Toggle
               checked={autoSchedule}
-              onChange={setAutoSchedule}
+              onChange={(val) => {
+                setAutoSchedule(val)
+                setAutoScheduleTouched(true)
+              }}
               label="جدولة القسط في المعاملات المتكررة"
               description={`يخصم القسط شهرياً تلقائياً، مع تخطي الخصم تلقائياً في شهر استلامك (الشهر ${myTurnMonth})`}
             />

@@ -8,6 +8,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   getDocs,
   limit,
   Timestamp,
@@ -126,7 +127,12 @@ export async function updateTransaction(
     payload.date = tx.date instanceof Date ? Timestamp.fromDate(tx.date) : tx.date
   }
   if (tx.title !== undefined) {
-    payload.title = typeof tx.title === 'string' ? tx.title.trim().slice(0, 100) : ''
+    const trimmedTitle = typeof tx.title === 'string' ? tx.title.trim() : ''
+    if (trimmedTitle === '') {
+      payload.title = deleteField()
+    } else {
+      payload.title = trimmedTitle.slice(0, 100)
+    }
   }
   if (tx.note !== undefined) {
     payload.note = typeof tx.note === 'string' ? tx.note.slice(0, 500) : ''

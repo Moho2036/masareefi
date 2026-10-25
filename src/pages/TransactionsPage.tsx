@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
 import { useDebts } from '../hooks/useDebts'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { useToast } from '../hooks/useToast'
@@ -48,11 +49,21 @@ import type { Transaction, TxType } from '../types'
 
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
-  const { range } = useSelectedMonth()
+  const { selectedDate, range } = useSelectedMonth()
   const [allMonths, setAllMonths] = useState(false)
+  const [prevSelectedTime, setPrevSelectedTime] = useState(selectedDate.getTime())
+
+  if (prevSelectedTime !== selectedDate.getTime()) {
+    setPrevSelectedTime(selectedDate.getTime())
+    if (allMonths) {
+      setAllMonths(false)
+    }
+  }
+
   const { data: rawTransactions, loading: txLoading } = useTransactions(allMonths ? undefined : range)
   const { data: categories } = useCategories()
   const { data: debts } = useDebts()
+  const { data: circles } = useMoneyCircles()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
   const { format, formatWithSign, config: currencyConfig } = useCurrency()
@@ -214,14 +225,22 @@ export const TransactionsPage: React.FC = () => {
     }
 
     if (txToDelete.id.startsWith('debt_init_')) {
-      showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
-      setTxToDelete(null)
-      return
+      const debtId = txToDelete.id.replace('debt_init_', '')
+      const debtExists = debts.some((d) => d.id === debtId)
+      if (debtExists) {
+        showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+        setTxToDelete(null)
+        return
+      }
     }
     if (txToDelete.id.startsWith('circle_payout_')) {
-      showToast('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.', 'error')
-      setTxToDelete(null)
-      return
+      const circleId = txToDelete.id.replace('circle_payout_', '')
+      const circleExists = circles.some((c) => c.id === circleId || txToDelete.id.startsWith(`circle_payout_${c.id}`))
+      if (circleExists) {
+        showToast('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.', 'error')
+        setTxToDelete(null)
+        return
+      }
     }
     setDeleting(true)
     try {
@@ -368,7 +387,7 @@ export const TransactionsPage: React.FC = () => {
             <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-xs">
               <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-0" />
               <div className="flex-1">
-                وضع <strong>البحث في كامل السجل (كل الأشهر)</strong> مفعّل حالياً. النتائج المعروضة وتصدير CSV يشملان كافة الأشهر.
+                وضع <strong>البحث في كامل السجل (كل الأشهر)</strong> مفعّل حالياً. النتائج المعروضة وتصدير CSV يشملان كافة الأشهر. (التنقل بين الأشهر من الشريط العلوي سيعيدك تلقائياً لتصفح ذلك الشهر).
               </div>
               <button
                 type="button"
@@ -608,70 +627,86 @@ export const TransactionsPage: React.FC = () => {
 
                               {/* Action Buttons: visible on mobile, smooth group hover on desktop */}
                               <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                {!(
-                                  tx.id.startsWith('debt_init_') ||
-                                  tx.id.startsWith('debt_pay_') ||
-                                  tx.id.startsWith('circle_payout_')
-                                ) && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      openDuplicate(tx)
-                                    }}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
-                                    aria-label="تكرار المعاملة"
-                                    title="تكرار المعاملة"
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    openEdit(tx)
-                                  }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
-                                  aria-label="تعديل المعاملة"
-                                  title="تعديل المعاملة"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                {tx.id.startsWith('debt_init_') ? (
-                                  <Link
-                                    to="/debts"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
-                                    aria-label="الانتقال إلى صفحة الديون"
-                                    title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </Link>
-                                ) : tx.id.startsWith('circle_payout_') ? (
-                                  <Link
-                                    to="/tools?tool=circles"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
-                                    aria-label="الانتقال إلى صفحة الجمعيات"
-                                    title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </Link>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setTxToDelete(tx)
-                                    }}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-                                    aria-label="حذف المعاملة"
-                                    title="حذف المعاملة"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
+                                {(() => {
+                                  const isDebtInit = tx.id.startsWith('debt_init_')
+                                  const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
+                                  const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
+
+                                  const isCirclePayout = tx.id.startsWith('circle_payout_')
+                                  const circleId = isCirclePayout ? tx.id.replace('circle_payout_', '') : null
+                                  const isCircleExists = Boolean(
+                                    isCirclePayout &&
+                                      circles.some((c) => c.id === circleId || tx.id.startsWith(`circle_payout_${c.id}`))
+                                  )
+
+                                  const isLockedDebt = isDebtInit && isDebtExists
+                                  const isLockedCircle = isCirclePayout && isCircleExists
+
+                                  return (
+                                    <>
+                                      {!(isLockedDebt || isLockedCircle || tx.id.startsWith('debt_pay_')) && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            openDuplicate(tx)
+                                          }}
+                                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                          aria-label="تكرار المعاملة"
+                                          title="تكرار المعاملة"
+                                        >
+                                          <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          openEdit(tx)
+                                        }}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                        aria-label="تعديل المعاملة"
+                                        title="تعديل المعاملة"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      {isLockedDebt ? (
+                                        <Link
+                                          to="/debts"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
+                                          aria-label="الانتقال إلى صفحة الديون"
+                                          title="مرتبط بسجل الديون - افتح صفحة الديون للإدارة"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </Link>
+                                      ) : isLockedCircle ? (
+                                        <Link
+                                          to="/tools?tool=circles"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                                          aria-label="الانتقال إلى صفحة الجمعيات"
+                                          title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </Link>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setTxToDelete(tx)
+                                          }}
+                                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
+                                          aria-label="حذف المعاملة"
+                                          title="حذف المعاملة"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </>
+                                  )
+                                })()}
                               </div>
                             </div>
                           </div>

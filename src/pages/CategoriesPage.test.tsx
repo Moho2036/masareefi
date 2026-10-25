@@ -24,6 +24,10 @@ let mockRecurring = [
   { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
 ]
 
+let mockTransactions = [
+  { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date('2026-10-05') },
+]
+
 let mockCircles: Array<{
   id: string
   name: string
@@ -49,9 +53,7 @@ vi.mock('../hooks/useSelectedMonth', () => ({
 
 vi.mock('../hooks/useTransactions', () => ({
   useTransactions: () => ({
-    data: [
-      { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date('2026-10-05') },
-    ],
+    data: mockTransactions,
     loading: false,
   }),
 }))
@@ -268,5 +270,27 @@ describe('CategoriesPage component category protection', () => {
         'info'
       )
     })
+  })
+
+  it('displays past transaction usage label and disables delete button for category used in previous months only', async () => {
+    mockCategories = [
+      { id: 'cat-past-only', name: 'تصنيف سابق', type: 'expense', icon: '📁', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 1 },
+    ]
+    mockTransactions = [
+      { id: 'tx-past', categoryId: 'cat-past-only', type: 'expense', amountFils: 12000, date: new Date('2026-08-15') },
+    ]
+
+    render(<CategoriesPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/معاملة واحدة سابقة/i)).toBeInTheDocument()
+    })
+
+    // Should NOT have a delete button for cat-past-only, should show "مستخدم" tag
+    expect(screen.queryByLabelText('حذف تصنيف تصنيف سابق نهائياً')).toBeNull()
+
+    // cat-unused has no transactions and should have delete button
+    expect(screen.getByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeInTheDocument()
   })
 })

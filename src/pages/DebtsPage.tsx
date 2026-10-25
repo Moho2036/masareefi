@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useDeferredValue } from 'react'
+import React, { useState, useMemo, useDeferredValue, useEffect } from 'react'
 import {
   HandCoins,
   Plus,
@@ -22,7 +22,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useDebts } from '../hooks/useDebts'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
-import { deleteDebt } from '../services/debts'
+import { deleteDebt, checkDebtInitialTransactionExists } from '../services/debts'
 import { calculateDebtSummary, filterDebts } from '../lib/debts'
 import { cn } from '../lib/cn'
 import type { Debt, DebtType } from '../types'
@@ -72,9 +72,26 @@ export const DebtsPage: React.FC = () => {
   const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null)
   const [deleteTransactions, setDeleteTransactions] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [hasInitTxOnDelete, setHasInitTxOnDelete] = useState(false)
+
+  useEffect(() => {
+    if (!debtToDelete || !user?.uid) {
+      return
+    }
+    let cancelled = false
+    checkDebtInitialTransactionExists(user.uid, debtToDelete.id, debtToDelete)
+      .then((exists) => {
+        if (!cancelled) setHasInitTxOnDelete(exists)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [debtToDelete, user?.uid])
 
   const hasLinkedTransactions = Boolean(
     debtToDelete && (
+      hasInitTxOnDelete ||
       (debtToDelete.payments && debtToDelete.payments.length > 0) ||
       (debtToDelete.paidFils || 0) > 0
     )
@@ -94,6 +111,12 @@ export const DebtsPage: React.FC = () => {
   const handleDelete = (debt: Debt) => {
     setDebtToDelete(debt)
     setDeleteTransactions(false)
+    setHasInitTxOnDelete(false)
+    if (user?.uid) {
+      checkDebtInitialTransactionExists(user.uid, debt.id, debt)
+        .then((exists) => setHasInitTxOnDelete(exists))
+        .catch(() => {})
+    }
   }
 
   const handleConfirmDelete = async () => {
@@ -104,6 +127,7 @@ export const DebtsPage: React.FC = () => {
       showToast('تم حذف الدين بنجاح', 'info')
       setDebtToDelete(null)
       setDeleteTransactions(false)
+      setHasInitTxOnDelete(false)
     } catch (err) {
       console.error('Failed to delete debt:', err)
       showToast('تعذر حذف الدين', 'error')
@@ -414,6 +438,7 @@ export const DebtsPage: React.FC = () => {
         onClose={() => {
           setDebtToDelete(null)
           setDeleteTransactions(false)
+          setHasInitTxOnDelete(false)
         }}
         title="تأكيد حذف الدين"
       >
@@ -431,7 +456,7 @@ export const DebtsPage: React.FC = () => {
                 htmlFor="delete-debt-txs"
                 className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none"
               >
-                حذف معاملات الدفعات المرتبطة بهذا الدين من المحفظة أيضاً
+                حذف المعاملات المالية المرتبطة بهذا الدين (أصل الدين والدفعات) من المحفظة أيضاً
               </label>
               <input
                 id="delete-debt-txs"
@@ -450,6 +475,7 @@ export const DebtsPage: React.FC = () => {
               onClick={() => {
                 setDebtToDelete(null)
                 setDeleteTransactions(false)
+                setHasInitTxOnDelete(false)
               }}
               disabled={isDeleting}
             >

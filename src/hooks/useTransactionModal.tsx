@@ -82,6 +82,13 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
       >
         {isOpen && (
           <TransactionForm
+            key={
+              editingTransaction
+                ? `edit-${editingTransaction.id}`
+                : duplicateTransaction
+                  ? `dup-${duplicateTransaction.id}`
+                  : `new-${defaultType}`
+            }
             initialTransaction={editingTransaction}
             duplicateFrom={duplicateTransaction}
             initialType={defaultType}
