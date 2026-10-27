@@ -7,6 +7,7 @@ vi.mock('../services/categories', () => ({
   deleteCategory: vi.fn().mockResolvedValue(undefined),
   archiveCategory: vi.fn().mockResolvedValue(undefined),
   updateCategory: vi.fn().mockResolvedValue(undefined),
+  reassignAndDeleteCategory: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -15,18 +16,34 @@ vi.mock('../hooks/useAuth', () => ({
   }),
 }))
 
+const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
+let mockUserSettings = {
+  currency: 'JOD',
+  categorySortMode: 'usage' as 'usage' | 'manual',
+  monthStartDay: 1,
+}
+
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => ({
+    data: mockUserSettings,
+    loading: false,
+    error: null,
+    updateSettings: mockUpdateSettings,
+  }),
+}))
+
 let mockCategories = [
-  { id: 'cat-used-tx', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
-  { id: 'cat-used-rec', name: 'اشتراك نت', type: 'expense', icon: '🌐', color: '#3B82F6', archived: false, order: 1 },
-  { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 2 },
+  { id: 'cat-used-tx', name: 'طعام وبقالة', type: 'expense' as const, icon: '🛒', color: '#10B981', archived: false, order: 0 },
+  { id: 'cat-used-rec', name: 'اشتراك نت', type: 'expense' as const, icon: '🌐', color: '#3B82F6', archived: false, order: 1 },
+  { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense' as const, icon: '📁', color: '#94A3B8', archived: false, order: 2 },
 ]
 
 let mockRecurring = [
-  { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
+  { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense' as const, amountFils: 25000, active: true },
 ]
 
 let mockTransactions = [
-  { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date('2026-10-05') },
+  { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense' as const, amountFils: 5000, date: new Date('2026-10-05') },
 ]
 
 let mockCircles: Array<{
@@ -74,10 +91,15 @@ vi.mock('../hooks/useToast', () => ({
   }),
 }))
 
-describe('CategoriesPage component category protection', () => {
+describe('CategoriesPage component category management & protection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    mockUserSettings = {
+      currency: 'JOD',
+      categorySortMode: 'usage',
+      monthStartDay: 1,
+    }
     mockCategories = [
       { id: 'cat-used-tx', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
       { id: 'cat-used-rec', name: 'اشتراك نت', type: 'expense', icon: '🌐', color: '#3B82F6', archived: false, order: 1 },
@@ -86,38 +108,41 @@ describe('CategoriesPage component category protection', () => {
     mockRecurring = [
       { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
     ]
+    mockTransactions = [
+      { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date('2026-10-05') },
+    ]
     mockCircles = []
   })
 
-  it('renders usage labels and prevents final deletion for categories in use', async () => {
+  it('renders monthly spend stats and usage details on category cards', async () => {
     render(<CategoriesPage />)
 
+    // cat-used-tx has 1 transaction of 5000 fils (5.000 د.أ) in October 2026
     await waitFor(() => {
-      expect(screen.getByText(/معاملة واحدة هذا الشهر/i)).toBeDefined()
+      expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('5.000'))).length).toBeGreaterThan(0)
+      expect(screen.getByText(/معاملة واحدة هذا الشهر/i)).toBeInTheDocument()
     })
 
     // cat-used-rec has recurring item
-    expect(screen.getByText(/معاملة متكررة مرتبطة/i)).toBeDefined()
+    expect(screen.getByText(/معاملة متكررة مرتبطة/i)).toBeInTheDocument()
 
     // cat-unused has 0 usage
-    expect(screen.getByText(/لا توجد معاملات مسجلة \(غير مستخدم\)/i)).toBeDefined()
+    expect(screen.getByText(/لا توجد معاملات مسجلة \(غير مستخدم\)/i)).toBeInTheDocument()
 
-    // Delete button should only be available for the unused category
-    expect(screen.getByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeDefined()
-
-    // Used categories should show "مستخدم" tag instead of trash button
-    expect(screen.queryByLabelText('حذف تصنيف طعام وبقالة نهائياً')).toBeNull()
-    expect(screen.queryByLabelText('حذف تصنيف اشتراك نت نهائياً')).toBeNull()
+    // All categories have action buttons (reorder, edit, archive, delete)
+    expect(screen.getByLabelText('حذف تصنيف طعام وبقالة')).toBeInTheDocument()
+    expect(screen.getByLabelText('حذف تصنيف اشتراك نت')).toBeInTheDocument()
+    expect(screen.getByLabelText('حذف تصنيف تصنيف فارغ')).toBeInTheDocument()
   })
 
-  it('allows deleting an unused category through confirmation modal', async () => {
+  it('allows deleting an unused category directly through simple confirmation modal', async () => {
     render(<CategoriesPage />)
 
-    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ')
     fireEvent.click(deleteBtn)
 
-    // Modal appears
-    expect(screen.getByText(/هل أنت متأكد من حذف تصنيف "تصنيف فارغ" نهائياً؟/i)).toBeDefined()
+    // Modal appears with simple warning
+    expect(screen.getByText(/هل أنت متأكد من حذف تصنيف "تصنيف فارغ" نهائياً؟/i)).toBeInTheDocument()
 
     const confirmBtn = screen.getByRole('button', { name: 'حذف نهائي' })
     fireEvent.click(confirmBtn)
@@ -127,14 +152,42 @@ describe('CategoriesPage component category protection', () => {
     })
   })
 
+  it('opens smart delete modal for category in use, offering archive or reassign & delete', async () => {
+    render(<CategoriesPage />)
+
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف طعام وبقالة')
+    fireEvent.click(deleteBtn)
+
+    // Smart modal text
+    expect(screen.getByText(/هذا التصنيف مرتبط بسجلات مالية حالية/i)).toBeInTheDocument()
+    expect(screen.getByText(/أرشفة التصنيف \(مستحسن\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/نقل كافة السجلات إلى تصنيف آخر وحذفه نهائياً/i)).toBeInTheDocument()
+
+    // Select "نقل كافة السجلات إلى تصنيف آخر وحذفه نهائياً"
+    const reassignOption = screen.getByText(/نقل كافة السجلات إلى تصنيف آخر وحذفه نهائياً/i)
+    fireEvent.click(reassignOption)
+
+    // Target category dropdown appears
+    expect(screen.getByText(/التصنيف البديل لنقل السجلات إليه:/i)).toBeInTheDocument()
+
+    const confirmBtn = screen.getByRole('button', { name: 'نقل السجلات وحذف التصنيف' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(categoriesService.reassignAndDeleteCategory).toHaveBeenCalledWith(
+        'user-123',
+        'cat-used-tx',
+        expect.any(String)
+      )
+    })
+  })
+
   it('allows hard deletion of category when transactions are empty even if old localStorage cache had counts', async () => {
-    // cat-unused has 0 transactions in Firestore, but had old stale count in localStorage
     localStorage.setItem('masareefi_category_usage', JSON.stringify({ 'cat-unused': 2 }))
 
     render(<CategoriesPage />)
 
-    // With Firestore as single source of truth, the stale count in localStorage does not block deletion
-    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ')
     expect(deleteBtn).toBeInTheDocument()
   })
 
@@ -145,7 +198,7 @@ describe('CategoriesPage component category protection', () => {
 
     render(<CategoriesPage />)
 
-    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ نهائياً')
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف فارغ')
     fireEvent.click(deleteBtn)
 
     const confirmBtn = screen.getByRole('button', { name: 'حذف نهائي' })
@@ -162,7 +215,6 @@ describe('CategoriesPage component category protection', () => {
   it('shows warning toast when archiving a category used in active recurring transactions', async () => {
     render(<CategoriesPage />)
 
-    // Archive button for cat-used-rec ("اشتراك نت")
     const archiveBtn = await screen.findByLabelText('أرشفة تصنيف اشتراك نت')
     fireEvent.click(archiveBtn)
 
@@ -178,7 +230,6 @@ describe('CategoriesPage component category protection', () => {
   it('shows standard info toast when archiving an unused category', async () => {
     render(<CategoriesPage />)
 
-    // Archive button for cat-unused ("تصنيف فارغ")
     const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف فارغ')
     fireEvent.click(archiveBtn)
 
@@ -215,7 +266,7 @@ describe('CategoriesPage component category protection', () => {
 
     render(<CategoriesPage />)
 
-    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف وحيد غير مستخدم نهائياً')
+    const deleteBtn = await screen.findByLabelText('حذف تصنيف تصنيف وحيد غير مستخدم')
     fireEvent.click(deleteBtn)
 
     const confirmBtn = screen.getByRole('button', { name: 'حذف نهائي' })
@@ -228,74 +279,7 @@ describe('CategoriesPage component category protection', () => {
     )
   })
 
-  it('recognizes money circle linkage, displays label, and prevents hard deletion', async () => {
-    mockCircles = [
-      {
-        id: 'circle-1',
-        name: 'جمعية الشباب',
-        status: 'active',
-        expenseCategoryId: 'cat-unused',
-      },
-    ]
-
-    render(<CategoriesPage />)
-
-    // cat-unused is now linked to a money circle
-    await waitFor(() => {
-      expect(screen.getByText(/جمعية مالية مرتبطة/i)).toBeInTheDocument()
-    })
-
-    // Should NOT have a delete button, should show "مستخدم" tag instead
-    expect(screen.queryByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeNull()
-  })
-
-  it('shows warning toast when archiving a category used in active money circle', async () => {
-    mockCircles = [
-      {
-        id: 'circle-1',
-        name: 'جمعية الشباب',
-        status: 'active',
-        expenseCategoryId: 'cat-unused',
-      },
-    ]
-
-    render(<CategoriesPage />)
-
-    const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف فارغ')
-    fireEvent.click(archiveBtn)
-
-    await waitFor(() => {
-      expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-unused', true)
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في جمعية مالية نشطة',
-        'info'
-      )
-    })
-  })
-
-  it('displays past transaction usage label and disables delete button for category used in previous months only', async () => {
-    mockCategories = [
-      { id: 'cat-past-only', name: 'تصنيف سابق', type: 'expense', icon: '📁', color: '#10B981', archived: false, order: 0 },
-      { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 1 },
-    ]
-    mockTransactions = [
-      { id: 'tx-past', categoryId: 'cat-past-only', type: 'expense', amountFils: 12000, date: new Date('2026-08-15') },
-    ]
-
-    render(<CategoriesPage />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/معاملة واحدة سابقة/i)).toBeInTheDocument()
-    })
-
-    // Should NOT have a delete button for cat-past-only, should show "مستخدم" tag
-    expect(screen.queryByLabelText('حذف تصنيف تصنيف سابق نهائياً')).toBeNull()
-
-    // cat-unused has no transactions and should have delete button
-    expect(screen.getByLabelText('حذف تصنيف تصنيف فارغ نهائياً')).toBeInTheDocument()
-  })
-
-  it('swaps category orders using Move Up and Move Down buttons', async () => {
+  it('swaps category orders and automatically switches sort mode to manual', async () => {
     render(<CategoriesPage />)
 
     // First category cannot move up
@@ -311,12 +295,26 @@ describe('CategoriesPage component category protection', () => {
     fireEvent.click(secondUpBtn)
 
     await waitFor(() => {
+      // Switched sort mode to manual
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ categorySortMode: 'manual' })
       expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-rec', { order: 0 })
       expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-tx', { order: 1 })
     })
   })
 
-  it('recognizes circle usage when evaluating category deletion safety', async () => {
+  it('allows toggling between usage and manual sort mode via UI toggle button', async () => {
+    render(<CategoriesPage />)
+
+    // Look for manual sort button in segmented control
+    const manualSortBtn = screen.getByRole('radio', { name: /يدوي/i })
+    fireEvent.click(manualSortBtn)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ categorySortMode: 'manual' })
+    })
+  })
+
+  it('recognizes circle linkage and opens smart delete modal on delete click', async () => {
     mockCategories = [
       { id: 'cat-circle-only', name: 'تصنيف جمعية', type: 'expense', icon: '👥', color: '#10B981', archived: false, order: 0 },
       { id: 'cat-unused', name: 'تصنيف فارغ', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 1 },
@@ -334,8 +332,14 @@ describe('CategoriesPage component category protection', () => {
 
     render(<CategoriesPage />)
 
-    // cat-circle-only is recognized as in-use, so delete button is hidden
-    expect(screen.queryByLabelText('حذف تصنيف تصنيف جمعية نهائياً')).toBeNull()
-    expect(screen.getByText(/جمعية مالية مرتبطة/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(/جمعية مالية مرتبطة/i)).toBeInTheDocument()
+    })
+
+    const deleteBtn = screen.getByLabelText('حذف تصنيف تصنيف جمعية')
+    fireEvent.click(deleteBtn)
+
+    // Should open smart modal
+    expect(screen.getByText(/هذا التصنيف مرتبط بسجلات مالية حالية/i)).toBeInTheDocument()
   })
 })

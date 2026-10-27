@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { AppShell } from './AppShell'
 
@@ -7,6 +7,8 @@ const mockUseUserSettings = vi.fn()
 const mockUseAuth = vi.fn()
 const mockHasExistingUserData = vi.fn().mockResolvedValue(true)
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
+const mockGoToCurrentMonth = vi.fn()
+let mockIsCurrentMonth = true
 
 vi.mock('../../services/userProfile', () => ({
   hasExistingUserData: (...args: unknown[]) => mockHasExistingUserData(...args),
@@ -23,8 +25,8 @@ vi.mock('../../hooks/useAuth', () => ({
 vi.mock('../../hooks/useSelectedMonth', () => ({
   useSelectedMonth: () => ({
     selectedDate: new Date('2026-10-15T00:00:00Z'),
-    goToCurrentMonth: vi.fn(),
-    isCurrentMonth: true,
+    goToCurrentMonth: mockGoToCurrentMonth,
+    isCurrentMonth: mockIsCurrentMonth,
   }),
 }))
 
@@ -39,6 +41,10 @@ vi.mock('../../hooks/useOnlineStatus', () => ({
 }))
 
 describe('AppShell displayName resolution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsCurrentMonth = true
+  })
   it('prioritizes settings.displayName over user.displayName', () => {
     mockUseAuth.mockReturnValue({
       user: { displayName: 'Auth Name', photoURL: null },
@@ -131,5 +137,26 @@ describe('AppShell displayName resolution', () => {
 
     // Onboarding wizard modal should appear
     expect(await screen.findByText(/تجهيز حسابك في بَصير/i)).toBeDefined()
+  })
+
+  it('calls goToCurrentMonth when clicking on dashboard link and not on current month', () => {
+    mockIsCurrentMonth = false
+    mockUseAuth.mockReturnValue({
+      user: { displayName: 'محمد', photoURL: null },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'محمد', monthStartDay: 1 },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    const dashboardLink = screen.getByRole('link', { name: /لوحة التحكم/i })
+    fireEvent.click(dashboardLink)
+
+    expect(mockGoToCurrentMonth).toHaveBeenCalledTimes(1)
   })
 })

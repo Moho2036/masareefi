@@ -9,6 +9,9 @@ vi.mock('../../services/debts', () => ({
   updateDebtPayment: vi.fn().mockResolvedValue(undefined),
   checkDebtPaymentTransactionExists: vi.fn().mockResolvedValue(true),
   compactDebtPayments: vi.fn().mockResolvedValue({ mergedCount: 85, mergedAmountFils: 170000 }),
+  addDebtEntry: vi.fn().mockResolvedValue('entry-new'),
+  updateDebtEntry: vi.fn().mockResolvedValue(undefined),
+  deleteDebtEntry: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -451,5 +454,73 @@ describe('PaymentHistoryModal', () => {
 
     // Delete button IS available
     expect(screen.getByTitle('حذف هذه الدفعة')).toBeInTheDocument()
+  })
+
+  it('renders entries section, allows adding new entry and opens share menu', async () => {
+    const debtWithEntries: Debt = {
+      id: 'd-entries',
+      personName: 'عمر',
+      type: 'lent',
+      amountFils: 60000,
+      paidFils: 10000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: 'ملاحظة',
+      payments: [],
+      createdAt: new Date(),
+      entries: [
+        {
+          id: 'e1',
+          amountFils: 60000,
+          date: new Date('2026-01-01'),
+          title: 'سلفة أولى',
+          note: 'سلفة أولى',
+          createdAt: new Date(),
+        },
+      ],
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={debtWithEntries}
+      />
+    )
+
+    expect(screen.getByText(/تفاصيل السلف وأصل الديون المسجلة/)).toBeInTheDocument()
+    expect(screen.getByText('سلفة أولى')).toBeInTheDocument()
+
+    // Open add entry form
+    const addEntryBtn = screen.getByText('+ إضافة سلفة جديدة على هذا الحساب')
+    fireEvent.click(addEntryBtn)
+
+    expect(screen.getByPlaceholderText('0.000')).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('0.000'), { target: { value: '25' } })
+    fireEvent.change(screen.getByPlaceholderText('مثال: سلفة تكاليف السفر...'), {
+      target: { value: 'سلفة إضافية' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'حفظ السلفة' }))
+
+    await waitFor(() => {
+      expect(debtServices.addDebtEntry).toHaveBeenCalledWith(
+        'user-1',
+        debtWithEntries,
+        expect.objectContaining({
+          amountFils: 25000,
+          title: 'سلفة إضافية',
+        }),
+        expect.any(Object)
+      )
+    })
+
+    // Open share menu
+    const shareOptionsBtn = screen.getByText('خيارات المشاركة')
+    fireEvent.click(shareOptionsBtn)
+
+    expect(screen.getByText('نسخ للحافظة')).toBeInTheDocument()
+    expect(screen.getByText('إرسال عبر واتساب')).toBeInTheDocument()
+    expect(screen.getByText('طباعة الكشف')).toBeInTheDocument()
   })
 })

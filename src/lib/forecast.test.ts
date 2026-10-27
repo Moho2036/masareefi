@@ -1145,6 +1145,59 @@ describe('forecast lib', () => {
     expect(res.upcomingDebtObligations).toBe(80000)
   })
 
+  it('keeps past unpaid debts visible in upcomingDebtObligations in future months when rolloverBalance is disabled', () => {
+    // Current date: Oct 15, 2026
+    const refDate = new Date(2026, 9, 15)
+    // Viewing December 2026
+    const decRange = {
+      start: new Date(2026, 11, 1),
+      end: new Date(2027, 0, 1),
+    }
+
+    // Past overdue unpaid debt (due Oct 5, before refDate Oct 15)
+    const overduePastDebt: Debt = {
+      id: 'debt-past-overdue',
+      personName: 'صالح',
+      type: 'borrowed',
+      amountFils: 60000,
+      paidFils: 0,
+      startDate: new Date(2026, 8, 1),
+      dueDate: new Date(2026, 9, 5), // past overdue
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(2026, 8, 1),
+    }
+
+    // Debt due in December
+    const decDebt: Debt = {
+      id: 'debt-dec',
+      personName: 'سمير',
+      type: 'borrowed',
+      amountFils: 80000,
+      paidFils: 0,
+      startDate: new Date(2026, 9, 1),
+      dueDate: new Date(2026, 11, 15),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(2026, 9, 1),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      debts: [overduePastDebt, decDebt],
+      monthStartDay: 1,
+      referenceDate: refDate,
+      periodRange: decRange,
+      // rolloverBalanceFils is omitted (disabled)
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    // Both decDebt (80,000) and overduePastDebt (60,000) must be included = 140,000 fils!
+    expect(res.upcomingDebtObligations).toBe(140000)
+  })
+
   it('accumulates intermediate active recurring items between now and rangeStart into rolloverBalance for future months', () => {
     // Current date: Oct 20, 2026
     const refDate = new Date(2026, 9, 20)

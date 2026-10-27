@@ -15,7 +15,7 @@ import {
   type DocumentReference,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import type { Debt, DebtPayment, TxType } from '../types'
+import type { Debt, DebtPayment, DebtEntry, TxType } from '../types'
 import { debtConverter, categoryConverter } from './converters'
 
 export function subscribeDebts(
@@ -54,7 +54,7 @@ export async function getOrCreateDebtCategory(
 
   if (type === 'expense') {
     const debtCat = categories.find(
-      (c) => c.type === 'expense' && !c.archived && c.name === 'سداد الديون والأقساط'
+      (c) => c.type === 'expense' && !c.archived && (c.name === 'الديون والسلف' || c.name === 'سداد الديون والأقساط')
     )
     if (debtCat) return debtCat.id
 
@@ -69,15 +69,20 @@ export async function getOrCreateDebtCategory(
     const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
     await setDoc(newDocRef, {
       id: '',
-      name: 'سداد الديون والأقساط',
+      name: 'الديون والسلف',
       type: 'expense',
-      icon: '💳',
+      icon: '🤝',
       color: '#D97706',
       archived: false,
       order: 0,
     })
     return newDocRef.id
   } else {
+    const debtCat = categories.find(
+      (c) => c.type === 'income' && !c.archived && c.name === 'الديون والسلف'
+    )
+    if (debtCat) return debtCat.id
+
     const otherCat = categories.find(
       (c) => c.type === 'income' && !c.archived && c.name === 'أخرى'
     )
@@ -89,10 +94,10 @@ export async function getOrCreateDebtCategory(
     const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
     await setDoc(newDocRef, {
       id: '',
-      name: 'أخرى',
+      name: 'الديون والسلف',
       type: 'income',
-      icon: '➕',
-      color: '#64748B',
+      icon: '🤝',
+      color: '#10B981',
       archived: false,
       order: 0,
     })
@@ -102,6 +107,8 @@ export async function getOrCreateDebtCategory(
 
 export interface AddDebtOptions {
   syncTransaction?: boolean
+  initialPaidFils?: number
+  initialPaymentNote?: string
 }
 
 export async function addDebt(
@@ -125,17 +132,45 @@ export async function addDebt(
   const defaultDebtNote = debt.type === 'lent' ? 'دين مستحق (لي)' : 'دين مستحق (عليّ)'
   const finalDebtNote = (typeof debt.note === 'string' && debt.note.trim() ? debt.note.trim() : defaultDebtNote).slice(0, 500)
 
+  const initialPaid = options?.initialPaidFils && options.initialPaidFils > 0
+    ? Math.min(debt.amountFils, Math.max(0, Math.round(options.initialPaidFils)))
+    : 0
+
+  const initialPayments: DebtPayment[] = initialPaid > 0 ? [
+    {
+      id: `p_init_${Date.now()}`,
+      amountFils: initialPaid,
+      date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+      note: (options?.initialPaymentNote?.trim() || 'سداد مسبق (توثيقي)').slice(0, 500),
+      createdAt: new Date(),
+    }
+  ] : []
+
+  const paidFils = initialPaid
+  const settled = paidFils === debt.amountFils
+
+  const initialEntry: DebtEntry = {
+    id: `entry_${debtId}`,
+    amountFils: debt.amountFils,
+    date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+    title: debt.type === 'lent' ? 'أصل السلفة / الدين' : 'أصل الدين المقترض',
+    note: finalDebtNote,
+    ...(options?.syncTransaction ? { transactionId: `debt_init_${debtId}` } : {}),
+    createdAt: new Date(),
+  }
+
   const debtData = {
     id: debtId,
     personName,
     type: debt.type,
     amountFils: debt.amountFils,
-    paidFils: 0,
-    settled: false,
+    paidFils,
+    settled,
     startDate: debt.startDate,
     dueDate: debt.dueDate ?? null,
     note: finalDebtNote,
-    payments: [],
+    payments: initialPayments,
+    entries: [initialEntry],
     createdAt: new Date(),
   }
 
@@ -201,6 +236,23 @@ function serializePayment(p: DebtPayment): Record<string, unknown> {
   }
   if (Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0) {
     item.mergedTransactionIds = p.mergedTransactionIds.filter(Boolean)
+  }
+  return item
+}
+
+function serializeDebtEntry(e: DebtEntry): Record<string, unknown> {
+  const item: Record<string, unknown> = {
+    id: e.id,
+    amountFils: Math.round(Number(e.amountFils)),
+    date: toTimestamp(e.date),
+    note: typeof e.note === 'string' ? e.note.slice(0, 500) : '',
+    createdAt: toTimestamp(e.createdAt),
+  }
+  if (e.title && typeof e.title === 'string' && e.title.trim()) {
+    item.title = e.title.trim().slice(0, 100)
+  }
+  if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
+    item.transactionId = e.transactionId.trim().slice(0, 128)
   }
   return item
 }
@@ -342,6 +394,9 @@ export async function updateDebt(
   }
   if (data.payments !== undefined) {
     updates.payments = data.payments.map(serializePayment)
+  }
+  if (data.entries !== undefined) {
+    updates.entries = data.entries.map(serializeDebtEntry)
   }
 
   // Always compute settled to satisfy firestore.rules:
@@ -1157,4 +1212,277 @@ export async function getAllDebts(uid: string): Promise<Debt[]> {
   const q = query(colRef, orderBy('startDate', 'desc'))
   const snap = await getDocs(q)
   return snap.docs.map((d) => d.data())
+}
+
+export async function addDebtEntry(
+  uid: string,
+  debt: Debt,
+  entry: {
+    amountFils: number
+    date: Date
+    title?: string
+    note?: string
+  },
+  options?: { syncTransaction?: boolean }
+): Promise<string> {
+  if (!Number.isInteger(entry.amountFils) || entry.amountFils <= 0) {
+    throw new Error('مبلغ السلفة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+  let existingEntries: DebtEntry[] = []
+
+  if (Array.isArray(debt.entries) && debt.entries.length > 0) {
+    existingEntries = [...debt.entries]
+  } else {
+    existingEntries = [
+      {
+        id: `entry_base_${debt.id}`,
+        amountFils: debt.amountFils,
+        date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+        title: 'أصل الدين الأول',
+        note: debt.note || '',
+        transactionId: `debt_init_${debt.id}`,
+        createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
+      },
+    ]
+  }
+
+  let txId: string | undefined
+  const batch = writeBatch(db)
+
+  if (options?.syncTransaction) {
+    txId = `debt_entry_${entryId}`
+    const txType: TxType = debt.type === 'lent' ? 'expense' : 'income'
+    const categoryId = await getOrCreateDebtCategory(uid, txType)
+    const txRef = doc(db, 'users', uid, 'transactions', txId)
+    const title = (
+      entry.title?.trim() ||
+      (debt.type === 'lent' ? `سلفة إضافية: ${debt.personName}` : `اقتراض إضافي من: ${debt.personName}`)
+    ).slice(0, 100)
+
+    const txData: Record<string, unknown> = {
+      type: txType,
+      amountFils: entry.amountFils,
+      categoryId,
+      date: entry.date instanceof Date ? Timestamp.fromDate(entry.date) : entry.date,
+      title,
+      note: (entry.note?.trim() || (entry.title?.trim() ? `سلفة إضافية: ${entry.title.trim()}` : 'سلفة إضافية')).slice(0, 500),
+      createdAt: serverTimestamp(),
+    }
+    batch.set(txRef, txData)
+  }
+
+  const newEntry: DebtEntry = {
+    id: entryId,
+    amountFils: entry.amountFils,
+    date: entry.date,
+    title: entry.title?.trim() || undefined,
+    note: entry.note?.trim() || '',
+    transactionId: txId,
+    createdAt: new Date(),
+  }
+
+  const newEntries = [...existingEntries, newEntry]
+  const newAmountFils = debt.amountFils + entry.amountFils
+  const paidFils = debt.paidFils || 0
+  const settled = paidFils === newAmountFils
+
+  const debtRef = doc(db, 'users', uid, 'debts', debt.id).withConverter(debtConverter)
+  batch.update(debtRef, {
+    amountFils: newAmountFils,
+    settled,
+    entries: newEntries.map(serializeDebtEntry),
+  })
+
+  await batch.commit()
+  return entryId
+}
+
+export async function updateDebtEntry(
+  uid: string,
+  debt: Debt,
+  entryId: string,
+  updated: {
+    amountFils: number
+    date: Date
+    title?: string
+    note?: string
+  }
+): Promise<void> {
+  if (!Number.isInteger(updated.amountFils) || updated.amountFils <= 0) {
+    throw new Error('مبلغ السلفة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const entries = debt.entries || []
+  const entryIndex = entries.findIndex((e) => e.id === entryId)
+  if (entryIndex === -1) {
+    throw new Error('السلفة المحددة غير موجودة')
+  }
+
+  const oldEntry = entries[entryIndex]
+  const diff = updated.amountFils - oldEntry.amountFils
+  const newAmountFils = debt.amountFils + diff
+
+  if (newAmountFils < (debt.paidFils || 0)) {
+    throw new Error('لا يمكن تقليص مبلغ السلفة لأن إجمالي الدين سيصبح أقل من المبالغ المسددة فعلياً')
+  }
+
+  const batch = writeBatch(db)
+
+  if (oldEntry.transactionId) {
+    const txRef = doc(db, 'users', uid, 'transactions', oldEntry.transactionId)
+    batch.update(txRef, {
+      amountFils: updated.amountFils,
+      date: updated.date instanceof Date ? Timestamp.fromDate(updated.date) : updated.date,
+      ...(updated.title ? { title: updated.title.trim().slice(0, 100) } : {}),
+      note: (updated.note?.trim() || '').slice(0, 500),
+    })
+  }
+
+  const newEntries = [...entries]
+  newEntries[entryIndex] = {
+    ...oldEntry,
+    amountFils: updated.amountFils,
+    date: updated.date,
+    title: updated.title?.trim() || undefined,
+    note: updated.note?.trim() || '',
+  }
+
+  const settled = (debt.paidFils || 0) === newAmountFils
+  const debtRef = doc(db, 'users', uid, 'debts', debt.id).withConverter(debtConverter)
+  batch.update(debtRef, {
+    amountFils: newAmountFils,
+    settled,
+    entries: newEntries.map(serializeDebtEntry),
+  })
+
+  await batch.commit()
+}
+
+export async function deleteDebtEntry(
+  uid: string,
+  debt: Debt,
+  entryId: string
+): Promise<void> {
+  const entries = debt.entries || []
+  const targetEntry = entries.find((e) => e.id === entryId)
+  if (!targetEntry) {
+    throw new Error('السلفة المحددة غير موجودة')
+  }
+
+  const newAmountFils = debt.amountFils - targetEntry.amountFils
+  if (newAmountFils < (debt.paidFils || 0)) {
+    throw new Error('لا يمكن حذف هذه السلفة لأن إجمالي الدين سيصبح أقل من المبلغ المسدد فعلياً')
+  }
+
+  if (newAmountFils <= 0) {
+    throw new Error('لا يمكن حذف السلفة الأساسية الوحيدة للدين. يمكنك حذف الدين بالكامل بدلاً من ذلك')
+  }
+
+  const batch = writeBatch(db)
+
+  if (targetEntry.transactionId) {
+    const txRef = doc(db, 'users', uid, 'transactions', targetEntry.transactionId)
+    batch.delete(txRef)
+  }
+
+  const newEntries = entries.filter((e) => e.id !== entryId)
+  const settled = (debt.paidFils || 0) === newAmountFils
+  const debtRef = doc(db, 'users', uid, 'debts', debt.id).withConverter(debtConverter)
+  batch.update(debtRef, {
+    amountFils: newAmountFils,
+    settled,
+    entries: newEntries.map(serializeDebtEntry),
+  })
+
+  await batch.commit()
+}
+
+export async function mergePersonDebts(
+  uid: string,
+  debtsToMerge: Debt[]
+): Promise<string> {
+  if (!Array.isArray(debtsToMerge) || debtsToMerge.length < 2) {
+    throw new Error('يجب اختيار دينين على الأقل للدمج')
+  }
+
+  const firstType = debtsToMerge[0].type
+  const allSameType = debtsToMerge.every((d) => d.type === firstType)
+  if (!allSameType) {
+    throw new Error('لا يمكن دمج ديون من نوعين مختلفين (لي وعليّ) معاً')
+  }
+
+  // Sort by startDate ascending to pick the primary (oldest) debt
+  const sorted = [...debtsToMerge].sort(
+    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+  )
+  const primaryDebt = sorted[0]
+  const secondaryDebts = sorted.slice(1)
+
+  // Collect and consolidate entries
+  const consolidatedEntries: DebtEntry[] = []
+  for (const d of sorted) {
+    if (Array.isArray(d.entries) && d.entries.length > 0) {
+      for (const e of d.entries) {
+        consolidatedEntries.push({ ...e })
+      }
+    } else {
+      consolidatedEntries.push({
+        id: `entry_base_${d.id}`,
+        amountFils: d.amountFils,
+        date: d.startDate instanceof Date ? d.startDate : new Date(d.startDate),
+        title: `أصل دين: ${d.personName}`,
+        note: d.note || '',
+        transactionId: `debt_init_${d.id}`,
+        createdAt: d.createdAt instanceof Date ? d.createdAt : new Date(d.createdAt || d.startDate),
+      })
+    }
+  }
+  consolidatedEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  // Collect and consolidate payments
+  const consolidatedPayments: DebtPayment[] = []
+  for (const d of sorted) {
+    if (Array.isArray(d.payments)) {
+      for (const p of d.payments) {
+        consolidatedPayments.push({ ...p })
+      }
+    }
+  }
+  consolidatedPayments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  // Consolidate notes
+  const notesSet = new Set<string>()
+  for (const d of sorted) {
+    if (d.note && d.note.trim()) {
+      notesSet.add(d.note.trim())
+    }
+  }
+  const combinedNote = Array.from(notesSet).join(' | ').slice(0, 500)
+
+  const totalAmountFils = sorted.reduce((sum, d) => sum + d.amountFils, 0)
+  const totalPaidFils = sorted.reduce((sum, d) => sum + (d.paidFils || 0), 0)
+  const settled = totalPaidFils === totalAmountFils
+
+  const batch = writeBatch(db)
+
+  const primaryRef = doc(db, 'users', uid, 'debts', primaryDebt.id).withConverter(debtConverter)
+  batch.update(primaryRef, {
+    amountFils: totalAmountFils,
+    paidFils: totalPaidFils,
+    settled,
+    note: combinedNote,
+    payments: consolidatedPayments.map(serializePayment),
+    entries: consolidatedEntries.slice(0, 100).map(serializeDebtEntry),
+  })
+
+  // Delete secondary debt documents
+  for (const secondary of secondaryDebts) {
+    const secRef = doc(db, 'users', uid, 'debts', secondary.id).withConverter(debtConverter)
+    batch.delete(secRef)
+  }
+
+  await batch.commit()
+  return primaryDebt.id
 }

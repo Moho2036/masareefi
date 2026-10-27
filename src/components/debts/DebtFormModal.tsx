@@ -44,6 +44,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   const [amountStr, setAmountStr] = useState(() =>
     initialDebt ? String(fromFils(initialDebt.amountFils)) : ''
   )
+  const [initialPaidStr, setInitialPaidStr] = useState('')
   const [startDateStr, setStartDateStr] = useState(() =>
     initialDebt?.startDate
       ? format(new Date(initialDebt.startDate), 'yyyy-MM-dd')
@@ -55,9 +56,33 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   )
   const [note, setNote] = useState(() => initialDebt?.note ?? '')
   const [syncTransaction, setSyncTransaction] = useState(true)
+  const [syncManuallyToggled, setSyncManuallyToggled] = useState(false)
   const [checkingSync, setCheckingSync] = useState(isEditing)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const isPastDebt = React.useMemo(() => {
+    if (isEditing) return false
+    try {
+      const parsed = parseLocalDateInput(startDateStr)
+      const now = new Date()
+      const firstOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const initialPaid = toFils(initialPaidStr, config.decimals)
+      return parsed < firstOfCurrentMonth || initialPaid > 0
+    } catch {
+      return false
+    }
+  }, [isEditing, startDateStr, initialPaidStr, config.decimals])
+
+  useEffect(() => {
+    if (!isEditing && !syncManuallyToggled) {
+      if (isPastDebt) {
+        setSyncTransaction(false)
+      } else {
+        setSyncTransaction(true)
+      }
+    }
+  }, [isPastDebt, isEditing, syncManuallyToggled])
 
   useEffect(() => {
     if (!user || !initialDebt) return
@@ -168,6 +193,18 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         )
         showToast('تم تحديث بيانات الدين بنجاح', 'success')
       } else {
+        const initialPaidFils = !isEditing && initialPaidStr.trim() ? toFils(initialPaidStr, config.decimals) : 0
+        if (initialPaidFils < 0) {
+          setError('المبلغ المسدد مسبقاً لا يمكن أن يكون سالباً')
+          setLoading(false)
+          return
+        }
+        if (initialPaidFils > amountFils) {
+          setError('المبلغ المسدد مسبقاً لا يمكن أن يتجاوز إجمالي الدين')
+          setLoading(false)
+          return
+        }
+
         const defaultDebtNote = type === 'lent' ? 'دين مستحق (لي)' : 'دين مستحق (عليّ)'
         const safeNote = note.trim() || defaultDebtNote
         await addDebt(
@@ -180,7 +217,11 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             dueDate,
             note: safeNote,
           },
-          { syncTransaction }
+          {
+            syncTransaction,
+            initialPaidFils: initialPaidFils > 0 ? initialPaidFils : undefined,
+            initialPaymentNote: 'سداد مسبق (توثيقي)',
+          }
         )
         showToast('تمت إضافة الدين بنجاح', 'success')
       }
@@ -283,6 +324,32 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           )}
       </div>
 
+      {/* 3b. Pre-paid Amount (for new debts) */}
+      {!isEditing && (
+        <div>
+          <label htmlFor="pre-paid-input" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+            المبلغ المسدد مسبقاً من هذا الدين (اختياري)
+          </label>
+          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20">
+            <input
+              id="pre-paid-input"
+              type="text"
+              inputMode="decimal"
+              placeholder={config.decimals === 3 ? '0.000' : '0.00'}
+              value={initialPaidStr}
+              onChange={(e) => setInitialPaidStr(e.target.value)}
+              className="w-full bg-transparent text-base font-bold font-mono text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
+            />
+            <span className="text-sm font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+              {config.symbol}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+            سجل المبلغ المسدد مسبقاً إذا كان الدين قديماً لتوثيق تاريخه وسداده دون التأثير على سيولة اليوم.
+          </p>
+        </div>
+      )}
+
       {/* 4. Start Date */}
       <div>
         <DatePickerInput
@@ -346,10 +413,13 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       </p>
 
       {/* 7. Accounting Sync Toggle */}
-      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 space-y-2">
         <Toggle
           checked={syncTransaction}
-          onChange={setSyncTransaction}
+          onChange={(val) => {
+            setSyncManuallyToggled(true)
+            setSyncTransaction(val)
+          }}
           disabled={checkingSync || loading}
           label={
             type === 'lent'
@@ -358,6 +428,12 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           }
           description="يربط مبلغ أصل الدين برصيد محفظتك كمعاملة مالية (دفعات السداد تُدار بشكل مستقل)."
         />
+        {isPastDebt && !syncTransaction && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1 font-medium pt-1 border-t border-amber-200/40 dark:border-amber-900/40">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>بما أن هذا دين سابق، تم إيقاف خصم أصل الدين من سيولة اليوم تلقائياً (ويمكنك تفعيله إن أردت).</span>
+          </p>
+        )}
       </div>
 
       {/* Actions */}

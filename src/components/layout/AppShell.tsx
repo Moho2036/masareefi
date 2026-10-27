@@ -161,7 +161,15 @@ export const AppShell: React.FC = () => {
         className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-slate-900 border-e border-slate-200/80 dark:border-slate-800 p-6 min-h-screen sticky top-0 h-screen overflow-y-auto"
       >
         {/* App Logo */}
-        <div className="flex items-center gap-3 px-2 mb-8">
+        <Link
+          to="/"
+          onClick={() => {
+            if (!isCurrentMonth) {
+              goToCurrentMonth()
+            }
+          }}
+          className="flex items-center gap-3 px-2 mb-8 cursor-pointer group"
+        >
           <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-blue-500/40 text-white flex items-center justify-center shadow-md">
             <img src="/icons/icon.svg" alt="بَصير" className="w-6 h-6 object-contain" />
           </div>
@@ -170,7 +178,7 @@ export const AppShell: React.FC = () => {
               بَصير
             </span>
           </div>
-        </div>
+        </Link>
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-4" aria-label="تنقل الصفحات">
@@ -190,6 +198,11 @@ export const AppShell: React.FC = () => {
                   <Link
                     key={item.to}
                     to={item.to}
+                    onClick={() => {
+                      if (item.to === '/' && !isCurrentMonth) {
+                        goToCurrentMonth()
+                      }
+                    }}
                     className={cn(
                       'flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all text-sm select-none',
                       isActive

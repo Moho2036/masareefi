@@ -6,7 +6,7 @@ import {
   type SnapshotOptions,
   type DocumentData,
 } from 'firebase/firestore'
-import type { Category, Transaction, Recurring, UserSettings, Debt, DebtPayment } from '../types'
+import type { Category, Transaction, Recurring, UserSettings, Debt, DebtPayment, DebtEntry } from '../types'
 
 export const categoryConverter: FirestoreDataConverter<Category> = {
   toFirestore(cat: Category): DocumentData {
@@ -119,6 +119,15 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
     ) {
       data.skipMonth = Math.round(Number(rec.skipMonth))
     }
+    if (Array.isArray(rec.skipMonths) && rec.skipMonths.length > 0) {
+      data.skipMonths = rec.skipMonths
+        .map(Number)
+        .filter((m) => Number.isFinite(m) && m >= 1 && m <= 50)
+        .slice(0, 10)
+    }
+    if (rec.requireConfirmation !== undefined) {
+      data.requireConfirmation = Boolean(rec.requireConfirmation)
+    }
     return data
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Recurring {
@@ -166,6 +175,15 @@ export const recurringConverter: FirestoreDataConverter<Recurring> = {
       Math.round(Number(data.skipMonth)) <= 50
     ) {
       rec.skipMonth = Math.round(Number(data.skipMonth))
+    }
+    if (Array.isArray(data.skipMonths) && data.skipMonths.length > 0) {
+      rec.skipMonths = data.skipMonths
+        .map(Number)
+        .filter((m) => Number.isFinite(m) && m >= 1 && m <= 50)
+        .slice(0, 10)
+    }
+    if (data.requireConfirmation !== undefined) {
+      rec.requireConfirmation = Boolean(data.requireConfirmation)
     }
     return rec
   },
@@ -372,6 +390,25 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
     } else {
       data.dueDate = null
     }
+    if (Array.isArray(debt.entries) && debt.entries.length > 0) {
+      data.entries = debt.entries.slice(0, 100).map((e) => {
+        const item: DocumentData = {
+          id: String(e.id || ''),
+          amountFils: Math.round(Number(e.amountFils || 0)),
+          date: e.date instanceof Date ? Timestamp.fromDate(e.date) : e.date,
+          note: typeof e.note === 'string' ? e.note.slice(0, 500) : '',
+          createdAt:
+            e.createdAt instanceof Date ? Timestamp.fromDate(e.createdAt) : e.createdAt,
+        }
+        if (typeof e.title === 'string' && e.title.trim()) {
+          item.title = e.title.trim().slice(0, 100)
+        }
+        if (typeof e.transactionId === 'string' && e.transactionId.trim()) {
+          item.transactionId = e.transactionId.trim().slice(0, 128)
+        }
+        return item
+      })
+    }
     return data
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Debt {
@@ -405,6 +442,32 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
         : {}),
     }))
 
+    const rawEntries: Array<Record<string, unknown>> = Array.isArray(data.entries)
+      ? data.entries
+      : []
+    const entries: DebtEntry[] = rawEntries.map((e) => ({
+      id: String(e.id || ''),
+      amountFils: Number(e.amountFils || 0),
+      date:
+        e.date instanceof Timestamp
+          ? e.date.toDate()
+          : e.date
+            ? new Date(e.date as string | number)
+            : new Date(),
+      title: typeof e.title === 'string' && e.title.trim() ? e.title.trim() : undefined,
+      note: typeof e.note === 'string' ? e.note : '',
+      transactionId:
+        typeof e.transactionId === 'string' && e.transactionId.trim()
+          ? e.transactionId.trim()
+          : undefined,
+      createdAt:
+        e.createdAt instanceof Timestamp
+          ? e.createdAt.toDate()
+          : e.createdAt
+            ? new Date(e.createdAt as string | number)
+            : new Date(),
+    }))
+
     return {
       id: snapshot.id,
       personName: data.personName ?? '',
@@ -430,6 +493,7 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
           : data.createdAt
             ? new Date(data.createdAt)
             : new Date(),
+      ...(entries.length > 0 ? { entries } : {}),
     }
   },
 }

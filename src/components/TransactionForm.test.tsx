@@ -15,11 +15,13 @@ vi.mock('../services/transactions', () => ({
   updateTransaction: vi.fn().mockResolvedValue(undefined),
   deleteTransaction: vi.fn().mockResolvedValue(undefined),
   getRecentTransactions: vi.fn().mockResolvedValue([]),
+  subscribeTransactions: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn().mockResolvedValue('mock-rec-id'),
   processDueRecurring: vi.fn().mockResolvedValue(1),
+  subscribeRecurring: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('../services/debts', () => ({
@@ -304,6 +306,48 @@ describe('TransactionForm Component', () => {
       expect(txServices.addTransaction).not.toHaveBeenCalled()
       expect(onClose).toHaveBeenCalled()
       expect(onSuccess).toHaveBeenCalled()
+    })
+  })
+
+  it('allows selecting extra frequencies (e.g. biweekly) from "أخرى ▾" dropdown when recurring is enabled', async () => {
+    const onClose = vi.fn()
+    const onSuccess = vi.fn()
+
+    renderWithRouter(<TransactionForm onClose={onClose} onSuccess={onSuccess} />)
+
+    const amountInput = screen.getByPlaceholderText('0.000')
+    fireEvent.change(amountInput, { target: { value: '40' } })
+
+    const foodCatBtn = screen.getByRole('button', { name: /طعام وبقالة/ })
+    fireEvent.click(foodCatBtn)
+
+    // Toggle recurring switch
+    const recurringSwitch = screen.getByRole('switch')
+    fireEvent.click(recurringSwitch)
+
+    // Click "أخرى ▾"
+    const otherBtn = screen.getByRole('radio', { name: /أخرى/ })
+    fireEvent.click(otherBtn)
+
+    // Select "كل أسبوعين"
+    const biweeklyBtn = screen.getByRole('button', { name: /كل أسبوعين/ })
+    fireEvent.click(biweeklyBtn)
+
+    // Submit form
+    const submitBtn = screen.getByRole('button', { name: 'حفظ' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.addRecurring).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          type: 'expense',
+          amountFils: 40000,
+          categoryId: 'c-food',
+          frequency: 'biweekly',
+          active: true,
+        })
+      )
     })
   })
 

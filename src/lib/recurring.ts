@@ -10,10 +10,18 @@ import type { Frequency, Recurring } from '../types'
 export function advanceDate(date: Date, freq: Frequency): Date {
   const d = new Date(date.getTime())
   switch (freq) {
+    case 'daily':
+      return addDays(d, 1)
     case 'weekly':
       return addDays(d, 7)
+    case 'biweekly':
+      return addDays(d, 14)
     case 'monthly':
       return addMonths(d, 1)
+    case 'quarterly':
+      return addMonths(d, 3)
+    case 'semiannual':
+      return addMonths(d, 6)
     case 'yearly':
       return addYears(d, 1)
   }
@@ -30,12 +38,28 @@ export function advanceDateWithTargetDay(
   targetDay: number
 ): Date {
   const d = new Date(date.getTime())
+  if (freq === 'daily') {
+    return addDays(d, 1)
+  }
   if (freq === 'weekly') {
     return addDays(d, 7)
+  }
+  if (freq === 'biweekly') {
+    return addDays(d, 14)
   }
   if (freq === 'monthly') {
     const nextYear = d.getMonth() === 11 ? d.getFullYear() + 1 : d.getFullYear()
     const nextMonth = (d.getMonth() + 1) % 12
+    const daysInNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate()
+    const safeDay = Math.min(targetDay, daysInNextMonth)
+    d.setFullYear(nextYear, nextMonth, safeDay)
+    return d
+  }
+  if (freq === 'quarterly' || freq === 'semiannual') {
+    const monthsToAdd = freq === 'quarterly' ? 3 : 6
+    const totalMonths = d.getMonth() + monthsToAdd
+    const nextYear = d.getFullYear() + Math.floor(totalMonths / 12)
+    const nextMonth = totalMonths % 12
     const daysInNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate()
     const safeDay = Math.min(targetDay, daysInNextMonth)
     d.setFullYear(nextYear, nextMonth, safeDay)
@@ -102,11 +126,16 @@ export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): 
  * For money circles, the user's turn month is exempt from paying an installment.
  */
 export function isOccurrenceSkipped(recurring: Recurring, occurrenceDate: Date): boolean {
-  if (recurring.skipMonth === undefined || recurring.skipMonth === null) {
-    return false
-  }
   const monthIdx = getOccurrenceMonthIndex(recurring.startDate, occurrenceDate)
-  return monthIdx === recurring.skipMonth
+  if (Array.isArray(recurring.skipMonths) && recurring.skipMonths.length > 0) {
+    if (recurring.skipMonths.includes(monthIdx)) {
+      return true
+    }
+  }
+  if (recurring.skipMonth !== undefined && recurring.skipMonth !== null) {
+    return monthIdx === recurring.skipMonth
+  }
+  return false
 }
 
 /**
@@ -205,12 +234,19 @@ export function getNextCircleDueMonth(
   paidMonths: number[] = [],
   paymentsByMonth?: Record<string | number, boolean>,
   startDate?: Date,
-  today: Date = new Date()
+  today: Date = new Date(),
+  exemptMonths?: number[]
 ): number | null {
   const start = startDate ? (startDate instanceof Date ? startDate : new Date(startDate)) : null
 
+  const allExempt = new Set<number>()
+  if (myTurnMonth) allExempt.add(myTurnMonth)
+  if (Array.isArray(exemptMonths)) {
+    exemptMonths.forEach((m) => allExempt.add(m))
+  }
+
   for (let m = 1; m <= membersCount; m++) {
-    if (m === myTurnMonth) continue
+    if (allExempt.has(m)) continue
 
     // If this month was explicitly cancelled/unpaid by the user and its date is <= today, skip it so recurring doesn't immediately re-deduct it
     if (start && (paymentsByMonth?.[m] === false || paymentsByMonth?.[String(m)] === false)) {
@@ -243,8 +279,11 @@ export function getNextCircleDueDate(
   myTurnMonth: number,
   paidMonths: number[] = [],
   paymentsByMonth?: Record<string | number, boolean>,
-  today: Date = new Date()
+  todayOrExempt?: Date | number[],
+  exemptMonths?: number[]
 ): Date {
+  const today = todayOrExempt instanceof Date ? todayOrExempt : new Date()
+  const effectiveExempt = Array.isArray(todayOrExempt) ? todayOrExempt : exemptMonths
   const start = startDate instanceof Date ? startDate : new Date(startDate)
   const dueMonth = getNextCircleDueMonth(
     membersCount,
@@ -252,7 +291,8 @@ export function getNextCircleDueDate(
     paidMonths,
     paymentsByMonth,
     start,
-    today
+    today,
+    effectiveExempt
   )
 
   if (dueMonth !== null) {
@@ -321,11 +361,23 @@ export function calculateMonthlyEquivalent(
 
     let equivalentFils = 0
     switch (item.frequency) {
+      case 'daily':
+        equivalentFils = Math.round(item.amountFils * (365 / 12))
+        break
       case 'weekly':
         equivalentFils = Math.round(item.amountFils * (52 / 12))
         break
+      case 'biweekly':
+        equivalentFils = Math.round(item.amountFils * (26 / 12))
+        break
       case 'monthly':
         equivalentFils = item.amountFils
+        break
+      case 'quarterly':
+        equivalentFils = Math.round(item.amountFils / 3)
+        break
+      case 'semiannual':
+        equivalentFils = Math.round(item.amountFils / 6)
         break
       case 'yearly':
         equivalentFils = Math.round(item.amountFils / 12)

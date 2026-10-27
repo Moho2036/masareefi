@@ -607,6 +607,45 @@ describe('backupRestore module', () => {
       expect(circleCall![1].recurringId).toBeUndefined()
     })
 
+    it('restores recurring items with new frequencies and requireConfirmation', async () => {
+      mockSet.mockClear()
+      mockCommit.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithSpecialRecurring: MasareefiBackup = {
+        app: 'masareefi',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          categories: [{ id: 'cat-bills', name: 'فواتير', type: 'expense', order: 0, archived: false, color: '#f00', icon: 'zap' }],
+          transactions: [],
+          debts: [],
+          recurring: [
+            {
+              id: 'rec-quarterly-conf',
+              amountFils: 45000,
+              type: 'expense',
+              categoryId: 'cat-bills',
+              frequency: 'quarterly',
+              startDate: new Date(),
+              nextDate: new Date(),
+              note: 'فاتورة ربع سنوية',
+              active: true,
+              requireConfirmation: true,
+            },
+          ],
+          circles: [],
+        },
+      }
+
+      await restoreBackup('user-test-uid', backupWithSpecialRecurring)
+
+      const recCall = mockSet.mock.calls.find((call) => call[0].path === 'users/user-test-uid/recurring/rec-quarterly-conf')
+      expect(recCall).toBeDefined()
+      expect(recCall![1].frequency).toBe('quarterly')
+      expect(recCall![1].requireConfirmation).toBe(true)
+    })
+
     it('restores debt with normalized paidFils and settled when paymentsSum exceeds raw paidFils', async () => {
       mockSet.mockClear()
       mockCommit.mockClear()
@@ -1224,6 +1263,104 @@ describe('backupRestore module', () => {
       const restoredPayment = debtCall![1].payments[0]
       expect(restoredPayment.isMerged).toBe(true)
       expect(restoredPayment.mergedTransactionIds).toEqual(['tx_1', 'tx_2'])
+    })
+
+    it('validates and restores debt entries, recurring skipMonths, and circle shareType', async () => {
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupAdvanced = {
+        app: 'baseer',
+        version: 1,
+        exportedAt: '2026-10-27T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [],
+          debts: [
+            {
+              id: 'debt_advanced',
+              personName: 'خالد',
+              amountFils: 60000,
+              paidFils: 20000,
+              startDate: new Date('2026-10-01'),
+              settled: false,
+              payments: [],
+              entries: [
+                {
+                  id: 'entry_1',
+                  amountFils: 40000,
+                  date: new Date('2026-10-01'),
+                  title: 'سلفة أولى',
+                  note: 'ملاحظة',
+                  transactionId: 'tx_init_1',
+                },
+                {
+                  id: 'entry_2',
+                  amountFils: 20000,
+                  date: new Date('2026-10-15'),
+                  title: 'سلفة ثانية',
+                  note: 'زيادة دين',
+                },
+              ],
+            },
+          ],
+          recurring: [
+            {
+              id: 'rec_advanced',
+              type: 'expense',
+              amountFils: 100000,
+              categoryId: 'cat_circle',
+              note: 'قسط جمعية',
+              frequency: 'monthly',
+              startDate: new Date('2026-01-01'),
+              nextDate: new Date('2026-02-01'),
+              active: true,
+              skipMonths: [2, 5],
+            },
+          ],
+          circles: [
+            {
+              id: 'circle_advanced',
+              name: 'جمعية الشباب',
+              monthlyAmountFils: 50000,
+              membersCount: 10,
+              totalAmountFils: 500000,
+              myTurnMonth: 2,
+              secondTurnMonth: 5,
+              shareType: 'double',
+              startDate: new Date('2026-01-01'),
+              members: [],
+              status: 'active',
+            },
+          ],
+        },
+      }
+
+      const valRes = validateBackup(JSON.stringify(backupAdvanced))
+      expect(valRes.valid).toBe(true)
+      expect(valRes.data?.data.debts[0].entries).toHaveLength(2)
+      expect(valRes.data?.data.recurring[0].skipMonths).toEqual([2, 5])
+
+      await restoreBackup('user-test-uid', valRes.data!)
+
+      const debtCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/user-test-uid/debts/debt_advanced'
+      )
+      expect(debtCall).toBeDefined()
+      expect(debtCall![1].entries).toHaveLength(2)
+      expect(debtCall![1].entries[0].title).toBe('سلفة أولى')
+
+      const recCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/user-test-uid/recurring/rec_advanced'
+      )
+      expect(recCall).toBeDefined()
+      expect(recCall![1].skipMonths).toEqual([2, 5])
+
+      const circleCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/user-test-uid/circles/circle_advanced'
+      )
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].shareType).toBe('double')
+      expect(circleCall![1].secondTurnMonth).toBe(5)
     })
   })
 })

@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore'
 import { formatDateInput } from './dates'
 import { db } from './firebase'
-import type { Category, Transaction, Debt, Recurring, MoneyCircle, UserSettings } from '../types'
+import type { Category, Transaction, Debt, Recurring, MoneyCircle, UserSettings, Frequency } from '../types'
 import {
   categoryConverter,
   transactionConverter,
@@ -299,12 +299,28 @@ export function validateBackup(jsonText: string): BackupValidationResult {
         const paidFils = Math.max(0, Math.min(amountFils, Math.max(rawPaidFils, paymentsSum)))
         const settled = paidFils === amountFils
 
+        const entries = (Array.isArray(d.entries) ? d.entries : [])
+          .filter((e) => Boolean(e && typeof e === 'object' && Math.round(Number(e.amountFils || 0)) > 0))
+          .map((e) => ({
+            id: e.id || `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            amountFils: Math.round(Number(e.amountFils || 0)),
+            date: e.date,
+            note: typeof e.note === 'string' ? e.note.slice(0, 500) : '',
+            ...(typeof e.title === 'string' && e.title.trim() ? { title: e.title.trim().slice(0, 100) } : {}),
+            ...(typeof e.transactionId === 'string' && e.transactionId.trim()
+              ? { transactionId: e.transactionId.trim().slice(0, 128) }
+              : {}),
+            createdAt: e.createdAt || new Date(),
+          }))
+          .slice(0, 100)
+
         return {
           ...d,
           amountFils,
           paidFils,
           settled,
           payments,
+          ...(entries.length > 0 ? { entries } : {}),
         }
       })
 
@@ -324,6 +340,17 @@ export function validateBackup(jsonText: string): BackupValidationResult {
           item.skipMonth = Math.round(Number(item.skipMonth))
         } else {
           delete item.skipMonth
+        }
+        if (Array.isArray(item.skipMonths) && item.skipMonths.length > 0) {
+          item.skipMonths = item.skipMonths
+            .map(Number)
+            .filter((m) => Number.isFinite(m) && m >= 1 && m <= 50)
+            .slice(0, 10)
+        } else {
+          delete item.skipMonths
+        }
+        if (typeof item.requireConfirmation !== 'boolean') {
+          delete item.requireConfirmation
         }
         return item
       })
@@ -754,6 +781,25 @@ export async function restoreBackup(
     const paidFils = Math.max(0, Math.min(amountFils, Math.max(rawPaidFils, paymentsSum)))
     const settled = paidFils === amountFils
 
+    const entries = (Array.isArray(d.entries) ? d.entries : [])
+      .map((e) => {
+        const eAmount = Math.round(Number(e.amountFils || 0))
+        if (eAmount <= 0) return null
+        return {
+          id: e.id || `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          amountFils: eAmount,
+          date: parseDate(e.date),
+          note: typeof e.note === 'string' ? e.note.slice(0, 500) : '',
+          ...(typeof e.title === 'string' && e.title.trim() ? { title: e.title.trim().slice(0, 100) } : {}),
+          ...(typeof e.transactionId === 'string' && e.transactionId.trim()
+            ? { transactionId: e.transactionId.trim().slice(0, 128) }
+            : {}),
+          createdAt: e.createdAt ? parseDate(e.createdAt) : new Date(),
+        }
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+      .slice(0, 100)
+
     const debtData: Debt = {
       id: d.id,
       personName: (d.personName || '').trim().slice(0, 100) || 'شخص',
@@ -766,6 +812,7 @@ export async function restoreBackup(
       settled,
       payments,
       createdAt: d.createdAt ? parseDate(d.createdAt) : new Date(),
+      ...(entries.length > 0 ? { entries } : {}),
     }
     ops.push((b) => b.set(debtRef, debtData))
   }
@@ -792,8 +839,16 @@ export async function restoreBackup(
         ? Math.round(Number(r.skipMonth))
         : undefined
 
-    const validFreqs = ['weekly', 'monthly', 'yearly']
-    const safeFreq = validFreqs.includes(r.frequency as string) ? r.frequency : 'monthly'
+    const skipMonths =
+      Array.isArray(r.skipMonths) && r.skipMonths.length > 0
+        ? r.skipMonths
+            .map(Number)
+            .filter((m) => Number.isFinite(m) && m >= 1 && m <= 50)
+            .slice(0, 10)
+        : undefined
+
+    const validFreqs = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'yearly']
+    const safeFreq = validFreqs.includes(r.frequency as string) ? (r.frequency as Frequency) : 'monthly'
 
     const recData: Recurring = {
       id: r.id,
@@ -810,6 +865,8 @@ export async function restoreBackup(
       ...(title !== undefined ? { title } : {}),
       ...(circleId !== undefined ? { circleId } : {}),
       ...(skipMonth !== undefined ? { skipMonth } : {}),
+      ...(skipMonths !== undefined ? { skipMonths } : {}),
+      ...(typeof r.requireConfirmation === 'boolean' ? { requireConfirmation: r.requireConfirmation } : {}),
     }
     ops.push((b) => b.set(recRef, recData))
   }
@@ -860,6 +917,17 @@ export async function restoreBackup(
       ? (categoryIdRemap.get(c.categoryId.trim()) || c.categoryId.trim())
       : undefined
 
+    const shareType =
+      c.shareType && ['full', 'half', 'double'].includes(c.shareType) ? c.shareType : undefined
+    const secondTurnMonth =
+      c.secondTurnMonth !== undefined &&
+      c.secondTurnMonth !== null &&
+      Number.isFinite(Number(c.secondTurnMonth)) &&
+      Math.round(Number(c.secondTurnMonth)) >= 1 &&
+      Math.round(Number(c.secondTurnMonth)) <= membersCount
+        ? Math.round(Number(c.secondTurnMonth))
+        : undefined
+
     const circleData: MoneyCircle = {
       id: c.id,
       name: (c.name || '').trim().slice(0, 100) || 'جمعية',
@@ -876,6 +944,8 @@ export async function restoreBackup(
       ...(expenseCategoryId !== undefined ? { expenseCategoryId } : {}),
       ...(incomeCategoryId !== undefined ? { incomeCategoryId } : {}),
       ...(categoryId !== undefined ? { categoryId } : {}),
+      ...(shareType !== undefined ? { shareType } : {}),
+      ...(secondTurnMonth !== undefined ? { secondTurnMonth } : {}),
     }
     ops.push((b) => b.set(circleRef, circleData))
   }

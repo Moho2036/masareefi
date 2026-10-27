@@ -16,6 +16,7 @@ export interface CategoryPieChartProps {
   data: CategoryDistributionItem[]
   className?: string
   height?: number
+  onSelectCategory?: (categoryId: string) => void
 }
 
 interface CustomTooltipProps {
@@ -49,7 +50,9 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
   data,
   className,
   height = 240,
+  onSelectCategory,
 }) => {
+  const [showAll, setShowAll] = React.useState(false)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -142,36 +145,71 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
         </div>
       </div>
 
-      {/* Legend with emojis, names, amounts and percentages (No inner scroll trap) */}
+      {/* Legend with emojis, names, amounts and percentages (Expandable & Interactive) */}
       <div className="space-y-1.5 w-full">
-        {data.slice(0, 5).map((item) => (
-          <div
-            key={item.categoryId}
-            className="flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-xs"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: item.color }}
-              />
-              <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-              <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
-                {item.name}
-              </span>
+        {(showAll ? data : data.slice(0, 5)).map((item) => {
+          const isClickable = Boolean(onSelectCategory)
+          const content = (
+            <div
+              className={cn(
+                'flex items-center justify-between gap-2 p-1.5 rounded-xl transition-colors text-xs w-full text-start',
+                isClickable
+                  ? 'hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer select-none active:scale-[0.99]'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: item.color }}
+                />
+                <CategoryIcon icon={item.icon} color={item.color} size="sm" />
+                <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
+                  {item.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-bold text-slate-800 dark:text-slate-100">
+                  {format(item.amountFils)}
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400 min-w-8 text-end">
+                  {item.percentage}%
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="font-bold text-slate-800 dark:text-slate-100">
-                {format(item.amountFils)}
-              </span>
-              <span className="text-[11px] font-semibold text-slate-400 min-w-8 text-end">
-                {item.percentage}%
-              </span>
+          )
+
+          if (isClickable) {
+            return (
+              <button
+                key={item.categoryId}
+                type="button"
+                onClick={() => onSelectCategory?.(item.categoryId)}
+                className="w-full text-start block focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl"
+                title={`عرض معاملات تصنيف ${item.name}`}
+              >
+                {content}
+              </button>
+            )
+          }
+
+          return (
+            <div key={item.categoryId}>
+              {content}
             </div>
-          </div>
-        ))}
+          )
+        })}
         {data.length > 5 && (
-          <div className="text-[11px] text-center text-slate-400 pt-0.5">
-            + {data.length - 5} تصنيفات أخرى
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAll((prev) => !prev)}
+              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer inline-flex items-center gap-1"
+            >
+              <span>
+                {showAll ? 'عرض أقل' : `عرض الكل (+${data.length - 5})`}
+              </span>
+            </button>
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import {
   calculateSavingsRate,
   calculateYearlyMonthlyAverage,
   calculateAnnualSummary,
+  getDailyExpenseStats,
   ARABIC_MONTH_NAMES,
 } from './reports'
 import type { Transaction, Category } from '../types'
@@ -538,6 +539,30 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(res.activeMonthsCount).toBe(0)
       expect(res.averageMonthlyExpenseFils).toBe(0)
       expect(res.isCurrentMonthOnly).toBe(false)
+    })
+  })
+
+  describe('getDailyExpenseStats', () => {
+    it('returns null highestDay and 0 zeroSpendDaysCount for empty array', () => {
+      const stats = getDailyExpenseStats([])
+      expect(stats.highestDay).toBeNull()
+      expect(stats.zeroSpendDaysCount).toBe(0)
+    })
+
+    it('identifies highest spend day and counts zero-spend days accurately', () => {
+      const items = [
+        { day: 1, date: new Date(2026, 9, 1), amountFils: 0 },
+        { day: 2, date: new Date(2026, 9, 2), amountFils: 15000 },
+        { day: 3, date: new Date(2026, 9, 3), amountFils: 0 },
+        { day: 4, date: new Date(2026, 9, 4), amountFils: 35000 }, // Peak
+        { day: 5, date: new Date(2026, 9, 5), amountFils: 0 },
+      ]
+
+      const stats = getDailyExpenseStats(items)
+      expect(stats.zeroSpendDaysCount).toBe(3)
+      expect(stats.highestDay).toBeDefined()
+      expect(stats.highestDay?.day).toBe(4)
+      expect(stats.highestDay?.amountFils).toBe(35000)
     })
   })
 })

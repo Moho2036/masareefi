@@ -1,9 +1,23 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { BottomNav } from './BottomNav'
 
+let mockIsCurrentMonth = true
+const mockGoToCurrentMonth = vi.fn()
+
+vi.mock('../../hooks/useSelectedMonth', () => ({
+  useSelectedMonth: () => ({
+    isCurrentMonth: mockIsCurrentMonth,
+    goToCurrentMonth: mockGoToCurrentMonth,
+  }),
+}))
+
 describe('BottomNav smartTools active highlighting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsCurrentMonth = true
+  })
   it('highlights only circles tool when url is /tools?tool=circles', () => {
     render(
       <MemoryRouter initialEntries={['/tools?tool=circles']}>
@@ -82,5 +96,19 @@ describe('BottomNav smartTools active highlighting', () => {
     fireEvent.touchEnd(touchArea)
 
     expect(screen.queryByText('جميع الأدوات والميزات')).not.toBeInTheDocument()
+  })
+
+  it('calls goToCurrentMonth when clicking on الرئيسية and not on current month', () => {
+    mockIsCurrentMonth = false
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <BottomNav onOpenAddModal={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const homeLink = screen.getByRole('link', { name: /الرئيسية/i })
+    fireEvent.click(homeLink)
+
+    expect(mockGoToCurrentMonth).toHaveBeenCalledTimes(1)
   })
 })

@@ -228,6 +228,31 @@ describe('TransactionsPage Component', () => {
     expect(mockShowToast).toHaveBeenCalledWith('تم تصدير المعاملات المحددة بنجاح', 'success')
   })
 
+  it('triggers window.print when clicking on "طباعة / PDF" button', () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {})
+    mockTransactions = [
+      {
+        id: 'tx-print-1',
+        type: 'expense',
+        amountFils: 20000,
+        date: new Date('2026-10-05'),
+        categoryId: 'c-food',
+        note: 'وجبة سريعة',
+        createdAt: new Date(),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    const printBtn = screen.getByRole('button', { name: /طباعة \/ PDF/i })
+    expect(printBtn).toBeInTheDocument()
+    expect(printBtn).not.toBeDisabled()
+
+    fireEvent.click(printBtn)
+    expect(printSpy).toHaveBeenCalledTimes(1)
+    printSpy.mockRestore()
+  })
+
   it('shows linked debt payment alert in modal and calls removeDebtPayment when deleting', async () => {
     const debtId = 'debt-100'
     const payId = 'pay-200'
@@ -614,4 +639,146 @@ describe('TransactionsPage Component', () => {
       expect(parsed['c-food']).toBe(2)
     })
   })
+
+  it('reads categoryId from search params on mount and filters transactions', () => {
+    mockTransactions = [
+      {
+        id: 'tx-food',
+        type: 'expense',
+        amountFils: 5000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-05'),
+        title: 'غداء عمل',
+        note: '',
+        createdAt: new Date('2026-10-05'),
+      },
+      {
+        id: 'tx-salary',
+        type: 'income',
+        amountFils: 500000,
+        categoryId: 'c-salary',
+        date: new Date('2026-10-01'),
+        title: 'راتب شهر 10',
+        note: '',
+        createdAt: new Date('2026-10-01'),
+      },
+    ]
+
+    render(
+      <MemoryRouter initialEntries={['/transactions?categoryId=c-food']}>
+        <TransactionsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('غداء عمل')).toBeInTheDocument()
+    expect(screen.queryByText('راتب شهر 10')).not.toBeInTheDocument()
+  })
+
+  it('filters by source chip (e.g. debt)', () => {
+    mockTransactions = [
+      {
+        id: 'manual-tx',
+        type: 'expense',
+        amountFils: 4000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-02'),
+        title: 'شراء يدوي',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'debt_init_99',
+        type: 'expense',
+        amountFils: 30000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-04'),
+        title: 'دين مستحق',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Initially both transactions are shown
+    expect(screen.getByText('شراء يدوي')).toBeInTheDocument()
+    expect(screen.getByText('دين مستحق')).toBeInTheDocument()
+
+    // Click source filter chip "ديون"
+    const debtChip = screen.getByRole('button', { name: 'ديون' })
+    fireEvent.click(debtChip)
+
+    expect(screen.queryByText('شراء يدوي')).not.toBeInTheDocument()
+    expect(screen.getByText('دين مستحق')).toBeInTheDocument()
+  })
+
+  it('renders a flat list when sorted by highest amount', () => {
+    mockTransactions = [
+      {
+        id: 'tx-low',
+        type: 'expense',
+        amountFils: 2000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-10'),
+        title: 'معاملة صغيرة',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-high',
+        type: 'expense',
+        amountFils: 90000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-01'),
+        title: 'معاملة كبيرة',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    const sortSelect = screen.getByRole('combobox')
+    fireEvent.change(sortSelect, { target: { value: 'highest' } })
+
+    // When sorted by highest, both items are in document in sorted order
+    const titles = screen.getAllByText(/معاملة (كبيرة|صغيرة)/)
+    expect(titles[0]).toHaveTextContent('معاملة كبيرة')
+    expect(titles[1]).toHaveTextContent('معاملة صغيرة')
+  })
+
+  it('initializes filterType to income when type=income is in search params', () => {
+    mockTransactions = [
+      {
+        id: 'tx-inc',
+        type: 'income',
+        amountFils: 500000,
+        categoryId: 'c-salary',
+        date: new Date('2026-10-01'),
+        title: 'راتب شهري',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-exp',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-02'),
+        title: 'مشتريات بقالة',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter initialEntries={['/transactions?type=income']}>
+        <TransactionsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('راتب شهري')).toBeInTheDocument()
+    expect(screen.queryByText('مشتريات بقالة')).not.toBeInTheDocument()
+  })
 })
+

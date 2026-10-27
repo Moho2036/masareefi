@@ -2,7 +2,7 @@ import type { Timestamp } from 'firebase/firestore'
 
 export type TxType = 'expense' | 'income'
 
-export type Frequency = 'weekly' | 'monthly' | 'yearly'
+export type Frequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 
@@ -42,6 +42,8 @@ export interface Recurring {
   active: boolean
   circleId?: string
   skipMonth?: number
+  skipMonths?: number[]
+  requireConfirmation?: boolean
   createdAt?: Date
 }
 
@@ -88,6 +90,16 @@ export interface DebtPayment {
   mergedTransactionIds?: string[]
 }
 
+export interface DebtEntry {
+  id: string
+  amountFils: number
+  date: Date
+  title?: string
+  note: string
+  transactionId?: string
+  createdAt: Date
+}
+
 export interface Debt {
   id: string
   personName: string
@@ -100,6 +112,7 @@ export interface Debt {
   settled: boolean
   payments: DebtPayment[]
   createdAt: Date
+  entries?: DebtEntry[]
 }
 
 export interface CircleMember {
@@ -126,5 +139,7 @@ export interface MoneyCircle {
   expenseCategoryId?: string
   incomeCategoryId?: string
   categoryId?: string
+  shareType?: 'full' | 'half' | 'double'
+  secondTurnMonth?: number
 }
 

@@ -17,7 +17,7 @@ import {
 import { db } from '../lib/firebase'
 import type { Recurring, MoneyCircle } from '../types'
 import { recurringConverter } from './converters'
-import { calculateDueOccurrences, getDeterministicTxId } from '../lib/recurring'
+import { calculateDueOccurrences, getDeterministicTxId, advanceDateWithTargetDay } from '../lib/recurring'
 import { getCircleCycleIndex, circleConverter } from './moneyCircles'
 
 export function subscribeRecurring(
@@ -53,6 +53,7 @@ export async function addRecurring(
     ...rec,
     id: '',
     note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+    ...(typeof rec.requireConfirmation === 'boolean' ? { requireConfirmation: rec.requireConfirmation } : {}),
   })
 
   return docRef.id
@@ -130,6 +131,14 @@ export async function updateRecurring(
       payload.skipMonth = deleteField()
     } else {
       payload.skipMonth = Math.round(rec.skipMonth)
+    }
+  }
+
+  if ('requireConfirmation' in rec) {
+    if (rec.requireConfirmation === undefined || rec.requireConfirmation === null) {
+      payload.requireConfirmation = deleteField()
+    } else {
+      payload.requireConfirmation = Boolean(rec.requireConfirmation)
     }
   }
 
@@ -235,6 +244,11 @@ export async function processDueRecurring(
   for (const docSnap of snap.docs) {
     const rec = docSnap.data()
     const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+
+    // If confirmation is required, skip automatic generation and do not advance nextDate
+    if (rec.requireConfirmation) {
+      continue
+    }
 
     // Defense-in-depth: If linked to a completed circle, immediately deactivate recurring rule and skip
     if (rec.circleId && circleMap.has(rec.circleId)) {
@@ -363,4 +377,131 @@ export async function processDueRecurring(
   }
 
   return createdCount
+}
+
+/**
+ * Confirms and executes a pending occurrence for a recurring transaction that requires manual confirmation.
+ * Allows customAmountFils (e.g. for variable utility bills) without changing the recurring rule's baseline amount.
+ * Creates the transaction, advances nextDate, and updates linked circle payment if applicable.
+ */
+export async function confirmRecurringOccurrence(
+  uid: string,
+  rec: Recurring,
+  customAmountFils?: number
+): Promise<string> {
+  const amountToCharge = customAmountFils !== undefined ? customAmountFils : rec.amountFils
+  if (!Number.isInteger(amountToCharge) || amountToCharge <= 0) {
+    throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+
+  const occDate = rec.nextDate instanceof Date ? rec.nextDate : new Date(rec.nextDate)
+  const txId = getDeterministicTxId(rec.id, occDate)
+  const txRef = doc(db, 'users', uid, 'transactions', txId)
+  const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+
+  const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
+  const targetDay = startDate.getDate()
+  const newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+
+  const endOfEndDate = rec.endDate
+    ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
+    : null
+  if (endOfEndDate) {
+    endOfEndDate.setHours(23, 59, 59, 999)
+  }
+  const shouldDeactivate = Boolean(endOfEndDate && newNextDate > endOfEndDate)
+
+  const batch = writeBatch(db)
+
+  const newTxData: Record<string, unknown> = {
+    type: rec.type,
+    amountFils: amountToCharge,
+    categoryId: rec.categoryId,
+    date: Timestamp.fromDate(occDate),
+    note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+    recurringId: rec.id,
+    createdAt: serverTimestamp(),
+  }
+  if (rec.title) {
+    newTxData.title = rec.title.slice(0, 100)
+  }
+  batch.set(txRef, newTxData)
+
+  const recUpdate: Record<string, unknown> = {
+    nextDate: Timestamp.fromDate(newNextDate),
+  }
+  if (shouldDeactivate) {
+    recUpdate.active = false
+  }
+  batch.update(recRef, recUpdate)
+
+  // Circle handling if linked
+  if (rec.circleId) {
+    try {
+      const circleDocRef = doc(db, 'users', uid, 'circles', rec.circleId).withConverter(circleConverter)
+      const circleSnap = await getDoc(circleDocRef)
+      if (circleSnap.exists()) {
+        const circle = circleSnap.data()
+        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        if (
+          cycleIndex >= 1 &&
+          cycleIndex <= circle.membersCount &&
+          cycleIndex !== circle.myTurnMonth
+        ) {
+          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
+          if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
+            userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
+            if (userMember.paymentsByMonth) {
+              userMember.paymentsByMonth[String(cycleIndex)] = true
+            }
+            batch.update(doc(db, 'users', uid, 'circles', circle.id), {
+              members: circle.members.map((m) => ({
+                id: m.id,
+                name: m.name.trim().slice(0, 50),
+                turnMonth: Math.round(m.turnMonth),
+                paidMonths: (m.paidMonths || []).map(Number),
+                ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
+              })),
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to link confirmed recurring to circle:', err)
+    }
+  }
+
+  await batch.commit()
+  return txId
+}
+
+/**
+ * Skips the current due occurrence without creating a transaction, advancing nextDate to the next cycle.
+ */
+export async function skipRecurringOccurrence(
+  uid: string,
+  rec: Recurring
+): Promise<void> {
+  const occDate = rec.nextDate instanceof Date ? rec.nextDate : new Date(rec.nextDate)
+  const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
+  const targetDay = startDate.getDate()
+  const newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+
+  const endOfEndDate = rec.endDate
+    ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
+    : null
+  if (endOfEndDate) {
+    endOfEndDate.setHours(23, 59, 59, 999)
+  }
+  const shouldDeactivate = Boolean(endOfEndDate && newNextDate > endOfEndDate)
+
+  const recRef = doc(db, 'users', uid, 'recurring', rec.id)
+  const recUpdate: Record<string, unknown> = {
+    nextDate: Timestamp.fromDate(newNextDate),
+  }
+  if (shouldDeactivate) {
+    recUpdate.active = false
+  }
+
+  await updateDoc(recRef, recUpdate)
 }

@@ -43,11 +43,17 @@ vi.mock('../hooks/useToast', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }))
 
+vi.mock('../hooks/useTransactions', () => ({
+  useTransactions: () => ({ data: [], loading: false, error: null }),
+}))
+
 vi.mock('../services/recurring', () => ({
   addRecurring: vi.fn(),
   updateRecurring: vi.fn(),
   deleteRecurring: vi.fn(),
   processDueRecurring: vi.fn(),
+  confirmRecurringOccurrence: vi.fn(),
+  skipRecurringOccurrence: vi.fn(),
 }))
 
 describe('RecurringPage Component', () => {
@@ -132,5 +138,33 @@ describe('RecurringPage Component', () => {
     expect(el1.compareDocumentPosition(el2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(el2.compareDocumentPosition(el3) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(el3.compareDocumentPosition(el4) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('displays pending confirmation badge and action buttons when requireConfirmation is true and due', () => {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    const rConfirmDue: Recurring = {
+      id: 'rec-due-conf',
+      type: 'expense',
+      amountFils: 45000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: yesterday,
+      active: true,
+      title: 'فاتورة الكهرباء',
+      note: 'متغيرة',
+      requireConfirmation: true,
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [rConfirmDue]
+    render(<RecurringPage />)
+
+    expect(screen.getByText('بانتظار تأكيدك')).toBeInTheDocument()
+    expect(screen.getByText('هذه الدفعة مستحقة وبانتظار تأكيدك')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /تأكيد وتسجيل الآن/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /تخطي/i })).toBeInTheDocument()
   })
 })

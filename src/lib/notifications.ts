@@ -160,6 +160,20 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       const nextDateStr = format(nextMidnight, 'yyyy-MM-dd')
       const amountFormatted = `${fromFils(rec.amountFils).toFixed(settings?.customCurrencyDecimals ?? 2)} ${settings?.currency || 'د.أ'}`
 
+      if (rec.requireConfirmation && diffDays <= 0) {
+        items.push({
+          id: `recurring_confirm_${rec.id}_${nextDateStr}`,
+          title: `مطلوب تأكيد دفعة: ${rec.title || 'معاملة دورية'}`,
+          message: `دفعة ${rec.type === 'expense' ? 'المصروف' : 'الدخل'} بقيمة ${amountFormatted} مستحقة وبانتظار تأكيدك أو تعديل المبلغ.`,
+          category: 'urgent',
+          isUrgent: true,
+          createdAt: todayMidnight,
+          actionPath: '/recurring',
+          actionLabel: 'تأكيد الدفعة الآن',
+        })
+        continue
+      }
+
       if (diffDays === 0) {
         items.push({
           id: `recurring_due_today_${rec.id}_${nextDateStr}`,

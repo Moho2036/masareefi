@@ -212,8 +212,9 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       if (debt.dueDate) {
         const dueDate = debt.dueDate instanceof Date ? debt.dueDate : new Date(debt.dueDate)
         const dueDay = toStartOfDay(dueDate)
+        const isPastOverdue = dueDay < now
         const isDueInWindow = isFutureMonth
-          ? dueDay >= rangeStart && dueDay < rangeEnd
+          ? (dueDay >= rangeStart && dueDay < rangeEnd) || (isPastOverdue && params.rolloverBalanceFils === undefined)
           : dueDay < rangeEnd
         if (isDueInWindow) {
           upcomingDebtObligations += remainingUnpaid

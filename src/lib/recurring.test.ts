@@ -20,6 +20,30 @@ describe('recurring pure logic', () => {
       expect(next.toISOString().slice(0, 10)).toBe('2026-10-08')
     })
 
+    it('advances daily by 1 day', () => {
+      const d = new Date('2026-10-01T00:00:00Z')
+      const next = advanceDate(d, 'daily')
+      expect(next.toISOString().slice(0, 10)).toBe('2026-10-02')
+    })
+
+    it('advances biweekly by 14 days', () => {
+      const d = new Date('2026-10-01T00:00:00Z')
+      const next = advanceDate(d, 'biweekly')
+      expect(next.toISOString().slice(0, 10)).toBe('2026-10-15')
+    })
+
+    it('advances quarterly by 3 months', () => {
+      const d = new Date('2026-01-15T00:00:00Z')
+      const next = advanceDate(d, 'quarterly')
+      expect(next.toISOString().slice(0, 10)).toBe('2026-04-15')
+    })
+
+    it('advances semiannual by 6 months', () => {
+      const d = new Date('2026-01-15T00:00:00Z')
+      const next = advanceDate(d, 'semiannual')
+      expect(next.toISOString().slice(0, 10)).toBe('2026-07-15')
+    })
+
     it('advances monthly by 1 month', () => {
       const d = new Date('2026-05-15T00:00:00Z')
       const next = advanceDate(d, 'monthly')
@@ -246,6 +270,29 @@ describe('recurring pure logic', () => {
       const result = calculateMonthlyEquivalent(items)
       expect(result.monthlyIncome).toBe(850000)
       expect(result.monthlyExpense).toBe(110000) // 100000 + 10000
+    })
+
+    it('correctly calculates monthly equivalents for all 7 frequencies', () => {
+      const items: Recurring[] = [
+        { id: '1', type: 'expense', amountFils: 1000, categoryId: 'c', note: '', frequency: 'daily', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '2', type: 'expense', amountFils: 7000, categoryId: 'c', note: '', frequency: 'weekly', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '3', type: 'expense', amountFils: 14000, categoryId: 'c', note: '', frequency: 'biweekly', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '4', type: 'expense', amountFils: 10000, categoryId: 'c', note: '', frequency: 'monthly', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '5', type: 'expense', amountFils: 30000, categoryId: 'c', note: '', frequency: 'quarterly', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '6', type: 'expense', amountFils: 60000, categoryId: 'c', note: '', frequency: 'semiannual', startDate: new Date(), nextDate: new Date(), active: true },
+        { id: '7', type: 'expense', amountFils: 120000, categoryId: 'c', note: '', frequency: 'yearly', startDate: new Date(), nextDate: new Date(), active: true },
+      ]
+
+      const res = calculateMonthlyEquivalent(items)
+      // daily: 1000 * 365 / 12 = 30417
+      // weekly: 7000 * 52 / 12 = 30333
+      // biweekly: 14000 * 26 / 12 = 30333
+      // monthly: 10000
+      // quarterly: 30000 / 3 = 10000
+      // semiannual: 60000 / 6 = 10000
+      // yearly: 120000 / 12 = 10000
+      // total = 30417 + 30333 + 30333 + 10000 + 10000 + 10000 + 10000 = 131083
+      expect(res.monthlyExpense).toBe(131083)
     })
 
     it('excludes expired recurring transactions whose endDate has passed before refDate', () => {
@@ -520,6 +567,15 @@ describe('recurring pure logic', () => {
         const dueDate = getNextCircleDueDate(startDate, 5, 2, [1, 3, 4, 5])
         expect(dueDate.getMonth()).toBe(1) // Oct + 4 months = Feb 2027 (month 5)
         expect(dueDate.getFullYear()).toBe(2027)
+      })
+
+      it('respects skipMonths and multiple exemptMonths for double-share circle', () => {
+        const circleStart = new Date('2026-01-01')
+        // 10 members, user has 2 turns: month 2 and month 6
+        // Month 1 paid. Month 2 exempt (myTurn). Next unpaid should be month 3!
+        expect(getNextCircleDueMonth(10, 2, [1], {}, circleStart, new Date(), [6])).toBe(3)
+        // If months 1, 3, 4, 5 are paid, month 6 is exempt, so next is month 7!
+        expect(getNextCircleDueMonth(10, 2, [1, 3, 4, 5], {}, circleStart, new Date(), [6])).toBe(7)
       })
     })
   })

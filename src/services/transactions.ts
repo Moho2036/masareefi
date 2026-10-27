@@ -168,14 +168,14 @@ export function subscribePriorBalance(
   beforeDate: Date,
   cb: (balance: number) => void,
   onError?: (err: Error) => void,
-  startDate?: Date | null
+  afterDate?: Date | null
 ): Unsubscribe {
   const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
   const constraints = [
     where('date', '<', Timestamp.fromDate(beforeDate)),
   ]
-  if (startDate) {
-    constraints.push(where('date', '>=', Timestamp.fromDate(startDate)))
+  if (afterDate) {
+    constraints.push(where('date', '>=', Timestamp.fromDate(afterDate)))
   }
   const q = query(
     colRef,
@@ -207,15 +207,15 @@ export function subscribePriorBalance(
 export async function getPriorBalance(
   uid: string,
   beforeDate: Date,
-  startDate?: Date | null
+  afterDate?: Date | null
 ): Promise<number> {
   try {
     const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
     const constraints = [
       where('date', '<', Timestamp.fromDate(beforeDate)),
     ]
-    if (startDate) {
-      constraints.push(where('date', '>=', Timestamp.fromDate(startDate)))
+    if (afterDate) {
+      constraints.push(where('date', '>=', Timestamp.fromDate(afterDate)))
     }
     const q = query(colRef, ...constraints)
     const snap = await getDocs(q)

@@ -8,6 +8,8 @@ import {
   filterDebts,
   isDebtSettled,
   findLinkedDebtPayment,
+  groupDebtsByPerson,
+  formatDebtAccountStatement,
 } from './debts'
 import type { Debt } from '../types'
 
@@ -245,6 +247,96 @@ describe('debts domain logic', () => {
 
     it('returns null when no debt has a matching payment', () => {
       expect(findLinkedDebtPayment('tx-other', [debtWithPayment])).toBeNull()
+    })
+  })
+
+  describe('groupDebtsByPerson & formatDebtAccountStatement', () => {
+    it('groups debts by normalized person name and detects mergeability', () => {
+      const debts: Debt[] = [
+        {
+          ...baseDebt,
+          id: 'd1',
+          personName: 'أبوي',
+          type: 'lent',
+          amountFils: 50000,
+          paidFils: 0,
+        },
+        {
+          ...baseDebt,
+          id: 'd2',
+          personName: 'ابوي',
+          type: 'lent',
+          amountFils: 30000,
+          paidFils: 10000,
+        },
+        {
+          ...baseDebt,
+          id: 'd3',
+          personName: 'محمد',
+          type: 'borrowed',
+          amountFils: 40000,
+          paidFils: 0,
+        },
+      ]
+
+      const groups = groupDebtsByPerson(debts)
+      expect(groups).toHaveLength(2)
+
+      const fatherGroup = groups.find((g) => g.personKey === 'ابوي')
+      expect(fatherGroup).toBeDefined()
+      expect(fatherGroup?.debts).toHaveLength(2)
+      expect(fatherGroup?.totalLentRemainingFils).toBe(70000)
+      expect(fatherGroup?.canMergeLent).toBe(true)
+      expect(fatherGroup?.canMerge).toBe(true)
+
+      const mohamedGroup = groups.find((g) => g.personKey === 'محمد')
+      expect(mohamedGroup).toBeDefined()
+      expect(mohamedGroup?.totalBorrowedRemainingFils).toBe(40000)
+      expect(mohamedGroup?.canMerge).toBe(false)
+    })
+
+    it('generates a detailed account statement string', () => {
+      const debtWithEntries: Debt = {
+        ...baseDebt,
+        personName: 'عمر',
+        entries: [
+          {
+            id: 'e1',
+            amountFils: 60000,
+            date: new Date('2026-09-01'),
+            title: 'قرض أول',
+            note: 'صيانة سيارة',
+            createdAt: new Date('2026-09-01'),
+          },
+          {
+            id: 'e2',
+            amountFils: 40000,
+            date: new Date('2026-09-15'),
+            title: 'سلفة ثانية',
+            note: 'قطع غيار',
+            createdAt: new Date('2026-09-15'),
+          },
+        ],
+        payments: [
+          {
+            id: 'p1',
+            amountFils: 30000,
+            date: new Date('2026-10-01'),
+            note: 'دفعة أولى كاش',
+            createdAt: new Date('2026-10-01'),
+          },
+        ],
+      }
+
+      const statement = formatDebtAccountStatement(debtWithEntries, 'د.أ')
+      expect(statement).toContain('كشف حساب مالي')
+      expect(statement).toContain('عمر')
+      expect(statement).toContain('قرض أول')
+      expect(statement).toContain('سلفة ثانية')
+      expect(statement).toContain('دفعة أولى كاش')
+      expect(statement).toContain('100 د.أ')
+      expect(statement).toContain('30 د.أ')
+      expect(statement).toContain('70 د.أ')
     })
   })
 })

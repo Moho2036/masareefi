@@ -1,5 +1,16 @@
-import React, { useState, useRef, useMemo } from 'react'
-import { Check, Trash2, AlertCircle, ArrowLeft, Copy, Users, Calendar } from 'lucide-react'
+import React, { useState, useRef, useMemo, useContext } from 'react'
+import {
+  Check,
+  Trash2,
+  AlertCircle,
+  ArrowLeft,
+  Copy,
+  Users,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
@@ -7,6 +18,7 @@ import { Input } from './ui/Input'
 import { DatePickerInput } from './ui/DatePickerInput'
 import { Toggle } from './ui/Toggle'
 import { CategoryIcon } from './ui/CategoryIcon'
+import { CategoryForm } from './CategoryForm'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useDebts } from '../hooks/useDebts'
@@ -14,6 +26,10 @@ import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
+import { useUserSettings } from '../hooks/useUserSettings'
+import { useRecurring } from '../hooks/useRecurring'
+import { useTransactions } from '../hooks/useTransactions'
+import { AppDataContext } from '../context/AppDataContext'
 import {
   addTransaction,
   updateTransaction,
@@ -22,16 +38,65 @@ import {
 import { addRecurring, processDueRecurring } from '../services/recurring'
 import { updateDebtPayment, removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
-import { toFils, fromFils } from '../lib/money'
-import { parseLocalDateInput, formatDateInput } from '../lib/dates'
+import { toFils, fromFils, formatMoney } from '../lib/money'
+import { parseLocalDateInput, formatDateInput, toWesternDigits } from '../lib/dates'
+import { normalizeArabic } from '../lib/aggregate'
 import { findLinkedDebtPayment } from '../lib/debts'
 import {
   getCategoryUsageMap,
   recordCategoryUsage,
-  sortCategoriesByUsage,
+  sortCategoriesUnified,
 } from '../lib/categoryUsage'
+import { calculateForecast } from '../lib/forecast'
+import { advanceDate } from '../lib/recurring'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType, Frequency } from '../types'
+
+function evaluateMathExpression(expr: string): number | null {
+  if (!expr) return null
+  const cleaned = expr.replace(/[^\d.+\-*/]/g, '').replace(/[+\-*/.]+$/, '')
+  if (!cleaned) return null
+  if (!/[+\-*/]/.test(cleaned)) {
+    const num = Number(cleaned)
+    return isNaN(num) ? null : num
+  }
+  try {
+    const tokens = cleaned.match(/(\d+(?:\.\d+)?|[+\-*/])/g)
+    if (!tokens || tokens.length === 0) return null
+
+    const firstPass: (number | string)[] = []
+    let i = 0
+    while (i < tokens.length) {
+      const tok = tokens[i]
+      if (tok === '*' || tok === '/') {
+        const prev = Number(firstPass.pop())
+        const next = Number(tokens[++i])
+        if (isNaN(prev) || isNaN(next)) return null
+        if (tok === '/' && next === 0) return null
+        firstPass.push(tok === '*' ? prev * next : prev / next)
+      } else if (!isNaN(Number(tok))) {
+        firstPass.push(Number(tok))
+      } else {
+        firstPass.push(tok)
+      }
+      i++
+    }
+
+    let result = typeof firstPass[0] === 'number' ? firstPass[0] : 0
+    let j = 1
+    while (j < firstPass.length) {
+      const op = firstPass[j]
+      const next = Number(firstPass[j + 1])
+      if (isNaN(next)) break
+      if (op === '+') result += next
+      else if (op === '-') result -= next
+      j += 2
+    }
+    return isFinite(result) ? result : null
+  } catch {
+    return null
+  }
+}
 
 export interface TransactionFormProps {
   initialTransaction?: Transaction | null
@@ -53,10 +118,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   isSourceDeleted,
 }) => {
   const { user } = useAuth()
+  const appData = useContext(AppDataContext)
+  const { data: userSettings } = useUserSettings()
   const { data: categories, loading: categoriesLoading } = useCategories()
   const { data: debts } = useDebts()
   const { data: circles } = useMoneyCircles()
+  const { data: recurringList } = useRecurring()
   const { setSelectedDate, range } = useSelectedMonth()
+  const { data: monthTransactions } = useTransactions(range)
   const { showToast } = useToast()
   const { config: currencyConfig } = useCurrency()
 
@@ -162,6 +231,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   )
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
+  const [showExtraFrequencyDropdown, setShowExtraFrequencyDropdown] = useState(false)
+  const [hasEndDate, setHasEndDate] = useState(false)
+  const [endDateStr, setEndDateStr] = useState('')
+  const [scheduleNextIfPast, setScheduleNextIfPast] = useState(true)
+  const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(false)
+  const [isCreateCatOpen, setIsCreateCatOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -177,8 +252,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     const filtered = categories.filter(
       (c) => c.type === type && (!c.archived || c.id === originalCatId)
     )
-    return sortCategoriesByUsage(filtered, usageMap)
-  }, [categories, type, usageMap, originalCatId])
+    return sortCategoriesUnified(
+      filtered,
+      usageMap,
+      userSettings?.categorySortMode || 'usage'
+    )
+  }, [categories, type, usageMap, originalCatId, userSettings?.categorySortMode])
 
   // Compute the effectively selected category ID:
   // If user selected one that belongs to available categories, use it.
@@ -187,6 +266,73 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     categoryId && availableCategories.some((c) => c.id === categoryId)
       ? categoryId
       : availableCategories[0]?.id ?? ''
+
+  // Foldable categories grid: first 6 (ensuring selected category is visible if chosen) or all
+  const displayedCategories = useMemo(() => {
+    if (isCategoriesExpanded || availableCategories.length <= 6) {
+      return availableCategories
+    }
+    const top6 = availableCategories.slice(0, 6)
+    if (activeCategoryId && !top6.some((c) => c.id === activeCategoryId)) {
+      const selected = availableCategories.find((c) => c.id === activeCategoryId)
+      if (selected) {
+        return [...availableCategories.slice(0, 5), selected]
+      }
+    }
+    return top6
+  }, [availableCategories, isCategoriesExpanded, activeCategoryId])
+
+  // Guidance metrics for expense in current month
+  const forecast = useMemo(() => {
+    if (type !== 'expense') return null
+    return calculateForecast({
+      transactions: monthTransactions || [],
+      recurring: recurringList || [],
+      debts: debts || [],
+      monthStartDay: userSettings?.monthStartDay ?? 1,
+      periodRange: range,
+      rolloverBalanceFils: userSettings?.rolloverBalance
+        ? appData?.rolloverBalanceFils || 0
+        : 0,
+    })
+  }, [
+    type,
+    monthTransactions,
+    recurringList,
+    debts,
+    userSettings?.monthStartDay,
+    userSettings?.rolloverBalance,
+    range,
+    appData?.rolloverBalanceFils,
+  ])
+
+  // Auto-suggest for description/title matching current month's transactions
+  const titleSuggestions = useMemo(() => {
+    if (!monthTransactions || monthTransactions.length === 0) return []
+    const matching = monthTransactions.filter(
+      (t) => t.type === type && t.title && t.title.trim()
+    )
+    const uniqueMap = new Map<string, { title: string; categoryId: string }>()
+    const cleanCurrentTitle = normalizeArabic(toWesternDigits(title.trim()))
+
+    for (const t of matching) {
+      const tTitle = t.title!.trim()
+      const cleanTTitle = normalizeArabic(toWesternDigits(tTitle))
+      if (cleanCurrentTitle) {
+        if (cleanTTitle.includes(cleanCurrentTitle) && cleanTTitle !== cleanCurrentTitle) {
+          if (!uniqueMap.has(tTitle)) {
+            uniqueMap.set(tTitle, { title: tTitle, categoryId: t.categoryId })
+          }
+        }
+      } else {
+        if (!uniqueMap.has(tTitle)) {
+          uniqueMap.set(tTitle, { title: tTitle, categoryId: t.categoryId })
+        }
+      }
+      if (uniqueMap.size >= 4) break
+    }
+    return Array.from(uniqueMap.values())
+  }, [monthTransactions, type, title])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -197,9 +343,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
+    let parsedAmountStr = amountStr
+    const evaluated = evaluateMathExpression(amountStr)
+    if (evaluated !== null && evaluated > 0) {
+      parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
+      setAmountStr(parsedAmountStr)
+    }
+
     const amountFils = isLockedTransaction && initialTransaction
       ? initialTransaction.amountFils
-      : toFils(amountStr, currencyConfig.decimals)
+      : toFils(parsedAmountStr, currencyConfig.decimals)
 
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
@@ -326,6 +479,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         endOfToday.setHours(23, 59, 59, 999)
         const isFuture = parsedDate > endOfToday
 
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+        let nextDate = parsedDate
+        if (scheduleNextIfPast && parsedDate < startOfToday) {
+          while (nextDate <= startOfToday) {
+            nextDate = advanceDate(nextDate, recurringFrequency)
+          }
+        }
+
         await addRecurring(user.uid, {
           type,
           amountFils,
@@ -334,7 +496,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           note: note.trim().slice(0, 500),
           frequency: recurringFrequency,
           startDate: parsedDate,
-          nextDate: parsedDate,
+          nextDate,
+          endDate: hasEndDate && endDateStr ? parseLocalDateInput(endDateStr) : null,
           active: true,
         })
 
@@ -411,7 +574,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return
     }
 
-    const amountFils = toFils(amountStr, currencyConfig.decimals)
+    let parsedAmountStr = amountStr
+    const evaluated = evaluateMathExpression(amountStr)
+    if (evaluated !== null && evaluated > 0) {
+      parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
+      setAmountStr(parsedAmountStr)
+    }
+
+    const amountFils = toFils(parsedAmountStr, currencyConfig.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
       return
@@ -436,6 +606,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         endOfToday.setHours(23, 59, 59, 999)
         const isFuture = parsedDate > endOfToday
 
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+        let nextDate = parsedDate
+        if (scheduleNextIfPast && parsedDate < startOfToday) {
+          while (nextDate <= startOfToday) {
+            nextDate = advanceDate(nextDate, recurringFrequency)
+          }
+        }
+
         await addRecurring(user.uid, {
           type,
           amountFils,
@@ -444,7 +623,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           note: note.trim().slice(0, 500),
           frequency: recurringFrequency,
           startDate: parsedDate,
-          nextDate: parsedDate,
+          nextDate,
+          endDate: hasEndDate && endDateStr ? parseLocalDateInput(endDateStr) : null,
           active: true,
         })
 
@@ -732,12 +912,51 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Big Amount Input */}
       <div>
-        <label
-          htmlFor="tx-amount"
-          className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5"
-        >
-          المبلغ
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label
+            htmlFor="tx-amount"
+            className="block text-xs font-bold text-slate-500 dark:text-slate-400"
+          >
+            المبلغ
+          </label>
+          {!isLockedTransaction && (
+            <div className="flex items-center gap-1">
+              {['+', '-', '*', '/'].map((op) => (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => {
+                    setAmountStr((prev) => {
+                      const trimmed = prev.trim()
+                      if (!trimmed) return ''
+                      if (/[+\-*/]$/.test(trimmed)) {
+                        return trimmed.slice(0, -1) + op
+                      }
+                      return trimmed + op
+                    })
+                  }}
+                  className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer select-none"
+                  title={`إضافة عملية ${op}`}
+                >
+                  {op === '*' ? '×' : op === '/' ? '÷' : op}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const evaluated = evaluateMathExpression(amountStr)
+                  if (evaluated !== null && evaluated >= 0) {
+                    setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                  }
+                }}
+                className="w-6 h-6 rounded-md bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 text-xs font-bold text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer select-none"
+                title="حساب النتيجة"
+              >
+                =
+              </button>
+            </div>
+          )}
+        </div>
         <div
           className={cn(
             'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
@@ -760,6 +979,23 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               setAmountStr(e.target.value)
               setError(null)
             }}
+            onKeyDown={(e) => {
+              if (e.key === '=') {
+                e.preventDefault()
+                const evaluated = evaluateMathExpression(amountStr)
+                if (evaluated !== null && evaluated >= 0) {
+                  setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                }
+              }
+            }}
+            onBlur={() => {
+              if (/[+\-*/]/.test(amountStr)) {
+                const evaluated = evaluateMathExpression(amountStr)
+                if (evaluated !== null && evaluated >= 0) {
+                  setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                }
+              }
+            }}
             placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
             className={cn(
               'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
@@ -771,14 +1007,67 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             {currencyConfig.symbol}
           </span>
         </div>
+
+        {/* Guidance Subline for Expense in Current Month */}
+        {type === 'expense' && forecast && forecast.isCurrentMonth && (
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 font-medium">
+            <span>
+              الرصيد المتاح الحر:{' '}
+              <strong
+                className={cn(
+                  forecast.freeBalance < 0
+                    ? 'text-red-500 dark:text-red-400 font-bold'
+                    : 'text-slate-700 dark:text-slate-200'
+                )}
+              >
+                {formatMoney(forecast.freeBalance, currencyConfig.code)}
+              </strong>
+            </span>
+            <span>
+              حد الصرف اليومي الآمن:{' '}
+              <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                {formatMoney(forecast.dailySafeFils, currencyConfig.code)}
+              </strong>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Category Chips Grid */}
       <div>
-        <div className="mb-2">
+        <div className="flex items-center justify-between mb-2">
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
             التصنيف
           </label>
+          <div className="flex items-center gap-2">
+            {availableCategories.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setIsCategoriesExpanded((prev) => !prev)}
+                className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                {isCategoriesExpanded ? (
+                  <>
+                    <span>طي التصنيفات</span>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </>
+                ) : (
+                  <>
+                    <span>عرض كل التصنيفات ({availableCategories.length})</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsCreateCatOpen(true)}
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>تصنيف جديد</span>
+            </button>
+          </div>
         </div>
         {categoriesLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
@@ -798,7 +1087,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5">
-            {availableCategories.map((cat) => {
+            {displayedCategories.map((cat) => {
               const isSelected = activeCategoryId === cat.id
               return (
                 <button
@@ -875,6 +1164,28 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           disabled={isLockedTransaction}
           readOnly={isLockedTransaction}
         />
+        {titleSuggestions.length > 0 && !isLockedTransaction && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-1.5 px-0.5">
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium select-none">
+              اقتراحات سريعة:
+            </span>
+            {titleSuggestions.map((s) => (
+              <button
+                key={s.title}
+                type="button"
+                onClick={() => {
+                  setTitle(s.title)
+                  if (s.categoryId && availableCategories.some((c) => c.id === s.categoryId)) {
+                    setCategoryId(s.categoryId)
+                  }
+                }}
+                className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+              >
+                {s.title}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Note Input (Collapsible) */}
@@ -912,20 +1223,159 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           />
 
           {isRecurring && (
-            <div className="space-y-1.5 pe-1">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
-                دورية التكرار
-              </label>
-              <SegmentedControl<Frequency>
-                value={recurringFrequency}
-                onChange={setRecurringFrequency}
-                options={[
-                  { value: 'weekly', label: 'أسبوعي' },
-                  { value: 'monthly', label: 'شهري' },
-                  { value: 'yearly', label: 'سنوي' },
-                ]}
-                className="w-full"
-              />
+            <div className="space-y-3 pe-1">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+                  دورية التكرار
+                </label>
+                <div
+                  role="radiogroup"
+                  className="grid grid-cols-4 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={recurringFrequency === 'weekly'}
+                    onClick={() => {
+                      setRecurringFrequency('weekly')
+                      setShowExtraFrequencyDropdown(false)
+                    }}
+                    className={cn(
+                      'py-1.5 text-xs font-bold rounded-lg transition-all',
+                      recurringFrequency === 'weekly'
+                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    )}
+                  >
+                    أسبوعي
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={recurringFrequency === 'monthly'}
+                    onClick={() => {
+                      setRecurringFrequency('monthly')
+                      setShowExtraFrequencyDropdown(false)
+                    }}
+                    className={cn(
+                      'py-1.5 text-xs font-bold rounded-lg transition-all',
+                      recurringFrequency === 'monthly'
+                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    )}
+                  >
+                    شهري
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={recurringFrequency === 'yearly'}
+                    onClick={() => {
+                      setRecurringFrequency('yearly')
+                      setShowExtraFrequencyDropdown(false)
+                    }}
+                    className={cn(
+                      'py-1.5 text-xs font-bold rounded-lg transition-all',
+                      recurringFrequency === 'yearly'
+                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    )}
+                  >
+                    سنوي
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={['daily', 'biweekly', 'quarterly', 'semiannual'].includes(
+                      recurringFrequency
+                    )}
+                    onClick={() => setShowExtraFrequencyDropdown((prev) => !prev)}
+                    className={cn(
+                      'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
+                      ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(recurringFrequency)
+                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    )}
+                  >
+                    <span className="truncate">
+                      {recurringFrequency === 'daily'
+                        ? 'يومي'
+                        : recurringFrequency === 'biweekly'
+                          ? 'أسبوعين'
+                          : recurringFrequency === 'quarterly'
+                            ? 'ربع سنوي'
+                            : recurringFrequency === 'semiannual'
+                              ? 'نصف سنوي'
+                              : 'أخرى'}
+                    </span>
+                    <ChevronDown className="w-3 h-3 shrink-0" />
+                  </button>
+                </div>
+
+                {/* Dropdown menu for extra frequencies */}
+                {showExtraFrequencyDropdown && (
+                  <div className="mt-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg grid grid-cols-2 gap-1.5">
+                    {[
+                      { value: 'daily' as Frequency, label: 'يومي' },
+                      { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
+                      { value: 'quarterly' as Frequency, label: 'ربع سنوي (3 أشهر)' },
+                      { value: 'semiannual' as Frequency, label: 'نصف سنوي (6 أشهر)' },
+                    ].map((f) => (
+                      <button
+                        key={f.value}
+                        type="button"
+                        onClick={() => {
+                          setRecurringFrequency(f.value)
+                          setShowExtraFrequencyDropdown(false)
+                        }}
+                        className={cn(
+                          'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
+                          recurringFrequency === f.value
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                        )}
+                      >
+                        <span>{f.label}</span>
+                        {recurringFrequency === f.value && (
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* End date toggle + picker */}
+              <div className="pt-1 space-y-2">
+                <Toggle
+                  checked={hasEndDate}
+                  onChange={setHasEndDate}
+                  label="تحديد تاريخ انتهاء للتكرار"
+                  description="يتوقف التكرار التلقائي بعد هذا التاريخ"
+                />
+                {hasEndDate && (
+                  <DatePickerInput
+                    id="rec-end-date"
+                    label="تاريخ الانتهاء"
+                    value={endDateStr}
+                    onChange={setEndDateStr}
+                    required
+                  />
+                )}
+              </div>
+
+              {/* Past date schedule notice */}
+              {parseLocalDateInput(dateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between gap-2">
+                  <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من تاريخ اليوم.</span>
+                  <input
+                    type="checkbox"
+                    checked={scheduleNextIfPast}
+                    onChange={(e) => setScheduleNextIfPast(e.target.checked)}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1037,6 +1487,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </Button>
         )}
       </div>
+
+      {isCreateCatOpen && (
+        <CategoryForm
+          isOpen={isCreateCatOpen}
+          onClose={() => setIsCreateCatOpen(false)}
+          defaultType={type}
+          onSuccess={() => setIsCreateCatOpen(false)}
+        />
+      )}
     </form>
   )
 }

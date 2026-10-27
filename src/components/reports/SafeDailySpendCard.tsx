@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   ShieldCheck,
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   Calendar,
   ArrowDownRight,
   CheckCircle2,
+  Info,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { useCurrency } from '../../hooks/useCurrency'
@@ -22,6 +23,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
   className,
 }) => {
   const { format } = useCurrency()
+  const [showInfo, setShowInfo] = useState(false)
 
   const {
     dailySafeFils,
@@ -251,12 +253,40 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
           </div>
 
-          {/* Days remaining badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 self-start sm:self-auto">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span>شهر مستقبلي (متبقي كامل الدورة {totalDays} يوماً)</span>
+          {/* Days remaining badge & Info toggle */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setShowInfo((prev) => !prev)}
+              className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+              aria-label="شرح معادلة الحساب"
+              title="كيف يُحسب حد الصرف اليومي؟"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>شهر مستقبلي (متبقي كامل الدورة {totalDays} يوماً)</span>
+            </div>
           </div>
         </div>
+
+        {/* Mathematical Explanation Box */}
+        {showInfo && (
+          <div className="mt-3 p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-200 space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>كيف يُحسب حد الصرف اليومي المقترح؟</span>
+            </div>
+            <p className="leading-relaxed font-semibold">
+              المعادلة: حد الصرف اليومي = (الرصيد الحر المتوقع) ÷ (إجمالي أيام الدورة الشهرية: {totalDays} يوماً).
+            </p>
+            <div className="text-[11px] text-blue-800/90 dark:text-blue-300/90 space-y-0.5 pt-1">
+              <div>• الرصيد الحر المتوقع = إجمالي الدخل المتوقع + الرصيد المرحّل - الفواتير والديون المحجوزة.</div>
+              <div>• التخطيط الاستباقي يمنحك رؤية واضحة لكيفية توزيع مصروفاتك قبل أن يبدأ الشهر.</div>
+            </div>
+          </div>
+        )}
 
         {/* Main highlight numbers */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
@@ -396,12 +426,41 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
         </div>
 
-        {/* Days remaining badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 self-start sm:self-auto">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span>متبقي {remainingDays} يوماً في الدورة</span>
+        {/* Days remaining badge & Info toggle */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowInfo((prev) => !prev)}
+            className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+            aria-label="شرح معادلة الحساب"
+            title="كيف يُحسب حد الصرف اليومي الآمن؟"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span>متبقي {remainingDays} يوماً في الدورة</span>
+          </div>
         </div>
       </div>
+
+      {/* Mathematical Explanation Box */}
+      {showInfo && (
+        <div className="mt-3 p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-200 space-y-1.5 animate-fade-in">
+          <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
+            <Info className="w-4 h-4 shrink-0" />
+            <span>كيف يُحسب حد الصرف اليومي الآمن؟</span>
+          </div>
+          <p className="leading-relaxed font-semibold">
+            المعادلة المحاسبية: حد الصرف اليومي الآمن = (الرصيد الحر المتبقي) ÷ (الأيام المتبقية: {remainingDays} يوماً).
+          </p>
+          <div className="text-[11px] text-blue-800/90 dark:text-blue-300/90 space-y-0.5 pt-1">
+            <div>• الرصيد الحر المتبقي = (السيولة المتاحة حالياً) - (الالتزامات المحجوزة من فواتير دورية قادمة + ديون مستحقة السداد).</div>
+            <div>• الأيام المتبقية = {remainingDays} يوماً حتى نهاية الشهر المالي الحالي.</div>
+            <div>• الهدف: حماية مدخراتك والتزاماتك من النفاذ المبكر بتوزيع المتاح بذكاء على الأيام المتبقية.</div>
+          </div>
+        </div>
+      )}
 
       {/* Main highlight numbers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">

@@ -221,4 +221,38 @@ describe('DebtFormModal syncTransaction on edit', () => {
       )
     })
   })
+
+  it('submits addDebt with initialPaidFils when pre-paid amount is entered', async () => {
+    render(
+      <DebtFormModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('مثال: أحمد العبدلله'), {
+      target: { value: 'سامي' },
+    })
+    fireEvent.change(screen.getAllByPlaceholderText('0.000')[0], {
+      target: { value: '100' },
+    })
+
+    const prePaidInput = screen.getByLabelText(/المبلغ المسدد مسبقاً/)
+    fireEvent.change(prePaidInput, { target: { value: '40' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'حفظ الدين' }))
+
+    await waitFor(() => {
+      expect(debtsService.addDebt).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          personName: 'سامي',
+          amountFils: 100000,
+        }),
+        expect.objectContaining({
+          initialPaidFils: 40000,
+        })
+      )
+    })
+  })
 })

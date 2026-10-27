@@ -5,6 +5,7 @@ import {
   sumByType,
   groupByDay,
   countByCategory,
+  sortTransactions,
 } from './aggregate'
 import type { Transaction } from '../types'
 
@@ -401,6 +402,132 @@ describe('aggregate helpers', () => {
         'cat-a': 2,
         'cat-b': 1,
       })
+    })
+  })
+
+  describe('filterTransactions with categoryIds, sourceType, and dateRange', () => {
+    const mixedTxs: Transaction[] = [
+      {
+        id: 'manual-1',
+        type: 'expense',
+        amountFils: 5000,
+        categoryId: 'cat-food',
+        date: new Date('2026-10-05T10:00:00Z'),
+        note: 'مطعم',
+        createdAt: new Date('2026-10-05T10:00:00Z'),
+      },
+      {
+        id: 'debt_init_123',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'cat-debt',
+        date: new Date('2026-10-10T10:00:00Z'),
+        note: 'دين',
+        createdAt: new Date('2026-10-10T10:00:00Z'),
+      },
+      {
+        id: 'circle_payout_456',
+        type: 'income',
+        amountFils: 100000,
+        categoryId: 'cat-circle',
+        date: new Date('2026-10-15T10:00:00Z'),
+        note: 'قبض جمعية',
+        createdAt: new Date('2026-10-15T10:00:00Z'),
+      },
+      {
+        id: 'rec-1',
+        recurringId: 'rule-789',
+        type: 'expense',
+        amountFils: 20000,
+        categoryId: 'cat-bills',
+        date: new Date('2026-10-20T10:00:00Z'),
+        note: 'إنترنت',
+        createdAt: new Date('2026-10-20T10:00:00Z'),
+      },
+    ]
+
+    it('filters by multiple categoryIds', () => {
+      const res = filterTransactions(mixedTxs, { categoryIds: ['cat-food', 'cat-bills'] })
+      expect(res.map((t) => t.id)).toEqual(['manual-1', 'rec-1'])
+
+      const allRes = filterTransactions(mixedTxs, { categoryIds: ['all'] })
+      expect(allRes).toHaveLength(4)
+    })
+
+    it('filters by sourceType (debt, circle, recurring, manual)', () => {
+      const debts = filterTransactions(mixedTxs, { sourceType: 'debt' })
+      expect(debts.map((t) => t.id)).toEqual(['debt_init_123'])
+
+      const circles = filterTransactions(mixedTxs, { sourceType: 'circle' })
+      expect(circles.map((t) => t.id)).toEqual(['circle_payout_456'])
+
+      const recurring = filterTransactions(mixedTxs, { sourceType: 'recurring' })
+      expect(recurring.map((t) => t.id)).toEqual(['rec-1'])
+
+      const manual = filterTransactions(mixedTxs, { sourceType: 'manual' })
+      expect(manual.map((t) => t.id)).toEqual(['manual-1'])
+    })
+
+    it('filters by custom dateRange', () => {
+      const res = filterTransactions(mixedTxs, {
+        dateRange: {
+          from: new Date('2026-10-08T00:00:00Z'),
+          to: new Date('2026-10-16T00:00:00Z'),
+        },
+      })
+      expect(res.map((t) => t.id)).toEqual(['debt_init_123', 'circle_payout_456'])
+    })
+  })
+
+  describe('sortTransactions', () => {
+    const list: Transaction[] = [
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 10000,
+        categoryId: 'c1',
+        date: new Date('2026-10-01T10:00:00Z'),
+        note: '',
+        createdAt: new Date('2026-10-01T10:00:00Z'),
+      },
+      {
+        id: 'tx-2',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c1',
+        date: new Date('2026-10-03T10:00:00Z'),
+        note: '',
+        createdAt: new Date('2026-10-03T10:00:00Z'),
+      },
+      {
+        id: 'tx-3',
+        type: 'expense',
+        amountFils: 20000,
+        categoryId: 'c1',
+        date: new Date('2026-10-02T10:00:00Z'),
+        note: '',
+        createdAt: new Date('2026-10-02T10:00:00Z'),
+      },
+    ]
+
+    it('sorts newest first (default)', () => {
+      const sorted = sortTransactions(list, 'newest')
+      expect(sorted.map((t) => t.id)).toEqual(['tx-2', 'tx-3', 'tx-1'])
+    })
+
+    it('sorts oldest first', () => {
+      const sorted = sortTransactions(list, 'oldest')
+      expect(sorted.map((t) => t.id)).toEqual(['tx-1', 'tx-3', 'tx-2'])
+    })
+
+    it('sorts highest amount first', () => {
+      const sorted = sortTransactions(list, 'highest')
+      expect(sorted.map((t) => t.id)).toEqual(['tx-2', 'tx-3', 'tx-1'])
+    })
+
+    it('sorts lowest amount first', () => {
+      const sorted = sortTransactions(list, 'lowest')
+      expect(sorted.map((t) => t.id)).toEqual(['tx-1', 'tx-3', 'tx-2'])
     })
   })
 })

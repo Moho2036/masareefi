@@ -4,12 +4,22 @@ import {
   Briefcase,
   ShoppingBag,
   Percent,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Input } from '../ui/Input'
+import { Button } from '../ui/Button'
+import { TransactionForm } from '../TransactionForm'
 import { useCurrency } from '../../hooks/useCurrency'
-import { toFils } from '../../lib/money'
-import { toWesternDigits } from '../../lib/dates'
+import { useRecurring } from '../../hooks/useRecurring'
+import { useTransactions } from '../../hooks/useTransactions'
+import { useDebts } from '../../hooks/useDebts'
+import { useUserSettings } from '../../hooks/useUserSettings'
+import { toFils, fromFils } from '../../lib/money'
+import { toWesternDigits, getFinancialMonthRange } from '../../lib/dates'
+import { calculateForecast } from '../../lib/forecast'
+import { calculateMonthlyEquivalent } from '../../lib/recurring'
 import { cn } from '../../lib/cn'
 import {
   clampWorkHoursPerDay,
@@ -170,6 +180,67 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   const [isCustomItemPrice, setIsCustomItemPrice] = useState<boolean>(initialPrefs.isCustomItemPrice)
 
   const [hasInteracted, setHasInteracted] = useState<boolean>(initialPrefs.hasInteracted)
+
+  const { data: settings } = useUserSettings()
+  const { data: recurringItems } = useRecurring()
+  const { data: debts } = useDebts()
+  const monthRange = useMemo(() => {
+    return getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
+  }, [settings?.monthStartDay])
+  const { data: currentMonthTransactions } = useTransactions(monthRange)
+
+  // Auto-detect monthly salary from active recurring rules or salary transactions if not customized
+  useEffect(() => {
+    if (isCustomSalary) return
+
+    let candidateFils = 0
+
+    // 1. Check active income recurring rules
+    const activeIncomeRec = recurringItems.filter((r) => r.active && r.type === 'income')
+    if (activeIncomeRec.length > 0) {
+      const salaryRec = activeIncomeRec.find(
+        (r) =>
+          (r.title && /راتب|salary/i.test(r.title)) ||
+          (r.note && /راتب|salary/i.test(r.note))
+      )
+      if (salaryRec) {
+        candidateFils = salaryRec.amountFils
+      } else {
+        const stats = calculateMonthlyEquivalent(activeIncomeRec, new Date())
+        candidateFils = stats.monthlyIncome
+      }
+    }
+
+    // 2. Check income transactions
+    if (candidateFils <= 0 && currentMonthTransactions.length > 0) {
+      const salaryTx = currentMonthTransactions.find(
+        (t) =>
+          t.type === 'income' &&
+          ((t.title && /راتب|salary/i.test(t.title)) || (t.note && /راتب|salary/i.test(t.note)))
+      )
+      if (salaryTx) {
+        candidateFils = salaryTx.amountFils
+      }
+    }
+
+    if (candidateFils > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSalaryStr(String(fromFils(candidateFils)))
+    }
+  }, [isCustomSalary, recurringItems, currentMonthTransactions])
+
+  // Current Month Forecast for Purchasing Decision Insight
+  const forecast = useMemo(() => {
+    return calculateForecast({
+      transactions: currentMonthTransactions,
+      recurring: recurringItems,
+      debts,
+      monthStartDay: settings?.monthStartDay ?? 1,
+      referenceDate: new Date(),
+    })
+  }, [currentMonthTransactions, recurringItems, debts, settings?.monthStartDay])
+
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false)
 
   // When currency changes, if user hasn't customized salary or price, update to new currency defaults
   const [prevCurrencyCode, setPrevCurrencyCode] = useState(config.code)
@@ -565,6 +636,132 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
           </Card>
         </div>
       </div>
+
+      {/* Purchasing Decision Insight Card */}
+      {itemPrice > 0 && (
+        <Card
+          title="بصيرة القرار الشرائي على ميزانية هذا الشهر"
+          subtitle="تحليل مباشر لأثر هذا الشراء على سيولتك وحد صرفك اليومي الآمن"
+          className="border border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
+        >
+          <div className="space-y-4 pt-1">
+            {/* Status Alert Banner */}
+            {forecast.freeBalance <= 0 ? (
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 flex items-start gap-3 text-rose-800 dark:text-rose-200 text-xs">
+                <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black block text-sm mb-0.5">
+                    تحذير: لا يوجد رصيد حر متاح هذا الشهر ({format(forecast.freeBalance)})
+                  </span>
+                  <span>
+                    ميزانيتك للشهر الحالي مستنفدة بالكامل أو في حالة عجز مالي. إتمام هذا الشراء سيزيد من العجز المرحّل للشهر القادم.
+                  </span>
+                </div>
+              </div>
+            ) : toFils(itemPrice, config.decimals) > forecast.freeBalance ? (
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3 text-amber-800 dark:text-amber-200 text-xs">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black block text-sm mb-0.5">
+                    تنبيه: سعر السلعة يتجاوز رصيدك الحر المتبقي!
+                  </span>
+                  <span>
+                    سعر السلعة ({format(toFils(itemPrice, config.decimals))}) أكبر من رصيدك الحر المتبقي ({format(forecast.freeBalance)}) بمقدار {format(toFils(itemPrice, config.decimals) - forecast.freeBalance)}.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3 text-emerald-800 dark:text-emerald-200 text-xs">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black block text-sm mb-0.5">
+                    قرار شراء آمن ضمن حدود رصيدك المتاح
+                  </span>
+                  <span>
+                    سعر السلعة يقع بالكامل ضمن رصيدك الحر المتبقي لهذا الشهر ({format(forecast.freeBalance)}).
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                  نسبة الاستهلاك من الرصيد الحر
+                </span>
+                <span className="text-xl font-black text-slate-900 dark:text-white">
+                  {forecast.freeBalance > 0
+                    ? `%${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}`
+                    : '100%+ (عجز)'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  الرصيد الحر الحالي: {format(forecast.freeBalance)}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                  الأثر على حد الصرف اليومي
+                </span>
+                <span className="text-xl font-black text-rose-600 dark:text-rose-400">
+                  - {format(Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays)))} / يوم
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  ينخفض من {format(forecast.dailySafeFils)} إلى {format(Math.max(0, forecast.dailySafeFils - Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays))))}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                  الأيام المتبقية في الشهر المالي
+                </span>
+                <span className="text-xl font-black text-slate-900 dark:text-white">
+                  {forecast.remainingDays} يوم
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  حتى موعد تجدد الدورة المالية
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Record Action */}
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-emerald-100 dark:border-emerald-900/30">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                اتخذت قرارك النهائي بشراء هذه السلعة؟
+              </span>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={() => setIsTxModalOpen(true)}
+                icon={<ShoppingBag className="w-4 h-4" />}
+              >
+                قررت شراءها؟ سجّلها كمصروف الآن
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Quick Add Expense Modal */}
+      {isTxModalOpen && (
+        <TransactionForm
+          initialType="expense"
+          duplicateFrom={{
+            id: '',
+            type: 'expense',
+            amountFils: toFils(itemPrice, config.decimals),
+            title: itemName || 'مشتريات جديدة',
+            note: `شراء ${itemName || 'سلعة'} (محسوبة من حاسبة ساعات العمل)`,
+            categoryId: '',
+            date: new Date(),
+            createdAt: new Date(),
+          }}
+          onClose={() => setIsTxModalOpen(false)}
+          onSuccess={() => setIsTxModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

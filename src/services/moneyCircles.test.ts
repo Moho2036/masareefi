@@ -11,6 +11,7 @@ import {
   checkCircleHasTransactions,
   toggleCircleMemberPayment,
   removeCircleInstallmentPayment,
+  swapMemberTurns,
 } from './moneyCircles'
 import type { MoneyCircle } from '../types'
 
@@ -1235,6 +1236,145 @@ describe('moneyCircles service', () => {
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-1_m1')
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('shareType and secondTurnMonth handling', () => {
+    it('updates recurring rule installment to 50% for half share', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 3,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [{ id: 'm-1', name: 'أنت', turnMonth: 3, paidMonths: [] }],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط',
+          amountFils: 100000,
+          skipMonth: 3,
+        }),
+      })
+
+      await updateMoneyCircle('uid-1', 'circle-1', {
+        shareType: 'half',
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-1')
+      )
+      expect(recUpdateCall).toBeDefined()
+      expect(recUpdateCall![1].amountFils).toBe(50000)
+    })
+
+    it('updates recurring rule installment to 2x and sets skipMonths for double share', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 2,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [{ id: 'm-1', name: 'أنت', turnMonth: 2, paidMonths: [] }],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط',
+          amountFils: 100000,
+          skipMonth: 2,
+        }),
+      })
+
+      await updateMoneyCircle('uid-1', 'circle-1', {
+        shareType: 'double',
+        secondTurnMonth: 7,
+      })
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-1')
+      )
+      expect(recUpdateCall).toBeDefined()
+      expect(recUpdateCall![1].amountFils).toBe(200000)
+      expect(recUpdateCall![1].skipMonths).toEqual([2, 7])
+    })
+  })
+
+  describe('swapMemberTurns', () => {
+    it('swaps turnMonth between two members and updates circle.myTurnMonth when user is involved', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الرواد',
+          monthlyAmountFils: 100000,
+          membersCount: 4,
+          totalAmountFils: 400000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+            { id: 'm-2', name: 'خالد', turnMonth: 3, paidMonths: [] },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // updateMoneyCircle gets circle document again
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الرواد',
+          monthlyAmountFils: 100000,
+          membersCount: 4,
+          totalAmountFils: 400000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+            { id: 'm-2', name: 'خالد', turnMonth: 3, paidMonths: [] },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await swapMemberTurns('uid-1', 'circle-1', 'm-1', 'm-2')
+
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      const circleUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/circle-1')
+      )
+      expect(circleUpdateCall).toBeDefined()
+      expect(circleUpdateCall![1].myTurnMonth).toBe(3)
+      expect(circleUpdateCall![1].members).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'm-1', turnMonth: 3 }),
+          expect.objectContaining({ id: 'm-2', turnMonth: 1 }),
+        ])
+      )
     })
   })
 })

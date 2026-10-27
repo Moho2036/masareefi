@@ -14,24 +14,37 @@ import {
   TrendingUp,
   TrendingDown,
   Crown,
+  History,
+  CheckCircle2,
+  SkipForward,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Modal } from '../components/ui/Modal'
 import { Toggle } from '../components/ui/Toggle'
+import { Input } from '../components/ui/Input'
 import { RecurringForm } from '../components/RecurringForm'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
+import { useTransactions } from '../hooks/useTransactions'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
 import { useUserSettings } from '../hooks/useUserSettings'
-import { addRecurring, updateRecurring, deleteRecurring, processDueRecurring } from '../services/recurring'
+import {
+  addRecurring,
+  updateRecurring,
+  deleteRecurring,
+  processDueRecurring,
+  confirmRecurringOccurrence,
+  skipRecurringOccurrence,
+} from '../services/recurring'
 import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle, getCircleCycleIndex } from '../services/moneyCircles'
 import { calculateMonthlyEquivalent, isOccurrenceSkipped, getNextCircleDueDate } from '../lib/recurring'
+import { toFils, fromFils } from '../lib/money'
 import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Recurring, Frequency } from '../types'
@@ -50,6 +63,61 @@ export const RecurringPage: React.FC = () => {
   const [editingItem, setEditingItem] = useState<Recurring | null>(null)
   const [itemToDelete, setItemToDelete] = useState<Recurring | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const { data: allTransactions } = useTransactions()
+  const { config: currencyConfig } = useCurrency()
+
+  const [confirmingItem, setConfirmingItem] = useState<Recurring | null>(null)
+  const [confirmAmountStr, setConfirmAmountStr] = useState('')
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+
+  const [historyItem, setHistoryItem] = useState<Recurring | null>(null)
+  const [skippingId, setSkippingId] = useState<string | null>(null)
+
+  const handleOpenConfirm = (item: Recurring) => {
+    setConfirmingItem(item)
+    setConfirmAmountStr(String(fromFils(item.amountFils)))
+    setConfirmError(null)
+  }
+
+  const handleConfirmSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !confirmingItem) return
+    setConfirmError(null)
+
+    const parsedFils = toFils(confirmAmountStr, currencyConfig.decimals)
+    if (parsedFils <= 0) {
+      setConfirmError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    setConfirmSubmitting(true)
+    try {
+      await confirmRecurringOccurrence(user.uid, confirmingItem, parsedFils)
+      showToast('تم تأكيد وتسجيل المعاملة بنجاح وتحديث الموعد القادم', 'success')
+      setConfirmingItem(null)
+    } catch (err) {
+      console.error('Failed to confirm recurring occurrence:', err)
+      setConfirmError('تعذر تأكيد المعاملة. يرجى المحاولة مرة أخرى.')
+    } finally {
+      setConfirmSubmitting(false)
+    }
+  }
+
+  const handleSkipOccurrence = async (item: Recurring) => {
+    if (!user) return
+    setSkippingId(item.id)
+    try {
+      await skipRecurringOccurrence(user.uid, item)
+      showToast('تم تخطي هذه الدورة بنجاح والانتقال للموعد القادم', 'info')
+    } catch (err) {
+      console.error('Failed to skip recurring occurrence:', err)
+      showToast('تعذر تخطي الدورة', 'error')
+    } finally {
+      setSkippingId(null)
+    }
+  }
 
   const activeCircles = useMemo(() => {
     const now = new Date()
@@ -195,8 +263,12 @@ export const RecurringPage: React.FC = () => {
   }
 
   const frequencyLabels: Record<Frequency, string> = {
+    daily: 'يومي',
     weekly: 'أسبوعي',
+    biweekly: 'كل أسبوعين',
     monthly: 'شهري',
+    quarterly: 'ربع سنوي',
+    semiannual: 'نصف سنوي',
     yearly: 'سنوي',
   }
 
@@ -471,6 +543,24 @@ export const RecurringPage: React.FC = () => {
                         متوقفة مؤقتاً
                       </span>
                     )}
+                    {item.requireConfirmation && (
+                      <span
+                        className={cn(
+                          'text-[10px] px-2 py-0.5 rounded-full font-bold border',
+                          item.active &&
+                            (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
+                              new Date()
+                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                        )}
+                      >
+                        {item.active &&
+                        (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
+                          new Date()
+                          ? 'بانتظار تأكيدك'
+                          : 'تأكيد يدوي'}
+                      </span>
+                    )}
                     <span className="text-xs px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200/60 dark:border-amber-900/40">
                       {frequencyLabels[item.frequency]}
                     </span>
@@ -513,6 +603,39 @@ export const RecurringPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Due Confirmation Banner for manual confirmation items */}
+                {item.requireConfirmation &&
+                  item.active &&
+                  (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
+                    new Date() && (
+                    <div className="my-2 p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span>هذه الدفعة مستحقة وبانتظار تأكيدك</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenConfirm(item)}
+                          className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>تأكيد وتسجيل الآن</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={skippingId === item.id}
+                          onClick={() => handleSkipOccurrence(item)}
+                          className="py-1.5 px-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                          title="تخطي دورة الاستحقاق الحالية دون خصم"
+                        >
+                          <SkipForward className="w-3.5 h-3.5" />
+                          <span>تخطي</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 {/* Bottom Row: Next date, Active toggle, Actions */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-1 text-slate-400 dark:text-slate-400 truncate">
@@ -521,6 +644,17 @@ export const RecurringPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Payment History button */}
+                    <button
+                      type="button"
+                      onClick={() => setHistoryItem(item)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                      aria-label="سجل الدفعات"
+                      title="عرض سجل دفعات هذه المعاملة"
+                    >
+                      <History className="w-4 h-4" />
+                    </button>
+
                     {/* Toggle button */}
                     <Toggle
                       checked={item.active}
@@ -600,6 +734,163 @@ export const RecurringPage: React.FC = () => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Due Occurrence Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(confirmingItem)}
+        onClose={() => setConfirmingItem(null)}
+        title="تأكيد وتسجيل الدفعة الدورية"
+      >
+        {confirmingItem && (
+          <form onSubmit={handleConfirmSubmit} noValidate className="space-y-4">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+              <span className="text-xs text-slate-400 dark:text-slate-500 font-bold block">
+                المعاملة:
+              </span>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-100">
+                {confirmingItem.title || categoryMap.get(confirmingItem.categoryId)?.name || 'معاملة دورية'}
+              </span>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                تاريخ الاستحقاق:{' '}
+                {toWesternDigits(
+                  formatDate(
+                    confirmingItem.nextDate instanceof Date
+                      ? confirmingItem.nextDate
+                      : new Date(confirmingItem.nextDate),
+                    'd LLLL yyyy',
+                    { locale: ar }
+                  )
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Input
+                label="المبلغ المسجل لهذه الدفعة"
+                type="text"
+                inputMode="decimal"
+                value={confirmAmountStr}
+                onChange={(e) => {
+                  setConfirmAmountStr(e.target.value)
+                  setConfirmError(null)
+                }}
+                required
+              />
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                يمكنك تعديل المبلغ الفعلي لهذه الدفعة دون تغيير المبلغ الأساسي للمعاملة.
+              </p>
+            </div>
+
+            {confirmError && (
+              <div
+                role="alert"
+                className="p-3 text-xs rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold border border-red-200 dark:border-red-800/50"
+              >
+                {confirmError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => setConfirmingItem(null)}
+                disabled={confirmSubmitting}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                disabled={confirmSubmitting}
+              >
+                {confirmSubmitting ? 'جاري التأكيد...' : 'تأكيد وتسجيل المعاملة'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Payment History Modal */}
+      <Modal
+        isOpen={Boolean(historyItem)}
+        onClose={() => setHistoryItem(null)}
+        title={
+          historyItem
+            ? `سجل دفعات: ${historyItem.title || categoryMap.get(historyItem.categoryId)?.name || 'المعاملة'}`
+            : 'سجل الدفعات'
+        }
+      >
+        {historyItem && (
+          <div className="space-y-3">
+            {(() => {
+              const historyTxs = allTransactions
+                .filter((t) => t.recurringId === historyItem.id)
+                .sort((a, b) => {
+                  const aDate = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
+                  const bDate = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
+                  return bDate - aDate
+                })
+
+              if (historyTxs.length === 0) {
+                return (
+                  <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                    لم يتم تسجيل أي دفعات سابقة لهذه المعاملة المتكررة حتى الآن.
+                  </div>
+                )
+              }
+
+              return (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
+                  {historyTxs.map((tx) => {
+                    const txDateFormatted = toWesternDigits(
+                      formatDate(
+                        tx.date instanceof Date ? tx.date : new Date(tx.date),
+                        'd LLLL yyyy',
+                        { locale: ar }
+                      )
+                    )
+                    return (
+                      <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-slate-800 dark:text-slate-100">
+                            {tx.title || txDateFormatted}
+                          </div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {txDateFormatted}
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            'font-black text-sm',
+                            tx.type === 'expense'
+                              ? 'text-red-500 dark:text-red-400'
+                              : 'text-emerald-600 dark:text-emerald-400'
+                          )}
+                        >
+                          {formatWithSign(tx.amountFils, tx.type)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setHistoryItem(null)}
+              >
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

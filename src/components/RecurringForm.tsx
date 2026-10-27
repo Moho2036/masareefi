@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { format, addMonths } from 'date-fns'
-import { Check, Info } from 'lucide-react'
+import { Check, Info, ChevronDown } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -34,6 +34,7 @@ export interface RecurringSubmitPayload {
   endDate?: Date | null
   circleId?: string
   skipMonth?: number
+  requireConfirmation?: boolean
 }
 
 export interface RecurringFormProps {
@@ -137,6 +138,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
   const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
+  const [requireConfirmation, setRequireConfirmation] = useState<boolean>(
+    Boolean(initialRecurring?.requireConfirmation)
+  )
+  const [showExtraDropdown, setShowExtraDropdown] = useState(false)
 
   const isCircleLinked = Boolean(initialRecurring?.circleId)
   const hasSelectedCircle = Boolean(circleId || isCircleLinked)
@@ -248,6 +253,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           endDate: parsedEndDate,
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+          requireConfirmation,
         }
 
         if (onSubmit) {
@@ -265,6 +271,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             endDate: parsedEndDate,
             circleId: circleId || undefined,
             skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+            requireConfirmation,
           })
         }
 
@@ -293,7 +300,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       } else {
         const linkedCircle = circleId ? circles.find((c) => c.id === circleId) : null
         const userMember = linkedCircle?.members.find((m) => m.turnMonth === linkedCircle.myTurnMonth)
-        const initialNextDate = linkedCircle
+        let initialNextDate = linkedCircle
           ? getNextCircleDueDate(
               parsedStartDate,
               linkedCircle.membersCount,
@@ -302,6 +309,15 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
               userMember?.paymentsByMonth
             )
           : parsedStartDate
+
+        // Retroactive protection: if start date is in the past and not a circle, start from the upcoming cycle
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+        const startOfStart = new Date(parsedStartDate.getTime())
+        startOfStart.setHours(0, 0, 0, 0)
+        if (!linkedCircle && startOfStart < startOfToday) {
+          initialNextDate = calculateNextDateOnEdit(parsedStartDate, frequency)
+        }
 
         const recId = await addRecurring(user.uid, {
           type,
@@ -316,6 +332,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           active: true,
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+          requireConfirmation,
         })
 
         // Two-way sync with money circles
@@ -348,12 +365,6 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const typeOptions: { value: TxType; label: string }[] = [
     { value: 'expense', label: 'مصروف' },
     { value: 'income', label: 'دخل' },
-  ]
-
-  const frequencyOptions: { value: Frequency; label: string }[] = [
-    { value: 'weekly', label: 'أسبوعي' },
-    { value: 'monthly', label: 'شهري' },
-    { value: 'yearly', label: 'سنوي' },
   ]
 
   const isTouchDevice =
@@ -494,18 +505,123 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         />
       </div>
 
-      {/* Frequency selector: أسبوعي / شهري / سنوي */}
+      {/* Frequency selector: 4 options [ أسبوعي | شهري | سنوي | أخرى ▾ ] */}
       <div>
         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
           التكرار
         </label>
-        <SegmentedControl<Frequency>
-          value={frequency}
-          onChange={setFrequency}
-          options={frequencyOptions}
-          disabled={hasSelectedCircle}
-          className="w-full"
-        />
+        <div role="radiogroup" className="grid grid-cols-4 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={frequency === 'weekly'}
+            disabled={hasSelectedCircle}
+            onClick={() => {
+              setFrequency('weekly')
+              setShowExtraDropdown(false)
+            }}
+            className={cn(
+              'py-1.5 text-xs font-bold rounded-lg transition-all',
+              frequency === 'weekly'
+                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            أسبوعي
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={frequency === 'monthly'}
+            disabled={hasSelectedCircle}
+            onClick={() => {
+              setFrequency('monthly')
+              setShowExtraDropdown(false)
+            }}
+            className={cn(
+              'py-1.5 text-xs font-bold rounded-lg transition-all',
+              frequency === 'monthly'
+                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            شهري
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={frequency === 'yearly'}
+            disabled={hasSelectedCircle}
+            onClick={() => {
+              setFrequency('yearly')
+              setShowExtraDropdown(false)
+            }}
+            className={cn(
+              'py-1.5 text-xs font-bold rounded-lg transition-all',
+              frequency === 'yearly'
+                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            سنوي
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={['daily', 'biweekly', 'quarterly', 'semiannual'].includes(frequency)}
+            disabled={hasSelectedCircle}
+            onClick={() => setShowExtraDropdown((prev) => !prev)}
+            className={cn(
+              'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
+              ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(frequency)
+                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            <span className="truncate">
+              {frequency === 'daily'
+                ? 'يومي'
+                : frequency === 'biweekly'
+                  ? 'أسبوعين'
+                  : frequency === 'quarterly'
+                    ? 'ربع سنوي'
+                    : frequency === 'semiannual'
+                      ? 'نصف سنوي'
+                      : 'أخرى'}
+            </span>
+            <ChevronDown className="w-3 h-3 shrink-0" />
+          </button>
+        </div>
+
+        {/* Dropdown menu for extra frequencies */}
+        {showExtraDropdown && !hasSelectedCircle && (
+          <div className="mt-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg grid grid-cols-2 gap-1.5">
+            {[
+              { value: 'daily' as Frequency, label: 'يومي' },
+              { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
+              { value: 'quarterly' as Frequency, label: 'ربع سنوي (3 أشهر)' },
+              { value: 'semiannual' as Frequency, label: 'نصف سنوي (6 أشهر)' },
+            ].map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => {
+                  setFrequency(f.value)
+                  setShowExtraDropdown(false)
+                }}
+                className={cn(
+                  'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
+                  frequency === f.value
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                )}
+              >
+                <span>{f.label}</span>
+                {frequency === f.value && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Money Circle Link / Skip Month */}
@@ -594,6 +710,16 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           disabled={hasSelectedCircle}
           label="تحديد تاريخ انتهاء"
           description="تتوقف المعاملة المتكررة تلقائياً بعد هذا التاريخ"
+        />
+      </div>
+
+      {/* Require Confirmation Toggle */}
+      <div>
+        <Toggle
+          checked={requireConfirmation}
+          onChange={setRequireConfirmation}
+          label="طلب تأكيد الدفعة يدوياً قبل التسجيل"
+          description="تنبيهك قبل التسجيل لإتاحة مراجعة أو تعديل المبلغ الفعلي (مناسب لفواتير الكهرباء والماء المتغيرة)"
         />
       </div>
 

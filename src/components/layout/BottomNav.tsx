@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { triggerHaptic } from '../../lib/haptics'
+import { useSelectedMonth } from '../../hooks/useSelectedMonth'
 
 export interface BottomNavProps {
   onOpenAddModal: () => void
@@ -74,6 +75,7 @@ const managementItems: FeatureItem[] = [
 export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
   const location = useLocation()
   const pathname = location.pathname
+  const { isCurrentMonth, goToCurrentMonth } = useSelectedMonth()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isPushedRef = useRef(false)
   const isClosingFromPopStateRef = useRef(false)
@@ -312,6 +314,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             {/* 1. الرئيسية */}
           <Link
             to="/"
+            onClick={() => {
+              if (!isCurrentMonth) {
+                goToCurrentMonth()
+              }
+            }}
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/'

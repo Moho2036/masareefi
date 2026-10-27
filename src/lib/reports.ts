@@ -384,3 +384,33 @@ export function calculateYearlyMonthlyAverage(
   const divisor = Math.max(1, activeMonthsCount)
   return Math.round(yearExpenseFils / divisor)
 }
+
+export interface DailyExpenseStats {
+  highestDay: DailyExpenseItem | null
+  zeroSpendDaysCount: number
+}
+
+/**
+ * Calculates high-level statistics from daily expense items:
+ * - highestDay: day with the single largest expense amount
+ * - zeroSpendDaysCount: number of days with 0 expenses recorded
+ */
+export function getDailyExpenseStats(items: DailyExpenseItem[]): DailyExpenseStats {
+  if (items.length === 0) {
+    return { highestDay: null, zeroSpendDaysCount: 0 }
+  }
+  let highest: DailyExpenseItem | null = null
+  let zeroCount = 0
+
+  for (const item of items) {
+    if (item.amountFils === 0) {
+      zeroCount++
+    } else {
+      if (!highest || item.amountFils > highest.amountFils) {
+        highest = item
+      }
+    }
+  }
+
+  return { highestDay: highest, zeroSpendDaysCount: zeroCount }
+}

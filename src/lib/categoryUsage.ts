@@ -91,6 +91,17 @@ export function sortCategoriesByUsage<T extends { id: string; order: number }>(
   })
 }
 
+export function sortCategoriesUnified<T extends { id: string; order: number }>(
+  categories: T[],
+  usageMap: Record<string, number>,
+  mode: 'usage' | 'manual' = 'usage'
+): T[] {
+  if (mode === 'manual') {
+    return [...categories].sort((a, b) => a.order - b.order)
+  }
+  return sortCategoriesByUsage(categories, usageMap)
+}
+
 export interface CategoryUsageDetails {
   txCount: number
   recurringCount: number

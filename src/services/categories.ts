@@ -11,6 +11,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
@@ -145,3 +146,112 @@ export async function deleteCategory(uid: string, id: string): Promise<void> {
 
   await deleteDoc(docRef)
 }
+
+export async function reassignAndDeleteCategory(
+  uid: string,
+  sourceCatId: string,
+  targetCatId: string
+): Promise<void> {
+  if (!sourceCatId || !targetCatId || sourceCatId === targetCatId) {
+    throw new Error('لا يمكن نقل المعاملات إلى نفس التصنيف.')
+  }
+
+  const sourceRef = doc(db, 'users', uid, 'categories', sourceCatId)
+  const targetRef = doc(db, 'users', uid, 'categories', targetCatId)
+
+  const [sourceSnap, targetSnap] = await Promise.all([
+    getDoc(sourceRef),
+    getDoc(targetRef),
+  ])
+
+  if (!sourceSnap.exists()) {
+    throw new Error('التصنيف المراد حذفه غير موجود.')
+  }
+  if (!targetSnap.exists()) {
+    throw new Error('التصنيف البديل غير موجود.')
+  }
+
+  const sourceData = sourceSnap.data() as Category
+  const targetData = targetSnap.data() as Category
+
+  if (sourceData.type !== targetData.type) {
+    throw new Error('يجب أن يكون التصنيف البديل من نفس النوع (مصروف أو دخل).')
+  }
+
+  if (!sourceData.archived && targetData.archived) {
+    const colRef = collection(db, 'users', uid, 'categories')
+    const activeSnap = await getDocs(
+      query(colRef, where('type', '==', sourceData.type), where('archived', '==', false))
+    )
+    if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === sourceCatId)) {
+      throw new Error('لا يمكن حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
+    }
+  }
+
+  const txsCol = collection(db, 'users', uid, 'transactions')
+  const recCol = collection(db, 'users', uid, 'recurring')
+  const circlesCol = collection(db, 'users', uid, 'circles')
+
+  const [snapTxs, snapRecs, snapCircExp, snapCircInc, snapCircCat] = await Promise.all([
+    getDocs(query(txsCol, where('categoryId', '==', sourceCatId))),
+    getDocs(query(recCol, where('categoryId', '==', sourceCatId))),
+    getDocs(query(circlesCol, where('expenseCategoryId', '==', sourceCatId))),
+    getDocs(query(circlesCol, where('incomeCategoryId', '==', sourceCatId))),
+    getDocs(query(circlesCol, where('categoryId', '==', sourceCatId))),
+  ])
+
+  type PendingOp = {
+    ref: ReturnType<typeof doc>
+    type: 'update' | 'delete'
+    data?: Record<string, unknown>
+  }
+  const ops: PendingOp[] = []
+
+  for (const d of snapTxs.docs) {
+    ops.push({ ref: d.ref, type: 'update', data: { categoryId: targetCatId } })
+  }
+  for (const d of snapRecs.docs) {
+    ops.push({ ref: d.ref, type: 'update', data: { categoryId: targetCatId } })
+  }
+
+  const circleUpdatesMap = new Map<string, { ref: ReturnType<typeof doc>; data: Record<string, unknown> }>()
+  for (const d of snapCircExp.docs) {
+    circleUpdatesMap.set(d.id, { ref: d.ref, data: { expenseCategoryId: targetCatId } })
+  }
+  for (const d of snapCircInc.docs) {
+    const existing = circleUpdatesMap.get(d.id)
+    if (existing) {
+      existing.data.incomeCategoryId = targetCatId
+    } else {
+      circleUpdatesMap.set(d.id, { ref: d.ref, data: { incomeCategoryId: targetCatId } })
+    }
+  }
+  for (const d of snapCircCat.docs) {
+    const existing = circleUpdatesMap.get(d.id)
+    if (existing) {
+      existing.data.categoryId = targetCatId
+    } else {
+      circleUpdatesMap.set(d.id, { ref: d.ref, data: { categoryId: targetCatId } })
+    }
+  }
+  for (const item of circleUpdatesMap.values()) {
+    ops.push({ ref: item.ref, type: 'update', data: item.data })
+  }
+
+  ops.push({ ref: sourceRef, type: 'delete' })
+
+  const CHUNK_SIZE = 400
+  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+    const chunk = ops.slice(i, i + CHUNK_SIZE)
+    const batch = writeBatch(db)
+    for (const op of chunk) {
+      if (op.type === 'update' && op.data) {
+        batch.update(op.ref, op.data)
+      } else if (op.type === 'delete') {
+        batch.delete(op.ref)
+      }
+    }
+    await batch.commit()
+  }
+}
+

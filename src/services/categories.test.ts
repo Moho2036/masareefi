@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { deleteCategory, archiveCategory } from './categories'
+import { deleteCategory, archiveCategory, reassignAndDeleteCategory } from './categories'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -10,21 +10,30 @@ const mockGetDocs = vi.fn()
 const mockDeleteDoc = vi.fn()
 const mockUpdateDoc = vi.fn()
 const mockCollection = vi.fn()
-const mockDoc = vi.fn()
+const mockDoc = vi.fn((...parts: any[]) => ({ path: parts.slice(1).join('/') }))
 const mockQuery = vi.fn()
 const mockWhere = vi.fn()
 const mockLimit = vi.fn()
+const mockBatchUpdate = vi.fn()
+const mockBatchDelete = vi.fn()
+const mockBatchCommit = vi.fn().mockResolvedValue(undefined)
+const mockWriteBatch = vi.fn((..._args: any[]) => ({
+  update: mockBatchUpdate,
+  delete: mockBatchDelete,
+  commit: mockBatchCommit,
+}))
 
 vi.mock('firebase/firestore', () => ({
-  collection: (...args: unknown[]) => mockCollection(...args),
-  doc: (...args: unknown[]) => mockDoc(...args),
-  query: (...args: unknown[]) => mockQuery(...args),
-  where: (...args: unknown[]) => mockWhere(...args),
-  limit: (...args: unknown[]) => mockLimit(...args),
-  getDoc: (...args: unknown[]) => mockGetDoc(...args),
-  getDocs: (...args: unknown[]) => mockGetDocs(...args),
-  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
-  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  collection: (...args: any[]) => mockCollection(...args),
+  doc: (...args: any[]) => mockDoc(...args),
+  query: (...args: any[]) => mockQuery(...args),
+  where: (...args: any[]) => mockWhere(...args),
+  limit: (...args: any[]) => mockLimit(...args),
+  getDoc: (...args: any[]) => mockGetDoc(...args),
+  getDocs: (...args: any[]) => mockGetDocs(...args),
+  deleteDoc: (...args: any[]) => mockDeleteDoc(...args),
+  updateDoc: (...args: any[]) => mockUpdateDoc(...args),
+  writeBatch: (...args: any[]) => mockWriteBatch(...args),
   orderBy: vi.fn(),
   onSnapshot: vi.fn(),
   addDoc: vi.fn(),
@@ -133,3 +142,78 @@ describe('archiveCategory service', () => {
     expect(mockUpdateDoc).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('reassignAndDeleteCategory service', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockBatchCommit.mockResolvedValue(undefined)
+  })
+
+  it('throws when source and target are the same', async () => {
+    await expect(
+      reassignAndDeleteCategory('user-1', 'cat-1', 'cat-1')
+    ).rejects.toThrow('لا يمكن نقل المعاملات إلى نفس التصنيف.')
+  })
+
+  it('throws when categories have different types', async () => {
+    mockGetDoc
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ type: 'expense', name: 'طعام' }),
+      })
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ type: 'income', name: 'راتب' }),
+      })
+
+    await expect(
+      reassignAndDeleteCategory('user-1', 'cat-food', 'cat-salary')
+    ).rejects.toThrow('يجب أن يكون التصنيف البديل من نفس النوع (مصروف أو دخل).')
+  })
+
+  it('reassigns transactions, recurring, circles and deletes source in batch', async () => {
+    mockGetDoc
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ type: 'expense', name: 'طعام قديم' }),
+      })
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ type: 'expense', name: 'طعام جديد' }),
+      })
+
+    // transactions (2 docs)
+    mockGetDocs.mockResolvedValueOnce({
+      docs: [
+        { id: 'tx-1', ref: { id: 'tx-1' } },
+        { id: 'tx-2', ref: { id: 'tx-2' } },
+      ],
+    })
+    // recurring (1 doc)
+    mockGetDocs.mockResolvedValueOnce({
+      docs: [{ id: 'rec-1', ref: { id: 'rec-1' } }],
+    })
+    // circles expense (1 doc)
+    mockGetDocs.mockResolvedValueOnce({
+      docs: [{ id: 'c-1', ref: { id: 'c-1' } }],
+    })
+    // circles income (0 docs)
+    mockGetDocs.mockResolvedValueOnce({
+      docs: [],
+    })
+    // circles cat (0 docs)
+    mockGetDocs.mockResolvedValueOnce({
+      docs: [],
+    })
+
+    await reassignAndDeleteCategory('user-1', 'cat-old', 'cat-new')
+
+    expect(mockWriteBatch).toHaveBeenCalled()
+    // 2 tx updates + 1 rec update + 1 circle update = 4 updates
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(4)
+    // 1 delete on source category
+    expect(mockBatchDelete).toHaveBeenCalledTimes(1)
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+  })
+})
+

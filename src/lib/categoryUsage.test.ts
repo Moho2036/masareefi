@@ -3,6 +3,7 @@ import {
   getCategoryUsageMap,
   recordCategoryUsage,
   sortCategoriesByUsage,
+  sortCategoriesUnified,
   buildUsageFromTransactions,
   syncCategoryUsageCache,
   mergeAndSaveUsage,
@@ -173,5 +174,42 @@ describe('categoryUsage utilities', () => {
     const updatedMap = syncCategoryUsageCache([{ categoryId: 'cat-b' }])
     expect(updatedMap).toEqual({ 'cat-b': 1 })
     expect(getCategoryUsageMap()).toEqual({ 'cat-b': 1 })
+  })
+
+  describe('sortCategoriesUnified', () => {
+    const cats = [
+      { id: 'cat-food', order: 2 },
+      { id: 'cat-salary', order: 0 },
+      { id: 'cat-bills', order: 1 },
+    ]
+    const usageMap = {
+      'cat-food': 10,
+      'cat-bills': 5,
+      'cat-salary': 1,
+    }
+
+    it('sorts by usage when mode is usage', () => {
+      const sorted = sortCategoriesUnified(cats, usageMap, 'usage')
+      expect(sorted.map((c) => c.id)).toEqual(['cat-food', 'cat-bills', 'cat-salary'])
+    })
+
+    it('defaults to usage mode when mode is omitted', () => {
+      const sorted = sortCategoriesUnified(cats, usageMap)
+      expect(sorted.map((c) => c.id)).toEqual(['cat-food', 'cat-bills', 'cat-salary'])
+    })
+
+    it('sorts strictly by manual order when mode is manual regardless of usage', () => {
+      const sorted = sortCategoriesUnified(cats, usageMap, 'manual')
+      expect(sorted.map((c) => c.id)).toEqual(['cat-salary', 'cat-bills', 'cat-food'])
+    })
+
+    it('falls back to manual order when usage counts are tied in usage mode', () => {
+      const tiedCats = [
+        { id: 'cat-b', order: 2 },
+        { id: 'cat-a', order: 1 },
+      ]
+      const sorted = sortCategoriesUnified(tiedCats, { 'cat-a': 5, 'cat-b': 5 }, 'usage')
+      expect(sorted.map((c) => c.id)).toEqual(['cat-a', 'cat-b'])
+    })
   })
 })

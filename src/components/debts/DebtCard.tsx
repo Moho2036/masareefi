@@ -170,6 +170,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({
             <span>الاستحقاق: {formattedDueDate}</span>
           </span>
         )}
+        {debt.entries && debt.entries.length > 1 && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-bold border border-slate-200/50 dark:border-slate-600/50">
+            {debt.entries.length} سلف مجمعة
+          </span>
+        )}
       </div>
 
       {/* Bottom Row: Actions */}

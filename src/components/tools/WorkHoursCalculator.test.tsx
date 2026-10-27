@@ -190,4 +190,12 @@ describe('WorkHoursCalculator component', () => {
     expect(screen.queryByText('يوم دوام عملي')).toBeNull()
     expect(screen.queryByText(/تحتاج إلى:/)).toBeNull()
   })
+
+  it('renders purchasing decision insight card and record expense button when item price is greater than 0', () => {
+    render(<WorkHoursCalculator />)
+
+    expect(screen.getByText('بصيرة القرار الشرائي على ميزانية هذا الشهر')).toBeInTheDocument()
+    expect(screen.getByText('الأثر على حد الصرف اليومي')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /قررت شراءها؟ سجّلها كمصروف الآن/i })).toBeInTheDocument()
+  })
 })

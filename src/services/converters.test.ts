@@ -258,14 +258,37 @@ describe('converters', () => {
 
       const data = recurringConverter.toFirestore(rec) as Record<string, unknown>
       expect(data.createdAt).toBeInstanceOf(Timestamp)
-      expect((data.createdAt as Timestamp).toDate().getTime()).toBe(createdAt.getTime())
 
       const snap = makeMockSnapshot('rec-created', {
         ...data,
       })
+      const fromSnap = recurringConverter.fromFirestore(snap)
+      expect(fromSnap.createdAt).toBeInstanceOf(Date)
+      expect(fromSnap.createdAt?.getTime()).toBe(createdAt.getTime())
+    })
+
+    it('handles requireConfirmation and new frequencies in toFirestore and fromFirestore', () => {
+      const rec: Recurring = {
+        id: 'rec-conf',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'cat-bills',
+        note: 'فاتورة كهرباء متغيرة',
+        frequency: 'biweekly',
+        startDate: new Date('2026-04-01T00:00:00Z'),
+        nextDate: new Date('2026-04-15T00:00:00Z'),
+        active: true,
+        requireConfirmation: true,
+      }
+
+      const data = recurringConverter.toFirestore(rec) as Record<string, unknown>
+      expect(data.requireConfirmation).toBe(true)
+      expect(data.frequency).toBe('biweekly')
+
+      const snap = makeMockSnapshot('rec-conf', data)
       const parsed = recurringConverter.fromFirestore(snap)
-      expect(parsed.createdAt).toBeInstanceOf(Date)
-      expect(parsed.createdAt?.getTime()).toBe(createdAt.getTime())
+      expect(parsed.requireConfirmation).toBe(true)
+      expect(parsed.frequency).toBe('biweekly')
     })
   })
 
@@ -561,6 +584,87 @@ describe('converters', () => {
       const data = recurringConverter.toFirestore(rec)
       expect(data.title).toBeUndefined()
       expect(data.circleId).toBeUndefined()
+    })
+
+    it('serializes and deserializes skipMonths in recurringConverter', () => {
+      const rec: Recurring = {
+        id: 'rec-skip-months',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'cat-1',
+        note: 'جمعية',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-02-01'),
+        active: true,
+        skipMonths: [3, 7],
+      }
+
+      const firestoreData = recurringConverter.toFirestore(rec)
+      expect(firestoreData.skipMonths).toEqual([3, 7])
+
+      const snapshot = makeMockSnapshot('rec-skip-months', {
+        ...firestoreData,
+        startDate: Timestamp.fromDate(rec.startDate),
+        nextDate: Timestamp.fromDate(rec.nextDate),
+      })
+      const fromFs = recurringConverter.fromFirestore(snapshot)
+      expect(fromFs.skipMonths).toEqual([3, 7])
+    })
+
+    it('serializes and deserializes entries in debtConverter', () => {
+      const debt: Debt = {
+        id: 'debt-entries',
+        personName: 'خالد',
+        type: 'lent',
+        amountFils: 70000,
+        paidFils: 20000,
+        startDate: new Date('2026-01-01'),
+        note: 'دين تجاري',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-01-01'),
+        entries: [
+          {
+            id: 'entry-1',
+            amountFils: 50000,
+            date: new Date('2026-01-01'),
+            title: 'دفعة أولى',
+            note: 'سلفة أولى',
+            transactionId: 'tx-1',
+            createdAt: new Date('2026-01-01'),
+          },
+          {
+            id: 'entry-2',
+            amountFils: 20000,
+            date: new Date('2026-02-01'),
+            title: 'سلفة ثانية',
+            note: 'تكاليف إضافية',
+            createdAt: new Date('2026-02-01'),
+          },
+        ],
+      }
+
+      const firestoreData = debtConverter.toFirestore(debt)
+      expect(firestoreData.entries).toHaveLength(2)
+      expect(firestoreData.entries[0].amountFils).toBe(50000)
+      expect(firestoreData.entries[0].title).toBe('دفعة أولى')
+      expect(firestoreData.entries[0].transactionId).toBe('tx-1')
+      expect(firestoreData.entries[1].amountFils).toBe(20000)
+
+      const snapshot = makeMockSnapshot('debt-entries', {
+        ...firestoreData,
+        startDate: Timestamp.fromDate(debt.startDate),
+        createdAt: Timestamp.fromDate(debt.createdAt),
+        entries: firestoreData.entries,
+      })
+      const fromFs = debtConverter.fromFirestore(snapshot)
+      expect(fromFs.entries).toHaveLength(2)
+      expect(fromFs.entries![0].id).toBe('entry-1')
+      expect(fromFs.entries![0].amountFils).toBe(50000)
+      expect(fromFs.entries![0].title).toBe('دفعة أولى')
+      expect(fromFs.entries![0].transactionId).toBe('tx-1')
+      expect(fromFs.entries![1].id).toBe('entry-2')
     })
   })
 })

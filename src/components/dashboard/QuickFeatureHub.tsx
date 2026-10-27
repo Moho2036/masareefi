@@ -2,7 +2,7 @@ import React from 'react'
 import { Link } from 'react-router'
 import {
   Users,
-  Clock,
+  LayoutGrid,
   BarChart3,
   RefreshCw,
   ChevronLeft,
@@ -30,16 +30,16 @@ export const QuickFeatureHub: React.FC<QuickFeatureHubProps> = ({ className }) =
       icon: Users,
     },
     {
-      id: 'work_hours',
-      to: '/tools?tool=work_hours',
-      title: 'حاسبة العمل',
-      icon: Clock,
-    },
-    {
       id: 'recurring',
       to: '/recurring',
       title: 'المتكررة',
       icon: RefreshCw,
+    },
+    {
+      id: 'categories',
+      to: '/categories',
+      title: 'التصنيفات',
+      icon: LayoutGrid,
     },
   ]
 
@@ -53,7 +53,7 @@ export const QuickFeatureHub: React.FC<QuickFeatureHubProps> = ({ className }) =
           to="/tools"
           className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
         >
-          <span>الأدوات</span>
+          <span>جميع الأدوات</span>
           <ChevronLeft className="w-3 h-3" />
         </Link>
       </div>

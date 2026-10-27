@@ -149,6 +149,7 @@ vi.mock('../../services/moneyCircles', async () => {
     checkCirclePayoutExists: vi.fn().mockResolvedValue(false),
     checkCircleHasTransactions: vi.fn().mockResolvedValue(false),
     depositCircleNetPayout: vi.fn().mockResolvedValue('payout-tx-id'),
+    swapMemberTurns: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -1018,5 +1019,74 @@ describe('MoneyCirclesManager Component', () => {
     // Blur turn input: should safely clamp to 1
     fireEvent.blur(turnInput)
     expect(turnInput.value).toBe('1')
+  })
+
+  it('supports selecting double share size and second turn month in add modal', async () => {
+    mockCircles = []
+    render(<MoneyCirclesManager />)
+
+    const addBtn = screen.getAllByRole('button', { name: /إنشاء جمعية جديدة/i })[0]
+    fireEvent.click(addBtn)
+
+    const nameInput = screen.getByLabelText(/اسم الجمعية/i)
+    fireEvent.change(nameInput, { target: { value: 'جمعية الاستثمار' } })
+
+    // Click double share button
+    const doubleShareBtn = screen.getByRole('button', { name: /سهمان \(دورين\)/i })
+    fireEvent.click(doubleShareBtn)
+
+    // Second turn month select appears
+    const secondTurnSelect = screen.getByLabelText(/الدور الثاني للاستلام/i) as HTMLSelectElement
+    expect(secondTurnSelect).toBeInTheDocument()
+    fireEvent.change(secondTurnSelect, { target: { value: '4' } })
+
+    const submitBtn = screen.getByRole('button', { name: /^إنشاء الجمعية$/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(circleServices.addMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          name: 'جمعية الاستثمار',
+          shareType: 'double',
+          secondTurnMonth: 4,
+        })
+      )
+    })
+  })
+
+  it('allows manager to swap member turns and calls swapMemberTurns', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Expand member tracking
+    const expandBtn = screen.getByRole('button', { name: /تتبع دفعات الأعضاء/i })
+    fireEvent.click(expandBtn)
+
+    // Member row swap button
+    const swapBtns = screen.getAllByTitle(/تبديل الدور ⇄/i)
+    expect(swapBtns.length).toBeGreaterThanOrEqual(1)
+    fireEvent.click(swapBtns[0]) // click swap for member 1
+
+    expect(screen.getByText(/تبديل الدور بين الأعضاء/i)).toBeInTheDocument()
+
+    const confirmSwapBtn = screen.getByRole('button', { name: /تأكيد تبديل الدور ⇄/i })
+    fireEvent.click(confirmSwapBtn)
+
+    await waitFor(() => {
+      expect(circleServices.swapMemberTurns).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ monthStartDay: expect.any(Number) })
+      )
+    })
   })
 })

@@ -13,14 +13,19 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  Printer,
+  CheckCircle2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { MonthSelector } from '../components/ui/MonthSelector'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
+import { Modal } from '../components/ui/Modal'
+import { Button } from '../components/ui/Button'
 import { CategoryPieChart } from '../components/charts/CategoryPieChart'
 import { MonthlyBarChart } from '../components/charts/MonthlyBarChart'
+import { DailyExpenseChart } from '../components/charts/DailyExpenseChart'
 import { useAuth } from '../hooks/useAuth'
 import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
@@ -37,6 +42,9 @@ import {
   calculateYearlyBreakdown,
   calculateSavingsRate,
   calculateAnnualSummary,
+  generateDailyExpenses,
+  getDailyExpenseStats,
+  type CategoryDistributionItem,
 } from '../lib/reports'
 import {
   getFinancialMonthRange,
@@ -50,11 +58,15 @@ import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { cn } from '../lib/cn'
+import type { TxType } from '../types'
 
 export const ReportsPage: React.FC = () => {
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [showAllMonthCategories, setShowAllMonthCategories] = useState(false)
   const [showAllYearCategories, setShowAllYearCategories] = useState(false)
+  const [monthCategoryType, setMonthCategoryType] = useState<TxType>('expense')
+  const [yearCategoryType, setYearCategoryType] = useState<TxType>('expense')
+  const [selectedCategoryModal, setSelectedCategoryModal] = useState<CategoryDistributionItem | null>(null)
 
   // Monthly data hooks
   const { user } = useAuth()
@@ -82,6 +94,14 @@ export const ReportsPage: React.FC = () => {
       return
     }
     const currentKey = range.start.toISOString()
+    const rolloverStartDate = settings?.rolloverStartDate
+      ? settings.rolloverStartDate instanceof Date
+        ? settings.rolloverStartDate
+        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
+          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
+          : new Date(settings.rolloverStartDate as unknown as string)
+      : null
+
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
@@ -90,22 +110,20 @@ export const ReportsPage: React.FC = () => {
       },
       (err) => {
         console.error('Failed to subscribe prior balance in ReportsPage:', err)
-      }
+      },
+      rolloverStartDate
     )
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, settings?.rolloverStartDate])
 
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
-  const effectiveRollover =
-    (isRolloverEnabled
-      ? isCurrentFiscalMonth
-        ? (appData?.rolloverBalanceFils ?? 0)
-        : effectiveLocalRollover
-      : 0) + (settings?.openingBalanceFils ?? 0)
+  const effectiveRollover = isCurrentFiscalMonth
+    ? (appData?.rolloverBalanceFils ?? 0)
+    : (isRolloverEnabled ? effectiveLocalRollover : 0) + (settings?.openingBalanceFils ?? 0)
 
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
@@ -215,9 +233,37 @@ export const ReportsPage: React.FC = () => {
   )
 
   const monthCategoryDist = useMemo(
-    () => calculateCategoryDistribution(monthTransactions, categories, 'expense'),
-    [monthTransactions, categories]
+    () => calculateCategoryDistribution(monthTransactions, categories, monthCategoryType),
+    [monthTransactions, categories, monthCategoryType]
   )
+
+  const modalTransactions = useMemo(() => {
+    if (!selectedCategoryModal) return []
+    const list = reportPeriod === 'monthly' ? monthTransactions : yearTransactions
+    const targetType = reportPeriod === 'monthly' ? monthCategoryType : yearCategoryType
+    return list
+      .filter((tx) => tx.categoryId === selectedCategoryModal.categoryId && tx.type === targetType)
+      .sort((a, b) => {
+        const da = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
+        const db = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
+        return db - da
+      })
+  }, [
+    selectedCategoryModal,
+    reportPeriod,
+    monthTransactions,
+    yearTransactions,
+    monthCategoryType,
+    yearCategoryType,
+  ])
+
+  const dailyExpenses = useMemo(() => {
+    return generateDailyExpenses(monthTransactions, range, new Date())
+  }, [monthTransactions, range])
+
+  const dailyStats = useMemo(() => {
+    return getDailyExpenseStats(dailyExpenses)
+  }, [dailyExpenses])
 
   const monthComparison = useMemo(() => {
     if (prevMonthSums.expense === 0 || monthSums.expense === 0) return null
@@ -252,8 +298,8 @@ export const ReportsPage: React.FC = () => {
     [yearTransactions, selectedYear, monthStartDay]
   )
   const yearCategoryDist = useMemo(
-    () => calculateCategoryDistribution(yearTransactions, categories, 'expense'),
-    [yearTransactions, categories]
+    () => calculateCategoryDistribution(yearTransactions, categories, yearCategoryType),
+    [yearTransactions, categories, yearCategoryType]
   )
 
   const annualSummary = useMemo(() => {
@@ -297,6 +343,16 @@ export const ReportsPage: React.FC = () => {
                 { value: 'yearly', label: 'تقرير سنوي' },
               ]}
             />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              icon={<Printer className="w-3.5 h-3.5" />}
+              className="print-hide hidden sm:inline-flex"
+            >
+              طباعة / حفظ PDF
+            </Button>
             {reportPeriod === 'monthly' ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
                 {!isCurrentMonth && (
@@ -502,13 +558,62 @@ export const ReportsPage: React.FC = () => {
             </Card>
           </div>
 
+          {/* Daily Expense Chart Card */}
+          <Card className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  المصروف اليومي خلال الشهر
+                </h2>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  توزيع الإنفاق اليومي لتحديد أيام الذروة والأيام الخالية من المصاريف
+                </p>
+              </div>
+
+              {/* Stats badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {dailyStats.highestDay && dailyStats.highestDay.amountFils > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200/60 dark:border-red-800/40">
+                    <span>أعلى صرف:</span>
+                    <span>
+                      {toWesternDigits(formatDate(dailyStats.highestDay.date, 'd MMMM', { locale: ar }))}
+                    </span>
+                    <span>({format(dailyStats.highestDay.amountFils)})</span>
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>أيام بدون مصاريف:</span>
+                  <span>{toWesternDigits(String(dailyStats.zeroSpendDaysCount))} يوم</span>
+                </span>
+              </div>
+            </div>
+
+            <DailyExpenseChart data={dailyExpenses} className="pt-2" />
+          </Card>
+
+          {/* Category Filter Controls */}
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+            <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+              {monthCategoryType === 'expense' ? 'تحليل المصروفات حسب التصنيف' : 'تحليل المداخيل حسب التصنيف'}
+            </h2>
+            <SegmentedControl<TxType>
+              value={monthCategoryType}
+              onChange={setMonthCategoryType}
+              options={[
+                { value: 'expense', label: 'المصروفات' },
+                { value: 'income', label: 'المداخيل' },
+              ]}
+            />
+          </div>
+
           {/* Monthly Charts & Top Categories Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Donut Chart */}
             <Card className="p-5 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
-                  توزيع المصاريف حسب التصنيف
+                  {monthCategoryType === 'expense' ? 'توزيع المصاريف حسب التصنيف' : 'توزيع المداخيل حسب التصنيف'}
                 </h2>
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                   {monthCategoryDist.length} تصنيفات
@@ -523,10 +628,10 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
-                  أعلى التصنيفات إنفاقاً
+                  {monthCategoryType === 'expense' ? 'أعلى التصنيفات إنفاقاً' : 'أعلى التصنيفات دخلاً'}
                 </h2>
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                  النسبة المئوية من الإنفاق
+                  {monthCategoryType === 'expense' ? 'النسبة المئوية من الإنفاق' : 'النسبة المئوية من الدخل'}
                 </span>
               </div>
 
@@ -550,19 +655,34 @@ export const ReportsPage: React.FC = () => {
                 </div>
               ) : monthCategoryDist.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
-                  لا توجد مصاريف مسجلة لهذا الشهر
+                  {monthCategoryType === 'expense'
+                    ? 'لا توجد مصاريف مسجلة لهذا الشهر'
+                    : 'لا توجد مداخيل مسجلة لهذا الشهر'}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(showAllMonthCategories
                     ? monthCategoryDist
                     : monthCategoryDist.slice(0, 6)
                   ).map((item) => (
-                    <div key={item.categoryId} className="space-y-1.5">
+                    <div
+                      key={item.categoryId}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedCategoryModal(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedCategoryModal(item)
+                        }
+                      }}
+                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                      title="اضغط لعرض المعاملات التابعة لهذا التصنيف"
+                    >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
@@ -766,13 +886,25 @@ export const ReportsPage: React.FC = () => {
           <div className="space-y-6">
             {/* Top Categories Annual */}
             <Card className="p-5">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
-                  أعلى التصنيفات إنفاقاً في السنة
-                </h2>
-                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                  حسب إجمالي المصاريف
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                    {yearCategoryType === 'expense'
+                      ? 'أعلى التصنيفات إنفاقاً في السنة'
+                      : 'أعلى التصنيفات دخلاً في السنة'}
+                  </h2>
+                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    {yearCategoryType === 'expense' ? 'حسب إجمالي المصاريف' : 'حسب إجمالي المداخيل'}
+                  </span>
+                </div>
+                <SegmentedControl<TxType>
+                  value={yearCategoryType}
+                  onChange={setYearCategoryType}
+                  options={[
+                    { value: 'expense', label: 'المصروفات' },
+                    { value: 'income', label: 'المداخيل' },
+                  ]}
+                />
               </div>
 
               {yearLoading ? (
@@ -795,19 +927,34 @@ export const ReportsPage: React.FC = () => {
                 </div>
               ) : yearCategoryDist.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
-                  لا توجد مصاريف مسجلة في هذه السنة
+                  {yearCategoryType === 'expense'
+                    ? 'لا توجد مصاريف مسجلة في هذه السنة'
+                    : 'لا توجد مداخيل مسجلة في هذه السنة'}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(showAllYearCategories
                     ? yearCategoryDist
                     : yearCategoryDist.slice(0, 6)
                   ).map((item) => (
-                    <div key={item.categoryId} className="space-y-1.5">
+                    <div
+                      key={item.categoryId}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedCategoryModal(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedCategoryModal(item)
+                        }
+                      }}
+                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                      title="اضغط لعرض المعاملات التابعة لهذا التصنيف"
+                    >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
@@ -887,39 +1034,179 @@ export const ReportsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {yearlyBreakdown.map((row) => (
-                      <tr
-                        key={row.monthIndex}
-                        className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors"
-                      >
-                        <td className="p-2.5 font-bold text-slate-700 dark:text-slate-200">
-                          {row.monthName}
-                        </td>
-                        <td className="p-2.5 font-bold text-emerald-600 dark:text-emerald-400">
-                          {format(row.income)}
-                        </td>
-                        <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
-                          {format(row.expense)}
-                        </td>
-                        <td
+                    {yearlyBreakdown.map((row) => {
+                      const isCurrentRowMonth =
+                        selectedYear === currentYear &&
+                        row.monthIndex === currentFiscalInfo.monthIndex
+                      const isFutureMonth =
+                        selectedYear > currentYear ||
+                        (selectedYear === currentYear &&
+                          row.monthIndex > currentFiscalInfo.monthIndex)
+                      const isUnstartedFuture =
+                        isFutureMonth && row.income === 0 && row.expense === 0
+
+                      return (
+                        <tr
+                          key={row.monthIndex}
                           className={cn(
-                            'p-2.5 font-extrabold',
-                            row.balance >= 0
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-red-500 dark:text-red-400'
+                            'border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors',
+                            isCurrentRowMonth &&
+                              'bg-emerald-50/70 dark:bg-emerald-950/40 font-bold border-s-4 border-emerald-500'
                           )}
                         >
-                          {format(row.balance)}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="p-2.5 font-bold text-slate-700 dark:text-slate-200">
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              <span>{row.monthName}</span>
+                              {isCurrentRowMonth && (
+                                <span className="px-1.5 py-0.5 text-[10px] rounded-md bg-emerald-500 text-white font-bold">
+                                  الشهر الحالي
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-bold text-emerald-600 dark:text-emerald-400">
+                            {isUnstartedFuture ? (
+                              <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
+                                لم يبدأ بعد
+                              </span>
+                            ) : (
+                              format(row.income)
+                            )}
+                          </td>
+                          <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
+                            {isUnstartedFuture ? (
+                              <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
+                                لم يبدأ بعد
+                              </span>
+                            ) : (
+                              format(row.expense)
+                            )}
+                          </td>
+                          <td
+                            className={cn(
+                              'p-2.5 font-extrabold',
+                              row.balance >= 0
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-red-500 dark:text-red-400'
+                            )}
+                          >
+                            {isUnstartedFuture ? (
+                              <span className="text-slate-400 dark:text-slate-500 text-[11px] font-normal">
+                                -
+                              </span>
+                            ) : (
+                              format(row.balance)
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-300 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-800/80 font-black">
+                      <td className="p-2.5 text-slate-800 dark:text-slate-100 font-black">
+                        الإجمالي السنوي
+                      </td>
+                      <td className="p-2.5 text-emerald-600 dark:text-emerald-400 font-black">
+                        {format(yearSums.income)}
+                      </td>
+                      <td className="p-2.5 text-red-500 dark:text-red-400 font-black">
+                        {format(yearSums.expense)}
+                      </td>
+                      <td
+                        className={cn(
+                          'p-2.5 font-black',
+                          yearSums.balance >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-red-500 dark:text-red-400'
+                        )}
+                      >
+                        {format(yearSums.balance)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </Card>
           </div>
         </div>
       )}
+
+      {/* Category Transactions Modal */}
+      <Modal
+        isOpen={selectedCategoryModal !== null}
+        onClose={() => setSelectedCategoryModal(null)}
+        title={selectedCategoryModal ? `معاملات ${selectedCategoryModal.name}` : undefined}
+      >
+        <div className="space-y-4 pt-1">
+          {selectedCategoryModal && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+              <div className="flex items-center gap-2.5">
+                <CategoryIcon
+                  icon={selectedCategoryModal.icon}
+                  color={selectedCategoryModal.color}
+                  size="md"
+                />
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                  {selectedCategoryModal.name}
+                </span>
+              </div>
+              <div className="text-end">
+                <div className="text-sm font-black text-slate-800 dark:text-slate-100">
+                  {format(selectedCategoryModal.amountFils)}
+                </div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold">
+                  {selectedCategoryModal.percentage}% من الإجمالي
+                </div>
+              </div>
+            </div>
+          )}
+
+          {modalTransactions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
+              لا توجد معاملات مسجلة في هذا التصنيف خلال هذه الفترة
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[50vh] overflow-y-auto ps-1 pe-2 -me-2">
+              {modalTransactions.map((tx) => {
+                const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+                return (
+                  <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-slate-700 dark:text-slate-200">
+                        {tx.note?.trim() ? tx.note : selectedCategoryModal?.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        {toWesternDigits(formatDate(txDate, 'd MMMM yyyy', { locale: ar }))}
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        'font-black text-sm',
+                        tx.type === 'income'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-500 dark:text-red-400'
+                      )}
+                    >
+                      {format(tx.amountFils)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div className="pt-2 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedCategoryModal(null)}
+            >
+              إغلاق
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

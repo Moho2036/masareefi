@@ -139,4 +139,47 @@ html.dark aside[aria-label="القائمة الجانبية"],
   touch-action: pan-y;
 }
 
+/* Print optimization */
+@media print {
+  header,
+  nav,
+  button,
+  aside[aria-label="القائمة الجانبية"],
+  .print-hide {
+    display: none !important;
+  }
+
+  body,
+  main {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 11pt !important;
+  }
+
+  .grid {
+    display: block !important;
+  }
+
+  .grid > * {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .card,
+  div[class*="rounded-2xl"],
+  div[class*="rounded-xl"] {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #d4d4d8 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  @page {
+    margin: 1.5cm;
+    size: auto;
+  }
+}
+
 

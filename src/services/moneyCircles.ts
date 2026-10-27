@@ -45,6 +45,8 @@ interface FirestoreCircleDoc {
   expenseCategoryId?: string
   incomeCategoryId?: string
   categoryId?: string
+  shareType?: 'full' | 'half' | 'double'
+  secondTurnMonth?: number
 }
 
 export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
@@ -85,6 +87,18 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
     if (typeof circle.categoryId === 'string' && circle.categoryId.trim()) {
       docData.categoryId = circle.categoryId.trim().slice(0, 128)
     }
+    if (circle.shareType && ['full', 'half', 'double'].includes(circle.shareType)) {
+      docData.shareType = circle.shareType
+    }
+    if (
+      circle.secondTurnMonth !== undefined &&
+      circle.secondTurnMonth !== null &&
+      Number.isFinite(Number(circle.secondTurnMonth)) &&
+      Number(circle.secondTurnMonth) >= 1 &&
+      Number(circle.secondTurnMonth) <= Math.round(circle.membersCount)
+    ) {
+      docData.secondTurnMonth = Math.round(Number(circle.secondTurnMonth))
+    }
     return docData
   },
   fromFirestore(snapshot: QueryDocumentSnapshot): MoneyCircle {
@@ -109,6 +123,8 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
       ...(data.expenseCategoryId ? { expenseCategoryId: data.expenseCategoryId } : {}),
       ...(data.incomeCategoryId ? { incomeCategoryId: data.incomeCategoryId } : {}),
       ...(data.categoryId ? { categoryId: data.categoryId } : {}),
+      ...(data.shareType ? { shareType: data.shareType } : {}),
+      ...(data.secondTurnMonth !== undefined ? { secondTurnMonth: data.secondTurnMonth } : {}),
       ...(data.isManager !== undefined ? { isManager: Boolean(data.isManager) } : {}),
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
     }
@@ -177,6 +193,10 @@ export async function addMoneyCircle(
     ...(circle.expenseCategoryId ? { expenseCategoryId: circle.expenseCategoryId } : {}),
     ...(circle.incomeCategoryId ? { incomeCategoryId: circle.incomeCategoryId } : {}),
     ...(circle.categoryId ? { categoryId: circle.categoryId } : {}),
+    ...(circle.shareType ? { shareType: circle.shareType } : {}),
+    ...(circle.secondTurnMonth !== undefined && circle.secondTurnMonth !== null
+      ? { secondTurnMonth: Math.round(Number(circle.secondTurnMonth)) }
+      : {}),
     createdAt: new Date(),
   }
 
@@ -219,6 +239,18 @@ export async function updateMoneyCircle(
   if (partial.expenseCategoryId !== undefined) updates.expenseCategoryId = partial.expenseCategoryId
   if (partial.incomeCategoryId !== undefined) updates.incomeCategoryId = partial.incomeCategoryId
   if (partial.categoryId !== undefined) updates.categoryId = partial.categoryId
+  if (partial.shareType !== undefined) updates.shareType = partial.shareType
+  if (partial.secondTurnMonth !== undefined) {
+    if (
+      partial.secondTurnMonth !== null &&
+      Number.isFinite(Number(partial.secondTurnMonth)) &&
+      Number(partial.secondTurnMonth) >= 1
+    ) {
+      updates.secondTurnMonth = Math.round(Number(partial.secondTurnMonth))
+    } else {
+      updates.secondTurnMonth = deleteField()
+    }
+  }
   if (options?.defaultCategoryId && !currentCircle.expenseCategoryId && partial.expenseCategoryId === undefined) {
     updates.expenseCategoryId = options.defaultCategoryId
   }
@@ -256,6 +288,23 @@ export async function updateMoneyCircle(
       ? partial.startDate
       : (partial.startDate ? new Date(partial.startDate) : currentCircle.startDate)
 
+  const effectiveShareType =
+    partial.shareType !== undefined ? partial.shareType : currentCircle.shareType
+  const effectiveSecondTurn =
+    partial.secondTurnMonth !== undefined ? partial.secondTurnMonth : currentCircle.secondTurnMonth
+
+  const userInstallmentAmount =
+    effectiveShareType === 'half'
+      ? Math.round(effectiveMonthly / 2)
+      : effectiveShareType === 'double'
+        ? effectiveMonthly * 2
+        : effectiveMonthly
+
+  const exemptMonths =
+    effectiveShareType === 'double' && effectiveSecondTurn
+      ? [effectiveTurn, effectiveSecondTurn]
+      : [effectiveTurn]
+
   // 1. Linked recurring rule handling
   const candidateRecId =
     partial.recurringId !== undefined ? partial.recurringId : currentCircle.recurringId
@@ -289,8 +338,9 @@ export async function updateMoneyCircle(
     if (recSnap.exists()) {
       const recData = recSnap.data()
       const recUpdates: Record<string, unknown> = {
-        amountFils: effectiveMonthly,
+        amountFils: userInstallmentAmount,
         skipMonth: effectiveTurn,
+        skipMonths: exemptMonths,
       }
 
       // Only update title/note if circle name explicitly changed or if rule had no title/note
@@ -326,7 +376,9 @@ export async function updateMoneyCircle(
         startDateChanged ||
         partial.myTurnMonth !== undefined ||
         partial.membersCount !== undefined ||
-        partial.members !== undefined
+        partial.members !== undefined ||
+        partial.shareType !== undefined ||
+        partial.secondTurnMonth !== undefined
 
       if (shouldRecalculateNextDate) {
         const newNextDate = getNextCircleDueDate(
@@ -334,7 +386,8 @@ export async function updateMoneyCircle(
           effectiveMembersCount,
           effectiveTurn,
           userMember?.paidMonths || [],
-          userMember?.paymentsByMonth
+          userMember?.paymentsByMonth,
+          exemptMonths
         )
         recUpdates.nextDate = Timestamp.fromDate(newNextDate)
       }
@@ -362,7 +415,8 @@ export async function updateMoneyCircle(
           effectiveMembersCount,
           effectiveTurn,
           userMember?.paidMonths || [],
-          userMember?.paymentsByMonth
+          userMember?.paymentsByMonth,
+          exemptMonths
         )
         const categoryId =
           options?.defaultCategoryId ||
@@ -372,7 +426,7 @@ export async function updateMoneyCircle(
 
         batch.set(newRecRef, {
           type: 'expense',
-          amountFils: effectiveMonthly,
+          amountFils: userInstallmentAmount,
           categoryId,
           title: `قسط ${effectiveName}`.slice(0, 100),
           note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
@@ -383,6 +437,7 @@ export async function updateMoneyCircle(
           active: true,
           circleId: id,
           skipMonth: effectiveTurn,
+          skipMonths: exemptMonths,
           createdAt: serverTimestamp(),
         })
         updates.recurringId = newRecRef.id
@@ -400,7 +455,8 @@ export async function updateMoneyCircle(
       effectiveMembersCount,
       effectiveTurn,
       userMember?.paidMonths || [],
-      userMember?.paymentsByMonth
+      userMember?.paymentsByMonth,
+      exemptMonths
     )
     const categoryId =
       options.defaultCategoryId ||
@@ -410,7 +466,7 @@ export async function updateMoneyCircle(
 
     batch.set(newRecRef, {
       type: 'expense',
-      amountFils: effectiveMonthly,
+      amountFils: userInstallmentAmount,
       categoryId,
       title: `قسط ${effectiveName}`.slice(0, 100),
       note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
@@ -421,6 +477,7 @@ export async function updateMoneyCircle(
       active: true,
       circleId: id,
       skipMonth: effectiveTurn,
+      skipMonths: exemptMonths,
       createdAt: serverTimestamp(),
     })
     updates.recurringId = newRecRef.id
@@ -463,7 +520,17 @@ export async function updateMoneyCircle(
       if (diffMonths < 0 || currentMonthIndex < effectiveTurn) {
         batch.delete(payoutRef)
       } else {
-        const netAmountFils = (effectiveMonthly * effectiveMembersCount) - effectiveMonthly
+        const userMonthly =
+          effectiveShareType === 'half'
+            ? Math.round(effectiveMonthly / 2)
+            : effectiveShareType === 'double'
+              ? effectiveMonthly * 2
+              : effectiveMonthly
+        const userGross =
+          effectiveShareType === 'half'
+            ? Math.round((effectiveMonthly * effectiveMembersCount) / 2)
+            : effectiveMonthly * effectiveMembersCount
+        const netAmountFils = userGross - userMonthly
         if (netAmountFils > 0) {
           const payoutUpdates: Record<string, unknown> = {
             amountFils: netAmountFils,
@@ -614,7 +681,19 @@ export async function depositCircleNetPayout(
     return payoutTxId
   }
 
-  const netAmountFils = circle.totalAmountFils - circle.monthlyAmountFils
+  const userMonthly =
+    circle.shareType === 'half'
+      ? Math.round(circle.monthlyAmountFils / 2)
+      : circle.shareType === 'double'
+        ? circle.monthlyAmountFils * 2
+        : circle.monthlyAmountFils
+
+  const userGross =
+    circle.shareType === 'half'
+      ? Math.round(circle.totalAmountFils / 2)
+      : circle.totalAmountFils
+
+  const netAmountFils = userGross - userMonthly
   if (netAmountFils <= 0) {
     throw new Error('صافي مبلغ الجمعية غير كافٍ للإيداع')
   }
@@ -677,7 +756,11 @@ export async function toggleCircleMemberPayment(
   }
 
   // The receiver for monthNum is exempt and cannot be toggled
-  if (targetMember.turnMonth === monthNum) {
+  const isTargetExempt =
+    targetMember.turnMonth === monthNum ||
+    (targetMember.turnMonth === circle.myTurnMonth && circle.secondTurnMonth === monthNum)
+
+  if (isTargetExempt) {
     return { isUser: targetMember.turnMonth === circle.myTurnMonth, paid: false }
   }
 
@@ -687,6 +770,13 @@ export async function toggleCircleMemberPayment(
 
   const newPaid = !hasPaid
   const isUser = targetMember.turnMonth === circle.myTurnMonth
+
+  const userInstallmentAmount =
+    circle.shareType === 'half'
+      ? Math.round(circle.monthlyAmountFils / 2)
+      : circle.shareType === 'double'
+        ? circle.monthlyAmountFils * 2
+        : circle.monthlyAmountFils
 
   const updatedMembers = circle.members.map((m) => {
     if (m.id !== memberId) return m
@@ -731,7 +821,7 @@ export async function toggleCircleMemberPayment(
       if (!txSnap.exists()) {
         batch.set(txRef, {
           type: 'expense',
-          amountFils: circle.monthlyAmountFils,
+          amountFils: userInstallmentAmount,
           categoryId: circle.expenseCategoryId || defaultCategoryId || 'cat-custom-circle',
           title: `قسط ${circle.name} (شهر ${monthNum})`.slice(0, 100),
           note: `تسجيل قسط الجمعية يدوياً لشهر ${monthNum}`.slice(0, 500),
@@ -765,12 +855,18 @@ export async function toggleCircleMemberPayment(
       const recSnap = await getDoc(recRef)
       if (recSnap.exists()) {
         const updatedUserMember = updatedMembers.find((m) => m.turnMonth === circle.myTurnMonth)
+        const exemptMonths =
+          circle.shareType === 'double' && circle.secondTurnMonth
+            ? [circle.myTurnMonth, circle.secondTurnMonth]
+            : [circle.myTurnMonth]
+
         const newNextDate = getNextCircleDueDate(
           circle.startDate,
           circle.membersCount,
           circle.myTurnMonth,
           updatedUserMember?.paidMonths || [],
-          updatedUserMember?.paymentsByMonth
+          updatedUserMember?.paymentsByMonth,
+          exemptMonths
         )
         batch.update(recRef, {
           nextDate: Timestamp.fromDate(newNextDate),
@@ -909,12 +1005,18 @@ export async function removeCircleInstallmentPayment(
     const recSnap = await getDoc(recRef)
     if (recSnap.exists()) {
       const updatedUser = updatedMembers.find((m) => m.turnMonth === circle.myTurnMonth)
+      const exemptMonths =
+        circle.shareType === 'double' && circle.secondTurnMonth
+          ? [circle.myTurnMonth, circle.secondTurnMonth]
+          : [circle.myTurnMonth]
+
       const newNextDate = getNextCircleDueDate(
         circle.startDate,
         circle.membersCount,
         circle.myTurnMonth,
         updatedUser?.paidMonths || [],
-        updatedUser?.paymentsByMonth
+        updatedUser?.paymentsByMonth,
+        exemptMonths
       )
       batch.update(recRef, {
         nextDate: Timestamp.fromDate(newNextDate),
@@ -1010,5 +1112,80 @@ export function isCircleFullyPaid(circle: MoneyCircle): boolean {
     }
   }
   return true
+}
+
+/**
+ * Swaps turnMonth between two members in a money circle.
+ * Preserves all member payment history and status.
+ * If either member is the user, updates circle.myTurnMonth and linked recurring rule.
+ */
+export async function swapMemberTurns(
+  uid: string,
+  circleId: string,
+  memberId1: string,
+  memberId2: string,
+  options?: { monthStartDay?: number }
+): Promise<void> {
+  const circleRef = doc(db, 'users', uid, 'circles', circleId)
+  const snap = await getDoc(circleRef)
+  if (!snap.exists()) {
+    throw new Error('الجمعية غير موجودة')
+  }
+
+  const circle = circleConverter.fromFirestore(snap as QueryDocumentSnapshot)
+  const m1 = circle.members.find((m) => m.id === memberId1)
+  const m2 = circle.members.find((m) => m.id === memberId2)
+
+  if (!m1 || !m2) {
+    throw new Error('أحد العضوين غير موجود في الجمعية')
+  }
+
+  const turn1 = m1.turnMonth
+  const turn2 = m2.turnMonth
+
+  if (turn1 === turn2) return
+
+  const isUser1 = turn1 === circle.myTurnMonth || m1.name === 'أنت'
+  const isUser2 = turn2 === circle.myTurnMonth || m2.name === 'أنت'
+
+  let newMyTurn = circle.myTurnMonth
+  if (isUser1) {
+    newMyTurn = turn2
+  } else if (isUser2) {
+    newMyTurn = turn1
+  }
+
+  let newSecondTurn = circle.secondTurnMonth
+  if (circle.secondTurnMonth !== undefined) {
+    if (turn1 === circle.secondTurnMonth) {
+      newSecondTurn = turn2
+    } else if (turn2 === circle.secondTurnMonth) {
+      newSecondTurn = turn1
+    }
+  }
+
+  const updatedMembers = circle.members.map((m) => {
+    if (m.id === memberId1) {
+      return { ...m, turnMonth: turn2 }
+    }
+    if (m.id === memberId2) {
+      return { ...m, turnMonth: turn1 }
+    }
+    return m
+  })
+
+  await updateMoneyCircle(
+    uid,
+    circleId,
+    {
+      members: updatedMembers,
+      myTurnMonth: newMyTurn,
+      ...(newSecondTurn !== undefined ? { secondTurnMonth: newSecondTurn } : {}),
+    },
+    {
+      monthStartDay: options?.monthStartDay,
+      createRecurringRule: Boolean(circle.recurringId),
+    }
+  )
 }
 

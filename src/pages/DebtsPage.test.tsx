@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DebtsPage } from './DebtsPage'
-import { deleteDebt, checkDebtInitialTransactionExists } from '../services/debts'
+import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
 import type { Debt } from '../types'
 
 vi.mock('../lib/firebase', () => ({
@@ -56,9 +56,11 @@ vi.mock('../hooks/useAuth', () => ({
   }),
 }))
 
+let currentDebts = mockDebts
+
 vi.mock('../hooks/useDebts', () => ({
   useDebts: () => ({
-    data: mockDebts,
+    data: currentDebts,
     loading: false,
     error: null,
   }),
@@ -87,11 +89,13 @@ vi.mock('../services/debts', () => ({
   recordDebtPayment: vi.fn().mockResolvedValue('pay-id'),
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
   checkDebtInitialTransactionExists: vi.fn().mockResolvedValue(false),
+  mergePersonDebts: vi.fn().mockResolvedValue('merged-debt-id'),
 }))
 
 describe('DebtsPage Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentDebts = mockDebts
     vi.mocked(checkDebtInitialTransactionExists).mockResolvedValue(false)
   })
 
@@ -228,5 +232,60 @@ describe('DebtsPage Component', () => {
     fireEvent.change(searchInput, { target: { value: '٣٠' } })
     expect(screen.getByText('عمر ياسين')).toBeInTheDocument()
     expect(screen.queryByText('أحمد محمود')).not.toBeInTheDocument()
+  })
+
+  it('switches between individual cards and grouped by person view', () => {
+    render(<DebtsPage />)
+    const groupedBtn = screen.getByRole('button', { name: /تجميع حسب الأشخاص/i })
+    fireEvent.click(groupedBtn)
+
+    expect(screen.getAllByText(/صافي الذمة:/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('أحمد محمود').length).toBeGreaterThanOrEqual(1)
+
+    // Switch back to individual cards
+    const cardsBtn = screen.getByRole('button', { name: /البطاقات الفردية/i })
+    fireEvent.click(cardsBtn)
+    expect(screen.queryByText(/صافي الذمة:/i)).not.toBeInTheDocument()
+  })
+
+  it('allows merging multiple debts of the same person from grouped view', async () => {
+    currentDebts = [
+      ...mockDebts,
+      {
+        id: 'debt-4',
+        personName: 'أحمد محمود',
+        type: 'lent',
+        amountFils: 20000,
+        paidFils: 0,
+        startDate: new Date('2026-09-15'),
+        dueDate: null,
+        note: 'سلفة إضافية',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-09-15'),
+      },
+    ]
+
+    render(<DebtsPage />)
+    fireEvent.click(screen.getByRole('button', { name: /تجميع حسب الأشخاص/i }))
+
+    const mergeBtn = screen.getByRole('button', { name: /دمج ديون أحمد محمود في سجل موحد/i })
+    expect(mergeBtn).toBeInTheDocument()
+    fireEvent.click(mergeBtn)
+
+    // Merge modal opens
+    expect(screen.getByText(/تأكيد دمج سجلات الديون/i)).toBeInTheDocument()
+    const confirmMergeBtn = screen.getByRole('button', { name: /تأكيد الدمج الموحد/i })
+    fireEvent.click(confirmMergeBtn)
+
+    await waitFor(() => {
+      expect(mergePersonDebts).toHaveBeenCalledWith(
+        'user-123',
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'debt-1' }),
+          expect.objectContaining({ id: 'debt-4' }),
+        ])
+      )
+    })
   })
 })

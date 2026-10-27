@@ -1,7 +1,17 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { Trash2, AlertCircle, Pencil } from 'lucide-react'
+import {
+  Trash2,
+  AlertCircle,
+  Pencil,
+  Plus,
+  Share2,
+  Copy,
+  Printer,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { DatePickerInput } from '../ui/DatePickerInput'
@@ -12,13 +22,16 @@ import {
   updateDebtPayment,
   checkDebtPaymentTransactionExists,
   compactDebtPayments,
+  addDebtEntry,
+  updateDebtEntry,
+  deleteDebtEntry,
 } from '../../services/debts'
 import { useCurrency } from '../../hooks/useCurrency'
-import { getDebtRemainingFils } from '../../lib/debts'
+import { getDebtRemainingFils, formatDebtAccountStatement } from '../../lib/debts'
 import { toWesternDigits, parseLocalDateInput } from '../../lib/dates'
 import { fromFils, toFils } from '../../lib/money'
 import { cn } from '../../lib/cn'
-import type { Debt, DebtPayment } from '../../types'
+import type { Debt, DebtPayment, DebtEntry } from '../../types'
 
 export interface PaymentHistoryModalProps {
   isOpen: boolean
@@ -50,6 +63,28 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [isCompacting, setIsCompacting] = useState(false)
 
+  // Entry management state
+  const [isAddingEntry, setIsAddingEntry] = useState(false)
+  const [newEntryAmountStr, setNewEntryAmountStr] = useState('')
+  const [newEntryDateStr, setNewEntryDateStr] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [newEntryTitle, setNewEntryTitle] = useState('')
+  const [newEntryNote, setNewEntryNote] = useState('')
+  const [newEntrySync, setNewEntrySync] = useState(true)
+  const [isSavingEntry, setIsSavingEntry] = useState(false)
+  const [entryError, setEntryError] = useState<string | null>(null)
+
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
+  const [editEntryAmountStr, setEditEntryAmountStr] = useState('')
+  const [editEntryDateStr, setEditEntryDateStr] = useState('')
+  const [editEntryTitle, setEditEntryTitle] = useState('')
+  const [editEntryNote, setEditEntryNote] = useState('')
+  const [isSavingEditEntry, setIsSavingEditEntry] = useState(false)
+  const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null)
+  const [isDeletingEntry, setIsDeletingEntry] = useState(false)
+
+  // Share statement menu state
+  const [showShareMenu, setShowShareMenu] = useState(false)
+
   const handleClose = () => {
     setConfirmDeleteId(null)
     setDeletePaymentTx(true)
@@ -57,6 +92,11 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setEditSyncTx(true)
     setCheckingEditSync(false)
     setEditError(null)
+    setIsAddingEntry(false)
+    setEditingEntryId(null)
+    setConfirmDeleteEntryId(null)
+    setEntryError(null)
+    setShowShareMenu(false)
     onClose()
   }
 
@@ -196,17 +236,149 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     }
   }
 
+  const rawEntries: DebtEntry[] =
+    debt.entries && debt.entries.length > 0
+      ? debt.entries
+      : [
+          {
+            id: `base_${debt.id}`,
+            amountFils: debt.amountFils,
+            date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+            title: debt.type === 'lent' ? 'أصل السلفة / الدين' : 'أصل الدين المقترض',
+            note: debt.note || '',
+            createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
+          },
+        ]
+
+  const handleAddEntry = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    const amountFils = toFils(newEntryAmountStr, config.decimals)
+    if (amountFils <= 0) {
+      setEntryError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    setIsSavingEntry(true)
+    setEntryError(null)
+    try {
+      const date = parseLocalDateInput(newEntryDateStr)
+      await addDebtEntry(
+        user.uid,
+        debt,
+        {
+          amountFils,
+          date,
+          title: newEntryTitle.trim() || undefined,
+          note: newEntryNote.trim() || undefined,
+        },
+        { syncTransaction: newEntrySync }
+      )
+      showToast('تمت إضافة السلفة وتحديث إجمالي الدين بنجاح', 'success')
+      setIsAddingEntry(false)
+      setNewEntryAmountStr('')
+      setNewEntryTitle('')
+      setNewEntryNote('')
+      onSuccess?.()
+    } catch (err) {
+      console.error('Error adding debt entry:', err)
+      setEntryError(err instanceof Error ? err.message : 'فشل إضافة السلفة')
+    } finally {
+      setIsSavingEntry(false)
+    }
+  }
+
+  const handleStartEditEntry = (entry: DebtEntry) => {
+    setEditingEntryId(entry.id)
+    setEditEntryAmountStr(String(fromFils(entry.amountFils)))
+    const eDate = entry.date instanceof Date ? entry.date : new Date(entry.date)
+    setEditEntryDateStr(format(eDate, 'yyyy-MM-dd'))
+    setEditEntryTitle(entry.title || '')
+    setEditEntryNote(entry.note || '')
+    setConfirmDeleteEntryId(null)
+    setEntryError(null)
+  }
+
+  const handleSaveEditEntry = async (entryId: string) => {
+    if (!user) return
+    const amountFils = toFils(editEntryAmountStr, config.decimals)
+    if (amountFils <= 0) {
+      setEntryError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    setIsSavingEditEntry(true)
+    setEntryError(null)
+    try {
+      const date = parseLocalDateInput(editEntryDateStr)
+      await updateDebtEntry(user.uid, debt, entryId, {
+        amountFils,
+        date,
+        title: editEntryTitle.trim() || undefined,
+        note: editEntryNote.trim() || undefined,
+      })
+      showToast('تم تحديث السلفة بنجاح', 'success')
+      setEditingEntryId(null)
+      onSuccess?.()
+    } catch (err) {
+      console.error('Error updating debt entry:', err)
+      setEntryError(err instanceof Error ? err.message : 'فشل تحديث السلفة')
+    } finally {
+      setIsSavingEditEntry(false)
+    }
+  }
+
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!user) return
+    setIsDeletingEntry(true)
+    try {
+      await deleteDebtEntry(user.uid, debt, entryId)
+      showToast('تم حذف السلفة وتحديث إجمالي الدين', 'success')
+      setConfirmDeleteEntryId(null)
+      onSuccess?.()
+    } catch (err) {
+      console.error('Error deleting debt entry:', err)
+      showToast(err instanceof Error ? err.message : 'فشل حذف السلفة', 'error')
+    } finally {
+      setIsDeletingEntry(false)
+    }
+  }
+
+  const handleCopyStatement = async () => {
+    try {
+      const text = formatDebtAccountStatement(debt, config.symbol)
+      await navigator.clipboard.writeText(text)
+      showToast('تم نسخ كشف الحساب بنجاح', 'success')
+      setShowShareMenu(false)
+    } catch (err) {
+      console.error('Clipboard copy failed:', err)
+      showToast('فشل نسخ كشف الحساب', 'error')
+    }
+  }
+
+  const handleWhatsAppShare = () => {
+    const text = formatDebtAccountStatement(debt, config.symbol)
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setShowShareMenu(false)
+  }
+
+  const handlePrint = () => {
+    window.print()
+    setShowShareMenu(false)
+  }
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`سجل الدفعات — ${debt.personName}`}
+      title={`سجل الحركات وكشف الحساب — ${debt.personName}`}
     >
       <div className="space-y-4">
         {/* Summary Card */}
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/60 grid grid-cols-3 gap-2 text-center">
           <div>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المبلغ الأصلي</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المبلغ الكلي</span>
             <span className="text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200">
               {formatCurrency(debt.amountFils)}
             </span>
@@ -231,6 +403,311 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Share Account Statement Strip */}
+        <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+              <Share2 className="w-4 h-4 text-emerald-600" />
+              <span>مشاركة كشف الحساب (نسخ / واتساب / طباعة)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowShareMenu((prev) => !prev)}
+              className="text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>{showShareMenu ? 'إغلاق الخيارات' : 'خيارات المشاركة'}</span>
+              {showShareMenu ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {showShareMenu && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-800/40">
+              <button
+                type="button"
+                onClick={handleCopyStatement}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shadow-xs transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>نسخ للحافظة</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleWhatsAppShare}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>إرسال عبر واتساب</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shadow-xs transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                <span>طباعة الكشف</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 1: Entries (أصل الديون والسلف) */}
+        <div className="space-y-2.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black text-slate-700 dark:text-slate-300">
+              تفاصيل السلف وأصل الديون المسجلة ({rawEntries.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsAddingEntry((prev) => !prev)}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ إضافة سلفة جديدة على هذا الحساب</span>
+            </button>
+          </div>
+
+          {entryError && (
+            <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/50">
+              {entryError}
+            </div>
+          )}
+
+          {/* Inline Add Entry Form */}
+          {isAddingEntry && (
+            <form onSubmit={handleAddEntry} className="p-3 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 space-y-2.5">
+              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
+                تسجيل سلفة إضافية جديدة لنفس الشخص
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ المطلوب إضافته</label>
+                  <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={newEntryAmountStr}
+                      placeholder="0.000"
+                      onChange={(e) => setNewEntryAmountStr(toWesternDigits(e.target.value))}
+                      className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
+                      required
+                    />
+                    <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
+                  </div>
+                </div>
+                <div>
+                  <DatePickerInput
+                    label="تاريخ السلفة"
+                    value={newEntryDateStr}
+                    onChange={(val) => setNewEntryDateStr(val)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">العنوان أو السبب (اختياري)</label>
+                  <input
+                    type="text"
+                    value={newEntryTitle}
+                    onChange={(e) => setNewEntryTitle(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                    placeholder="مثال: سلفة تكاليف السفر..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">ملاحظات إضافية (اختياري)</label>
+                  <input
+                    type="text"
+                    value={newEntryNote}
+                    onChange={(e) => setNewEntryNote(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                    placeholder="تفاصيل إضافية..."
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={newEntrySync}
+                  onChange={(e) => setNewEntrySync(e.target.checked)}
+                  className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                />
+                <span>خصم/إيداع مبلغ السلفة من الرصيد كمعاملة مالية</span>
+              </label>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingEntry(false)}
+                  disabled={isSavingEntry}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEntry}
+                  className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEntry ? 'جاري الحفظ...' : 'حفظ السلفة'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Entries list */}
+          <div className="space-y-2 max-h-48 overflow-y-auto pe-1">
+            {rawEntries.map((e, idx) => {
+              const formattedDate = toWesternDigits(format(new Date(e.date), 'd MMMM yyyy', { locale: ar }))
+              const isEditingThis = editingEntryId === e.id
+              const isConfirmDelete = confirmDeleteEntryId === e.id
+
+              if (isEditingThis) {
+                return (
+                  <div key={e.id} className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ</label>
+                        <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editEntryAmountStr}
+                            onChange={(ev) => setEditEntryAmountStr(toWesternDigits(ev.target.value))}
+                            className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
+                            required
+                          />
+                          <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <DatePickerInput
+                          label="التاريخ"
+                          value={editEntryDateStr}
+                          onChange={(val) => setEditEntryDateStr(val)}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={editEntryTitle}
+                        onChange={(ev) => setEditEntryTitle(ev.target.value)}
+                        placeholder="العنوان أو سبب السلفة..."
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={editEntryNote}
+                        onChange={(ev) => setEditEntryNote(ev.target.value)}
+                        placeholder="ملاحظة السلفة..."
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                      <button
+                        type="button"
+                        onClick={() => setEditingEntryId(null)}
+                        disabled={isSavingEditEntry}
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEditEntry(e.id)}
+                        disabled={isSavingEditEntry}
+                        className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
+                      >
+                        {isSavingEditEntry ? 'جاري الحفظ...' : 'حفظ التعديل'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (isConfirmDelete) {
+                return (
+                  <div key={e.id} className="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/60 space-y-2">
+                    <span className="text-xs font-bold text-red-700 dark:text-red-400 block">
+                      هل أنت متأكد من حذف هذه السلفة بقيمة ({formatCurrency(e.amountFils)})؟
+                    </span>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteEntryId(null)}
+                        disabled={isDeletingEntry}
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEntry(e.id)}
+                        disabled={isDeletingEntry}
+                        className="px-3 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white cursor-pointer disabled:opacity-50"
+                      >
+                        {isDeletingEntry ? 'جاري الحذف...' : 'تأكيد الحذف'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div key={e.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        {e.title || `سلفة #${idx + 1}`}
+                      </span>
+                      <span className="text-xs font-black text-slate-900 dark:text-slate-100">
+                        ({formatCurrency(e.amountFils)})
+                      </span>
+                      {e.transactionId && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                          مرتبط بالرصيد
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                      {formattedDate} {e.note ? `• ${e.note}` : ''}
+                    </div>
+                  </div>
+                  {debt.entries && debt.entries.length > 0 && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditEntry(e)}
+                        className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg cursor-pointer"
+                        title="تعديل السلفة"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteEntryId(e.id)}
+                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg cursor-pointer"
+                        title="حذف السلفة"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* SECTION 2: Payments (سجل دفعات السداد) */}
+        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black text-slate-700 dark:text-slate-300">
+              سجل دفعات السداد ({payments.length})
+            </h3>
+          </div>
 
         {/* Compaction Banner */}
         {payments.length >= 90 && (
@@ -483,6 +960,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               })}
           </div>
         )}
+        </div>
 
         <div className="pt-2">
           <Button

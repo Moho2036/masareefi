@@ -1,3 +1,4 @@
+import { format } from 'date-fns'
 import type { Debt, DebtType } from '../types'
 export { normalizeArabic } from './aggregate'
 import { normalizeArabic } from './aggregate'
@@ -46,6 +47,10 @@ export interface DebtSummary {
   lentActiveCount: number
   borrowedActiveCount: number
   settledCount: number
+  overdueCount: number
+  overdueFils: number
+  upcomingCount: number
+  upcomingFils: number
 }
 
 /**
@@ -53,13 +58,22 @@ export interface DebtSummary {
  * - lentFils: total outstanding balance owed to the user (أطلب الناس)
  * - borrowedFils: total outstanding balance the user owes (عليّ للناس)
  * - netFils: lentFils - borrowedFils
+ * - overdueCount & overdueFils: debts past due date
+ * - upcomingCount & upcomingFils: debts due within next 7 days
  */
-export function calculateDebtSummary(debts: Debt[]): DebtSummary {
+export function calculateDebtSummary(debts: Debt[], referenceDate = new Date()): DebtSummary {
   let lentFils = 0
   let borrowedFils = 0
   let lentActiveCount = 0
   let borrowedActiveCount = 0
   let settledCount = 0
+  let overdueCount = 0
+  let overdueFils = 0
+  let upcomingCount = 0
+  let upcomingFils = 0
+
+  const now = referenceDate.getTime()
+  const sevenDaysFromNow = now + 7 * 24 * 60 * 60 * 1000
 
   for (const debt of debts) {
     if (debt.settled) {
@@ -76,6 +90,17 @@ export function calculateDebtSummary(debts: Debt[]): DebtSummary {
       borrowedFils += remaining
       borrowedActiveCount++
     }
+
+    if (isDebtOverdue(debt, referenceDate)) {
+      overdueCount++
+      overdueFils += remaining
+    } else if (debt.dueDate) {
+      const dueTime = new Date(debt.dueDate).getTime()
+      if (dueTime <= sevenDaysFromNow) {
+        upcomingCount++
+        upcomingFils += remaining
+      }
+    }
   }
 
   return {
@@ -85,6 +110,10 @@ export function calculateDebtSummary(debts: Debt[]): DebtSummary {
     lentActiveCount,
     borrowedActiveCount,
     settledCount,
+    overdueCount,
+    overdueFils,
+    upcomingCount,
+    upcomingFils,
   }
 }
 
@@ -128,6 +157,9 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
       if (normalizedQuery) {
         const nameNorm = normalizeArabic(debt.personName)
         const noteNorm = normalizeArabic(debt.note || '')
+        const entriesNorm = (debt.entries || [])
+          .map((e) => normalizeArabic(`${e.title || ''} ${e.note || ''}`))
+          .join(' ')
 
         const rawSearch = search.trim()
         const westernQuery = toWesternDigits(rawSearch).replace(/,/g, '')
@@ -151,7 +183,12 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
                 fromFils(remainingFils).toFixed(3).includes(westernQuery))
         )
 
-        if (!nameNorm.includes(normalizedQuery) && !noteNorm.includes(normalizedQuery) && !matchesAmount) {
+        if (
+          !nameNorm.includes(normalizedQuery) &&
+          !noteNorm.includes(normalizedQuery) &&
+          !entriesNorm.includes(normalizedQuery) &&
+          !matchesAmount
+        ) {
           return false
         }
       }
@@ -197,4 +234,116 @@ export function findLinkedDebtPayment(
     }
   }
   return null
+}
+
+export interface PersonDebtsGroup {
+  personKey: string
+  canonicalName: string
+  debts: Debt[]
+  totalLentRemainingFils: number
+  totalBorrowedRemainingFils: number
+  netRemainingFils: number
+  canMerge: boolean
+  canMergeLent: boolean
+  canMergeBorrowed: boolean
+}
+
+export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
+  const map = new Map<string, { canonicalName: string; debts: Debt[] }>()
+  for (const debt of debts) {
+    const key = normalizeArabic(debt.personName || '').trim() || 'unnamed'
+    const existing = map.get(key)
+    if (existing) {
+      existing.debts.push(debt)
+    } else {
+      map.set(key, { canonicalName: debt.personName.trim() || 'غير مسمى', debts: [debt] })
+    }
+  }
+
+  const groups: PersonDebtsGroup[] = []
+  for (const [personKey, { canonicalName, debts: pDebts }] of map.entries()) {
+    let totalLent = 0
+    let totalBorrowed = 0
+
+    for (const d of pDebts) {
+      if (!d.settled) {
+        const rem = getDebtRemainingFils(d)
+        if (d.type === 'lent') {
+          totalLent += rem
+        } else {
+          totalBorrowed += rem
+        }
+      }
+    }
+
+    const canMergeLent = pDebts.filter((d) => d.type === 'lent').length >= 2
+    const canMergeBorrowed = pDebts.filter((d) => d.type === 'borrowed').length >= 2
+
+    groups.push({
+      personKey,
+      canonicalName,
+      debts: pDebts,
+      totalLentRemainingFils: totalLent,
+      totalBorrowedRemainingFils: totalBorrowed,
+      netRemainingFils: totalLent - totalBorrowed,
+      canMerge: canMergeLent || canMergeBorrowed,
+      canMergeLent,
+      canMergeBorrowed,
+    })
+  }
+
+  return groups.sort((a, b) => {
+    const aTotal = a.totalLentRemainingFils + a.totalBorrowedRemainingFils
+    const bTotal = b.totalLentRemainingFils + b.totalBorrowedRemainingFils
+    if (aTotal !== bTotal) return bTotal - aTotal
+    return a.canonicalName.localeCompare(b.canonicalName, 'ar')
+  })
+}
+
+export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ'): string {
+  const isLent = debt.type === 'lent'
+  const typeText = isLent ? 'مستحقات لك (سلف / إقراض)' : 'التزامات عليك (اقتراض)'
+  const statusText = debt.settled ? 'مسدد بالكامل ✅' : 'قيد السداد ⏳'
+  const remaining = getDebtRemainingFils(debt)
+
+  let entriesText = ''
+  if (debt.entries && debt.entries.length > 0) {
+    entriesText = debt.entries
+      .map(
+        (e, idx) =>
+          `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${fromFils(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
+      )
+      .join('\n')
+  } else {
+    entriesText = `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${fromFils(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
+  }
+
+  let paymentsText = 'لا توجد دفعات مسجلة بعد.'
+  if (debt.payments && debt.payments.length > 0) {
+    paymentsText = debt.payments
+      .map(
+        (p, idx) =>
+          `${idx + 1}. ${format(new Date(p.date), 'yyyy/MM/dd')}: ${fromFils(p.amountFils)} ${currencySymbol}${p.note ? ` (${p.note})` : ''}`
+      )
+      .join('\n')
+  }
+
+  return `📋 *كشف حساب مالي - تطبيق بَصير*
+────────────────
+👤 *الطرف:* ${debt.personName}
+🔖 *نوع المعاملة:* ${typeText}
+📌 *الحالة:* ${statusText}
+
+💰 *تفاصيل السلف وأصل الدين:*
+${entriesText}
+
+💳 *سجل الدفعات المسددة:*
+${paymentsText}
+
+────────────────
+💵 *إجمالي المبلغ:* ${fromFils(debt.amountFils)} ${currencySymbol}
+✅ *المسدد:* ${fromFils(debt.paidFils || 0)} ${currencySymbol}
+⏳ *المتبقي:* ${fromFils(remaining)} ${currencySymbol}
+────────────────
+تم إنشاء كشف الحساب في ${format(new Date(), 'yyyy/MM/dd')}`
 }

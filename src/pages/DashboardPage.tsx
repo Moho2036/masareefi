@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import {
   Plus,
   Receipt,
@@ -19,6 +19,8 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Modal } from '../components/ui/Modal'
+import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { EmptyState } from '../components/ui/EmptyState'
 import { QuickFeatureHub } from '../components/dashboard/QuickFeatureHub'
@@ -40,12 +42,14 @@ import { useDebts } from '../hooks/useDebts'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useCurrency } from '../hooks/useCurrency'
 import { useTransactionModal } from '../hooks/useTransactionModal'
+import { useToast } from '../hooks/useToast'
 import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
 import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/reports'
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
 import { isOccurrenceSkipped, advanceDateWithTargetDay } from '../lib/recurring'
+import { toFils, fromFils } from '../lib/money'
 import {
   toWesternDigits,
   formatDayHeader,
@@ -60,17 +64,23 @@ import { cn } from '../lib/cn'
 import type { Recurring } from '../types'
 
 export const DashboardPage: React.FC = () => {
+  const navigate = useNavigate()
   const { user } = useAuth()
-  const { range } = useSelectedMonth()
+  const { range, goToCurrentMonth } = useSelectedMonth()
   const { data: rawTransactions, loading: txLoading } = useTransactions(range)
   const { data: categories } = useCategories()
   const { data: recurringList } = useRecurring()
   const { data: debts } = useDebts()
-  const { data: settings } = useUserSettings()
-  const { format, formatWithSign } = useCurrency()
+  const { data: settings, updateSettings } = useUserSettings()
+  const { format, formatWithSign, config: currencyConfig } = useCurrency()
+  const { showToast } = useToast()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
 
   const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
+  const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false)
+  const [reconcileInput, setReconcileInput] = useState('')
+  const [isReconciling, setIsReconciling] = useState(false)
+  const [pieChartType, setPieChartType] = useState<'expense' | 'income'>('expense')
   const isRolloverEnabled = settings?.rolloverBalance ?? true
   const monthStartDay = settings?.monthStartDay ?? 1
 
@@ -88,6 +98,13 @@ export const DashboardPage: React.FC = () => {
       return
     }
     const currentKey = range.start.toISOString()
+    const rolloverStartDate = settings?.rolloverStartDate
+      ? settings.rolloverStartDate instanceof Date
+        ? settings.rolloverStartDate
+        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
+          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
+          : new Date(settings.rolloverStartDate as unknown as string)
+      : null
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
@@ -96,22 +113,20 @@ export const DashboardPage: React.FC = () => {
       },
       (err) => {
         console.error('Failed to subscribe prior balance in DashboardPage:', err)
-      }
+      },
+      rolloverStartDate
     )
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, settings?.rolloverStartDate])
 
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
-  const effectiveRollover =
-    (isRolloverEnabled
-      ? isCurrentFiscalMonth
-        ? (appData?.rolloverBalanceFils ?? 0)
-        : effectiveLocalRollover
-      : 0) + (settings?.openingBalanceFils ?? 0)
+  const effectiveRollover = isCurrentFiscalMonth
+    ? (appData?.rolloverBalanceFils ?? 0)
+    : (isRolloverEnabled ? effectiveLocalRollover : 0) + (settings?.openingBalanceFils ?? 0)
 
   const prevMonthLabel = useMemo(() => {
     const prevFinancialMonth = getPreviousFinancialMonth(range.start, monthStartDay)
@@ -159,10 +174,10 @@ export const DashboardPage: React.FC = () => {
     return map
   }, [categories])
 
-  // Category distribution for donut chart
+  // Category distribution for donut chart (toggleable between expense and income)
   const categoryDistribution = useMemo(
-    () => calculateCategoryDistribution(rawTransactions, categories, 'expense'),
-    [rawTransactions, categories]
+    () => calculateCategoryDistribution(rawTransactions, categories, pieChartType),
+    [rawTransactions, categories, pieChartType]
   )
 
   // Daily expenses for trend area chart
@@ -293,7 +308,9 @@ export const DashboardPage: React.FC = () => {
           ? 'جاري التحديث...'
           : isZeroState
             ? 'لا توجد معاملات بعد'
-            : 'فائض مالي',
+            : rawTransactions.length === 0 && effectiveRollover > 0
+              ? 'مسار مالي آمن'
+              : 'فائض مالي',
         stripBg:
           'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:border-emerald-800/50 dark:text-emerald-200',
       }
@@ -328,6 +345,8 @@ export const DashboardPage: React.FC = () => {
   }, [
     isInitialOrLoading,
     isZeroState,
+    rawTransactions.length,
+    effectiveRollover,
     isTemporaryLiquidityDeficit,
     isSpendingWithoutIncome,
     isHighConsumption,
@@ -337,12 +356,44 @@ export const DashboardPage: React.FC = () => {
     displayBalance,
   ])
 
+  const targetReconcileFils = toFils(reconcileInput, currencyConfig.decimals)
+  const reconcileDiffFils = targetReconcileFils - displayBalance
+
+  const handleOpenReconcile = () => {
+    setReconcileInput(fromFils(displayBalance).toString())
+    setIsReconcileModalOpen(true)
+  }
+
+  const handleConfirmReconcile = async () => {
+    if (reconcileDiffFils === 0) {
+      setIsReconcileModalOpen(false)
+      return
+    }
+    setIsReconciling(true)
+    try {
+      const newOpeningBalanceFils = (settings?.openingBalanceFils ?? 0) + reconcileDiffFils
+      await updateSettings({ openingBalanceFils: newOpeningBalanceFils })
+      showToast('تمت تسوية وتحديث الرصيد بنجاح', 'success')
+      setIsReconcileModalOpen(false)
+    } catch (err) {
+      console.error('Failed to reconcile balance:', err)
+      showToast('تعذر تحديث الرصيد، يرجى المحاولة مرة أخرى', 'error')
+    } finally {
+      setIsReconciling(false)
+    }
+  }
+
+  const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || ''
+  const greetingSubtitle = displayName
+    ? `أهلاً بك، ${displayName} — نظرة شاملة على وضعك المالي لهذا الشهر`
+    : 'نظرة شاملة وسريعة على وضعك المالي لهذا الشهر'
+
   return (
     <div className="space-y-6 animate-slide-up">
       {/* Header with Title and Desktop-only Quick Add */}
       <PageHeader
         title="لوحة التحكم"
-        subtitle="نظرة شاملة وسريعة على وضعك المالي لهذا الشهر"
+        subtitle={greetingSubtitle}
         actions={
           <Button
             variant="primary"
@@ -356,6 +407,26 @@ export const DashboardPage: React.FC = () => {
         }
       />
 
+      {/* Warning banner when browsing a different month */}
+      {!isCurrentFiscalMonth && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+            <span>
+              أنت تستعرض حالياً بيانات شهر {formatFinancialMonthLabel(range, monthStartDay)}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToCurrentMonth}
+            className="shrink-0 text-xs font-bold border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+          >
+            العودة إلى الشهر الحالي
+          </Button>
+        </div>
+      )}
+
       {/* 1. Hero Card: Clean Swiss Surface & Financial Health Indicator */}
       {isInitialOrLoading ? (
         <HeroCardSkeleton />
@@ -365,13 +436,22 @@ export const DashboardPage: React.FC = () => {
           <div className={cn('h-1.5 w-full absolute top-0 inset-x-0', heroTheme.topBar)} />
 
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
               <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center">
                 <Wallet className="w-4 h-4 stroke-[2.2]" />
               </div>
               <span className="text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                 {isRolloverEnabled ? 'الرصيد المتاح (شامل المرحّل)' : 'الرصيد المتاح (لهذا الشهر)'}
               </span>
+              <button
+                type="button"
+                onClick={handleOpenReconcile}
+                className="text-[11px] font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:underline inline-flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="تسوية الرصيد الفعلي وتعديل الرصيد الافتتاحي"
+              >
+                <Scale className="w-3 h-3 text-emerald-500" />
+                <span>تسوية الرصيد</span>
+              </button>
             </div>
             <span
               className={cn(
@@ -384,7 +464,7 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50">
-            {format(displayBalance)}
+            <FormattedMoney amountFils={displayBalance} />
           </div>
 
           {/* Rollover Breakdown Subline */}
@@ -393,11 +473,7 @@ export const DashboardPage: React.FC = () => {
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
                 <span className="text-zinc-500 dark:text-zinc-400 text-[11px] sm:text-xs">صافي هذا الشهر:</span>
                 <span className="font-black text-zinc-900 dark:text-zinc-100">
-                  {sums.balance > 0
-                    ? `+ ${format(sums.balance)}`
-                    : sums.balance < 0
-                      ? `- ${format(Math.abs(sums.balance))}`
-                      : format(0)}
+                  <FormattedMoney amountFils={sums.balance} withSign="auto" />
                 </span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
@@ -407,11 +483,7 @@ export const DashboardPage: React.FC = () => {
                     : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}
                 </span>
                 <span className="font-black text-zinc-900 dark:text-zinc-100">
-                  {effectiveRollover > 0
-                    ? `+ ${format(effectiveRollover)}`
-                    : effectiveRollover < 0
-                      ? `- ${format(Math.abs(effectiveRollover))}`
-                      : format(0)}
+                  <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
                 </span>
               </div>
             </div>
@@ -419,8 +491,12 @@ export const DashboardPage: React.FC = () => {
 
           {/* Total Income & Total Expenses Row */}
           <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-bold border border-emerald-200/60 dark:border-emerald-800/60">
+            <Link
+              to="/transactions?type=income"
+              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+              title="عرض كافة معاملات الدخل"
+            >
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-bold border border-emerald-200/60 dark:border-emerald-800/60 group-hover:scale-105 transition-transform">
                 <TrendingUp className="w-4 h-4 stroke-[2.5]" />
               </div>
               <div className="min-w-0">
@@ -428,13 +504,17 @@ export const DashboardPage: React.FC = () => {
                   إجمالي المداخيل
                 </div>
                 <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
-                  {format(sums.income)}
+                  <FormattedMoney amountFils={sums.income} />
                 </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-              <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 font-bold border border-red-200/60 dark:border-red-800/60">
+            <Link
+              to="/transactions?type=expense"
+              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+              title="عرض كافة معاملات المصاريف"
+            >
+              <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 font-bold border border-red-200/60 dark:border-red-800/60 group-hover:scale-105 transition-transform">
                 <TrendingDown className="w-4 h-4 stroke-[2.5]" />
               </div>
               <div className="min-w-0">
@@ -442,10 +522,10 @@ export const DashboardPage: React.FC = () => {
                   إجمالي المصاريف
                 </div>
                 <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
-                  {format(sums.expense)}
+                  <FormattedMoney amountFils={sums.expense} />
                 </div>
               </div>
-            </div>
+            </Link>
           </div>
 
           {/* Daily Safe Budget Interactive Strip */}
@@ -466,7 +546,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 text-end">
                 <span className="font-black text-sm sm:text-base">
-                  {format(forecast.dailySafeFils)}
+                  <FormattedMoney amountFils={forecast.dailySafeFils} />
                 </span>
                 <span className="text-[11px] font-medium opacity-80">
                   / اليوم
@@ -668,7 +748,11 @@ export const DashboardPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5">
               {/* Lent to others (مستحقات لك) */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+              <Link
+                to="/debts"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 hover:opacity-90 transition-opacity cursor-pointer"
+                title="عرض المستحقات في صفحة الديون"
+              >
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
                     لي
@@ -683,12 +767,16 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 select-none">
-                  {format(debtSummary.lentFils)}
+                  <FormattedMoney amountFils={debtSummary.lentFils} />
                 </div>
-              </div>
+              </Link>
 
               {/* Borrowed from others (التزامات عليك) */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+              <Link
+                to="/debts"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 hover:opacity-90 transition-opacity cursor-pointer"
+                title="عرض الالتزامات في صفحة الديون"
+              >
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 flex items-center justify-center font-bold text-xs">
                     عليّ
@@ -703,12 +791,16 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-xs sm:text-sm font-black text-rose-600 dark:text-rose-400 select-none">
-                  {format(debtSummary.borrowedFils)}
+                  <FormattedMoney amountFils={debtSummary.borrowedFils} />
                 </div>
-              </div>
+              </Link>
 
               {/* Net difference (الصافي) */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/60 border border-slate-100 dark:border-slate-700/40">
+              <Link
+                to="/debts"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/60 border border-slate-100 dark:border-slate-700/40 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                title="عرض صفحة الديون"
+              >
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs">
                     <Scale className="w-3.5 h-3.5" />
@@ -730,10 +822,9 @@ export const DashboardPage: React.FC = () => {
                       : 'text-rose-600 dark:text-rose-400'
                   )}
                 >
-                  {debtSummary.netFils >= 0 ? '+' : ''}
-                  {format(debtSummary.netFils)}
+                  <FormattedMoney amountFils={debtSummary.netFils} withSign="auto" />
                 </div>
-              </div>
+              </Link>
             </div>
           </Card>
 
@@ -780,9 +871,10 @@ export const DashboardPage: React.FC = () => {
                   )
 
                   return (
-                    <div
+                    <Link
+                      to="/recurring"
                       key={item.id}
-                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span
@@ -815,7 +907,7 @@ export const DashboardPage: React.FC = () => {
                           {formatWithSign(item.amountFils, item.type)}
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   )
                 })}
               </div>
@@ -830,11 +922,39 @@ export const DashboardPage: React.FC = () => {
         <Card className="p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
-              المصاريف حسب التصنيف
+              {pieChartType === 'expense' ? 'المصاريف حسب التصنيف' : 'المداخيل حسب التصنيف'}
             </h2>
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-              {categoryDistribution.length} تصنيفات
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPieChartType('expense')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer',
+                    pieChartType === 'expense'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  )}
+                >
+                  المصاريف
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPieChartType('income')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer',
+                    pieChartType === 'income'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  )}
+                >
+                  المداخيل
+                </button>
+              </div>
+              <span className="hidden sm:inline text-xs font-semibold text-slate-400 dark:text-slate-500">
+                {categoryDistribution.length} تصنيفات
+              </span>
+            </div>
           </div>
           <div className="flex-1 flex items-center justify-center">
             <React.Suspense
@@ -844,7 +964,13 @@ export const DashboardPage: React.FC = () => {
                 </div>
               }
             >
-              <CategoryPieChart data={categoryDistribution} className="w-full" />
+              <CategoryPieChart
+                data={categoryDistribution}
+                className="w-full"
+                onSelectCategory={(categoryId) => {
+                  navigate(`/transactions?categoryId=${categoryId}&type=${pieChartType}`)
+                }}
+              />
             </React.Suspense>
           </div>
         </Card>
@@ -878,6 +1004,83 @@ export const DashboardPage: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Balance Reconciliation Modal */}
+      <Modal
+        isOpen={isReconcileModalOpen}
+        onClose={() => {
+          if (!isReconciling) setIsReconcileModalOpen(false)
+        }}
+        title="تسوية وتعديل الرصيد الفعلي"
+      >
+        <div className="space-y-4">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            إذا كان المبلغ المتوفر معك حالياً يختلف عما هو مسجل في التطبيق، يمكنك إدخال المبلغ الفعلي ليتم تعديل الرصيد الافتتاحي تلقائياً ليتطابق مع واقعك.
+          </p>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-xs sm:text-sm">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">الرصيد المحسوب حالياً في التطبيق:</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100">
+              <FormattedMoney amountFils={displayBalance} />
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+              كم المبلغ الفعلي الموجود معك الآن؟
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={reconcileInput}
+                onChange={(e) => setReconcileInput(e.target.value)}
+                placeholder="0.000"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              />
+              <span className="absolute end-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                {currencyConfig.symbol}
+              </span>
+            </div>
+          </div>
+
+          {/* Difference display */}
+          <div className="p-3 rounded-xl border flex items-center justify-between text-xs font-semibold bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-700/60">
+            <span className="text-slate-500 dark:text-slate-400">فارق التسوية:</span>
+            <span
+              className={cn(
+                'font-black',
+                reconcileDiffFils > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : reconcileDiffFils < 0
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-slate-400'
+              )}
+            >
+              {reconcileDiffFils > 0 ? `+ ${format(reconcileDiffFils)}` : reconcileDiffFils < 0 ? `- ${format(Math.abs(reconcileDiffFils))}` : 'مطابق تماماً (0)'}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setIsReconcileModalOpen(false)}
+              disabled={isReconciling}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleConfirmReconcile}
+              disabled={isReconciling}
+            >
+              {isReconciling ? 'جاري الاعتماد...' : 'اعتماد التسوية'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

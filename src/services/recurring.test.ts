@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { updateRecurring, deleteRecurring, processDueRecurring } from './recurring'
+import {
+  updateRecurring,
+  deleteRecurring,
+  processDueRecurring,
+  confirmRecurringOccurrence,
+  skipRecurringOccurrence,
+} from './recurring'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -301,5 +307,78 @@ describe('recurring service - processDueRecurring', () => {
     expect(userMember.paidMonths).toContain(2) // Month 2 was automatically added!
 
     expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips silent processing when requireConfirmation is true', async () => {
+    const today = new Date(2026, 1, 1) // Feb 1, 2026
+
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          data: () => ({
+            id: 'rec-confirm-1',
+            type: 'expense',
+            amountFils: 40000,
+            categoryId: 'cat-bills',
+            title: 'فاتورة مياه',
+            frequency: 'monthly',
+            startDate: new Date(2026, 0, 1),
+            nextDate: new Date(2026, 1, 1),
+            active: true,
+            requireConfirmation: true,
+          }),
+        },
+      ],
+    })
+
+    const count = await processDueRecurring('uid-1', today)
+    expect(count).toBe(0)
+    expect(mockBatchSet).not.toHaveBeenCalled()
+    expect(mockBatchUpdate).not.toHaveBeenCalled()
+  })
+
+  it('confirms recurring occurrence with custom amount and advances nextDate', async () => {
+    mockGetDoc.mockResolvedValueOnce({ exists: () => false }) // tx verification
+
+    const rec = {
+      id: 'rec-util',
+      type: 'expense' as const,
+      amountFils: 30000,
+      categoryId: 'cat-elec',
+      title: 'كهرباء',
+      note: 'شهري',
+      frequency: 'monthly' as const,
+      startDate: new Date(2026, 0, 5),
+      nextDate: new Date(2026, 1, 5),
+      active: true,
+      requireConfirmation: true,
+    }
+
+    const txId = await confirmRecurringOccurrence('uid-1', rec, 35500)
+    expect(txId).toBe('rec-util_2026-02-05')
+    expect(mockBatchSet).toHaveBeenCalledTimes(1)
+    expect(mockBatchSet.mock.calls[0][1].amountFils).toBe(35500)
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips recurring occurrence without creating transaction and advances nextDate', async () => {
+    const rec = {
+      id: 'rec-gym',
+      type: 'expense' as const,
+      amountFils: 20000,
+      categoryId: 'cat-gym',
+      title: 'نادي',
+      note: '',
+      frequency: 'monthly' as const,
+      startDate: new Date(2026, 0, 10),
+      nextDate: new Date(2026, 1, 10),
+      active: true,
+    }
+
+    await skipRecurringOccurrence('uid-1', rec)
+    expect(mockUpdateDoc).toHaveBeenCalledTimes(1)
+    expect(mockBatchSet).not.toHaveBeenCalled()
   })
 })

@@ -253,9 +253,75 @@ describe('recurring validation', () => {
       setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), title: false }),
     );
   });
+  it('allows valid frequencies including daily, biweekly, quarterly, semiannual, weekly, monthly, yearly', async () => {
+    const validFrequencies = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'yearly'];
+    for (const freq of validFrequencies) {
+      await assertSucceeds(
+        setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_freq_${freq}`), {
+          ...validRecurring(),
+          frequency: freq,
+        }),
+      );
+    }
+  });
+
   it('denies invalid frequency', async () => {
+    const invalidFrequencies = ['hourly', 'minutely', 'bi-weekly', 'random', ''];
+    for (const freq of invalidFrequencies) {
+      await assertFails(
+        setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_inv_${freq || 'empty'}`), {
+          ...validRecurring(),
+          frequency: freq,
+        }),
+      );
+    }
     await assertFails(
-      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r1`), { ...validRecurring(), frequency: 'daily' }),
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_inv_num`), {
+        ...validRecurring(),
+        frequency: 123,
+      }),
+    );
+  });
+
+  it('allows valid optional requireConfirmation boolean', async () => {
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_true`), {
+        ...validRecurring(),
+        requireConfirmation: true,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_false`), {
+        ...validRecurring(),
+        requireConfirmation: false,
+      }),
+    );
+  });
+
+  it('denies invalid type for requireConfirmation', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_num`), {
+        ...validRecurring(),
+        requireConfirmation: 1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_str`), {
+        ...validRecurring(),
+        requireConfirmation: 'true',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_obj`), {
+        ...validRecurring(),
+        requireConfirmation: {},
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_confirm_arr`), {
+        ...validRecurring(),
+        requireConfirmation: [true],
+      }),
     );
   });
   it('allows valid optional circleId and skipMonth', async () => {
@@ -348,6 +414,56 @@ describe('recurring validation', () => {
       setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_invalid_created_num`), {
         ...validRecurring(),
         createdAt: 12345,
+      }),
+    );
+  });
+
+  it('allows valid optional skipMonths and denies invalid skipMonths', async () => {
+    // Valid: empty list or list up to 10 elements
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_empty`), {
+        ...validRecurring(),
+        skipMonths: [],
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_valid`), {
+        ...validRecurring(),
+        skipMonths: [1, 2, 3],
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_max`), {
+        ...validRecurring(),
+        skipMonths: Array.from({ length: 10 }, (_, i) => i + 1),
+      }),
+    );
+
+    // Denied: non-list types
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_str`), {
+        ...validRecurring(),
+        skipMonths: 'not-a-list',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_num`), {
+        ...validRecurring(),
+        skipMonths: 5,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_obj`), {
+        ...validRecurring(),
+        skipMonths: { 0: 1 },
+      }),
+    );
+
+    // Denied: list with more than 10 elements
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/recurring/r_skip_oversized`), {
+        ...validRecurring(),
+        skipMonths: Array.from({ length: 11 }, (_, i) => i + 1),
       }),
     );
   });
@@ -1167,6 +1283,64 @@ describe('debt validation', () => {
     );
   });
 
+  it('allows optional entries list <= 100 and denies non-list or entries > 100', async () => {
+    // Valid: empty list or list up to 100 entries
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_empty`), {
+        ...validDebt(),
+        entries: [],
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_valid`), {
+        ...validDebt(),
+        entries: [
+          {
+            id: 'e1',
+            amountFils: 100000,
+            date: now(),
+            note: 'Initial entry',
+            createdAt: now(),
+          },
+        ],
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_max`), {
+        ...validDebt(),
+        entries: Array.from({ length: 100 }, (_, i) => ({ id: `e${i}` })),
+      }),
+    );
+
+    // Denied: non-list entries
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_bad_str`), {
+        ...validDebt(),
+        entries: 'not-a-list',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_bad_num`), {
+        ...validDebt(),
+        entries: 100,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_bad_obj`), {
+        ...validDebt(),
+        entries: { id: 'e1' },
+      }),
+    );
+
+    // Denied: > 100 entries
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/debts/d_entries_oversized`), {
+        ...validDebt(),
+        entries: Array.from({ length: 101 }, (_, i) => ({ id: `e${i}` })),
+      }),
+    );
+  });
+
   it('denies extra unexpected fields', async () => {
     await assertFails(
       setDoc(doc(aliceDb(), `users/${ALICE}/debts/d1`), {
@@ -1439,6 +1613,103 @@ describe('money circle validation', () => {
     );
     await assertFails(
       setDoc(doc(aliceDb(), `users/${ALICE}/circles/c1`), { ...validCircle(), myTurnMonth: '3' }),
+    );
+  });
+
+  it('allows valid optional shareType and secondTurnMonth', async () => {
+    // Valid shareTypes
+    for (const shareType of ['full', 'half', 'double']) {
+      await assertSucceeds(
+        setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_${shareType}`), {
+          ...validCircle(),
+          shareType,
+        }),
+      );
+    }
+
+    // Valid secondTurnMonth (1 <= secondTurnMonth <= membersCount)
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_1`), {
+        ...validCircle(),
+        secondTurnMonth: 1,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_max`), {
+        ...validCircle(),
+        membersCount: 10,
+        secondTurnMonth: 10,
+      }),
+    );
+
+    // Valid combined shareType and secondTurnMonth
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_and_second_turn`), {
+        ...validCircle(),
+        shareType: 'double',
+        secondTurnMonth: 5,
+      }),
+    );
+  });
+
+  it('denies invalid shareType', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_bad_val`), {
+        ...validCircle(),
+        shareType: 'triple',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_bad_empty`), {
+        ...validCircle(),
+        shareType: '',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_bad_num`), {
+        ...validCircle(),
+        shareType: 2,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_share_bad_bool`), {
+        ...validCircle(),
+        shareType: true,
+      }),
+    );
+  });
+
+  it('denies invalid secondTurnMonth (< 1, > membersCount, non-int)', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_zero`), {
+        ...validCircle(),
+        secondTurnMonth: 0,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_negative`), {
+        ...validCircle(),
+        secondTurnMonth: -1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_exceed`), {
+        ...validCircle(),
+        membersCount: 10,
+        secondTurnMonth: 11,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_float`), {
+        ...validCircle(),
+        secondTurnMonth: 3.5,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}/circles/c_second_turn_str`), {
+        ...validCircle(),
+        secondTurnMonth: '4',
+      }),
     );
   });
 

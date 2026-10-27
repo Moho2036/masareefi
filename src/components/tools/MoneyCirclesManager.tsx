@@ -12,6 +12,7 @@ import {
   ChevronUp,
   AlertCircle,
   Zap,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -42,6 +43,7 @@ import {
   getCircleCycleIndex,
   isCircleFullyPaid,
   toggleCircleMemberPayment,
+  swapMemberTurns,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
@@ -73,10 +75,26 @@ export const MoneyCirclesManager: React.FC = () => {
     })
   }, [circles])
 
-  const defaultExpenseCategory = categories.find((c) => c.type === 'expense' && !c.archived)
-  const defaultIncomeCategory =
-    categories.find((c) => c.type === 'income' && !c.archived) ||
-    categories.find((c) => c.type === 'income')
+  const defaultExpenseCategory = useMemo(() => {
+    const active = categories.filter((c) => c.type === 'expense' && !c.archived)
+    return (
+      active.find((c) => c.name.includes('سداد الديون والأقساط')) ||
+      active.find((c) => c.name.includes('الجمعيات المالية') || c.name.includes('الجمعيات')) ||
+      active.find((c) => c.name.includes('أقساط') || c.name.includes('ديون')) ||
+      active[0] ||
+      categories.find((c) => c.type === 'expense')
+    )
+  }, [categories])
+
+  const defaultIncomeCategory = useMemo(() => {
+    const active = categories.filter((c) => c.type === 'income' && !c.archived)
+    return (
+      active.find((c) => c.name.includes('الجمعيات المالية') || c.name.includes('الجمعيات')) ||
+      active.find((c) => c.name.includes('استلام') || c.name.includes('دخل إضافي')) ||
+      active[0] ||
+      categories.find((c) => c.type === 'income')
+    )
+  }, [categories])
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [deleteCircleId, setDeleteCircleId] = useState<string | null>(null)
@@ -85,6 +103,11 @@ export const MoneyCirclesManager: React.FC = () => {
   const [togglingMemberKey, setTogglingMemberKey] = useState<string | null>(null)
   const [depositedCircleIds, setDepositedCircleIds] = useState<Set<string>>(new Set())
   const checkedCirclesRef = useRef<Set<string>>(new Set())
+
+  // Swap turn state
+  const [swapTarget, setSwapTarget] = useState<{ circle: MoneyCircle; member: CircleMember } | null>(null)
+  const [swapWithMemberId, setSwapWithMemberId] = useState<string>('')
+  const [isSwapping, setIsSwapping] = useState(false)
 
   const getLinkedRecurring = (circle: MoneyCircle) => {
     return recurringList.find(
@@ -161,6 +184,10 @@ export const MoneyCirclesManager: React.FC = () => {
   const [monthlyAmountStr, setMonthlyAmountStr] = useState('100')
   const [membersCountStr, setMembersCountStr] = useState('10')
   const [myTurnMonthStr, setMyTurnMonthStr] = useState('1')
+  const [expenseCategoryId, setExpenseCategoryId] = useState<string>('')
+  const [incomeCategoryId, setIncomeCategoryId] = useState<string>('')
+  const [shareType, setShareType] = useState<'full' | 'half' | 'double'>('full')
+  const [secondTurnMonthStr, setSecondTurnMonthStr] = useState<string>('2')
 
   const parsedMembersCount = parseInt(membersCountStr, 10)
   const membersCount = isNaN(parsedMembersCount) ? 2 : Math.max(2, Math.min(50, parsedMembersCount))
@@ -302,6 +329,10 @@ export const MoneyCirclesManager: React.FC = () => {
     setWasPausedOnOpen(false)
     setAutoScheduleTouched(false)
     setIsManager(false)
+    setExpenseCategoryId(defaultExpenseCategory?.id || '')
+    setIncomeCategoryId(defaultIncomeCategory?.id || '')
+    setShareType('full')
+    setSecondTurnMonthStr('2')
     setStartDateStr(getInitialStartDateStr(monthStartDay))
     const initialNames: string[] = []
     for (let i = 1; i <= 10; i++) {
@@ -318,6 +349,10 @@ export const MoneyCirclesManager: React.FC = () => {
     setMonthlyAmountStr(String(fromFils(circle.monthlyAmountFils)))
     setMembersCount(circle.membersCount)
     setMyTurnMonth(circle.myTurnMonth)
+    setExpenseCategoryId(circle.expenseCategoryId || defaultExpenseCategory?.id || '')
+    setIncomeCategoryId(circle.incomeCategoryId || defaultIncomeCategory?.id || '')
+    setShareType(circle.shareType || 'full')
+    setSecondTurnMonthStr(String(circle.secondTurnMonth || (circle.myTurnMonth === 1 ? 2 : 1)))
     const startDate =
       circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
     setStartDateStr(formatDate(startDate, 'yyyy-MM-dd'))
@@ -512,12 +547,16 @@ export const MoneyCirclesManager: React.FC = () => {
             startDate,
             members,
             isManager,
+            expenseCategoryId: expenseCategoryId || defaultExpenseCategory?.id,
+            incomeCategoryId: incomeCategoryId || defaultIncomeCategory?.id,
+            shareType,
+            secondTurnMonth: shareType === 'double' ? parseInt(secondTurnMonthStr, 10) : undefined,
             ...recurringPayload,
           },
           {
             monthStartDay,
             createRecurringRule: shouldCreateOrReactivate,
-            defaultCategoryId: defaultExpenseCategory?.id,
+            defaultCategoryId: expenseCategoryId || defaultExpenseCategory?.id,
           }
         )
 
@@ -560,9 +599,13 @@ export const MoneyCirclesManager: React.FC = () => {
           members,
           status: 'active',
           isManager,
+          expenseCategoryId: expenseCategoryId || defaultExpenseCategory?.id,
+          incomeCategoryId: incomeCategoryId || defaultIncomeCategory?.id,
+          shareType,
+          ...(shareType === 'double' ? { secondTurnMonth: parseInt(secondTurnMonthStr, 10) } : {}),
         })
 
-        if (autoSchedule && defaultExpenseCategory) {
+        if (autoSchedule && (expenseCategoryId || defaultExpenseCategory)) {
           try {
             await updateMoneyCircle(
               user.uid,
@@ -571,7 +614,7 @@ export const MoneyCirclesManager: React.FC = () => {
               {
                 monthStartDay,
                 createRecurringRule: true,
-                defaultCategoryId: defaultExpenseCategory.id,
+                defaultCategoryId: expenseCategoryId || defaultExpenseCategory?.id,
               }
             )
             await processDueRecurring(user.uid)
@@ -745,6 +788,24 @@ export const MoneyCirclesManager: React.FC = () => {
     } catch (err) {
       console.error('Failed to complete circle:', err)
       showToast('تعذر إنهاء الجمعية', 'error')
+    }
+  }
+
+  const handleConfirmSwap = async () => {
+    if (!user || !swapTarget || !swapWithMemberId) return
+    setIsSwapping(true)
+    try {
+      await swapMemberTurns(user.uid, swapTarget.circle.id, swapTarget.member.id, swapWithMemberId, {
+        monthStartDay,
+      })
+      showToast('تم تبديل الأدوار بنجاح', 'success')
+      setSwapTarget(null)
+      setSwapWithMemberId('')
+    } catch (err) {
+      console.error('Swap turns failed:', err)
+      showToast(err instanceof Error ? err.message : 'تعذر تبديل الدور', 'error')
+    } finally {
+      setIsSwapping(false)
     }
   }
 
@@ -1272,38 +1333,58 @@ export const MoneyCirclesManager: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Toggle Button or Exempt Receiver Badge */}
-                            {isReceiverThisMonth ? (
-                              <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1 shrink-0">
-                                <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                                <span>مستلم الدورة (معفى)</span>
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={togglingMemberKey === `${circle.id}_${member.id}_${viewingMonth}`}
-                                onClick={() => handleToggleMemberPayment(circle, member.id, viewingMonth)}
-                                className={cn(
-                                  'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
-                                  hasPaid
-                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                    : isOverdue
-                                      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
-                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                                )}
-                              >
-                                {hasPaid ? (
-                                  <>
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>تم الدفع</span>
-                                  </>
-                                ) : isOverdue ? (
-                                  <span>متأخر</span>
-                                ) : (
-                                  <span>لم يدفع</span>
-                                )}
-                              </button>
-                            )}
+                            {/* Actions: Swap Button (Manager mode) & Toggle / Exempt Badge */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {Boolean(circle.isManager) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSwapTarget({ circle, member })
+                                    const others = circle.members.filter((m) => m.id !== member.id)
+                                    if (others.length > 0) {
+                                      setSwapWithMemberId(others[0].id)
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                  title="تبديل الدور ⇄"
+                                  aria-label={`تبديل دور ${member.name}`}
+                                >
+                                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {isReceiverThisMonth ? (
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1">
+                                  <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>مستلم الدورة (معفى)</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={togglingMemberKey === `${circle.id}_${member.id}_${viewingMonth}`}
+                                  onClick={() => handleToggleMemberPayment(circle, member.id, viewingMonth)}
+                                  className={cn(
+                                    'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
+                                    hasPaid
+                                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                      : isOverdue
+                                        ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                  )}
+                                >
+                                  {hasPaid ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      <span>تم الدفع</span>
+                                    </>
+                                  ) : isOverdue ? (
+                                    <span>متأخر</span>
+                                  ) : (
+                                    <span>لم يدفع</span>
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )
                       })}
@@ -1423,10 +1504,128 @@ export const MoneyCirclesManager: React.FC = () => {
             />
           </div>
 
+          {/* Share Size Selector */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              حجم السهم في الجمعية
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setShareType('full')}
+                className={cn(
+                  'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
+                  shareType === 'full'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                )}
+              >
+                سهم كامل (100%)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareType('half')}
+                className={cn(
+                  'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
+                  shareType === 'half'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                )}
+              >
+                نصف سهم (50%)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareType('double')}
+                className={cn(
+                  'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
+                  shareType === 'double'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                )}
+              >
+                سهمان (دورين)
+              </button>
+            </div>
+          </div>
+
+          {/* Second Turn Month Selector for Double Share */}
+          {shareType === 'double' && (
+            <div className="space-y-1">
+              <label htmlFor="circle-second-turn" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                الدور الثاني للاستلام (للسهم الثاني)
+              </label>
+              <select
+                id="circle-second-turn"
+                value={secondTurnMonthStr}
+                onChange={(e) => setSecondTurnMonthStr(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+              >
+                {Array.from({ length: membersCount }, (_, i) => i + 1)
+                  .filter((m) => m !== myTurnMonth)
+                  .map((m) => (
+                    <option key={m} value={m}>
+                      الشهر {m}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          {/* Category Selectors for Expenses & Income */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="circle-expense-cat" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                تصنيف أقساط المصاريف
+              </label>
+              <select
+                id="circle-expense-cat"
+                value={expenseCategoryId || defaultExpenseCategory?.id || ''}
+                onChange={(e) => setExpenseCategoryId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+              >
+                {categories
+                  .filter((c) => c.type === 'expense' && !c.archived)
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon ? `${cat.icon} ` : ''}{cat.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="circle-income-cat" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                تصنيف إيداع الصافي (دخل)
+              </label>
+              <select
+                id="circle-income-cat"
+                value={incomeCategoryId || defaultIncomeCategory?.id || ''}
+                onChange={(e) => setIncomeCategoryId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+              >
+                {categories
+                  .filter((c) => c.type === 'income' && !c.archived)
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon ? `${cat.icon} ` : ''}{cat.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between font-bold text-emerald-800 dark:text-emerald-200">
             <span>المبلغ الإجمالي المقبوض:</span>
             <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-              {format(toFils((parseFloat(monthlyAmountStr) || 0) * membersCount, config.decimals))}
+              {format(
+                toFils(
+                  ((parseFloat(monthlyAmountStr) || 0) * membersCount) *
+                    (shareType === 'half' ? 0.5 : 1),
+                  config.decimals
+                )
+              )}
+              {shareType === 'double' ? ' (لكل دور استلام)' : ''}
             </span>
           </div>
 
@@ -1560,6 +1759,62 @@ export const MoneyCirclesManager: React.FC = () => {
             </Button>
             <Button variant="danger" onClick={handleDelete}>
               نعم، حذف الجمعية
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Swap Turns Modal */}
+      <Modal
+        isOpen={Boolean(swapTarget)}
+        onClose={() => {
+          setSwapTarget(null)
+          setSwapWithMemberId('')
+        }}
+        title="تبديل الدور بين الأعضاء"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            اختر العضو الذي ترغب في تبديل دور الاستلام معه لـ &quot;{swapTarget?.member.name}&quot; (الدور الحالي: شهر {swapTarget?.member.turnMonth}):
+          </p>
+
+          <div className="space-y-1">
+            <label htmlFor="swap-target-member-select" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              تبديل مع العضو:
+            </label>
+            <select
+              id="swap-target-member-select"
+              value={swapWithMemberId}
+              onChange={(e) => setSwapWithMemberId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+            >
+              {swapTarget?.circle.members
+                .filter((m) => m.id !== swapTarget.member.id)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} (شهر {m.turnMonth})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSwapTarget(null)
+                setSwapWithMemberId('')
+              }}
+              disabled={isSwapping}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmSwap}
+              disabled={isSwapping || !swapWithMemberId}
+            >
+              {isSwapping ? 'جاري التبديل...' : 'تأكيد تبديل الدور ⇄'}
             </Button>
           </div>
         </div>

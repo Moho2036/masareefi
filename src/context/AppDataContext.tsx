@@ -292,8 +292,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const openingFils = settings?.openingBalanceFils ?? 0
     const effectiveRolloverBalanceFils =
-      user && isRolloverEnabled ? rolloverBalanceFils : 0
+      (user && isRolloverEnabled ? rolloverBalanceFils : 0) + openingFils
 
     return {
       settings,

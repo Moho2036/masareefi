@@ -25,6 +25,9 @@ export interface FilterTransactionsOptions {
   query?: string
   type?: TxType | 'all'
   categoryId?: string
+  categoryIds?: string[]
+  sourceType?: 'all' | 'manual' | 'recurring' | 'debt' | 'circle'
+  dateRange?: { from?: Date; to?: Date }
 }
 
 export type CategoryResolver =
@@ -37,7 +40,7 @@ export function filterTransactions(
   filters: FilterTransactionsOptions = {},
   categoryResolver?: CategoryResolver
 ): Transaction[] {
-  const { query, type, categoryId } = filters
+  const { query, type, categoryId, categoryIds, sourceType, dateRange } = filters
   const rawQuery = query ? query.trim() : ''
   const normalizedQuery = rawQuery ? normalizeArabic(toWesternDigits(rawQuery)) : ''
 
@@ -45,8 +48,41 @@ export function filterTransactions(
     if (type && type !== 'all' && tx.type !== type) {
       return false
     }
-    if (categoryId && categoryId !== 'all' && tx.categoryId !== categoryId) {
+
+    // Category filtering: support multiple categoryIds if provided and non-empty (excluding 'all')
+    if (categoryIds && categoryIds.length > 0 && !categoryIds.includes('all')) {
+      if (!categoryIds.includes(tx.categoryId)) {
+        return false
+      }
+    } else if (categoryId && categoryId !== 'all' && tx.categoryId !== categoryId) {
       return false
+    }
+
+    // Source filtering
+    if (sourceType && sourceType !== 'all') {
+      const isDebt = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_')
+      const isCircle = tx.id.startsWith('circle_')
+      const isRecurring = Boolean(tx.recurringId) && !isCircle
+
+      if (sourceType === 'debt' && !isDebt) return false
+      if (sourceType === 'circle' && !isCircle) return false
+      if (sourceType === 'recurring' && !isRecurring) return false
+      if (sourceType === 'manual' && (isDebt || isCircle || isRecurring)) return false
+    }
+
+    // Custom Date range filtering
+    if (dateRange && (dateRange.from || dateRange.to)) {
+      const txTime = (tx.date instanceof Date ? tx.date : new Date(tx.date)).getTime()
+      if (dateRange.from) {
+        const fromMidnight = new Date(dateRange.from)
+        fromMidnight.setHours(0, 0, 0, 0)
+        if (txTime < fromMidnight.getTime()) return false
+      }
+      if (dateRange.to) {
+        const toEndDay = new Date(dateRange.to)
+        toEndDay.setHours(23, 59, 59, 999)
+        if (txTime > toEndDay.getTime()) return false
+      }
     }
     if (normalizedQuery) {
       const normalizedTitle = tx.title ? normalizeArabic(toWesternDigits(tx.title)) : ''
@@ -189,3 +225,49 @@ export function countByCategory(txs: Transaction[]): Record<string, number> {
   }
   return counts
 }
+
+export type TransactionSortOption = 'newest' | 'oldest' | 'highest' | 'lowest'
+
+export function sortTransactions(
+  txs: Transaction[],
+  sortBy: TransactionSortOption = 'newest'
+): Transaction[] {
+  const copy = [...txs]
+  switch (sortBy) {
+    case 'newest':
+      return copy.sort((a, b) => {
+        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        if (timeB !== timeA) return timeB - timeA
+        const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+        const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+        return createdB - createdA
+      })
+    case 'oldest':
+      return copy.sort((a, b) => {
+        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        if (timeA !== timeB) return timeA - timeB
+        const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+        const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+        return createdA - createdB
+      })
+    case 'highest':
+      return copy.sort((a, b) => {
+        if (b.amountFils !== a.amountFils) return b.amountFils - a.amountFils
+        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        return timeB - timeA
+      })
+    case 'lowest':
+      return copy.sort((a, b) => {
+        if (a.amountFils !== b.amountFils) return a.amountFils - b.amountFils
+        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        return timeB - timeA
+      })
+    default:
+      return copy
+  }
+}
+

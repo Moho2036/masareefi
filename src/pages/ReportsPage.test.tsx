@@ -8,6 +8,7 @@ let mockIsCurrentMonth = true
 const mockGoToCurrentMonth = vi.fn()
 let mockTransactions: Transaction[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
+let mockCategories: Array<{ id: string; name: string; icon: string; color: string; isArchived: boolean }> = []
 
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
@@ -75,7 +76,7 @@ vi.mock('../hooks/useTransactions', () => ({
 
 vi.mock('../hooks/useCategories', () => ({
   useCategories: () => ({
-    data: [],
+    data: mockCategories,
     loading: false,
   }),
 }))
@@ -88,6 +89,9 @@ describe('ReportsPage month switching and period header', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIsCurrentMonth = true
+    mockCategories = []
+    mockTransactions = []
+    mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
   })
 
   it('renders MonthSelector in header when monthly report tab is active', () => {
@@ -282,5 +286,139 @@ describe('ReportsPage month switching and period header', () => {
 
     const option2020 = screen.getByRole('option', { name: 'سنة 2020' })
     expect(option2020).toBeInTheDocument()
+  })
+
+  it('renders print button in header', () => {
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByRole('button', { name: /طباعة \/ حفظ PDF/ })).toBeInTheDocument()
+  })
+
+  it('renders DailyExpenseChart card and zero spend days badge in monthly report', () => {
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('المصروف اليومي خلال الشهر')).toBeInTheDocument()
+    expect(screen.getByText(/أيام بدون مصاريف:/)).toBeInTheDocument()
+  })
+
+  it('toggles between expenses and income category analysis in monthly report', () => {
+    mockCategories = [
+      { id: 'cat-food', name: 'طعام ومشروبات', icon: '🍔', color: '#10b981', isArchived: false },
+      { id: 'cat-sal', name: 'راتب شهري', icon: '💰', color: '#3b82f6', isArchived: false },
+    ]
+    mockTransactions = [
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 25000,
+        date: new Date('2026-10-05'),
+        categoryId: 'cat-food',
+        note: 'غداء عمل',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-2',
+        type: 'income',
+        amountFils: 500000,
+        date: new Date('2026-10-01'),
+        categoryId: 'cat-sal',
+        note: 'راتب أكتوبر',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // Initially in expense mode
+    expect(screen.getByText('أعلى التصنيفات إنفاقاً')).toBeInTheDocument()
+    expect(screen.getAllByText('طعام ومشروبات').length).toBeGreaterThan(0)
+
+    // Switch to income mode
+    const incomeRadios = screen.getAllByRole('radio', { name: 'المداخيل' })
+    fireEvent.click(incomeRadios[0])
+
+    expect(screen.getByText('أعلى التصنيفات دخلاً')).toBeInTheDocument()
+    expect(screen.getAllByText('راتب شهري').length).toBeGreaterThan(0)
+  })
+
+  it('opens Category Transactions Modal when a category row is clicked', () => {
+    mockCategories = [
+      { id: 'cat-food', name: 'طعام ومشروبات', icon: '🍔', color: '#10b981', isArchived: false },
+    ]
+    mockTransactions = [
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 12500,
+        date: new Date('2026-10-10'),
+        categoryId: 'cat-food',
+        note: 'مطعم السعادة',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    const categoryRow = screen.getByRole('button', { name: /طعام ومشروبات/ })
+    fireEvent.click(categoryRow)
+
+    // Modal opens showing category transactions
+    expect(screen.getByText('مطعم السعادة')).toBeInTheDocument()
+    expect(screen.getAllByText('12.5 د.أ').length).toBeGreaterThan(0)
+  })
+
+  it('displays current fiscal month badge and sticky total footer in annual report', () => {
+    mockTransactions = [
+      {
+        id: 'tx-annual-1',
+        type: 'expense',
+        amountFils: 30000,
+        date: new Date('2026-10-05'),
+        categoryId: 'cat-food',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-annual-2',
+        type: 'income',
+        amountFils: 80000,
+        date: new Date('2026-10-01'),
+        categoryId: 'cat-sal',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // Switch to yearly report
+    const yearlyRadio = screen.getByRole('radio', { name: 'تقرير سنوي' })
+    fireEvent.click(yearlyRadio)
+
+    // Check for "الشهر الحالي" badge in the table
+    expect(screen.getByText('الشهر الحالي')).toBeInTheDocument()
+
+    // Check for "الإجمالي السنوي" in tfoot
+    expect(screen.getByText('الإجمالي السنوي')).toBeInTheDocument()
   })
 })

@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Info,
   X,
+  Users,
+  GitMerge,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -22,8 +24,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useDebts } from '../hooks/useDebts'
 import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
-import { deleteDebt, checkDebtInitialTransactionExists } from '../services/debts'
-import { calculateDebtSummary, filterDebts, isDebtOverdue } from '../lib/debts'
+import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
+import { calculateDebtSummary, filterDebts, isDebtOverdue, groupDebtsByPerson } from '../lib/debts'
 import { cn } from '../lib/cn'
 import type { Debt, DebtType } from '../types'
 
@@ -54,6 +56,7 @@ export const DebtsPage: React.FC = () => {
   const deferredSearch = useDeferredValue(search)
   const [typeFilter, setTypeFilter] = useState<'all' | DebtType>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'settled' | 'overdue'>('all')
+  const [viewMode, setViewMode] = useState<'cards' | 'grouped'>('cards')
 
   // Summary KPIs
   const summary = useMemo(() => {
@@ -72,6 +75,29 @@ export const DebtsPage: React.FC = () => {
       search: deferredSearch,
     })
   }, [debts, typeFilter, statusFilter, deferredSearch])
+
+  // Grouped debts by person
+  const groupedDebts = useMemo(() => {
+    return groupDebtsByPerson(filteredDebts)
+  }, [filteredDebts])
+
+  const [mergeTarget, setMergeTarget] = useState<{ debts: Debt[]; personName: string } | null>(null)
+  const [isMerging, setIsMerging] = useState(false)
+
+  const handleConfirmMerge = async () => {
+    if (!user?.uid || !mergeTarget) return
+    setIsMerging(true)
+    try {
+      await mergePersonDebts(user.uid, mergeTarget.debts)
+      showToast(`تم دمج ديون ${mergeTarget.personName} في سجل موحد بنجاح`, 'success')
+      setMergeTarget(null)
+    } catch (err) {
+      console.error('Merge debts failed:', err)
+      showToast(err instanceof Error ? err.message : 'فشل دمج الديون', 'error')
+    } finally {
+      setIsMerging(false)
+    }
+  }
 
   const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null)
   const [deleteTransactions, setDeleteTransactions] = useState(false)
@@ -229,6 +255,15 @@ export const DebtsPage: React.FC = () => {
                 : summary.netFils < 0
                   ? 'عجز مستحق عليك'
                   : 'متعادل تماماً'}
+              {summary.overdueCount > 0 ? (
+                <span className="text-amber-600 dark:text-amber-400 font-bold ms-1">
+                  • {summary.overdueCount} متأخرة ({format(summary.overdueFils)})
+                </span>
+              ) : summary.upcomingCount > 0 ? (
+                <span className="text-blue-600 dark:text-blue-400 font-bold ms-1">
+                  • {summary.upcomingCount} قريبة ({format(summary.upcomingFils)})
+                </span>
+              ) : null}
             </span>
           </div>
           <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
@@ -300,6 +335,34 @@ export const DebtsPage: React.FC = () => {
             )}
           >
             عليّ (يطلبوني)
+          </button>
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="inline-flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-700/60 gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={cn(
+              'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
+              viewMode === 'cards'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            )}
+          >
+            البطاقات الفردية
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grouped')}
+            className={cn(
+              'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
+              viewMode === 'grouped'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            )}
+          >
+            تجميع حسب الأشخاص
           </button>
         </div>
       </div>
@@ -420,6 +483,93 @@ export const DebtsPage: React.FC = () => {
           />
         </div>
 
+      ) : viewMode === 'grouped' ? (
+        <div className="space-y-6">
+          {groupedDebts.map((group) => {
+            const lentDebts = group.debts.filter((d) => d.type === 'lent')
+            const borrowedDebts = group.debts.filter((d) => d.type === 'borrowed')
+
+            return (
+              <div
+                key={group.personKey}
+                className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700/60 p-4 sm:p-5 shadow-xs space-y-4"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center shrink-0">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                        {group.canonicalName}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        {group.debts.length} {group.debts.length === 1 ? 'سجل دين' : 'سجلات ديون'}
+                        {' • '}
+                        صافي الذمة:{' '}
+                        <span
+                          className={cn(
+                            'font-bold',
+                            group.netRemainingFils > 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : group.netRemainingFils < 0
+                                ? 'text-red-500 dark:text-red-400'
+                                : 'text-slate-600 dark:text-slate-300'
+                          )}
+                        >
+                          {group.netRemainingFils > 0 ? '+' : ''}
+                          {format(group.netRemainingFils)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {lentDebts.length > 1 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setMergeTarget({ debts: lentDebts, personName: group.canonicalName })
+                        }
+                        className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                      >
+                        <GitMerge className="w-3.5 h-3.5" />
+                        <span>دمج ديون {group.canonicalName} في سجل موحد</span>
+                      </Button>
+                    )}
+                    {borrowedDebts.length > 1 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setMergeTarget({ debts: borrowedDebts, personName: group.canonicalName })
+                        }
+                        className="flex items-center gap-1.5 text-xs text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      >
+                        <GitMerge className="w-3.5 h-3.5" />
+                        <span>دمج التزامات {group.canonicalName} في سجل موحد</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {group.debts.map((debt) => (
+                    <DebtCard
+                      key={debt.id}
+                      debt={debt}
+                      onOpenPaymentModal={(d) => setPaymentDebtId(d.id)}
+                      onOpenHistoryModal={(d) => setHistoryDebtId(d.id)}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredDebts.map((debt) => (
@@ -515,6 +665,45 @@ export const DebtsPage: React.FC = () => {
               disabled={isDeleting}
             >
               {isDeleting ? 'جاري الحذف...' : 'حذف الدين'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Merge Debts Modal */}
+      <Modal
+        isOpen={Boolean(mergeTarget)}
+        onClose={() => setMergeTarget(null)}
+        title="تأكيد دمج سجلات الديون"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 text-slate-800 dark:text-slate-200">
+            <GitMerge className="w-5 h-5 text-emerald-600 shrink-0" />
+            <p className="text-sm font-semibold">
+              هل ترغب في دمج {mergeTarget?.debts.length} سجلات ديون لـ &quot;{mergeTarget?.personName}&quot; في سجل دين موحد؟
+            </p>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            سيتم تحويل جميع السجلات والسلف ودفعات السداد السابقة إلى سجل واحد متكامل، مع الحفاظ الكامل على كافة المعاملات المالية ورصيد المحفظة.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setMergeTarget(null)}
+              disabled={isMerging}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleConfirmMerge}
+              disabled={isMerging}
+            >
+              {isMerging ? 'جاري الدمج...' : 'تأكيد الدمج الموحد'}
             </Button>
           </div>
         </div>
