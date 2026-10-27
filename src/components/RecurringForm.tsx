@@ -4,8 +4,10 @@ import { Check, Info } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { DatePickerInput } from './ui/DatePickerInput'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Toggle } from './ui/Toggle'
+import { CategoryIcon } from './ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
@@ -354,8 +356,12 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
     { value: 'yearly', label: 'سنوي' },
   ]
 
+  const isTouchDevice =
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {/* Linked Circle Info Banner */}
       {hasSelectedCircle && (
         <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-xs flex items-center gap-2">
@@ -408,7 +414,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             }}
             placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
             className="w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
-            autoFocus={!isEditing}
+            autoFocus={!isEditing && !isTouchDevice}
           />
           <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
             {currencyConfig.symbol}
@@ -422,7 +428,17 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           التصنيف
         </label>
         {categoriesLoading ? (
-          <div className="py-3 text-center text-xs text-slate-400">جاري تحميل التصنيفات...</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-750 flex items-center gap-2 p-2"
+              >
+                <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
+              </div>
+            ))}
+          </div>
         ) : availableCategories.length === 0 ? (
           <div className="py-2.5 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
             لا توجد تصنيفات متاحة لهذا النوع
@@ -447,10 +463,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   )}
                 >
                   <span
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-sm"
+                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${cat.color}25` }}
                   >
-                    {cat.icon}
+                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                   </span>
                   <span className="truncate flex-1">
                     {cat.name}
@@ -549,21 +565,21 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
       {/* Dates: Start Date & Optional End Date */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Input
-          type="date"
+        <DatePickerInput
+          id="rec-start-date"
           label="تاريخ البداية"
           value={startDateStr}
-          onChange={(e) => setStartDateStr(e.target.value)}
+          onChange={(val) => setStartDateStr(val)}
           disabled={hasSelectedCircle}
           required
         />
 
         {hasEndDate ? (
-          <Input
-            type="date"
+          <DatePickerInput
+            id="rec-end-date"
             label="تاريخ الانتهاء"
             value={endDateStr}
-            onChange={(e) => setEndDateStr(e.target.value)}
+            onChange={(val) => setEndDateStr(val)}
             disabled={hasSelectedCircle}
             required={hasEndDate}
           />
@@ -604,7 +620,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
         <Button
           type="button"
           variant="outline"

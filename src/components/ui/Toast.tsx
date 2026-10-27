@@ -23,14 +23,14 @@ export const ToastContainer: React.FC = () => {
             key={toast.id}
             role="alert"
             className={cn(
-              'pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-2xl shadow-lg border text-sm font-bold transition-all animate-in slide-in-from-bottom-2 duration-200',
+              'pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-2xl shadow-xl border text-sm font-bold transition-all animate-in slide-in-from-bottom-2 duration-200 backdrop-blur-md',
               isSuccess &&
-                'bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:border-emerald-800',
+                'bg-white/95 text-zinc-900 border-emerald-500/30 dark:bg-zinc-900/95 dark:text-zinc-100 dark:border-emerald-500/30 ring-1 ring-emerald-500/20',
               isError &&
-                'bg-red-50 text-red-900 border-red-200 dark:bg-red-950 dark:text-red-100 dark:border-red-800',
+                'bg-white/95 text-zinc-900 border-red-500/30 dark:bg-zinc-900/95 dark:text-zinc-100 dark:border-red-500/30 ring-1 ring-red-500/20',
               !isSuccess &&
                 !isError &&
-                'bg-slate-50 text-slate-900 border-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700'
+                'bg-white/95 text-zinc-900 border-zinc-200/80 dark:bg-zinc-900/95 dark:text-zinc-100 dark:border-zinc-800 ring-1 ring-zinc-500/10'
             )}
           >
             <div className="flex items-center gap-2.5">

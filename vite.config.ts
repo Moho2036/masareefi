@@ -13,17 +13,23 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png', 'icons/*.svg'],
       manifest: {
-        name: 'مصاريفي - إدارة الشؤون المالية الشخصية',
-        short_name: 'مصاريفي',
-        description: 'تطبيق لإدارة المصاريف والمداخيل وتتبع الميزانية الشخصية',
-        theme_color: '#10B981',
-        background_color: '#F8FAFC',
+        name: 'بَصير - البصيرة والإدارة المالية الشخصية',
+        short_name: 'بَصير',
+        description: 'تطبيق بَصير لإدارة المصاريف والمداخيل وتتبع الميزانية الشخصية بوضوح',
+        theme_color: '#18181B',
+        background_color: '#F4F4F5',
         display: 'standalone',
         orientation: 'any',
         dir: 'rtl',
         lang: 'ar',
         start_url: '/',
         icons: [
+          {
+            src: '/icons/icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
           {
             src: '/icons/icon-192.png',
             sizes: '192x192',

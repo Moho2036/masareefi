@@ -16,6 +16,7 @@ import {
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { DatePickerInput } from '../ui/DatePickerInput'
 import { Modal } from '../ui/Modal'
 import { Toggle } from '../ui/Toggle'
 import { EmptyState } from '../ui/EmptyState'
@@ -158,8 +159,17 @@ export const MoneyCirclesManager: React.FC = () => {
   const [editingCircle, setEditingCircle] = useState<MoneyCircle | null>(null)
   const [name, setName] = useState('')
   const [monthlyAmountStr, setMonthlyAmountStr] = useState('100')
-  const [membersCount, setMembersCount] = useState(10)
-  const [myTurnMonth, setMyTurnMonth] = useState(1)
+  const [membersCountStr, setMembersCountStr] = useState('10')
+  const [myTurnMonthStr, setMyTurnMonthStr] = useState('1')
+
+  const parsedMembersCount = parseInt(membersCountStr, 10)
+  const membersCount = isNaN(parsedMembersCount) ? 2 : Math.max(2, Math.min(50, parsedMembersCount))
+
+  const parsedMyTurnMonth = parseInt(myTurnMonthStr, 10)
+  const myTurnMonth = isNaN(parsedMyTurnMonth) ? 1 : Math.max(1, Math.min(membersCount, parsedMyTurnMonth))
+
+  const setMembersCount = (val: number | string) => setMembersCountStr(String(val))
+  const setMyTurnMonth = (val: number | string) => setMyTurnMonthStr(String(val))
   const [autoSchedule, setAutoSchedule] = useState(true)
   const [startDateStr, setStartDateStr] = useState(() => getInitialStartDateStr(1))
   const [customMembers, setCustomMembers] = useState<string[]>([])
@@ -764,7 +774,30 @@ export const MoneyCirclesManager: React.FC = () => {
 
       {/* Circles List */}
       {loading ? (
-        <div className="p-8 text-center text-sm text-slate-400">جاري تحميل الجمعيات...</div>
+        <div className="space-y-4 animate-pulse">
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5 space-y-4 shadow-xs"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+                  <div className="space-y-1.5">
+                    <div className="w-32 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="w-20 h-3 rounded bg-zinc-100 dark:bg-zinc-800/60" />
+                  </div>
+                </div>
+                <div className="w-20 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[1, 2, 3, 4].map((j) => (
+                  <div key={j} className="h-16 rounded-xl bg-zinc-50 dark:bg-zinc-800/40" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : circles.length === 0 ? (
         <Card>
           <EmptyState
@@ -1295,7 +1328,7 @@ export const MoneyCirclesManager: React.FC = () => {
         title={editingCircle ? 'تعديل الجمعية المالية' : 'إنشاء جمعية مالية جديدة'}
         closeOnBackdropClick={false}
       >
-        <form onSubmit={handleSaveCircle} className="space-y-4">
+        <form onSubmit={handleSaveCircle} noValidate className="space-y-4">
           {formError && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1326,8 +1359,21 @@ export const MoneyCirclesManager: React.FC = () => {
               type="number"
               min="2"
               max="50"
-              value={membersCount}
-              onChange={(e) => handleMembersCountChange(parseInt(e.target.value, 10) || 2)}
+              value={membersCountStr}
+              onChange={(e) => {
+                const val = toWesternDigits(e.target.value)
+                setMembersCountStr(val)
+                const num = parseInt(val, 10)
+                if (!isNaN(num) && num >= 2 && num <= 50) {
+                  handleMembersCountChange(num)
+                }
+              }}
+              onBlur={() => {
+                const parsed = parseInt(membersCountStr, 10)
+                const safeCount = isNaN(parsed) ? 2 : Math.max(2, Math.min(50, parsed))
+                setMembersCountStr(String(safeCount))
+                handleMembersCountChange(safeCount)
+              }}
               required
             />
           </div>
@@ -1351,16 +1397,28 @@ export const MoneyCirclesManager: React.FC = () => {
               type="number"
               min="1"
               max={membersCount}
-              value={myTurnMonth}
-              onChange={(e) => handleMyTurnMonthChange(parseInt(e.target.value, 10) || 1)}
+              value={myTurnMonthStr}
+              onChange={(e) => {
+                const val = toWesternDigits(e.target.value)
+                setMyTurnMonthStr(val)
+                const num = parseInt(val, 10)
+                if (!isNaN(num) && num >= 1 && num <= membersCount) {
+                  handleMyTurnMonthChange(num)
+                }
+              }}
+              onBlur={() => {
+                const parsed = parseInt(myTurnMonthStr, 10)
+                const safeTurn = isNaN(parsed) ? 1 : Math.max(1, Math.min(membersCount, parsed))
+                setMyTurnMonthStr(String(safeTurn))
+                handleMyTurnMonthChange(safeTurn)
+              }}
               required
             />
 
-            <Input
+            <DatePickerInput
               label="تاريخ البدء"
-              type="date"
               value={startDateStr}
-              onChange={(e) => setStartDateStr(e.target.value)}
+              onChange={(val) => setStartDateStr(val)}
               required
             />
           </div>
@@ -1431,7 +1489,7 @@ export const MoneyCirclesManager: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
             <Button
               type="button"
               variant="ghost"

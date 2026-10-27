@@ -4,8 +4,10 @@ import {
   buildCsv,
   exportTransactionsToCsv,
   exportDebtsToCsv,
+  exportRecurringToCsv,
+  exportCirclesToCsv,
 } from './exportCsv'
-import type { Transaction, Debt, Category } from '../types'
+import type { Transaction, Debt, Category, Recurring, MoneyCircle } from '../types'
 
 describe('exportCsv module', () => {
   describe('escapeCsvCell', () => {
@@ -104,7 +106,7 @@ describe('exportCsv module', () => {
 
       expect(createdAnchor).not.toBeNull()
       expect(clickSpy).toHaveBeenCalledTimes(1)
-      expect(createdAnchor?.getAttribute('download')).toMatch(/^masareefi_transactions_\d{4}-\d{2}-\d{2}\.csv$/)
+      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_transactions_\d{4}-\d{2}-\d{2}\.csv$/)
     })
 
     it('formats and triggers download for debts', () => {
@@ -128,7 +130,7 @@ describe('exportCsv module', () => {
 
       expect(createdAnchor).not.toBeNull()
       expect(clickSpy).toHaveBeenCalledTimes(1)
-      expect(createdAnchor?.getAttribute('download')).toMatch(/^masareefi_debts_\d{4}-\d{2}-\d{2}\.csv$/)
+      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_debts_\d{4}-\d{2}-\d{2}\.csv$/)
 
       // Verify the generated CSV blob contains the new headers and values
       const blob = (globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as Blob
@@ -174,6 +176,56 @@ describe('exportCsv module', () => {
 
       exportDebtsToCsv(sampleDebts, { symbol: 'ر.س', decimals: 2 })
       expect(clickSpy).toHaveBeenCalled()
+    })
+
+    it('formats and triggers download for recurring items', () => {
+      const sampleCategories: Category[] = [
+        { id: 'c1', name: 'اشتراكات', type: 'expense', icon: '📱', color: '#10B981', archived: false, order: 0 },
+      ]
+      const sampleRecurring: Recurring[] = [
+        {
+          id: 'r1',
+          type: 'expense',
+          amountFils: 15000,
+          categoryId: 'c1',
+          title: 'إنترنت',
+          note: 'فايبر',
+          frequency: 'monthly',
+          startDate: new Date('2026-01-01T00:00:00Z'),
+          nextDate: new Date('2026-06-01T00:00:00Z'),
+          active: true,
+          createdAt: new Date(),
+        },
+      ]
+
+      exportRecurringToCsv(sampleRecurring, sampleCategories)
+
+      expect(createdAnchor).not.toBeNull()
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_recurring_\d{4}-\d{2}-\d{2}\.csv$/)
+    })
+
+    it('formats and triggers download for money circles', () => {
+      const sampleCircles: MoneyCircle[] = [
+        {
+          id: 'mc1',
+          name: 'جمعية العائلة',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 5,
+          startDate: new Date('2026-01-01T00:00:00Z'),
+          members: [],
+          status: 'active',
+          createdAt: new Date(),
+        },
+      ]
+
+      exportCirclesToCsv(sampleCircles)
+
+      expect(createdAnchor).not.toBeNull()
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_circles_\d{4}-\d{2}-\d{2}\.csv$/)
     })
   })
 })

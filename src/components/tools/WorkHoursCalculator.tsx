@@ -18,7 +18,8 @@ import {
   parseNumeric,
 } from '../../lib/workHours'
 
-const STORAGE_KEY = 'masareefi_work_hours_prefs'
+const STORAGE_KEY = 'baseer_work_hours_prefs'
+const LEGACY_STORAGE_KEY = 'masareefi_work_hours_prefs'
 
 interface BenchmarkExample {
   coffee: number
@@ -76,7 +77,7 @@ function loadStoredPrefs(currencyCode: string): {
 } {
   const benchmarks = getCurrencyBenchmarks(currencyCode)
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY)
     if (raw) {
       const parsed: StoredWorkHoursPrefs = JSON.parse(raw)
       const storedCurr = parsed.currencyCode || 'JOD'
@@ -186,20 +187,19 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   useEffect(() => {
     if (hasInteracted || isCustomSalary || isCustomItemPrice) {
       try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            currencyCode: config.code,
-            salary: salaryStr,
-            isCustomSalary,
-            itemPrice: itemPriceStr,
-            isCustomItemPrice,
-            dailyHours: dailyHoursStr,
-            workDays: workDaysStr,
-            workDaysMode,
-            itemName,
-          })
-        )
+        const payload = JSON.stringify({
+          currencyCode: config.code,
+          salary: salaryStr,
+          isCustomSalary,
+          itemPrice: itemPriceStr,
+          isCustomItemPrice,
+          dailyHours: dailyHoursStr,
+          workDays: workDaysStr,
+          workDaysMode,
+          itemName,
+        })
+        localStorage.setItem(STORAGE_KEY, payload)
+        localStorage.setItem(LEGACY_STORAGE_KEY, payload)
       } catch {
         // ignore
       }

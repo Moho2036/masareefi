@@ -190,11 +190,84 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
     if (typeof settings.rolloverBalance === 'boolean') {
       data.rolloverBalance = settings.rolloverBalance
     }
+    if (typeof settings.onboardingCompleted === 'boolean') {
+      data.onboardingCompleted = settings.onboardingCompleted
+    }
+    if (
+      settings.openingBalanceFils !== undefined &&
+      settings.openingBalanceFils !== null &&
+      Number.isFinite(Number(settings.openingBalanceFils)) &&
+      Number(settings.openingBalanceFils) >= 0
+    ) {
+      data.openingBalanceFils = Math.round(Number(settings.openingBalanceFils))
+    }
+    if (typeof settings.hideBalances === 'boolean') {
+      data.hideBalances = settings.hideBalances
+    }
+    if (typeof settings.hideZeroDecimals === 'boolean') {
+      data.hideZeroDecimals = settings.hideZeroDecimals
+    }
+    if (settings.categorySortMode === 'usage' || settings.categorySortMode === 'manual') {
+      data.categorySortMode = settings.categorySortMode
+    }
+    if (
+      settings.customCurrencyDecimals !== undefined &&
+      settings.customCurrencyDecimals !== null &&
+      [0, 2, 3].includes(Number(settings.customCurrencyDecimals))
+    ) {
+      data.customCurrencyDecimals = Number(settings.customCurrencyDecimals)
+    }
+    if (settings.rolloverStartDate !== undefined && settings.rolloverStartDate !== null) {
+      if (settings.rolloverStartDate instanceof Timestamp) {
+        data.rolloverStartDate = settings.rolloverStartDate
+      } else if (settings.rolloverStartDate instanceof Date) {
+        data.rolloverStartDate = Timestamp.fromDate(settings.rolloverStartDate)
+      } else if (typeof settings.rolloverStartDate === 'string') {
+        const parsed = new Date(settings.rolloverStartDate)
+        if (!isNaN(parsed.getTime())) {
+          data.rolloverStartDate = Timestamp.fromDate(parsed)
+        }
+      }
+    }
+    if (typeof settings.lastBackupAt === 'string') {
+      data.lastBackupAt = settings.lastBackupAt.slice(0, 50)
+    }
+    if (typeof settings.avatarColor === 'string' && settings.avatarColor.trim()) {
+      data.avatarColor = settings.avatarColor.trim().slice(0, 30)
+    }
+    if (settings.notificationPrefs && typeof settings.notificationPrefs === 'object') {
+      const prefs: Record<string, unknown> = {}
+      if (typeof settings.notificationPrefs.autoPayments === 'boolean') {
+        prefs.autoPayments = settings.notificationPrefs.autoPayments
+      }
+      if (typeof settings.notificationPrefs.debtReminders === 'boolean') {
+        prefs.debtReminders = settings.notificationPrefs.debtReminders
+      }
+      if (
+        settings.notificationPrefs.debtReminderDaysBefore !== undefined &&
+        [0, 1, 3].includes(Number(settings.notificationPrefs.debtReminderDaysBefore))
+      ) {
+        prefs.debtReminderDaysBefore = Number(settings.notificationPrefs.debtReminderDaysBefore)
+      }
+      if (typeof settings.notificationPrefs.circleAlerts === 'boolean') {
+        prefs.circleAlerts = settings.notificationPrefs.circleAlerts
+      }
+      if (typeof settings.notificationPrefs.budgetWarnings === 'boolean') {
+        prefs.budgetWarnings = settings.notificationPrefs.budgetWarnings
+      }
+      if (typeof settings.notificationPrefs.dailyReminder === 'boolean') {
+        prefs.dailyReminder = settings.notificationPrefs.dailyReminder
+      }
+      if (typeof settings.notificationPrefs.dailyReminderTime === 'string') {
+        prefs.dailyReminderTime = settings.notificationPrefs.dailyReminderTime.slice(0, 10)
+      }
+      data.notificationPrefs = prefs
+    }
     return data
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): UserSettings {
     const data = snapshot.data(options)
-    return {
+    const settings: UserSettings = {
       uid: snapshot.id,
       displayName: data.displayName ?? '',
       currency: data.currency ?? 'JOD',
@@ -208,6 +281,44 @@ export const userSettingsConverter: FirestoreDataConverter<UserSettings> = {
             ? new Date(data.createdAt)
             : undefined,
     }
+    if (typeof data.onboardingCompleted === 'boolean') {
+      settings.onboardingCompleted = data.onboardingCompleted
+    }
+    if (
+      data.openingBalanceFils !== undefined &&
+      data.openingBalanceFils !== null &&
+      typeof data.openingBalanceFils === 'number'
+    ) {
+      settings.openingBalanceFils = data.openingBalanceFils
+    }
+    if (typeof data.hideBalances === 'boolean') {
+      settings.hideBalances = data.hideBalances
+    }
+    if (typeof data.hideZeroDecimals === 'boolean') {
+      settings.hideZeroDecimals = data.hideZeroDecimals
+    }
+    if (data.categorySortMode === 'usage' || data.categorySortMode === 'manual') {
+      settings.categorySortMode = data.categorySortMode
+    }
+    if (typeof data.customCurrencyDecimals === 'number') {
+      settings.customCurrencyDecimals = data.customCurrencyDecimals
+    }
+    if (data.rolloverStartDate) {
+      settings.rolloverStartDate =
+        data.rolloverStartDate instanceof Timestamp
+          ? data.rolloverStartDate.toDate()
+          : new Date(data.rolloverStartDate)
+    }
+    if (typeof data.lastBackupAt === 'string') {
+      settings.lastBackupAt = data.lastBackupAt
+    }
+    if (typeof data.avatarColor === 'string') {
+      settings.avatarColor = data.avatarColor
+    }
+    if (data.notificationPrefs && typeof data.notificationPrefs === 'object') {
+      settings.notificationPrefs = { ...data.notificationPrefs }
+    }
+    return settings
   },
 }
 

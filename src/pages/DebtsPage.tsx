@@ -305,61 +305,84 @@ export const DebtsPage: React.FC = () => {
       </div>
 
       {/* 4. Secondary Status Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold">
-        <button
-          type="button"
-          onClick={() => setStatusFilter('all')}
-          className={cn(
-            'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
-            statusFilter === 'all'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-          )}
-        >
-          كافة الحالات ({debts.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('active')}
-          className={cn(
-            'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
-            statusFilter === 'active'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-          )}
-        >
-          الديون المفتوحة ({summary.lentActiveCount + summary.borrowedActiveCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('overdue')}
-          className={cn(
-            'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
-            statusFilter === 'overdue'
-              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-700 dark:text-amber-400'
-              : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-          )}
-        >
-          المتأخرة عن الموعد ({overdueCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('settled')}
-          className={cn(
-            'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
-            statusFilter === 'settled'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-          )}
-        >
-          المسددة بالكامل ({summary.settledCount})
-        </button>
+      <div className="relative">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            className={cn(
+              'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
+              statusFilter === 'all'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            )}
+          >
+            كافة الحالات ({debts.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('active')}
+            className={cn(
+              'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
+              statusFilter === 'active'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            )}
+          >
+            الديون المفتوحة ({summary.lentActiveCount + summary.borrowedActiveCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('overdue')}
+            className={cn(
+              'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
+              statusFilter === 'overdue'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-700 dark:text-amber-400'
+                : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            )}
+          >
+            المتأخرة عن الموعد ({overdueCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('settled')}
+            className={cn(
+              'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
+              statusFilter === 'settled'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            )}
+          >
+            المسددة بالكامل ({summary.settledCount})
+          </button>
+        </div>
       </div>
 
       {/* 5. Debts Cards Grid or Empty State */}
       {loading ? (
-        <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-          <p className="text-sm font-semibold animate-pulse">جارٍ تحميل بيانات الديون...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5 space-y-4 shadow-xs"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+                  <div className="space-y-1.5">
+                    <div className="w-24 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="w-16 h-2.5 rounded bg-zinc-100 dark:bg-zinc-800/60" />
+                  </div>
+                </div>
+                <div className="w-16 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="h-16 rounded-xl bg-zinc-50 dark:bg-zinc-800/40" />
+              <div className="flex items-center justify-between pt-2">
+                <div className="w-20 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+                <div className="w-16 h-8 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : filteredDebts.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700/60 p-8 shadow-xs">

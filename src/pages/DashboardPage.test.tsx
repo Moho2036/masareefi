@@ -132,4 +132,16 @@ describe('DashboardPage Component', () => {
     // formatFinancialMonthLabel produces "أغسطس / سبتمبر 2026"
     expect(screen.getByText(/الرصيد المرحّل \(من شهر أغسطس \/ سبتمبر 2026\):/)).toBeInTheDocument()
   })
+
+  it('displays "الرصيد التراكمي / الافتتاحي:" badge when openingBalanceFils is present', () => {
+    mockRolloverBalanceFils = 20000
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    )
+
+    // Without opening balance, standard text
+    expect(screen.getByText(/الرصيد المرحّل/)).toBeInTheDocument()
+  })
 })

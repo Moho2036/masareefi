@@ -18,21 +18,40 @@ export interface UseCurrencyResult {
 export function useCurrency(): UseCurrencyResult {
   const { data: settings } = useUserSettings()
   const currency = settings?.currency || 'JOD'
+  const customDecimals = settings?.customCurrencyDecimals
+  const hideBalances = Boolean(settings?.hideBalances)
+  const hideZeroDecimals = Boolean(settings?.hideZeroDecimals)
 
-  const config = useMemo(() => getCurrencyConfig(currency), [currency])
+  const config = useMemo(
+    () => getCurrencyConfig(currency, customDecimals),
+    [currency, customDecimals]
+  )
 
   const format = useCallback(
     (fils: number, opts?: FormatOptions) => {
-      return formatMoney(fils, currency, opts)
+      return formatMoney(fils, currency, {
+        maskAmount: opts?.maskAmount !== undefined ? opts.maskAmount : hideBalances,
+        hideZeroDecimals:
+          opts?.hideZeroDecimals !== undefined ? opts.hideZeroDecimals : hideZeroDecimals,
+        customDecimals: opts?.customDecimals !== undefined ? opts.customDecimals : customDecimals,
+        ...opts,
+      })
     },
-    [currency]
+    [currency, hideBalances, hideZeroDecimals, customDecimals]
   )
 
   const formatWithSign = useCallback(
     (fils: number, type: 'expense' | 'income', opts?: FormatOptions) => {
-      return formatSigned(fils, type, { ...opts, currency })
+      return formatSigned(fils, type, {
+        maskAmount: opts?.maskAmount !== undefined ? opts.maskAmount : hideBalances,
+        hideZeroDecimals:
+          opts?.hideZeroDecimals !== undefined ? opts.hideZeroDecimals : hideZeroDecimals,
+        customDecimals: opts?.customDecimals !== undefined ? opts.customDecimals : customDecimals,
+        currency,
+        ...opts,
+      })
     },
-    [currency]
+    [currency, hideBalances, hideZeroDecimals, customDecimals]
   )
 
   return { currency, config, format, formatWithSign }

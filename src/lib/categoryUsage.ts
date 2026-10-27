@@ -1,8 +1,9 @@
-const USAGE_KEY = 'masareefi_category_usage'
+const USAGE_KEY = 'baseer_category_usage'
+const LEGACY_USAGE_KEY = 'masareefi_category_usage'
 
 export function getCategoryUsageMap(): Record<string, number> {
   try {
-    const raw = localStorage.getItem(USAGE_KEY)
+    const raw = localStorage.getItem(USAGE_KEY) || localStorage.getItem(LEGACY_USAGE_KEY)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return typeof parsed === 'object' && parsed !== null ? parsed : {}
@@ -13,7 +14,9 @@ export function getCategoryUsageMap(): Record<string, number> {
 
 export function saveCategoryUsageMap(map: Record<string, number>): void {
   try {
-    localStorage.setItem(USAGE_KEY, JSON.stringify(map))
+    const serialized = JSON.stringify(map)
+    localStorage.setItem(USAGE_KEY, serialized)
+    localStorage.setItem(LEGACY_USAGE_KEY, serialized)
   } catch {
     // Ignore storage errors
   }

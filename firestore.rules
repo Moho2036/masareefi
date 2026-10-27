@@ -13,8 +13,18 @@ rules_version = '2';
 //   - monthStartDay: int (required, 1..28)
 //   - theme: string (required, 'system' | 'light' | 'dark')
 //   - rolloverBalance: bool (optional)
+//   - onboardingCompleted: bool (optional)
+//   - openingBalanceFils: int (optional, 0..1000000000000)
+//   - hideBalances: bool (optional)
+//   - hideZeroDecimals: bool (optional)
+//   - categorySortMode: string (optional, 'usage' | 'manual')
+//   - customCurrencyDecimals: int (optional, 0 | 2 | 3)
+//   - rolloverStartDate: timestamp (optional)
+//   - lastBackupAt: string (optional, 0..50)
+//   - avatarColor: string (optional, 0..30)
+//   - notificationPrefs: map (optional)
 //   - createdAt: timestamp (required, immutable)
-//   Delete: denied.
+//   Delete: owner only.
 //
 // Collection: users/{uid}/categories   Document ID: any
 //   - name: string (required, 1..40)
@@ -104,14 +114,41 @@ service cloud.firestore {
     }
 
     // ---------------- Domain Validators ----------------
+    function isValidNotificationPrefs(prefs) {
+      return prefs is map
+        && prefs.keys().hasOnly(['autoPayments', 'debtReminders', 'debtReminderDaysBefore', 'circleAlerts', 'budgetWarnings', 'dailyReminder', 'dailyReminderTime'])
+        && (!('autoPayments' in prefs) || prefs.autoPayments is bool)
+        && (!('debtReminders' in prefs) || prefs.debtReminders is bool)
+        && (!('debtReminderDaysBefore' in prefs) || (prefs.debtReminderDaysBefore is int && prefs.debtReminderDaysBefore in [0, 1, 3]))
+        && (!('circleAlerts' in prefs) || prefs.circleAlerts is bool)
+        && (!('budgetWarnings' in prefs) || prefs.budgetWarnings is bool)
+        && (!('dailyReminder' in prefs) || prefs.dailyReminder is bool)
+        && (!('dailyReminderTime' in prefs) || isStr(prefs.dailyReminderTime, 0, 10));
+    }
+
     function isValidUserProfile(data) {
-      return data.keys().hasOnly(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt', 'rolloverBalance'])
+      return data.keys().hasOnly([
+          'displayName', 'currency', 'monthStartDay', 'theme', 'createdAt',
+          'rolloverBalance', 'onboardingCompleted', 'openingBalanceFils',
+          'hideBalances', 'hideZeroDecimals', 'categorySortMode', 'customCurrencyDecimals',
+          'rolloverStartDate', 'lastBackupAt', 'avatarColor', 'notificationPrefs'
+        ])
         && data.keys().hasAll(['displayName', 'currency', 'monthStartDay', 'theme', 'createdAt'])
         && isStr(data.displayName, 0, 100)
         && isStr(data.currency, 1, 20)
         && data.monthStartDay is int && data.monthStartDay >= 1 && data.monthStartDay <= 28
         && data.theme in ['system', 'light', 'dark']
         && (!('rolloverBalance' in data) || data.rolloverBalance is bool)
+        && (!('onboardingCompleted' in data) || data.onboardingCompleted is bool)
+        && (!('openingBalanceFils' in data) || (data.openingBalanceFils is int && data.openingBalanceFils >= 0 && data.openingBalanceFils <= 1000000000000))
+        && (!('hideBalances' in data) || data.hideBalances is bool)
+        && (!('hideZeroDecimals' in data) || data.hideZeroDecimals is bool)
+        && (!('categorySortMode' in data) || (data.categorySortMode is string && data.categorySortMode in ['usage', 'manual']))
+        && (!('customCurrencyDecimals' in data) || (data.customCurrencyDecimals is int && data.customCurrencyDecimals in [0, 2, 3]))
+        && (!('rolloverStartDate' in data) || data.rolloverStartDate is timestamp)
+        && (!('lastBackupAt' in data) || isStr(data.lastBackupAt, 0, 50))
+        && (!('avatarColor' in data) || isStr(data.avatarColor, 0, 30))
+        && (!('notificationPrefs' in data) || isValidNotificationPrefs(data.notificationPrefs))
         && data.createdAt is timestamp;
     }
 
@@ -198,7 +235,7 @@ service cloud.firestore {
       allow create: if isOwner(uid) && isValidUserProfile(request.resource.data);
       allow update: if isOwner(uid) && isValidUserProfile(request.resource.data)
         && fieldUnchanged('createdAt');
-      allow delete: if false;
+      allow delete: if isOwner(uid);
 
       match /categories/{id} {
         allow read, delete: if isOwner(uid);

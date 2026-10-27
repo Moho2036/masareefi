@@ -162,14 +162,14 @@ describe('backupRestore module', () => {
       expect(res.error).toBeDefined()
     })
 
-    it('rejects JSON not from masareefi app', () => {
+    it('rejects JSON not from baseer app', () => {
       const otherAppBackup = {
         app: 'other-app',
         data: {},
       }
       const res = validateBackup(JSON.stringify(otherAppBackup))
       expect(res.valid).toBe(false)
-      expect(res.error).toContain('ليس نسخة احتياطية خاصة بتطبيق مصاريفي')
+      expect(res.error).toContain('ليس نسخة احتياطية خاصة بتطبيق بَصير')
     })
 
     it('rejects JSON with missing data payload', () => {
@@ -315,6 +315,82 @@ describe('backupRestore module', () => {
       expect(updateCall).toBeDefined()
       expect(updateCall![1].createdAt).toBeUndefined()
       expect(updateCall![1].displayName).toBe('أحمد')
+    })
+
+    it('restores onboardingCompleted and openingBalanceFils in settings without defaulting undefined to 0', async () => {
+      mockSet.mockClear()
+      mockUpdate.mockClear()
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ createdAt: new Date() }),
+      })
+
+      const backupWithNewSettings: MasareefiBackup = {
+        ...sampleBackup,
+        data: {
+          ...sampleBackup.data,
+          settings: {
+            ...sampleBackup.data.settings!,
+            onboardingCompleted: true,
+            openingBalanceFils: 300000,
+          },
+        },
+      }
+
+      await restoreBackup('user-test-uid', backupWithNewSettings)
+      const updateCall = mockUpdate.mock.calls.find((call) => call[0].path === 'users/user-test-uid')
+      expect(updateCall).toBeDefined()
+      expect(updateCall![1].onboardingCompleted).toBe(true)
+      expect(updateCall![1].openingBalanceFils).toBe(300000)
+    })
+
+    it('restores extended settings (privacy, currency decimals, notificationPrefs)', async () => {
+      mockUpdate.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => true })
+
+      const backupWithExtendedSettings: MasareefiBackup = {
+        version: 1,
+        app: 'baseer',
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          settings: {
+            displayName: 'سارة',
+            currency: 'USD',
+            monthStartDay: 15,
+            theme: 'dark',
+            rolloverBalance: true,
+            hideBalances: true,
+            hideZeroDecimals: true,
+            categorySortMode: 'manual',
+            customCurrencyDecimals: 2,
+            avatarColor: '#2563eb',
+            notificationPrefs: {
+              autoPayments: true,
+              debtReminders: false,
+              debtReminderDaysBefore: 3,
+            },
+          },
+          categories: [],
+          transactions: [],
+          debts: [],
+          recurring: [],
+          circles: [],
+        },
+      }
+
+      await restoreBackup('user-extended-uid', backupWithExtendedSettings)
+      const updateCall = mockUpdate.mock.calls.find((call) => call[0].path === 'users/user-extended-uid')
+      expect(updateCall).toBeDefined()
+      expect(updateCall![1].hideBalances).toBe(true)
+      expect(updateCall![1].hideZeroDecimals).toBe(true)
+      expect(updateCall![1].categorySortMode).toBe('manual')
+      expect(updateCall![1].customCurrencyDecimals).toBe(2)
+      expect(updateCall![1].avatarColor).toBe('#2563eb')
+      expect(updateCall![1].notificationPrefs).toEqual({
+        autoPayments: true,
+        debtReminders: false,
+        debtReminderDaysBefore: 3,
+      })
     })
 
     it('preserves existing transactions and debts in merge mode (default)', async () => {
@@ -722,7 +798,7 @@ describe('backupRestore module', () => {
       downloadBackupFile(sampleBackup)
 
       const expectedDate = formatDateInput(new Date())
-      expect(downloadedName).toBe(`masareefi-backup-${expectedDate}.json`)
+      expect(downloadedName).toBe(`baseer-backup-${expectedDate}.json`)
     })
   })
 

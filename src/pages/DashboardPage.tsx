@@ -19,6 +19,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { EmptyState } from '../components/ui/EmptyState'
 import { QuickFeatureHub } from '../components/dashboard/QuickFeatureHub'
 import { HeroCardSkeleton } from '../components/skeletons/DashboardSkeleton'
@@ -105,9 +106,12 @@ export const DashboardPage: React.FC = () => {
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
-  const effectiveRollover = isRolloverEnabled
-    ? (isCurrentFiscalMonth ? (appData?.rolloverBalanceFils ?? 0) : effectiveLocalRollover)
-    : 0
+  const effectiveRollover =
+    (isRolloverEnabled
+      ? isCurrentFiscalMonth
+        ? (appData?.rolloverBalanceFils ?? 0)
+        : effectiveLocalRollover
+      : 0) + (settings?.openingBalanceFils ?? 0)
 
   const prevMonthLabel = useMemo(() => {
     const prevFinancialMonth = getPreviousFinancialMonth(range.start, monthStartDay)
@@ -127,9 +131,21 @@ export const DashboardPage: React.FC = () => {
       debts,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
+      rolloverBalanceFils:
+        isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
+          ? effectiveRollover
+          : undefined,
     })
-  }, [rawTransactions, recurringList, debts, monthStartDay, range, effectiveRollover, isRolloverEnabled])
+  }, [
+    rawTransactions,
+    recurringList,
+    debts,
+    monthStartDay,
+    range,
+    effectiveRollover,
+    isRolloverEnabled,
+    settings?.openingBalanceFils,
+  ])
 
   // Calculate active debts summary
   const debtSummary = useMemo(() => calculateDebtSummary(debts), [debts])
@@ -231,12 +247,13 @@ export const DashboardPage: React.FC = () => {
   // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
   const isInitialOrLoading = txLoading && rawTransactions.length === 0
 
-  // Financial health and liquidity pool calculations (taking positive/negative rollover into account)
-  const effectiveAvailableIncome = sums.income + (isRolloverEnabled ? effectiveRollover : 0)
+  // Financial health and liquidity pool calculations (taking positive/negative rollover and opening balance into account)
+  const hasRolloverEffect = isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
+  const effectiveAvailableIncome = sums.income + (hasRolloverEffect ? effectiveRollover : 0)
   const isZeroState =
     sums.income === 0 &&
     sums.expense === 0 &&
-    (!isRolloverEnabled || effectiveRollover === 0)
+    (!hasRolloverEffect || effectiveRollover === 0)
   const isTemporaryLiquidityDeficit =
     displayBalance < 0 && forecast.freeBalance > 0 && forecast.upcomingRecurringIncome > 0
   const isSpendingWithoutIncome =
@@ -246,9 +263,7 @@ export const DashboardPage: React.FC = () => {
   const isHighConsumption = effectiveAvailableIncome > 0 && consumptionRatio >= 0.8
 
   // Dynamic Hero Card Palette based on financial health:
-  // safe (excellent) -> Emerald / Green (lighter, vibrant, distinct)
-  // warning (medium) -> Amber / Yellow (warm, bright, clear)
-  // danger (bad) -> Rose / Red (striking, clear crimson)
+  // Clean Swiss surface with distinct top accent bar and badges
   const heroTheme = useMemo(() => {
     let status: 'safe' | 'warning' | 'danger'
     if (isInitialOrLoading) {
@@ -270,51 +285,45 @@ export const DashboardPage: React.FC = () => {
 
     if (status === 'safe') {
       return {
-        cardBg:
-          'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 border-emerald-400/40 shadow-xl shadow-emerald-900/15',
-        walletBg: 'bg-white/20 text-white',
-        badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+        status,
+        topBar: 'bg-emerald-500',
+        badge:
+          'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60',
         badgeText: isInitialOrLoading
           ? 'جاري التحديث...'
           : isZeroState
             ? 'لا توجد معاملات بعد'
             : 'فائض مالي',
-        subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
-        subLabel: 'text-emerald-100',
-        stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
-        stripText: 'text-emerald-100',
+        stripBg:
+          'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:border-emerald-800/50 dark:text-emerald-200',
       }
     }
     if (status === 'warning') {
       return {
-        cardBg:
-          'bg-gradient-to-br from-amber-600 via-amber-700 to-yellow-800 border-amber-400/40 shadow-xl shadow-amber-900/15',
-        walletBg: 'bg-white/20 text-white',
-        badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+        status,
+        topBar: 'bg-amber-500',
+        badge:
+          'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60',
         badgeText: isTemporaryLiquidityDeficit
           ? 'سيولة مؤقتة بانتظار الدخل'
           : isHighConsumption
             ? `استهلكت ${Math.round(consumptionRatio * 100)}% من الدخل`
             : 'انتبه للوتيرة',
-        subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
-        subLabel: 'text-amber-100',
-        stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
-        stripText: 'text-amber-100',
+        stripBg:
+          'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200',
       }
     }
     return {
-      cardBg:
-        'bg-gradient-to-br from-rose-600 via-red-700 to-rose-800 border-rose-400/40 shadow-xl shadow-rose-900/20',
-      walletBg: 'bg-white/20 text-white',
-      badge: 'bg-white/20 text-white border-white/30 backdrop-blur-xs',
+      status,
+      topBar: 'bg-red-500',
+      badge:
+        'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800/60',
       badgeText:
         displayBalance < 0 || isSpendingWithoutIncome
           ? 'عجز مالي'
           : 'التزامات تفوق الرصيد',
-      subBox: 'bg-white/10 hover:bg-white/15 border-white/20 text-white backdrop-blur-xs',
-      subLabel: 'text-rose-100',
-      stripBg: 'bg-white/15 hover:bg-white/20 border-white/25 text-white backdrop-blur-xs',
-      stripText: 'text-rose-100',
+      stripBg:
+        'bg-red-50/70 hover:bg-red-100/70 border-red-200/80 text-red-900 dark:bg-red-950/30 dark:border-red-800/50 dark:text-red-200',
     }
   }, [
     isInitialOrLoading,
@@ -347,27 +356,20 @@ export const DashboardPage: React.FC = () => {
         }
       />
 
-      {/* 1. Hero Card: Clean, Vibrant, High-Contrast Cash Balance */}
+      {/* 1. Hero Card: Clean Swiss Surface & Financial Health Indicator */}
       {isInitialOrLoading ? (
         <HeroCardSkeleton />
       ) : (
-        <div
-          className={cn(
-            'text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-md border space-y-4 transition-colors duration-300',
-            heroTheme.cardBg
-          )}
-        >
-          <div className="flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 border border-zinc-200 dark:border-zinc-800 shadow-sm relative overflow-hidden rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4 min-h-[260px] sm:min-h-[275px] flex flex-col justify-between transition-all">
+          {/* Top highlight bar */}
+          <div className={cn('h-1.5 w-full absolute top-0 inset-x-0', heroTheme.topBar)} />
+
+          <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2.5">
-              <div
-                className={cn(
-                  'w-8 h-8 rounded-xl flex items-center justify-center',
-                  heroTheme.walletBg
-                )}
-              >
+              <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center">
                 <Wallet className="w-4 h-4 stroke-[2.2]" />
               </div>
-              <span className="text-xs sm:text-sm font-semibold text-white/90">
+              <span className="text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                 {isRolloverEnabled ? 'الرصيد المتاح (شامل المرحّل)' : 'الرصيد المتاح (لهذا الشهر)'}
               </span>
             </div>
@@ -381,16 +383,16 @@ export const DashboardPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none">
+          <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50">
             {format(displayBalance)}
           </div>
 
           {/* Rollover Breakdown Subline */}
-          {isRolloverEnabled && (
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-medium text-white/95 -mt-1 pb-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/15 backdrop-blur-xs border border-white/20">
-                <span className="text-white/80 text-[11px] sm:text-xs">صافي هذا الشهر:</span>
-                <span className="font-black text-white">
+          {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && (
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-medium -mt-1 pb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+                <span className="text-zinc-500 dark:text-zinc-400 text-[11px] sm:text-xs">صافي هذا الشهر:</span>
+                <span className="font-black text-zinc-900 dark:text-zinc-100">
                   {sums.balance > 0
                     ? `+ ${format(sums.balance)}`
                     : sums.balance < 0
@@ -398,11 +400,13 @@ export const DashboardPage: React.FC = () => {
                       : format(0)}
                 </span>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/15 backdrop-blur-xs border border-white/20">
-                <span className="text-white/80 text-[11px] sm:text-xs">
-                  الرصيد المرحّل (من شهر {prevMonthLabel}):
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+                <span className="text-zinc-500 dark:text-zinc-400 text-[11px] sm:text-xs">
+                  {(settings?.openingBalanceFils ?? 0) > 0
+                    ? 'الرصيد التراكمي / الافتتاحي:'
+                    : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}
                 </span>
-                <span className="font-black text-white">
+                <span className="font-black text-zinc-900 dark:text-zinc-100">
                   {effectiveRollover > 0
                     ? `+ ${format(effectiveRollover)}`
                     : effectiveRollover < 0
@@ -414,40 +418,30 @@ export const DashboardPage: React.FC = () => {
           )}
 
           {/* Total Income & Total Expenses Row */}
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/15">
-            <div
-              className={cn(
-                'flex items-center gap-2.5 p-2.5 rounded-xl border',
-                heroTheme.subBox
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0 font-bold">
+          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-bold border border-emerald-200/60 dark:border-emerald-800/60">
                 <TrendingUp className="w-4 h-4 stroke-[2.5]" />
               </div>
               <div className="min-w-0">
-                <div className={cn('text-[11px] font-medium', heroTheme.subLabel)}>
+                <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                   إجمالي المداخيل
                 </div>
-                <div className="text-sm sm:text-base font-black truncate text-white">
+                <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
                   {format(sums.income)}
                 </div>
               </div>
             </div>
 
-            <div
-              className={cn(
-                'flex items-center gap-2.5 p-2.5 rounded-xl border',
-                heroTheme.subBox
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0 font-bold">
+            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+              <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 font-bold border border-red-200/60 dark:border-red-800/60">
                 <TrendingDown className="w-4 h-4 stroke-[2.5]" />
               </div>
               <div className="min-w-0">
-                <div className={cn('text-[11px] font-medium', heroTheme.subLabel)}>
+                <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                   إجمالي المصاريف
                 </div>
-                <div className="text-sm sm:text-base font-black truncate text-white">
+                <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
                   {format(sums.expense)}
                 </div>
               </div>
@@ -464,20 +458,20 @@ export const DashboardPage: React.FC = () => {
               )}
               title="عرض التفاصيل في التقارير"
             >
-              <div className="flex items-center gap-2 text-white font-medium">
-                <div className="w-6 h-6 rounded-lg bg-white/20 text-white flex items-center justify-center">
+              <div className="flex items-center gap-2 font-medium">
+                <div className="w-6 h-6 rounded-lg bg-white/50 dark:bg-zinc-900/50 flex items-center justify-center">
                   <ShieldCheck className="w-3.5 h-3.5" />
                 </div>
                 <span>ميزانية الأمان اليومي:</span>
               </div>
               <div className="flex items-center gap-1.5 text-end">
-                <span className="font-black text-white text-sm sm:text-base">
+                <span className="font-black text-sm sm:text-base">
                   {format(forecast.dailySafeFils)}
                 </span>
-                <span className={cn('text-[11px] font-medium', heroTheme.stripText)}>
+                <span className="text-[11px] font-medium opacity-80">
                   / اليوم
                 </span>
-                <ChevronLeft className="w-3.5 h-3.5 text-white/80 group-hover:-translate-x-0.5 transition-transform" />
+                <ChevronLeft className="w-3.5 h-3.5 opacity-80 group-hover:-translate-x-0.5 transition-transform" />
               </div>
             </Link>
           )}
@@ -591,12 +585,12 @@ export const DashboardPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <span
-                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base shadow-xs"
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
                           style={{
                             backgroundColor: cat ? `${cat.color}25` : '#94A3B825',
                           }}
                         >
-                          {cat ? cat.icon : '📁'}
+                          <CategoryIcon icon={cat?.icon || '📁'} color={cat?.color} size="md" />
                         </span>
                         <div className="min-w-0">
                           <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
@@ -626,7 +620,7 @@ export const DashboardPage: React.FC = () => {
                               e.stopPropagation()
                               openDuplicate(tx)
                             }}
-                            className="inline-flex sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                            className="hidden sm:inline-flex sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
                             aria-label="تكرار المعاملة"
                             title="تكرار المعاملة"
                           >
@@ -792,12 +786,12 @@ export const DashboardPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span
-                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm shadow-xs"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-xs"
                           style={{
                             backgroundColor: cat ? `${cat.color}25` : '#94A3B825',
                           }}
                         >
-                          {cat ? cat.icon : '🔄'}
+                          <CategoryIcon icon={cat?.icon || '🔄'} color={cat?.color} size="sm" />
                         </span>
                         <div className="min-w-0">
                           <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">

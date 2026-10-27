@@ -22,6 +22,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
+import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
@@ -389,42 +390,44 @@ export const TransactionsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Bottom Row: Horizontal Scrollable Category Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 select-none text-xs">
-              {/* All Categories Chip */}
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('all')}
-                className={cn(
-                  'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
-                  selectedCategory === 'all'
-                    ? 'bg-emerald-500 text-white shadow-xs font-bold'
-                    : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                )}
-              >
-                كل التصنيفات
-              </button>
+            {/* Bottom Row: Category Chips with Desktop Wrap & Mobile Scroll */}
+            <div className="relative">
+              <div className="flex items-center gap-1.5 overflow-x-auto lg:overflow-visible flex-nowrap lg:flex-wrap pb-1 pt-0.5 select-none text-xs scrollbar-none">
+                {/* All Categories Chip */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                    selectedCategory === 'all'
+                      ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                      : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                  )}
+                >
+                  كل التصنيفات
+                </button>
 
-              {/* Individual Category Chips */}
-              {relevantCategories.map((cat) => {
-                const isSelected = selectedCategory === cat.id
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategory(isSelected ? 'all' : cat.id)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
-                      isSelected
-                        ? 'bg-emerald-500 text-white shadow-xs font-bold'
-                        : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                    )}
-                  >
-                    <span className="text-sm shrink-0">{cat.icon}</span>
-                    <span className="font-semibold">{cat.name}</span>
-                  </button>
-                )
-              })}
+                {/* Individual Category Chips */}
+                {relevantCategories.map((cat) => {
+                  const isSelected = selectedCategory === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(isSelected ? 'all' : cat.id)}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                        isSelected
+                          ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                          : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                      )}
+                    >
+                      <CategoryIcon icon={cat.icon} size="sm" />
+                      <span className="font-semibold">{cat.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
@@ -528,7 +531,7 @@ export const TransactionsPage: React.FC = () => {
 
         {/* Main Column: Transactions List */}
         <main className="lg:col-span-8 space-y-4">
-          {txLoading ? (
+          {txLoading && rawTransactions.length === 0 ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
                 <div
@@ -615,10 +618,10 @@ export const TransactionsPage: React.FC = () => {
                             {/* Right side: Emoji circle + Category Name + Note */}
                             <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
                               <div
-                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-base sm:text-lg shrink-0"
+                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0"
                                 style={{ backgroundColor: `${color}20` }}
                               >
-                                {icon}
+                                <CategoryIcon icon={icon} color={color} size="md" />
                               </div>
 
                               <div className="min-w-0 flex-1">
@@ -673,8 +676,8 @@ export const TransactionsPage: React.FC = () => {
                                 {formatWithSign(tx.amountFils, tx.type)}
                               </div>
 
-                              {/* Action Buttons: visible on mobile, smooth group hover on desktop */}
-                              <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                              {/* Action Buttons: hidden on mobile, smooth group hover on desktop */}
+                              <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 {(() => {
                                   const linkedPaymentItem = findLinkedDebtPayment(tx.id, debts)
                                   const isMergedDebtPayment = Boolean(linkedPaymentItem?.payment?.isMerged)

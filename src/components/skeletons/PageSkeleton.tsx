@@ -18,7 +18,7 @@ export const PageSkeleton: React.FC = () => {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 space-y-3"
+            className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-3"
           >
             <div className="flex items-center justify-between">
               <Skeleton className="w-20 h-4" />
@@ -31,14 +31,14 @@ export const PageSkeleton: React.FC = () => {
       </div>
 
       {/* Main Content Skeleton */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-700/60">
+      <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
           <Skeleton className="w-28 h-5" />
           <Skeleton className="w-16 h-4" />
         </div>
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/70 dark:bg-slate-750/40">
+            <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-zinc-50/80 dark:bg-zinc-800/40">
               <div className="flex items-center gap-3">
                 <Skeleton className="w-9 h-9 rounded-xl" />
                 <div className="space-y-1.5">

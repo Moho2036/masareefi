@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { DatePickerInput } from '../ui/DatePickerInput'
 import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
@@ -195,7 +196,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {error && (
         <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60 rounded-xl text-xs font-semibold">
           {error}
@@ -284,14 +285,10 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
       {/* 4. Start Date */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-          تاريخ الدين
-        </label>
-        <input
-          type="date"
+        <DatePickerInput
+          label="تاريخ الدين"
           value={startDateStr}
-          onChange={(e) => setStartDateStr(e.target.value)}
-          className="w-full rounded-xl border bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm outline-none border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          onChange={(val) => setStartDateStr(val)}
           required
         />
       </div>
@@ -322,11 +319,10 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
         {hasDueDate && (
           <div className="pt-2">
-            <input
-              type="date"
+            <DatePickerInput
+              label="تاريخ الاستحقاق"
               value={dueDateStr}
-              onChange={(e) => setDueDateStr(e.target.value)}
-              className="w-full rounded-xl border bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm outline-none border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+              onChange={(val) => setDueDateStr(val)}
               required={hasDueDate}
             />
           </div>
@@ -365,7 +361,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="pt-2 flex items-center gap-3">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
         <Button
           type="submit"
           variant="primary"

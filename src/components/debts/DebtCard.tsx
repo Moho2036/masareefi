@@ -104,7 +104,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
       </div>
 
       {/* Middle: Remaining Amount & Breakdown */}
-      <div className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700/50 space-y-2">
+      <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/80 space-y-2">
         <div className="flex items-end justify-between gap-2">
           <div>
             <span className="text-[11px] font-bold text-slate-400 dark:text-slate-400 block mb-0.5">
@@ -124,7 +124,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
             </div>
           </div>
           <div className="text-end">
-            <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
               {progress}% مسدد
             </span>
           </div>

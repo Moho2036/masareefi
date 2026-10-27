@@ -8,48 +8,51 @@ export const HeroCardSkeleton: React.FC<{ className?: string }> = ({ className }
       role="status"
       aria-label="جاري تحميل بيانات الرصيد"
       className={cn(
-        'rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-gradient-to-br from-emerald-600/80 via-emerald-700/80 to-teal-800/80 border border-emerald-400/30 shadow-md space-y-4 animate-pulse text-white',
+        'rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-pulse relative overflow-hidden min-h-[260px] sm:min-h-[275px] flex flex-col justify-between',
         className
       )}
     >
+      {/* Top accent bar shimmer */}
+      <div className="h-1.5 w-full absolute top-0 inset-x-0 bg-zinc-200 dark:bg-zinc-800" />
+
       {/* Top Header Row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-white/20" />
-          <div className="w-28 sm:w-36 h-4 rounded-lg bg-white/20" />
+          <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+          <div className="w-28 sm:w-36 h-4 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
         </div>
-        <div className="w-20 h-6 rounded-full bg-white/20" />
+        <div className="w-20 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800" />
       </div>
 
       {/* Main Balance Shimmer */}
-      <div className="w-48 sm:w-64 h-10 sm:h-12 rounded-xl bg-white/25 my-1" />
+      <div className="w-48 sm:w-64 h-10 sm:h-12 rounded-xl bg-zinc-200 dark:bg-zinc-800 my-1" />
 
       {/* Income & Expense Sub-Boxes */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/15">
-        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/10 border border-white/15">
-          <div className="w-8 h-8 rounded-lg bg-white/20 shrink-0" />
+      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+          <div className="w-8 h-8 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
           <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="w-16 h-3 rounded bg-white/20" />
-            <div className="w-20 sm:w-24 h-4 rounded bg-white/30" />
+            <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
+            <div className="w-20 sm:w-24 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/10 border border-white/15">
-          <div className="w-8 h-8 rounded-lg bg-white/20 shrink-0" />
+        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
+          <div className="w-8 h-8 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
           <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="w-16 h-3 rounded bg-white/20" />
-            <div className="w-20 sm:w-24 h-4 rounded bg-white/30" />
+            <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
+            <div className="w-20 sm:w-24 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
           </div>
         </div>
       </div>
 
       {/* Daily Safe Budget Strip */}
-      <div className="h-11 rounded-xl bg-white/10 border border-white/15 flex items-center justify-between px-3">
+      <div className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 flex items-center justify-between px-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-white/20" />
-          <div className="w-28 h-3.5 rounded bg-white/20" />
+          <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700" />
+          <div className="w-28 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700" />
         </div>
-        <div className="w-20 h-4 rounded bg-white/30" />
+        <div className="w-20 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
       </div>
     </div>
   )

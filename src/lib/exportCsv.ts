@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { fromFils } from './money'
-import type { Transaction, Debt, Category } from '../types'
+import type { Transaction, Debt, Category, Recurring, MoneyCircle } from '../types'
 
 /**
  * Escapes a cell value according to standard CSV rules (RFC 4180):
@@ -89,7 +89,7 @@ export function exportTransactionsToCsv(
 
   const csv = buildCsv(headers, rows)
   const today = format(new Date(), 'yyyy-MM-dd')
-  triggerCsvDownload(`masareefi_transactions_${today}.csv`, csv)
+  triggerCsvDownload(`baseer_transactions_${today}.csv`, csv)
 }
 
 /**
@@ -142,5 +142,121 @@ export function exportDebtsToCsv(debts: Debt[], options?: ExportCurrencyOptions)
 
   const csv = buildCsv(headers, rows)
   const today = format(new Date(), 'yyyy-MM-dd')
-  triggerCsvDownload(`masareefi_debts_${today}.csv`, csv)
+  triggerCsvDownload(`baseer_debts_${today}.csv`, csv)
+}
+
+/**
+ * Converts recurring rules into formatted CSV content and triggers download.
+ */
+export function exportRecurringToCsv(
+  recurring: Recurring[],
+  categories: Category[],
+  options?: ExportCurrencyOptions
+): void {
+  const categoryMap = new Map<string, string>()
+  for (const cat of categories) {
+    categoryMap.set(cat.id, cat.name)
+  }
+
+  const symbol = options?.symbol ?? 'د.أ'
+  const decimals = options?.decimals ?? 3
+
+  const frequencyMap: Record<string, string> = {
+    daily: 'يومي',
+    weekly: 'أسبوعي',
+    monthly: 'شهري',
+    yearly: 'سنوي',
+  }
+
+  const headers = [
+    'العنوان',
+    'النوع',
+    'التصنيف',
+    `المبلغ (${symbol})`,
+    'التكرار',
+    'الحالة',
+    'تاريخ البدء',
+    'تاريخ الاستحقاق القادم',
+    'تاريخ الانتهاء',
+    'الملاحظة',
+    'العملة',
+  ]
+
+  const rows = recurring.map((r) => {
+    const titleStr = r.title || ''
+    const typeStr = r.type === 'expense' ? 'مصروف' : 'دخل'
+    const categoryStr = categoryMap.get(r.categoryId) || 'غير محدد'
+    const amountStr = fromFils(r.amountFils).toFixed(decimals)
+    const freqStr = frequencyMap[r.frequency] || r.frequency
+    const statusStr = r.active ? 'نشط' : 'متوقف'
+    const startDateStr = format(r.startDate, 'yyyy-MM-dd')
+    const nextDateStr = format(r.nextDate, 'yyyy-MM-dd')
+    const endDateStr = r.endDate ? format(r.endDate, 'yyyy-MM-dd') : 'مستمر'
+    const noteStr = r.note || ''
+
+    return [
+      titleStr,
+      typeStr,
+      categoryStr,
+      amountStr,
+      freqStr,
+      statusStr,
+      startDateStr,
+      nextDateStr,
+      endDateStr,
+      noteStr,
+      symbol,
+    ]
+  })
+
+  const csv = buildCsv(headers, rows)
+  const today = format(new Date(), 'yyyy-MM-dd')
+  triggerCsvDownload(`baseer_recurring_${today}.csv`, csv)
+}
+
+/**
+ * Converts money circles into formatted CSV content and triggers download.
+ */
+export function exportCirclesToCsv(
+  circles: MoneyCircle[],
+  options?: ExportCurrencyOptions
+): void {
+  const symbol = options?.symbol ?? 'د.أ'
+  const decimals = options?.decimals ?? 3
+
+  const headers = [
+    'اسم الجمعية',
+    `القسط الشهري (${symbol})`,
+    'عدد الأعضاء',
+    `إجمالي القبض (${symbol})`,
+    'دوري في الشهر',
+    'الحالة',
+    'تاريخ البدء',
+    'العملة',
+  ]
+
+  const rows = circles.map((c) => {
+    const nameStr = c.name
+    const monthlyStr = fromFils(c.monthlyAmountFils).toFixed(decimals)
+    const membersCountStr = String(c.membersCount)
+    const totalStr = fromFils(c.totalAmountFils).toFixed(decimals)
+    const myTurnStr = String(c.myTurnMonth)
+    const statusStr = c.status === 'active' ? 'نشطة' : 'مكتملة'
+    const startDateStr = format(c.startDate, 'yyyy-MM-dd')
+
+    return [
+      nameStr,
+      monthlyStr,
+      membersCountStr,
+      totalStr,
+      myTurnStr,
+      statusStr,
+      startDateStr,
+      symbol,
+    ]
+  })
+
+  const csv = buildCsv(headers, rows)
+  const today = format(new Date(), 'yyyy-MM-dd')
+  triggerCsvDownload(`baseer_circles_${today}.csv`, csv)
 }

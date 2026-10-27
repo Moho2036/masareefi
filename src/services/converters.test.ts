@@ -321,6 +321,78 @@ describe('converters', () => {
       expect(settings.rolloverBalance).toBe(true)
       expect((settings.createdAt as Date)?.getTime()).toBe(createdAt.getTime())
     })
+
+    it('handles onboardingCompleted and openingBalanceFils in toFirestore and fromFirestore', () => {
+      const fullSettings: UserSettings = {
+        uid: 'user-onboarded',
+        displayName: 'علي',
+        currency: 'AED',
+        monthStartDay: 1,
+        theme: 'system',
+        rolloverBalance: true,
+        onboardingCompleted: true,
+        openingBalanceFils: 500000,
+      }
+
+      const data = userSettingsConverter.toFirestore(fullSettings) as Record<string, unknown>
+      expect(data.onboardingCompleted).toBe(true)
+      expect(data.openingBalanceFils).toBe(500000)
+
+      const snap = makeMockSnapshot('user-onboarded', data)
+      const parsed = userSettingsConverter.fromFirestore(snap)
+      expect(parsed.onboardingCompleted).toBe(true)
+      expect(parsed.openingBalanceFils).toBe(500000)
+    })
+
+    it('handles privacy, sorting, decimals, and notification preferences in toFirestore and fromFirestore', () => {
+      const advancedSettings: UserSettings = {
+        uid: 'user-adv',
+        displayName: 'فاطمة',
+        currency: 'USD',
+        monthStartDay: 15,
+        theme: 'dark',
+        hideBalances: true,
+        hideZeroDecimals: true,
+        categorySortMode: 'usage',
+        customCurrencyDecimals: 0,
+        lastBackupAt: '2026-10-27T10:00:00.000Z',
+        avatarColor: '#3b82f6',
+        notificationPrefs: {
+          autoPayments: true,
+          debtReminders: true,
+          debtReminderDaysBefore: 3,
+          circleAlerts: true,
+          budgetWarnings: false,
+          dailyReminder: true,
+          dailyReminderTime: '20:30',
+        },
+      }
+
+      const data = userSettingsConverter.toFirestore(advancedSettings) as Record<string, unknown>
+      expect(data.hideBalances).toBe(true)
+      expect(data.hideZeroDecimals).toBe(true)
+      expect(data.categorySortMode).toBe('usage')
+      expect(data.customCurrencyDecimals).toBe(0)
+      expect(data.lastBackupAt).toBe('2026-10-27T10:00:00.000Z')
+      expect(data.avatarColor).toBe('#3b82f6')
+      expect(data.notificationPrefs).toEqual({
+        autoPayments: true,
+        debtReminders: true,
+        debtReminderDaysBefore: 3,
+        circleAlerts: true,
+        budgetWarnings: false,
+        dailyReminder: true,
+        dailyReminderTime: '20:30',
+      })
+
+      const snap = makeMockSnapshot('user-adv', data)
+      const parsed = userSettingsConverter.fromFirestore(snap)
+      expect(parsed.hideBalances).toBe(true)
+      expect(parsed.hideZeroDecimals).toBe(true)
+      expect(parsed.categorySortMode).toBe('usage')
+      expect(parsed.customCurrencyDecimals).toBe(0)
+      expect(parsed.notificationPrefs?.dailyReminderTime).toBe('20:30')
+    })
   })
 
   describe('debtConverter', () => {

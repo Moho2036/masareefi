@@ -53,6 +53,18 @@ vi.mock('../hooks/useCategories', () => ({
   }),
 }))
 
+vi.mock('../hooks/useRecurring', () => ({
+  useRecurring: () => ({
+    data: [],
+  }),
+}))
+
+vi.mock('../hooks/useMoneyCircles', () => ({
+  useMoneyCircles: () => ({
+    data: [],
+  }),
+}))
+
 vi.mock('../hooks/useToast', () => ({
   useToast: () => ({
     showToast: mockShowToast,
@@ -359,5 +371,50 @@ describe('SettingsPage Backup and Restore modal', () => {
     expect(screen.getByText('خطوات تثبيت التطبيق على الآيفون والآيباد (iOS Safari):')).toBeDefined()
     expect(screen.getByText(/المشاركة \(Share/)).toBeDefined()
     expect(screen.getByText(/إضافة إلى الشاشة الرئيسية/)).toBeDefined()
+  })
+})
+
+describe('SettingsPage Extended Features', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('toggles privacy mode (hideBalances) and calls updateSettings', async () => {
+    render(<SettingsPage />)
+    const toggle = screen.getByLabelText(/وضع الخصوصية وإخفاء الأرقام/i)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ hideBalances: true })
+      )
+    })
+  })
+
+  it('toggles hideZeroDecimals and calls updateSettings', async () => {
+    render(<SettingsPage />)
+    const toggle = screen.getByLabelText(/إخفاء الكسور الصفرية/i)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ hideZeroDecimals: true })
+      )
+    })
+  })
+
+  it('updates notification preferences on toggle click', async () => {
+    render(<SettingsPage />)
+    const toggle = screen.getByLabelText(/تنبيهات المعاملات الدورية والتسديد التلقائي/i)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notificationPrefs: expect.objectContaining({ autoPayments: false }),
+        })
+      )
+    })
   })
 })

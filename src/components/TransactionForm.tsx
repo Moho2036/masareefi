@@ -1,11 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react'
-import { format } from 'date-fns'
-import { Check, Trash2, AlertCircle, ArrowLeft, Copy, Users } from 'lucide-react'
+import { Check, Trash2, AlertCircle, ArrowLeft, Copy, Users, Calendar } from 'lucide-react'
 import { Link } from 'react-router'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { DatePickerInput } from './ui/DatePickerInput'
 import { Toggle } from './ui/Toggle'
+import { CategoryIcon } from './ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useDebts } from '../hooks/useDebts'
@@ -608,8 +609,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     { value: 'income', label: 'دخل' },
   ]
 
+  const isTouchDevice =
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {/* Linked Debt Init Warning Banner */}
       {isLinkedToDebtInit && isDebtExists && !isSourceDeleted && (
         <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
@@ -760,7 +765,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
               isLockedTransaction && 'cursor-not-allowed'
             )}
-            autoFocus={!isEditing && !isLockedTransaction}
+            autoFocus={!isEditing && !isLockedTransaction && !isTouchDevice}
           />
           <span className="text-base lg:text-lg font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
             {currencyConfig.symbol}
@@ -776,7 +781,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </label>
         </div>
         {categoriesLoading ? (
-          <div className="py-4 text-center text-xs text-slate-400">جاري تحميل التصنيفات...</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-750 flex items-center gap-2 p-2.5"
+              >
+                <div className="w-7 h-7 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
+              </div>
+            ))}
+          </div>
         ) : availableCategories.length === 0 ? (
           <div className="py-3 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
             لا توجد تصنيفات متاحة لهذا النوع
@@ -801,10 +816,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   )}
                 >
                   <span
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-base"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${cat.color}25` }}
                   >
-                    {cat.icon}
+                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                   </span>
                   <span className="truncate flex-1 text-xs sm:text-sm font-semibold">
                     {cat.name}
@@ -820,74 +835,24 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
       </div>
 
-      {/* Date Input with Quick Select Buttons */}
+      {/* Date Picker */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label
-            htmlFor="tx-date"
-            className="block text-xs font-bold text-slate-500 dark:text-slate-400"
-          >
-            التاريخ
-          </label>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={isLockedTransaction}
-              onClick={() => {
-                if (isLockedTransaction) return
-                const today = new Date()
-                setDateStr(format(today, 'yyyy-MM-dd'))
-              }}
-              className={cn(
-                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
-                dateStr === format(new Date(), 'yyyy-MM-dd')
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
-                isLockedTransaction && 'opacity-50 cursor-not-allowed pointer-events-none'
-              )}
-            >
-              اليوم
-            </button>
-            <button
-              type="button"
-              disabled={isLockedTransaction}
-              onClick={() => {
-                if (isLockedTransaction) return
-                const yesterday = new Date()
-                yesterday.setDate(yesterday.getDate() - 1)
-                setDateStr(format(yesterday, 'yyyy-MM-dd'))
-              }}
-              className={cn(
-                'px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
-                (() => {
-                  const y = new Date()
-                  y.setDate(y.getDate() - 1)
-                  return dateStr === format(y, 'yyyy-MM-dd')
-                })()
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
-                isLockedTransaction && 'opacity-50 cursor-not-allowed pointer-events-none'
-              )}
-            >
-              أمس
-            </button>
-          </div>
-        </div>
-        <Input
+        <DatePickerInput
           id="tx-date"
-          type="date"
+          label="التاريخ"
           value={dateStr}
-          onChange={(e) => {
+          onChange={(val) => {
             if (isLockedTransaction) return
-            setDateStr(e.target.value)
+            setDateStr(val)
           }}
           required
           disabled={isLockedTransaction}
           readOnly={isLockedTransaction}
+          showQuickButtons
         />
         {isBrowsingDifferentMonth && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1 font-medium">
-            <span>💡</span>
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1.5 font-medium">
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
             <span>
               تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً ({formatDateInput(range.start)}). يمكنك تغييره بحرية.
             </span>
@@ -1008,7 +973,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : null}
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-3 pt-2">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
           <Button
             type="submit"

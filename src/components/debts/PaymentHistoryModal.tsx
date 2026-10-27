@@ -4,6 +4,7 @@ import { ar } from 'date-fns/locale'
 import { Trash2, AlertCircle, Pencil } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { DatePickerInput } from '../ui/DatePickerInput'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import {
@@ -301,14 +302,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
                             </div>
                           </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">التاريخ</label>
-                            <input
-                              type="date"
+                          <div className="w-full">
+                            <DatePickerInput
+                              label="التاريخ"
                               value={editDateStr}
                               min={debtStartStr}
-                              onChange={(e) => setEditDateStr(e.target.value)}
-                              className="w-full text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                              onChange={(val) => setEditDateStr(val)}
                               required
                             />
                           </div>

@@ -8,6 +8,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
+import { BarChart3 } from 'lucide-react'
 import { fromFils, formatCompactNumber } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
@@ -79,6 +80,31 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   className,
   height = 300,
 }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    const handleTouchOutside = (e: TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }
+    document.addEventListener('touchstart', handleTouchOutside, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', handleTouchOutside)
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    }
+  }, [])
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    touchTimerRef.current = setTimeout(() => {
+      if (containerRef.current) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }, 2000)
+  }
+
   const chartData = React.useMemo(
     () =>
       data.map((item) => ({
@@ -90,6 +116,22 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   )
 
   const hasData = data.some((d) => d.income > 0 || d.expense > 0)
+
+  if (!hasData) {
+    return (
+      <div
+        className={cn(
+          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[260px]',
+          className
+        )}
+      >
+        <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
+          <BarChart3 className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
+        </div>
+        <p className="text-xs font-semibold">لا توجد معاملات مسجلة في هذه السنة</p>
+      </div>
+    )
+  }
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -106,7 +148,12 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       </div>
 
       {/* Chart */}
-      <div className="w-full relative" style={{ height }}>
+      <div
+        ref={containerRef}
+        onTouchEnd={handleTouchEnd}
+        className="w-full relative"
+        style={{ height }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -154,13 +201,6 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
             />
           </BarChart>
         </ResponsiveContainer>
-        {!hasData && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-              لا توجد معاملات مسجلة في هذه السنة
-            </p>
-          </div>
-        )}
       </div>
     </div>
   )

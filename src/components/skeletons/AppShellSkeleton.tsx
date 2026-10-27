@@ -27,13 +27,34 @@ export const AppShellSkeleton: React.FC = () => {
         </div>
 
         {/* Nav Items Skeleton */}
-        <div className="flex-1 space-y-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="flex items-center gap-3.5 px-4 py-3 rounded-xl animate-pulse">
-              <Skeleton className="w-5 h-5 rounded-lg" />
-              <Skeleton className="w-28 h-4 rounded" />
-            </div>
-          ))}
+        <div className="flex-1 space-y-4">
+          <div className="space-y-1">
+            <Skeleton className="w-16 h-2.5 mx-3 mb-1.5 rounded" />
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl animate-pulse">
+                <Skeleton className="w-4.5 h-4.5 rounded-lg" />
+                <Skeleton className="w-24 h-4 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1">
+            <Skeleton className="w-20 h-2.5 mx-3 mb-1.5 rounded" />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl animate-pulse">
+                <Skeleton className="w-4.5 h-4.5 rounded-lg" />
+                <Skeleton className="w-24 h-4 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1">
+            <Skeleton className="w-16 h-2.5 mx-3 mb-1.5 rounded" />
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl animate-pulse">
+                <Skeleton className="w-4.5 h-4.5 rounded-lg" />
+                <Skeleton className="w-24 h-4 rounded" />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Sidebar Footer Skeleton */}

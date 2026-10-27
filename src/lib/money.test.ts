@@ -88,6 +88,25 @@ describe('money lib', () => {
     })
   })
 
+  describe('0 decimals & privacy options', () => {
+    it('supports 0 decimals in toFils and formatMoney', () => {
+      expect(toFils(50, 0)).toBe(50000)
+      expect(toFils('50', 0)).toBe(50000)
+      expect(formatMoney(50000, 'JPY', { customDecimals: 0 })).toBe('50 JPY')
+    })
+
+    it('masks amount when maskAmount is true (privacy mode)', () => {
+      expect(formatMoney(50000, 'JOD', { maskAmount: true })).toBe('••••• د.أ')
+      expect(formatMoney(50000, 'JOD', { maskAmount: true, showCurrency: false })).toBe('•••••')
+      expect(formatSigned(50000, 'expense', { currency: 'JOD', maskAmount: true })).toBe('••••• د.أ')
+    })
+
+    it('hides zero decimals when hideZeroDecimals is true and amount is integer', () => {
+      expect(formatMoney(20000, 'JOD', { hideZeroDecimals: true })).toBe('20 د.أ')
+      expect(formatMoney(20500, 'JOD', { hideZeroDecimals: true })).toBe('20.500 د.أ')
+    })
+  })
+
   describe('formatJOD', () => {
     it('formats fils with Arabic currency symbol and 3 decimals', () => {
       expect(formatJOD(12500)).toBe('12.500 د.أ')

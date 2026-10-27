@@ -41,7 +41,7 @@ export interface WorkHoursPrefsBackup {
 
 export interface MasareefiBackup {
   version: 1
-  app: 'masareefi'
+  app: 'baseer' | 'masareefi'
   exportedAt: string
   data: {
     settings?: UserSettings
@@ -99,7 +99,9 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
   let workHoursPrefs: WorkHoursPrefsBackup | undefined
   if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
     try {
-      const rawPrefs = localStorage.getItem('masareefi_work_hours_prefs')
+      const rawPrefs =
+        localStorage.getItem('baseer_work_hours_prefs') ||
+        localStorage.getItem('masareefi_work_hours_prefs')
       if (rawPrefs) {
         const parsed = JSON.parse(rawPrefs)
         if (parsed && typeof parsed === 'object') {
@@ -113,7 +115,7 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
 
   return {
     version: 1,
-    app: 'masareefi',
+    app: 'baseer',
     exportedAt: new Date().toISOString(),
     data: {
       settings,
@@ -137,7 +139,7 @@ export function downloadBackupFile(backup: MasareefiBackup): void {
   const dateStr = formatDateInput(new Date())
   const a = document.createElement('a')
   a.href = url
-  a.download = `masareefi-backup-${dateStr}.json`
+  a.download = `baseer-backup-${dateStr}.json`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -253,8 +255,8 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       return { valid: false, error: 'الملف لا يحتوي على بيانات JSON صالحة' }
     }
 
-    if (parsed.app !== 'masareefi') {
-      return { valid: false, error: 'الملف المحدد ليس نسخة احتياطية خاصة بتطبيق مصاريفي' }
+    if (parsed.app !== 'baseer' && parsed.app !== 'masareefi') {
+      return { valid: false, error: 'الملف المحدد ليس نسخة احتياطية خاصة بتطبيق بَصير' }
     }
 
     if (!parsed.data || typeof parsed.data !== 'object') {
@@ -412,10 +414,9 @@ export async function restoreBackup(
     typeof window.localStorage !== 'undefined'
   ) {
     try {
-      localStorage.setItem(
-        'masareefi_work_hours_prefs',
-        JSON.stringify(backup.data.workHoursPrefs)
-      )
+      const payload = JSON.stringify(backup.data.workHoursPrefs)
+      localStorage.setItem('baseer_work_hours_prefs', payload)
+      localStorage.setItem('masareefi_work_hours_prefs', payload)
     } catch {
       // ignore
     }
@@ -471,12 +472,68 @@ export async function restoreBackup(
     const validThemes = ['system', 'light', 'dark']
     const safeTheme = validThemes.includes(s.theme as string) ? s.theme : 'system'
 
-    const baseSettings = {
+    const baseSettings: Record<string, unknown> = {
       displayName: (s.displayName || '').slice(0, 100),
       currency: (s.currency || 'JOD').trim().slice(0, 20),
       monthStartDay: Math.min(28, Math.max(1, Math.round(s.monthStartDay || 1))),
       theme: safeTheme,
       rolloverBalance: typeof s.rolloverBalance === 'boolean' ? s.rolloverBalance : true,
+    }
+
+    if (typeof s.onboardingCompleted === 'boolean') {
+      baseSettings.onboardingCompleted = s.onboardingCompleted
+    }
+    if (
+      s.openingBalanceFils !== undefined &&
+      s.openingBalanceFils !== null &&
+      Number.isFinite(Number(s.openingBalanceFils)) &&
+      Number(s.openingBalanceFils) >= 0
+    ) {
+      baseSettings.openingBalanceFils = Math.round(Number(s.openingBalanceFils))
+    }
+    if (typeof s.hideBalances === 'boolean') {
+      baseSettings.hideBalances = s.hideBalances
+    }
+    if (typeof s.hideZeroDecimals === 'boolean') {
+      baseSettings.hideZeroDecimals = s.hideZeroDecimals
+    }
+    if (s.categorySortMode === 'usage' || s.categorySortMode === 'manual') {
+      baseSettings.categorySortMode = s.categorySortMode
+    }
+    if (
+      s.customCurrencyDecimals !== undefined &&
+      s.customCurrencyDecimals !== null &&
+      [0, 2, 3].includes(Number(s.customCurrencyDecimals))
+    ) {
+      baseSettings.customCurrencyDecimals = Number(s.customCurrencyDecimals)
+    }
+    if (s.rolloverStartDate) {
+      try {
+        baseSettings.rolloverStartDate = Timestamp.fromDate(parseDate(s.rolloverStartDate))
+      } catch {
+        // ignore invalid date
+      }
+    }
+    if (typeof s.lastBackupAt === 'string') {
+      baseSettings.lastBackupAt = s.lastBackupAt.slice(0, 50)
+    }
+    if (typeof s.avatarColor === 'string') {
+      baseSettings.avatarColor = s.avatarColor.slice(0, 50)
+    }
+    if (s.notificationPrefs && typeof s.notificationPrefs === 'object') {
+      const np = s.notificationPrefs as Record<string, unknown>
+      const cleanNotificationPrefs: Record<string, unknown> = {}
+      if (typeof np.autoPayments === 'boolean') cleanNotificationPrefs.autoPayments = np.autoPayments
+      if (typeof np.debtReminders === 'boolean') cleanNotificationPrefs.debtReminders = np.debtReminders
+      if (typeof np.debtReminderDaysBefore === 'number' && [0, 1, 3].includes(np.debtReminderDaysBefore)) {
+        cleanNotificationPrefs.debtReminderDaysBefore = np.debtReminderDaysBefore
+      }
+      if (typeof np.circleAlerts === 'boolean') cleanNotificationPrefs.circleAlerts = np.circleAlerts
+      if (typeof np.budgetWarnings === 'boolean') cleanNotificationPrefs.budgetWarnings = np.budgetWarnings
+      if (typeof np.dailyReminder === 'boolean') cleanNotificationPrefs.dailyReminder = np.dailyReminder
+      if (typeof np.dailyReminderTime === 'string') cleanNotificationPrefs.dailyReminderTime = np.dailyReminderTime.slice(0, 10)
+
+      baseSettings.notificationPrefs = cleanNotificationPrefs
     }
 
     if (userExists) {

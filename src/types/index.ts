@@ -45,6 +45,16 @@ export interface Recurring {
   createdAt?: Date
 }
 
+export interface NotificationPrefs {
+  autoPayments?: boolean
+  debtReminders?: boolean
+  debtReminderDaysBefore?: number // 0, 1, or 3
+  circleAlerts?: boolean
+  budgetWarnings?: boolean
+  dailyReminder?: boolean
+  dailyReminderTime?: string // e.g. '21:00'
+}
+
 export interface UserSettings {
   uid?: string
   displayName: string
@@ -52,6 +62,16 @@ export interface UserSettings {
   monthStartDay: number
   theme: ThemePreference
   rolloverBalance?: boolean
+  onboardingCompleted?: boolean
+  openingBalanceFils?: number
+  hideBalances?: boolean
+  hideZeroDecimals?: boolean
+  categorySortMode?: 'usage' | 'manual'
+  customCurrencyDecimals?: number // 0, 2, or 3
+  rolloverStartDate?: Date | Timestamp | null
+  lastBackupAt?: string
+  avatarColor?: string
+  notificationPrefs?: NotificationPrefs
   createdAt?: Date | Timestamp
 }
 

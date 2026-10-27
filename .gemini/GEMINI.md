@@ -6,7 +6,6 @@ Before starting any task, read:
 1. `AGENTS.md` (Always-on binding agent rules)
 2. `docs/CONVENTIONS.md` (Strict engineering conventions)
 3. `docs/PLAN.md` (Architecture, data models, state management)
-4. `docs/PROJECT_BIBLE.md` (Comprehensive documentation of every component, service, and rule)
 
 ---
 
@@ -89,7 +88,6 @@ Before starting any task, read:
 - **Zero Blocking Spinners:** Use skeleton loaders (`AppShellSkeleton`, `PageSkeleton`, etc.).
 - **Currency Storage:** Integer fils (`amountFils`, 1 JOD = 1000 fils). Never use floating point numbers for currency values.
 - **Firestore Access:** All database reads and writes MUST go through `src/services/*`. UI components must never import `firebase/firestore` directly.
-- **Documentation Sync:** Any change to features, data models, or calculations MUST be recorded in `docs/PROJECT_BIBLE.md`.
 
 ---
 

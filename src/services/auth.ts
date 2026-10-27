@@ -5,6 +5,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  deleteUser,
   GoogleAuthProvider,
   type UserCredential,
   type User,
@@ -41,7 +47,9 @@ export async function signUpWithEmail(
 export async function signOutUser(): Promise<void> {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('baseer_work_hours_prefs')
       window.localStorage.removeItem('masareefi_work_hours_prefs')
+      window.localStorage.removeItem('baseer_category_usage')
       window.localStorage.removeItem('masareefi_category_usage')
     }
   } catch (e) {
@@ -56,4 +64,38 @@ export async function resetPassword(email: string): Promise<void> {
 
 export async function updateUserDisplayName(user: User, displayName: string): Promise<void> {
   return updateProfile(user, { displayName })
+}
+
+export async function sendUserEmailVerification(): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error('لا يوجد مستخدم مسجل الدخول حالياً')
+  return sendEmailVerification(user)
+}
+
+export async function changeUserPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const user = auth.currentUser
+  if (!user || !user.email) throw new Error('لا يوجد مستخدم مسجل الدخول حالياً')
+  const cred = EmailAuthProvider.credential(user.email, currentPassword)
+  await reauthenticateWithCredential(user, cred)
+  return updatePassword(user, newPassword)
+}
+
+export async function reauthenticateCurrentPassword(password: string): Promise<void> {
+  const user = auth.currentUser
+  if (!user || !user.email) throw new Error('لا يوجد مستخدم مسجل الدخول حالياً')
+  const cred = EmailAuthProvider.credential(user.email, password)
+  await reauthenticateWithCredential(user, cred)
+}
+
+export async function reauthenticateCurrentGoogle(): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error('لا يوجد مستخدم مسجل الدخول حالياً')
+  const provider = new GoogleAuthProvider()
+  await reauthenticateWithPopup(user, provider)
+}
+
+export async function deleteUserAccount(): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error('لا يوجد مستخدم مسجل الدخول حالياً')
+  return deleteUser(user)
 }

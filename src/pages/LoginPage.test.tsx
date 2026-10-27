@@ -39,7 +39,7 @@ describe('LoginPage Component', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByText('مصاريفي')).toBeDefined()
+    expect(screen.getByText('بَصير')).toBeDefined()
     expect(screen.getByLabelText('البريد الإلكتروني')).toBeDefined()
     expect(screen.getByLabelText('كلمة المرور')).toBeDefined()
     expect(screen.getByRole('button', { name: 'تسجيل الدخول' })).toBeDefined()
@@ -103,6 +103,7 @@ describe('LoginPage Component', () => {
     fireEvent.change(screen.getByLabelText('الاسم الكامل'), { target: { value: '  محمد أحمد  ' } })
     fireEvent.change(screen.getByLabelText('البريد الإلكتروني'), { target: { value: '  user@example.com  ' } })
     fireEvent.change(screen.getByLabelText('كلمة المرور'), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText('تأكيد كلمة المرور'), { target: { value: 'secret123' } })
 
     const submitBtn = screen.getByRole('button', { name: 'إنشاء الحساب' })
     fireEvent.click(submitBtn)
@@ -114,6 +115,59 @@ describe('LoginPage Component', () => {
         'محمد أحمد'
       )
     })
+  })
+
+  it('validates password mismatch in signup mode', async () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'حساب جديد' }))
+
+    fireEvent.change(screen.getByLabelText('الاسم الكامل'), { target: { value: 'محمد' } })
+    fireEvent.change(screen.getByLabelText('البريد الإلكتروني'), { target: { value: 'test@example.com' } })
+    fireEvent.change(screen.getByLabelText('كلمة المرور'), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText('تأكيد كلمة المرور'), { target: { value: 'different123' } })
+
+    const submitBtn = screen.getByRole('button', { name: 'إنشاء الحساب' })
+    fireEvent.click(submitBtn)
+
+    expect(screen.getByText('كلمتا المرور غير متطابقتين')).toBeDefined()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
+  it('displays password strength meter dynamically in signup mode', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'حساب جديد' }))
+
+    // Initially with empty password, meter label is not present
+    expect(screen.queryByText('قوة كلمة المرور:')).toBeNull()
+
+    // Weak password
+    fireEvent.change(screen.getByLabelText('كلمة المرور'), { target: { value: '123456' } })
+    expect(screen.getByText('قوة كلمة المرور:')).toBeDefined()
+    expect(screen.getByText('ضعيفة')).toBeDefined()
+
+    // Strong password
+    fireEvent.change(screen.getByLabelText('كلمة المرور'), { target: { value: 'StrongP@ssw0rd!' } })
+    expect(screen.getByText('قوية')).toBeDefined()
+  })
+
+  it('displays trust and security footnote', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('بياناتك مشفرة ومحمية بالكامل ولا يطلع عليها أحد')).toBeDefined()
   })
 
   it('submits login with email and password and calls signInWithEmail', async () => {

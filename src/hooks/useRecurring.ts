@@ -21,7 +21,7 @@ export function useRecurring(): UseRecurringResult {
 
   useEffect(() => {
     // If context is provided, AppDataProvider manages the single deduplicated subscription
-    if (appData || !user) {
+    if (appData || !user?.uid) {
       return
     }
 

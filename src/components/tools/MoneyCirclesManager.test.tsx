@@ -988,4 +988,35 @@ describe('MoneyCirclesManager Component', () => {
     expect(titles[2]).toContain('جمعية مكتملة أحدث')
     expect(titles[3]).toContain('جمعية مكتملة قديمة')
   })
+
+  it('allows membersCount and myTurnMonth inputs to be cleared with backspace while typing', () => {
+    mockCircles = []
+    render(<MoneyCirclesManager />)
+
+    const addBtn = screen.getAllByRole('button', { name: /إنشاء جمعية جديدة/i })[0]
+    fireEvent.click(addBtn)
+
+    const countInput = screen.getByLabelText(/عدد الأعضاء/i) as HTMLInputElement
+    const turnInput = screen.getByLabelText(/دورك في الاستلام/i) as HTMLInputElement
+
+    // Clear count input to empty string (Backspace)
+    fireEvent.change(countInput, { target: { value: '' } })
+    expect(countInput.value).toBe('')
+
+    // Type 6
+    fireEvent.change(countInput, { target: { value: '6' } })
+    expect(countInput.value).toBe('6')
+
+    // Blur count input: should remain 6
+    fireEvent.blur(countInput)
+    expect(countInput.value).toBe('6')
+
+    // Clear turn input to empty string
+    fireEvent.change(turnInput, { target: { value: '' } })
+    expect(turnInput.value).toBe('')
+
+    // Blur turn input: should safely clamp to 1
+    fireEvent.blur(turnInput)
+    expect(turnInput.value).toBe('1')
+  })
 })

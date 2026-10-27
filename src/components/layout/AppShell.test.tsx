@@ -5,6 +5,12 @@ import { AppShell } from './AppShell'
 
 const mockUseUserSettings = vi.fn()
 const mockUseAuth = vi.fn()
+const mockHasExistingUserData = vi.fn().mockResolvedValue(true)
+const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
+
+vi.mock('../../services/userProfile', () => ({
+  hasExistingUserData: (...args: unknown[]) => mockHasExistingUserData(...args),
+}))
 
 vi.mock('../../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUseUserSettings(),
@@ -68,7 +74,7 @@ describe('AppShell displayName resolution', () => {
     expect(screen.getByText('محمد علي')).toBeDefined()
   })
 
-  it('falls back to default "مستخدم مصاريفي" when neither is provided', () => {
+  it('falls back to default "مستخدم بَصير" when neither is provided', () => {
     mockUseAuth.mockReturnValue({
       user: { displayName: null, photoURL: null },
     })
@@ -82,6 +88,48 @@ describe('AppShell displayName resolution', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByText('مستخدم مصاريفي')).toBeDefined()
+    expect(screen.getByText('مستخدم بَصير')).toBeDefined()
+  })
+
+  it('silently completes onboarding for existing user with prior data', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'u-existing', displayName: 'مستخدم قديم' },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'مستخدم قديم', onboardingCompleted: false },
+      updateSettings: mockUpdateSettings,
+      loading: false,
+    })
+    mockHasExistingUserData.mockResolvedValueOnce(true)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    // Onboarding wizard modal should not be shown
+    expect(screen.queryByText(/تجهيز حسابك في بَصير/i)).toBeNull()
+  })
+
+  it('opens onboarding wizard for brand new user with no prior data', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'u-new', displayName: 'مستخدم جديد' },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'مستخدم جديد', onboardingCompleted: false },
+      updateSettings: mockUpdateSettings,
+      loading: false,
+    })
+    mockHasExistingUserData.mockResolvedValueOnce(false)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    // Onboarding wizard modal should appear
+    expect(await screen.findByText(/تجهيز حسابك في بَصير/i)).toBeDefined()
   })
 })

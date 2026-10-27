@@ -17,6 +17,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { CategoryForm } from '../components/CategoryForm'
+import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { EmptyState } from '../components/ui/EmptyState'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
@@ -31,6 +32,8 @@ import {
   syncCategoryUsageCache,
   getCategoryUsageDetails,
 } from '../lib/categoryUsage'
+import { triggerHaptic } from '../lib/haptics'
+import { cn } from '../lib/cn'
 import type { Category, TxType } from '../types'
 
 export const CategoriesPage: React.FC = () => {
@@ -49,6 +52,7 @@ export const CategoriesPage: React.FC = () => {
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false)
   const [catToDelete, setCatToDelete] = useState<Category | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [lastMovedId, setLastMovedId] = useState<string | null>(null)
 
   // Transaction count per category for current financial month
   const currentMonthTxCounts = useMemo(() => {
@@ -168,6 +172,12 @@ export const CategoriesPage: React.FC = () => {
     if (currentIndex === -1) return
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
     if (targetIndex < 0 || targetIndex >= activeCategories.length) return
+
+    triggerHaptic('light')
+    setLastMovedId(cat.id)
+    setTimeout(() => {
+      setLastMovedId((current) => (current === cat.id ? null : current))
+    }, 600)
 
     const adjacentCat = activeCategories[targetIndex]
     let currentOrder = cat.order ?? 0
@@ -355,15 +365,18 @@ export const CategoriesPage: React.FC = () => {
             return (
               <div
                 key={cat.id}
-                className="group bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                className={cn(
+                  'group bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between',
+                  lastMovedId === cat.id && 'ring-2 ring-blue-500/70 scale-[1.02] shadow-md z-10'
+                )}
               >
                 {/* Card Top: Icon & Details */}
                 <div className="flex items-start gap-3.5 mb-4">
                   <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-xs"
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs"
                     style={{ backgroundColor: `${cat.color}25`, color: cat.color }}
                   >
-                    {cat.icon}
+                    <CategoryIcon icon={cat.icon} color={cat.color} size="lg" />
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -476,7 +489,7 @@ export const CategoriesPage: React.FC = () => {
                     className="bg-slate-50 dark:bg-slate-850/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-3 opacity-80"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-xl shrink-0">{cat.icon}</span>
+                      <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
                       <span className="font-semibold text-sm text-slate-600 dark:text-slate-300 truncate">
                         {cat.name}
                       </span>

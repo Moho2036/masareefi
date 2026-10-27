@@ -8,6 +8,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
+import { TrendingDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fromFils, formatCompactNumber } from '../../lib/money'
@@ -54,6 +55,31 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
   className,
   height = 240,
 }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    const handleTouchOutside = (e: TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }
+    document.addEventListener('touchstart', handleTouchOutside, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', handleTouchOutside)
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    }
+  }, [])
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    touchTimerRef.current = setTimeout(() => {
+      if (containerRef.current) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }, 2000)
+  }
+
   const hasExpenses = data.some((d) => d.amountFils > 0)
 
   // Format chart data with JOD value and concise Arabic date label
@@ -68,7 +94,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
     })
   }, [data])
 
-  if (data.length === 0) {
+  if (data.length === 0 || !hasExpenses) {
     return (
       <div
         className={cn(
@@ -76,13 +102,21 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
           className
         )}
       >
-        <p className="text-xs font-semibold">لا توجد بيانات لهذا الشهر</p>
+        <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
+          <TrendingDown className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
+        </div>
+        <p className="text-xs font-semibold">لا توجد مصاريف مسجلة لهذه الفترة</p>
       </div>
     )
   }
 
   return (
-    <div className={cn('w-full relative', className)} style={{ height }}>
+    <div
+      ref={containerRef}
+      onTouchEnd={handleTouchEnd}
+      className={cn('w-full relative', className)}
+      style={{ height }}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={chartData}
@@ -129,13 +163,6 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
           />
         </AreaChart>
       </ResponsiveContainer>
-      {!hasExpenses && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-            لا توجد مصاريف مسجلة حتى الآن
-          </p>
-        </div>
-      )}
     </div>
   )
 })

@@ -2,16 +2,26 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useUserSettings } from './useUserSettings'
 import type { ThemePreference } from '../types'
 
-const STORAGE_KEY = 'masareefi-theme'
-const ALT_STORAGE_KEY = 'masareefi_theme'
-
 function getInitialTheme(): ThemePreference {
   if (typeof window === 'undefined') return 'system'
-  const saved = (localStorage.getItem(ALT_STORAGE_KEY) || localStorage.getItem(STORAGE_KEY)) as ThemePreference | null
+  const saved = (
+    localStorage.getItem('baseer_theme') ||
+    localStorage.getItem('baseer-theme') ||
+    localStorage.getItem('masareefi_theme') ||
+    localStorage.getItem('masareefi-theme')
+  ) as ThemePreference | null
   if (saved === 'light' || saved === 'dark' || saved === 'system') {
     return saved
   }
   return 'system'
+}
+
+function saveThemeToStorage(theme: ThemePreference): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('baseer_theme', theme)
+  localStorage.setItem('baseer-theme', theme)
+  localStorage.setItem('masareefi_theme', theme)
+  localStorage.setItem('masareefi-theme', theme)
 }
 
 function getSystemIsDark(): boolean {
@@ -59,10 +69,7 @@ export function useTheme() {
 
   const setTheme = useCallback((newTheme: ThemePreference) => {
     setLocalTheme(newTheme)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, newTheme)
-      localStorage.setItem(ALT_STORAGE_KEY, newTheme)
-    }
+    saveThemeToStorage(newTheme)
   }, [])
 
   // Sync DOM and localStorage with current resolved theme (only write to localStorage when not loading)
@@ -70,14 +77,18 @@ export function useTheme() {
     if (typeof window === 'undefined') return
 
     if (!loading) {
-      localStorage.setItem(STORAGE_KEY, theme)
-      localStorage.setItem(ALT_STORAGE_KEY, theme)
+      saveThemeToStorage(theme)
     }
     const root = document.documentElement
     if (resolvedTheme === 'dark') {
       root.classList.add('dark')
     } else {
       root.classList.remove('dark')
+    }
+
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', resolvedTheme === 'dark' ? '#09090B' : '#F4F4F5')
     }
   }, [theme, resolvedTheme, loading])
 

@@ -21,7 +21,7 @@ export function useCategories(): UseCategoriesResult {
 
   useEffect(() => {
     // If context is provided, AppDataProvider manages the subscription
-    if (appData || !user) {
+    if (appData || !user?.uid) {
       return
     }
 

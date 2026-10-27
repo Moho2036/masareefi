@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router'
 import {
   Home,
@@ -16,6 +16,7 @@ import {
   ChevronLeft,
 } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { triggerHaptic } from '../../lib/haptics'
 
 export interface BottomNavProps {
   onOpenAddModal: () => void
@@ -74,6 +75,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
   const location = useLocation()
   const pathname = location.pathname
   const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const isPushedRef = useRef(false)
+  const isClosingFromPopStateRef = useRef(false)
+  const [dragOffsetY, setDragOffsetY] = useState(0)
+  const touchStartYRef = useRef<number | null>(null)
 
   const [prevLocationKey, setPrevLocationKey] = useState(location.pathname + location.search)
 
@@ -83,12 +88,24 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
     setIsMoreOpen(false)
   }
 
-  // Auto-close on browser back button or Escape key
+  // Push history state on open & handle popstate / Escape key
   useEffect(() => {
     if (!isMoreOpen) return
 
+    isClosingFromPopStateRef.current = false
+    try {
+      window.history.pushState({ moreDrawerOpen: true }, '')
+      isPushedRef.current = true
+    } catch {
+      isPushedRef.current = false
+    }
+
     const handlePopState = () => {
-      setIsMoreOpen(false)
+      if (isPushedRef.current) {
+        isPushedRef.current = false
+        isClosingFromPopStateRef.current = true
+        setIsMoreOpen(false)
+      }
     }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsMoreOpen(false)
@@ -99,8 +116,46 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
     return () => {
       window.removeEventListener('popstate', handlePopState)
       window.removeEventListener('keydown', handleKeyDown)
+      if (isPushedRef.current && !isClosingFromPopStateRef.current) {
+        isPushedRef.current = false
+        try {
+          if (window.history.state?.moreDrawerOpen) {
+            window.history.back()
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
   }, [isMoreOpen])
+
+  // Swipe-down touch handlers for mobile drawer handle
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartYRef.current = e.touches[0].clientY
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current !== null && e.touches.length === 1) {
+      const currentY = e.touches[0].clientY
+      const diffY = currentY - touchStartYRef.current
+      if (diffY > 0) {
+        setDragOffsetY(diffY)
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (dragOffsetY > 70) {
+      setDragOffsetY(0)
+      touchStartYRef.current = null
+      setIsMoreOpen(false)
+    } else {
+      setDragOffsetY(0)
+      touchStartYRef.current = null
+    }
+  }
 
   const isMoreActive =
     pathname.startsWith('/tools') ||
@@ -114,15 +169,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
       {/* "More" Bottom Sheet Drawer for Mobile */}
       {isMoreOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs transition-opacity lg:hidden"
+          className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-xs transition-opacity lg:hidden"
           onClick={() => setIsMoreOpen(false)}
         >
           <div
-            className="fixed inset-x-0 bottom-0 bg-white dark:bg-slate-900 rounded-t-[2.25rem] p-5 shadow-2xl border-t border-slate-200/80 dark:border-slate-800 max-w-lg mx-auto max-h-[85vh] overflow-y-auto animate-drawer"
+            className="fixed inset-x-0 bottom-0 bg-white dark:bg-zinc-900 rounded-t-[2.25rem] p-5 shadow-2xl border-t border-zinc-200/80 dark:border-zinc-800 max-w-lg mx-auto max-h-[88dvh] overflow-y-auto"
+            style={{
+              transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
+              transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Native Drag Handle */}
-            <div className="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto mb-4" />
+            <div
+              className="py-1 cursor-grab active:cursor-grabbing select-none touch-none"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div className="w-12 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700 mx-auto mb-4" />
+            </div>
 
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
@@ -249,14 +315,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/'
-                ? 'text-emerald-600 dark:text-emerald-400 font-extrabold'
+                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
             )}
           >
             <Home className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">الرئيسية</span>
             {pathname === '/' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5 transition-opacity" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-0.5 transition-opacity" />
             )}
           </Link>
 
@@ -266,14 +332,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/transactions'
-                ? 'text-emerald-600 dark:text-emerald-400 font-extrabold'
+                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
             )}
           >
             <ArrowLeftRight className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">المعاملات</span>
             {pathname === '/transactions' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5 transition-opacity" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-0.5 transition-opacity" />
             )}
           </Link>
 
@@ -281,9 +347,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
           <div className="relative -top-5 flex items-center justify-center">
             <button
               type="button"
-              onClick={onOpenAddModal}
+              onClick={() => {
+                triggerHaptic('light')
+                onOpenAddModal()
+              }}
               aria-label="إضافة معاملة جديدة"
-              className="press-scale w-13 h-13 rounded-full bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/35 border-4 border-slate-50 dark:border-slate-900 active:scale-90 active:rotate-45 transition-all duration-200 cursor-pointer"
+              className="press-scale w-13 h-13 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-600/30 border-4 border-zinc-100 dark:border-zinc-950 active:scale-90 active:rotate-45 transition-all duration-200 cursor-pointer"
             >
               <Plus className="w-6 h-6 stroke-[2.8]" />
             </button>
@@ -295,14 +364,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/debts'
-                ? 'text-emerald-600 dark:text-emerald-400 font-extrabold'
+                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
             )}
           >
             <HandCoins className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">الديون</span>
             {pathname === '/debts' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5 transition-opacity" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-0.5 transition-opacity" />
             )}
           </Link>
 
@@ -313,14 +382,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all cursor-pointer',
               isMoreActive || isMoreOpen
-                ? 'text-emerald-600 dark:text-emerald-400 font-extrabold'
+                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
             )}
           >
             <MoreHorizontal className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">المزيد</span>
             {(isMoreActive || isMoreOpen) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5 transition-opacity" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-0.5 transition-opacity" />
             )}
           </button>
         </div>

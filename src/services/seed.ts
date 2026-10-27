@@ -68,16 +68,24 @@ export async function seedDefaultCategories(uid: string): Promise<void> {
   await batch.commit()
 }
 
-export const SEED_V2_STORAGE_KEY_PREFIX = 'masareefi_categories_seed_v2_'
+export const SEED_V2_STORAGE_KEY_PREFIX = 'baseer_categories_seed_v2_'
+export const LEGACY_SEED_V2_STORAGE_KEY_PREFIX = 'masareefi_categories_seed_v2_'
 
 export function getCategoriesSeedV2Key(uid: string): string {
   return `${SEED_V2_STORAGE_KEY_PREFIX}${uid}`
 }
 
+export function getLegacyCategoriesSeedV2Key(uid: string): string {
+  return `${LEGACY_SEED_V2_STORAGE_KEY_PREFIX}${uid}`
+}
+
 export function isCategoriesSeedUpgraded(uid: string): boolean {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage.getItem(getCategoriesSeedV2Key(uid)) === 'true'
+      return (
+        window.localStorage.getItem(getCategoriesSeedV2Key(uid)) === 'true' ||
+        window.localStorage.getItem(getLegacyCategoriesSeedV2Key(uid)) === 'true'
+      )
     }
   } catch {
     // Ignore storage access errors
@@ -89,6 +97,7 @@ export function markCategoriesSeedUpgraded(uid: string): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(getCategoriesSeedV2Key(uid), 'true')
+      window.localStorage.setItem(getLegacyCategoriesSeedV2Key(uid), 'true')
     }
   } catch {
     // Ignore storage access errors

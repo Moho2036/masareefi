@@ -25,49 +25,57 @@ const THREE_DECIMAL_CODES = new Set([
   'د.أ', 'د.ك', 'د.ب', 'ر.ع', 'د.ت', 'د.ل', 'د.ع'
 ])
 
-export function getCurrencyConfig(currencyCode?: string): CurrencyInfo {
+export function getCurrencyConfig(currencyCode?: string, customDecimals?: number): CurrencyInfo {
+  let baseConfig: CurrencyInfo
   if (!currencyCode || currencyCode === 'JOD') {
-    return PRESET_CURRENCIES.JOD
-  }
-  const clean = currencyCode.trim().slice(0, 20)
-  const upper = clean.toUpperCase()
+    baseConfig = PRESET_CURRENCIES.JOD
+  } else {
+    const clean = currencyCode.trim().slice(0, 20)
+    const upper = clean.toUpperCase()
 
-  if (PRESET_CURRENCIES[upper]) {
-    return PRESET_CURRENCIES[upper]
+    if (PRESET_CURRENCIES[upper]) {
+      baseConfig = PRESET_CURRENCIES[upper]
+    } else {
+      const matchBySymbol = Object.values(PRESET_CURRENCIES).find(
+        (c) => c.symbol === clean || c.code === upper
+      )
+      if (matchBySymbol) {
+        baseConfig = matchBySymbol
+      } else {
+        const isThreeDecimals = THREE_DECIMAL_CODES.has(clean) || THREE_DECIMAL_CODES.has(upper)
+        const decimals = isThreeDecimals ? 3 : 2
+        baseConfig = {
+          code: clean,
+          name: clean,
+          symbol: clean,
+          decimals,
+          flag: '🪙',
+        }
+      }
+    }
   }
 
-  // Check preset match by symbol (e.g. if user entered "د.ك" or "د.أ" or "ج.م")
-  const matchBySymbol = Object.values(PRESET_CURRENCIES).find(
-    (c) => c.symbol === clean || c.code === upper
-  )
-  if (matchBySymbol) {
-    return matchBySymbol
+  if (customDecimals !== undefined && [0, 2, 3].includes(customDecimals)) {
+    return { ...baseConfig, decimals: customDecimals }
   }
-
-  // Check if custom currency text is a known 3-decimal currency
-  const isThreeDecimals = THREE_DECIMAL_CODES.has(clean) || THREE_DECIMAL_CODES.has(upper)
-  const decimals = isThreeDecimals ? 3 : 2
-
-  return {
-    code: clean,
-    name: clean,
-    symbol: clean,
-    decimals,
-    flag: '🪙',
-  }
+  return baseConfig
 }
 
 /**
  * Returns a suitable input placeholder according to currency decimal places.
- * e.g. 3 decimals -> '0.000', 2 decimals -> '0.00'
+ * e.g. 0 decimals -> '0', 3 decimals -> '0.000', 2 decimals -> '0.00'
  */
 export function getCurrencyPlaceholder(decimals: number): string {
+  if (decimals === 0) return '0'
   return decimals === 3 ? '0.000' : '0.00'
 }
 
 export interface FormatOptions {
   showCurrency?: boolean
   currency?: string
+  hideZeroDecimals?: boolean
+  maskAmount?: boolean
+  customDecimals?: number
 }
 
 export type FormatJODOptions = FormatOptions
@@ -101,6 +109,9 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
 
   if (typeof input === 'number') {
     if (isNaN(input) || !isFinite(input)) return 0
+    if (decimals === 0) {
+      return Math.round(input) * 1000
+    }
     if (decimals === 2) {
       return Math.round(input * 100) * 10
     }
@@ -167,6 +178,9 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
 
   const num = parseFloat(clean)
   if (isNaN(num) || !isFinite(num)) return 0
+  if (decimals === 0) {
+    return Math.round(num) * 1000
+  }
   if (decimals === 2) {
     return Math.round(num * 100) * 10
   }
@@ -190,9 +204,21 @@ export function formatMoney(
   opts: FormatOptions = {}
 ): string {
   const code = currencyCode || opts.currency
-  const config = getCurrencyConfig(code)
+  const config = getCurrencyConfig(code, opts.customDecimals)
+
+  if (opts.maskAmount) {
+    if (opts.showCurrency === false) {
+      return '•••••'
+    }
+    return `••••• ${config.symbol}`
+  }
+
   const amount = fromFils(fils)
-  const formatter = getFormatter(config.decimals)
+  const isExactThousand = Math.abs(fils) % 1000 === 0
+  const decimalsToUse =
+    opts.hideZeroDecimals && isExactThousand ? 0 : config.decimals
+
+  const formatter = getFormatter(decimalsToUse)
   const formattedNumber = formatter.format(amount)
 
   if (opts.showCurrency === false) {
@@ -218,8 +244,18 @@ export function formatSigned(
   type: 'expense' | 'income',
   opts: FormatOptions = {}
 ): string {
+  const code = opts.currency
+  const config = getCurrencyConfig(code, opts.customDecimals)
+
+  if (opts.maskAmount) {
+    if (opts.showCurrency === false) {
+      return '•••••'
+    }
+    return `••••• ${config.symbol}`
+  }
+
   const prefix = type === 'income' ? '+ ' : '- '
-  const absFormatted = formatMoney(Math.abs(fils), opts.currency, opts)
+  const absFormatted = formatMoney(Math.abs(fils), code, opts)
   return `${prefix}${absFormatted}`
 }
 
@@ -239,4 +275,26 @@ export function formatCompactNumber(val: number): string {
     return `${sign}${toWesternDigits(formatted)}k`
   }
   return `${sign}${toWesternDigits(String(Math.round(abs)))}`
+}
+
+/**
+ * Detects default currency from browser timezone or locale with JOD as default fallback.
+ */
+export function detectDefaultCurrency(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    const lang = typeof navigator !== 'undefined' ? navigator.language : ''
+    if (tz.includes('Amman') || lang === 'ar-JO') return 'JOD'
+    if (tz.includes('Riyadh') || lang === 'ar-SA') return 'SAR'
+    if (tz.includes('Dubai') || lang === 'ar-AE') return 'AED'
+    if (tz.includes('Kuwait') || lang === 'ar-KW') return 'KWD'
+    if (tz.includes('Bahrain') || lang === 'ar-BH') return 'BHD'
+    if (tz.includes('Muscat') || lang === 'ar-OM') return 'OMR'
+    if (tz.includes('Cairo') || lang === 'ar-EG') return 'EGP'
+    if (tz.includes('Europe')) return 'EUR'
+    if (tz.includes('America') || tz.includes('US') || lang === 'en-US') return 'USD'
+  } catch {
+    // fallback
+  }
+  return 'JOD'
 }

@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { PinLockGate } from './components/security/PinLockGate'
 import { AuthProvider } from './hooks/useAuth'
 import { AppDataProvider } from './context/AppDataContext'
 import { ToastProvider } from './hooks/useToast'
@@ -38,7 +39,9 @@ function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <AppShell />
+            <PinLockGate>
+              <AppShell />
+            </PinLockGate>
           </ProtectedRoute>
         }
       >

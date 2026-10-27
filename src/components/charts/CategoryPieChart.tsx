@@ -6,6 +6,8 @@ import {
   Cell,
   Tooltip,
 } from 'recharts'
+import { PieChart as PieChartIcon } from 'lucide-react'
+import { CategoryIcon } from '../ui/CategoryIcon'
 import { useCurrency } from '../../hooks/useCurrency'
 import { cn } from '../../lib/cn'
 import type { CategoryDistributionItem } from '../../lib/reports'
@@ -28,7 +30,7 @@ const CustomPieTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
     return (
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl shadow-xl text-xs space-y-1 z-50 text-start min-w-[140px]">
         <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
-          <span className="text-base">{item.icon}</span>
+          <CategoryIcon icon={item.icon} color={item.color} size="sm" />
           <span className="truncate">{item.name}</span>
         </div>
         <div className="text-red-500 dark:text-red-400 font-black text-sm">
@@ -48,6 +50,31 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
   className,
   height = 240,
 }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    const handleTouchOutside = (e: TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }
+    document.addEventListener('touchstart', handleTouchOutside, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', handleTouchOutside)
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    }
+  }, [])
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    touchTimerRef.current = setTimeout(() => {
+      if (containerRef.current) {
+        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      }
+    }, 2000)
+  }
+
   const { format } = useCurrency()
   const totalExpenses = React.useMemo(
     () => data.reduce((sum, item) => sum + item.amountFils, 0),
@@ -63,7 +90,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
         )}
       >
         <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
-          <span className="text-2xl">📊</span>
+          <PieChartIcon className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
         </div>
         <p className="text-xs font-semibold">لا توجد مصاريف مسجلة لهذه الفترة</p>
       </div>
@@ -73,7 +100,12 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
   return (
     <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-4 items-center', className)}>
       {/* Pie Donut Chart */}
-      <div className="w-full relative flex items-center justify-center" style={{ height }}>
+      <div
+        ref={containerRef}
+        onTouchEnd={handleTouchEnd}
+        className="w-full relative flex items-center justify-center"
+        style={{ height }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -122,7 +154,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
                 className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: item.color }}
               />
-              <span className="shrink-0">{item.icon}</span>
+              <CategoryIcon icon={item.icon} color={item.color} size="sm" />
               <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
                 {item.name}
               </span>

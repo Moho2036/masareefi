@@ -39,4 +39,48 @@ describe('BottomNav smartTools active highlighting', () => {
     expect(workHoursLink.className).toContain('bg-emerald-50')
     expect(circlesLink.className).not.toContain('bg-emerald-50')
   })
+
+  it('closes More drawer when hardware back button triggers popstate', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BottomNav onOpenAddModal={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const moreBtn = screen.getByRole('button', { name: /المزيد/i })
+    fireEvent.click(moreBtn)
+
+    expect(screen.getByText('جميع الأدوات والميزات')).toBeInTheDocument()
+
+    // Trigger popstate event
+    fireEvent(window, new PopStateEvent('popstate'))
+
+    expect(screen.queryByText('جميع الأدوات والميزات')).not.toBeInTheDocument()
+  })
+
+  it('dismisses More drawer on touch swipe-down exceeding 70px', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BottomNav onOpenAddModal={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const moreBtn = screen.getByRole('button', { name: /المزيد/i })
+    fireEvent.click(moreBtn)
+
+    expect(screen.getByText('جميع الأدوات والميزات')).toBeInTheDocument()
+
+    const dragHandle = screen.getByText('جميع الأدوات والميزات').closest('.fixed')!
+    const touchArea = dragHandle.querySelector('.touch-none')!
+
+    fireEvent.touchStart(touchArea, {
+      touches: [{ clientY: 100 }],
+    })
+    fireEvent.touchMove(touchArea, {
+      touches: [{ clientY: 180 }],
+    })
+    fireEvent.touchEnd(touchArea)
+
+    expect(screen.queryByText('جميع الأدوات والميزات')).not.toBeInTheDocument()
+  })
 })

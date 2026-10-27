@@ -441,6 +441,209 @@ describe('user profile validation', () => {
     );
   });
 
+  it('allows creating and updating user profile with valid onboardingCompleted (true or false)', async () => {
+    const ob1Db = testEnv.authenticatedContext('ob_user1').firestore();
+    await assertSucceeds(
+      setDoc(doc(ob1Db, 'users/ob_user1'), {
+        ...validProfile(),
+        onboardingCompleted: true,
+      }),
+    );
+    const ob2Db = testEnv.authenticatedContext('ob_user2').firestore();
+    await assertSucceeds(
+      setDoc(doc(ob2Db, 'users/ob_user2'), {
+        ...validProfile(),
+        onboardingCompleted: false,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: true,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: false,
+      }),
+    );
+  });
+
+  it('denies invalid onboardingCompleted (non-boolean)', async () => {
+    const badObDb = testEnv.authenticatedContext('bad_ob_user').firestore();
+    await assertFails(
+      setDoc(doc(badObDb, 'users/bad_ob_user'), {
+        ...validProfile(),
+        onboardingCompleted: 'true',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badObDb, 'users/bad_ob_user'), {
+        ...validProfile(),
+        onboardingCompleted: 1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badObDb, 'users/bad_ob_user'), {
+        ...validProfile(),
+        onboardingCompleted: null,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: 'false',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: 0,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: {},
+      }),
+    );
+  });
+
+  it('allows creating and updating user profile with valid openingBalanceFils (positive int, 0, within bounds)', async () => {
+    const bal0Db = testEnv.authenticatedContext('bal_zero_user').firestore();
+    await assertSucceeds(
+      setDoc(doc(bal0Db, 'users/bal_zero_user'), {
+        ...validProfile(),
+        openingBalanceFils: 0,
+      }),
+    );
+    const balPosDb = testEnv.authenticatedContext('bal_pos_user').firestore();
+    await assertSucceeds(
+      setDoc(doc(balPosDb, 'users/bal_pos_user'), {
+        ...validProfile(),
+        openingBalanceFils: 50000,
+      }),
+    );
+    const balMaxDb = testEnv.authenticatedContext('bal_max_user').firestore();
+    await assertSucceeds(
+      setDoc(doc(balMaxDb, 'users/bal_max_user'), {
+        ...validProfile(),
+        openingBalanceFils: 1000000000000,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: 0,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: 125000,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: 1000000000000,
+      }),
+    );
+  });
+
+  it('denies invalid openingBalanceFils (negative, float, non-int, out of bounds)', async () => {
+    const badBalDb = testEnv.authenticatedContext('bad_bal_user').firestore();
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: -1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: -500,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: 100.5,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: '500',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: true,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(badBalDb, 'users/bad_bal_user'), {
+        ...validProfile(),
+        openingBalanceFils: 1000000000001,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: -10,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: 50.25,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        openingBalanceFils: 1000000000001,
+      }),
+    );
+  });
+
+  it('allows combining valid onboardingCompleted and openingBalanceFils', async () => {
+    const comboDb = testEnv.authenticatedContext('combo_user').firestore();
+    await assertSucceeds(
+      setDoc(doc(comboDb, 'users/combo_user'), {
+        ...validProfile(),
+        onboardingCompleted: true,
+        openingBalanceFils: 25000,
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        onboardingCompleted: true,
+        openingBalanceFils: 75000,
+      }),
+    );
+  });
+
+  it('denies unexpected extra fields on user profile', async () => {
+    const extraDb = testEnv.authenticatedContext('extra_user').firestore();
+    await assertFails(
+      setDoc(doc(extraDb, 'users/extra_user'), {
+        ...validProfile(),
+        unexpectedField: 'forbidden',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        role: 'admin',
+      }),
+    );
+  });
+
   it('denies modifying createdAt on update', async () => {
     await assertFails(
       setDoc(doc(aliceDb(), `users/${ALICE}`), {
@@ -448,6 +651,334 @@ describe('user profile validation', () => {
         createdAt: Timestamp.fromDate(new Date('2027-01-01T00:00:00Z')),
       }),
     );
+  });
+
+  it('allows creating and updating user profile with valid optional fields', async () => {
+    const optUserDb = testEnv.authenticatedContext('opt_user').firestore();
+    const validFullProfile = {
+      ...validProfile(),
+      hideBalances: true,
+      hideZeroDecimals: false,
+      categorySortMode: 'usage',
+      customCurrencyDecimals: 2,
+      rolloverStartDate: now(),
+      lastBackupAt: '2026-01-01T12:00:00.000Z',
+      avatarColor: '#10B981',
+      notificationPrefs: {
+        autoPayments: true,
+        debtReminders: false,
+        debtReminderDaysBefore: 1,
+        circleAlerts: true,
+        budgetWarnings: false,
+        dailyReminder: true,
+        dailyReminderTime: '21:00',
+      },
+    };
+
+    // Create with all optional fields
+    await assertSucceeds(setDoc(doc(optUserDb, 'users/opt_user'), validFullProfile));
+
+    // Update with alternative valid options
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        hideBalances: false,
+        hideZeroDecimals: true,
+        categorySortMode: 'manual',
+        customCurrencyDecimals: 0,
+        avatarColor: 'rgb(255, 0, 0)',
+        lastBackupAt: 'backup_v1',
+        notificationPrefs: {
+          debtReminderDaysBefore: 0,
+          dailyReminderTime: '',
+        },
+      }),
+    );
+
+    // Update with customCurrencyDecimals = 3 and debtReminderDaysBefore = 3
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: 3,
+        notificationPrefs: {
+          debtReminderDaysBefore: 3,
+        },
+      }),
+    );
+
+    // Update with empty notificationPrefs
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: {},
+      }),
+    );
+  });
+
+  it('denies invalid hideBalances and hideZeroDecimals', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        hideBalances: 'true',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        hideBalances: 1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        hideZeroDecimals: 'false',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        hideZeroDecimals: 0,
+      }),
+    );
+  });
+
+  it('denies invalid categorySortMode', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        categorySortMode: 'invalid',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        categorySortMode: 'alphabetical',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        categorySortMode: 123,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        categorySortMode: true,
+      }),
+    );
+  });
+
+  it('denies invalid customCurrencyDecimals', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: 1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: 4,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: 5,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: -1,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: 2.5,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: '2',
+      }),
+    );
+  });
+
+  it('denies invalid rolloverStartDate', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        rolloverStartDate: '2026-01-01',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        rolloverStartDate: 1704067200000,
+      }),
+    );
+  });
+
+  it('denies invalid lastBackupAt', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        lastBackupAt: 'a'.repeat(51),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        lastBackupAt: 12345,
+      }),
+    );
+  });
+
+  it('denies invalid avatarColor', async () => {
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        avatarColor: 'a'.repeat(31),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        avatarColor: 12345,
+      }),
+    );
+  });
+
+  it('denies invalid notificationPrefs', async () => {
+    // Non-map types
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: 'not-a-map',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: 123,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: ['autoPayments'],
+      }),
+    );
+
+    // Invalid / unexpected keys
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { invalidKey: true },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { autoPayments: true, extraKey: 'bad' },
+      }),
+    );
+
+    // Invalid field types
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { autoPayments: 'true' },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminders: 1 },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { circleAlerts: 'false' },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { budgetWarnings: 0 },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { dailyReminder: 'yes' },
+      }),
+    );
+
+    // debtReminderDaysBefore must be int in [0, 1, 3]
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminderDaysBefore: 2 },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminderDaysBefore: 5 },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminderDaysBefore: -1 },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminderDaysBefore: '1' },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { debtReminderDaysBefore: 1.5 },
+      }),
+    );
+
+    // dailyReminderTime must be string <= 10
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { dailyReminderTime: 'a'.repeat(11) },
+      }),
+    );
+    await assertFails(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        notificationPrefs: { dailyReminderTime: 2100 },
+      }),
+    );
+  });
+});
+
+describe('user document deletion', () => {
+  it('allows owner to delete their own user document', async () => {
+    await assertSucceeds(deleteDoc(doc(aliceDb(), `users/${ALICE}`)));
+  });
+
+  it('denies another user from deleting user document', async () => {
+    await assertFails(deleteDoc(doc(bobDb(), `users/${ALICE}`)));
+  });
+
+  it('denies unauthenticated user from deleting user document', async () => {
+    await assertFails(deleteDoc(doc(anonDb(), `users/${ALICE}`)));
   });
 });
 

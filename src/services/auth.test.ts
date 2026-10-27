@@ -6,6 +6,11 @@ import {
   signOutUser,
   resetPassword,
   updateUserDisplayName,
+  sendUserEmailVerification,
+  changeUserPassword,
+  reauthenticateCurrentPassword,
+  reauthenticateCurrentGoogle,
+  deleteUserAccount,
 } from './auth'
 import * as userProfileService from './userProfile'
 import * as firebaseAuth from 'firebase/auth'
@@ -28,6 +33,12 @@ vi.mock('firebase/auth', () => ({
   signOut: vi.fn(),
   updateProfile: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
+  sendEmailVerification: vi.fn(),
+  updatePassword: vi.fn(),
+  EmailAuthProvider: { credential: vi.fn() },
+  reauthenticateWithCredential: vi.fn(),
+  reauthenticateWithPopup: vi.fn(),
+  deleteUser: vi.fn(),
 }))
 
 vi.mock('./userProfile', () => ({
@@ -111,5 +122,31 @@ describe('auth service', () => {
     await updateUserDisplayName(user, 'اسم جديد')
 
     expect(firebaseAuth.updateProfile).toHaveBeenCalledWith(user, { displayName: 'اسم جديد' })
+  })
+
+  it('sendUserEmailVerification calls sendEmailVerification with currentUser', async () => {
+    vi.mocked(firebaseAuth.sendEmailVerification).mockResolvedValueOnce(undefined)
+    await sendUserEmailVerification()
+    expect(firebaseAuth.sendEmailVerification).toHaveBeenCalledWith({ uid: 'u-current' })
+  })
+
+  it('deleteUserAccount calls deleteUser with currentUser', async () => {
+    vi.mocked(firebaseAuth.deleteUser).mockResolvedValueOnce(undefined)
+    await deleteUserAccount()
+    expect(firebaseAuth.deleteUser).toHaveBeenCalledWith({ uid: 'u-current' })
+  })
+
+  it('changeUserPassword throws if user has no email', async () => {
+    await expect(changeUserPassword('oldPass', 'newSecret123')).rejects.toThrow()
+  })
+
+  it('reauthenticateCurrentPassword throws if no user or email', async () => {
+    await expect(reauthenticateCurrentPassword('pass')).rejects.toThrow()
+  })
+
+  it('reauthenticateCurrentGoogle calls reauthenticateWithPopup', async () => {
+    vi.mocked(firebaseAuth.reauthenticateWithPopup).mockResolvedValueOnce({} as unknown as firebaseAuth.UserCredential)
+    await reauthenticateCurrentGoogle()
+    expect(firebaseAuth.reauthenticateWithPopup).toHaveBeenCalledWith({ uid: 'u-current' }, expect.anything())
   })
 })

@@ -227,6 +227,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
 
     const periodRange = getFinancialMonthRange(new Date(), monthStartDay)
+    const rolloverStartDate = settings?.rolloverStartDate
+      ? settings.rolloverStartDate instanceof Date
+        ? settings.rolloverStartDate
+        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
+          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
+          : new Date(settings.rolloverStartDate as unknown as string)
+      : null
+
     const unsub = subscribePriorBalance(
       userId,
       periodRange.start,
@@ -235,13 +243,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       },
       (err) => {
         console.error('Failed to subscribe prior balance in AppDataContext:', err)
-      }
+      },
+      rolloverStartDate
     )
 
     return () => {
       unsub()
     }
-  }, [userId, hasSettings, isRolloverEnabled, monthStartDay, currentDayKey])
+  }, [userId, hasSettings, isRolloverEnabled, monthStartDay, currentDayKey, settings?.rolloverStartDate])
 
   const handleSetRolloverBalanceFils = useCallback(
     (amount: number) => {

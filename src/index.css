@@ -3,21 +3,35 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
   --font-cairo: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  --color-brand-primary: #10b981;
-  --color-brand-expense: #ef4444;
-  --color-brand-income: #10b981;
+  --color-brand-primary: #2563eb;
+  --color-brand-carbon: #18181b;
+  --color-brand-expense: #dc2626;
+  --color-brand-income: #16a34a;
 
-  --color-slate-750: #293548;
-  --color-slate-850: #141e30;
+  --color-slate-50: #f4f4f5;
+  --color-slate-100: #e4e4e7;
+  --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8;
+  --color-slate-400: #71717a;
+  --color-slate-500: #52525b;
+  --color-slate-600: #3f3f46;
+  --color-slate-700: #27272a;
+  --color-slate-750: #1e1e24;
+  --color-slate-800: #121215;
+  --color-slate-850: #18181c;
+  --color-slate-900: #09090b;
+  --color-slate-950: #050507;
 }
 
 body {
-  font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
   @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
   min-height: 100vh;
+  overscroll-behavior-y: none;
+  font-variant-numeric: tabular-nums;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -35,8 +49,8 @@ textarea,
 /* Explicit fallback for desktop sidebar in dark mode */
 html.dark aside[aria-label="القائمة الجانبية"],
 .dark aside[aria-label="القائمة الجانبية"] {
-  background-color: #0f172a;
-  border-color: #1e293b;
+  background-color: #09090b;
+  border-color: #27272a;
 }
 
 /* Lightweight native micro-animations */

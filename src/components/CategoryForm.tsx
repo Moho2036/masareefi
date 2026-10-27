@@ -3,6 +3,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { SegmentedControl } from './ui/SegmentedControl'
+import { CategoryIcon } from './ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
@@ -133,8 +134,12 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
     }
   }
 
+  const isTouchDevice =
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {/* Type toggle (locked when editing) */}
       <div>
         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
@@ -177,7 +182,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           }}
           maxLength={40}
           required
-          autoFocus
+          autoFocus={!isTouchDevice}
         />
       </div>
 
@@ -193,7 +198,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               className="w-5 h-5 rounded-md flex items-center justify-center text-xs"
               style={{ backgroundColor: `${color}30` }}
             >
-              {icon}
+              <CategoryIcon icon={icon} color={color} size="sm" />
             </span>
             <span>{name || 'معاينة'}</span>
           </div>
@@ -207,11 +212,11 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               type="button"
               onClick={() => setIcon(em)}
               className={cn(
-                'h-8 w-8 rounded-lg flex items-center justify-center text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer select-none',
+                'h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer select-none',
                 icon === em && 'bg-emerald-100 dark:bg-emerald-950 ring-2 ring-emerald-500'
               )}
             >
-              {em}
+              <CategoryIcon icon={em} size="sm" />
             </button>
           ))}
         </div>
@@ -287,7 +292,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
         <Button
           type="button"
           variant="outline"

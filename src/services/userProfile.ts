@@ -1,11 +1,17 @@
 import {
   doc,
+  collection,
   getDoc,
+  getDocs,
+  query,
+  limit,
   setDoc,
   writeBatch,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   serverTimestamp,
+  Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
@@ -130,6 +136,83 @@ export async function updateUserSettings(
   if (partial.rolloverBalance !== undefined) {
     cleanUpdates.rolloverBalance = Boolean(partial.rolloverBalance)
   }
+  if (partial.onboardingCompleted !== undefined) {
+    cleanUpdates.onboardingCompleted = Boolean(partial.onboardingCompleted)
+  }
+  if (
+    partial.openingBalanceFils !== undefined &&
+    partial.openingBalanceFils !== null &&
+    Number.isFinite(Number(partial.openingBalanceFils)) &&
+    Number(partial.openingBalanceFils) >= 0
+  ) {
+    cleanUpdates.openingBalanceFils = Math.round(Number(partial.openingBalanceFils))
+  }
+  if (partial.hideBalances !== undefined) {
+    cleanUpdates.hideBalances = Boolean(partial.hideBalances)
+  }
+  if (partial.hideZeroDecimals !== undefined) {
+    cleanUpdates.hideZeroDecimals = Boolean(partial.hideZeroDecimals)
+  }
+  if (partial.categorySortMode === 'usage' || partial.categorySortMode === 'manual') {
+    cleanUpdates.categorySortMode = partial.categorySortMode
+  }
+  if (
+    partial.customCurrencyDecimals !== undefined &&
+    partial.customCurrencyDecimals !== null &&
+    [0, 2, 3].includes(Number(partial.customCurrencyDecimals))
+  ) {
+    cleanUpdates.customCurrencyDecimals = Number(partial.customCurrencyDecimals)
+  }
+  if (partial.rolloverStartDate !== undefined) {
+    if (partial.rolloverStartDate === null) {
+      cleanUpdates.rolloverStartDate = null
+    } else if (partial.rolloverStartDate instanceof Timestamp) {
+      cleanUpdates.rolloverStartDate = partial.rolloverStartDate
+    } else if (partial.rolloverStartDate instanceof Date) {
+      cleanUpdates.rolloverStartDate = Timestamp.fromDate(partial.rolloverStartDate)
+    } else if (typeof partial.rolloverStartDate === 'string') {
+      const parsed = new Date(partial.rolloverStartDate)
+      if (!isNaN(parsed.getTime())) {
+        cleanUpdates.rolloverStartDate = Timestamp.fromDate(parsed)
+      }
+    }
+  }
+  if (partial.lastBackupAt !== undefined) {
+    cleanUpdates.lastBackupAt = String(partial.lastBackupAt).slice(0, 50)
+  }
+  if (partial.avatarColor !== undefined) {
+    cleanUpdates.avatarColor = String(partial.avatarColor).slice(0, 30)
+  }
+  if (partial.notificationPrefs !== undefined) {
+    if (partial.notificationPrefs && typeof partial.notificationPrefs === 'object') {
+      const prefs: Record<string, unknown> = {}
+      if (typeof partial.notificationPrefs.autoPayments === 'boolean') {
+        prefs.autoPayments = partial.notificationPrefs.autoPayments
+      }
+      if (typeof partial.notificationPrefs.debtReminders === 'boolean') {
+        prefs.debtReminders = partial.notificationPrefs.debtReminders
+      }
+      if (
+        partial.notificationPrefs.debtReminderDaysBefore !== undefined &&
+        [0, 1, 3].includes(Number(partial.notificationPrefs.debtReminderDaysBefore))
+      ) {
+        prefs.debtReminderDaysBefore = Number(partial.notificationPrefs.debtReminderDaysBefore)
+      }
+      if (typeof partial.notificationPrefs.circleAlerts === 'boolean') {
+        prefs.circleAlerts = partial.notificationPrefs.circleAlerts
+      }
+      if (typeof partial.notificationPrefs.budgetWarnings === 'boolean') {
+        prefs.budgetWarnings = partial.notificationPrefs.budgetWarnings
+      }
+      if (typeof partial.notificationPrefs.dailyReminder === 'boolean') {
+        prefs.dailyReminder = partial.notificationPrefs.dailyReminder
+      }
+      if (typeof partial.notificationPrefs.dailyReminderTime === 'string') {
+        prefs.dailyReminderTime = partial.notificationPrefs.dailyReminderTime.slice(0, 10)
+      }
+      cleanUpdates.notificationPrefs = prefs
+    }
+  }
 
   // Ensure createdAt is never passed in updates
   delete (cleanUpdates as Record<string, unknown>).createdAt
@@ -147,4 +230,102 @@ export async function updateUserSettings(
     }
     await setDoc(userRef, fullPayload)
   }
+}
+
+export async function hasExistingUserData(uid: string): Promise<boolean> {
+  try {
+    const txCol = collection(db, 'users', uid, 'transactions')
+    const debtCol = collection(db, 'users', uid, 'debts')
+    const recCol = collection(db, 'users', uid, 'recurring')
+    const circleCol = collection(db, 'users', uid, 'circles')
+
+    const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
+      getDocs(query(txCol, limit(1))),
+      getDocs(query(debtCol, limit(1))),
+      getDocs(query(recCol, limit(1))),
+      getDocs(query(circleCol, limit(1))),
+    ])
+
+    return !txSnap.empty || !debtSnap.empty || !recSnap.empty || !circleSnap.empty
+  } catch (err) {
+    console.error('hasExistingUserData error:', err)
+    return false
+  }
+}
+
+/**
+ * Deletes all transactions, debts, recurring items, and circles in chunks <= 400,
+ * and resets openingBalanceFils to 0, preserving categories and user settings.
+ */
+export async function resetUserData(uid: string): Promise<void> {
+  const txCol = collection(db, 'users', uid, 'transactions')
+  const debtCol = collection(db, 'users', uid, 'debts')
+  const recCol = collection(db, 'users', uid, 'recurring')
+  const circleCol = collection(db, 'users', uid, 'circles')
+
+  const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
+    getDocs(txCol),
+    getDocs(debtCol),
+    getDocs(recCol),
+    getDocs(circleCol),
+  ])
+
+  const docsToDelete = [
+    ...txSnap.docs.map((d) => d.ref),
+    ...debtSnap.docs.map((d) => d.ref),
+    ...recSnap.docs.map((d) => d.ref),
+    ...circleSnap.docs.map((d) => d.ref),
+  ]
+
+  const CHUNK_SIZE = 400
+  for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
+    const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
+    const batch = writeBatch(db)
+    for (const ref of chunk) {
+      batch.delete(ref)
+    }
+    await batch.commit()
+  }
+
+  await updateUserSettings(uid, { openingBalanceFils: 0 })
+}
+
+/**
+ * Deletes all subcollections (transactions, debts, recurring, circles, categories)
+ * and the user profile document users/{uid}.
+ */
+export async function deleteUserFirestoreData(uid: string): Promise<void> {
+  const txCol = collection(db, 'users', uid, 'transactions')
+  const debtCol = collection(db, 'users', uid, 'debts')
+  const recCol = collection(db, 'users', uid, 'recurring')
+  const circleCol = collection(db, 'users', uid, 'circles')
+  const catCol = collection(db, 'users', uid, 'categories')
+
+  const [txSnap, debtSnap, recSnap, circleSnap, catSnap] = await Promise.all([
+    getDocs(txCol),
+    getDocs(debtCol),
+    getDocs(recCol),
+    getDocs(circleCol),
+    getDocs(catCol),
+  ])
+
+  const docsToDelete = [
+    ...txSnap.docs.map((d) => d.ref),
+    ...debtSnap.docs.map((d) => d.ref),
+    ...recSnap.docs.map((d) => d.ref),
+    ...circleSnap.docs.map((d) => d.ref),
+    ...catSnap.docs.map((d) => d.ref),
+  ]
+
+  const CHUNK_SIZE = 400
+  for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
+    const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
+    const batch = writeBatch(db)
+    for (const ref of chunk) {
+      batch.delete(ref)
+    }
+    await batch.commit()
+  }
+
+  await deleteDoc(doc(db, 'users', uid))
 }

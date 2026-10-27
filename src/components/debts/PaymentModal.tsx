@@ -4,6 +4,7 @@ import { Zap, AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { DatePickerInput } from '../ui/DatePickerInput'
 import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
@@ -141,7 +142,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {paymentsCount >= 90 && (
         <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-semibold space-y-2">
           <div className="font-bold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
@@ -254,15 +255,11 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
       {/* Date */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-          تاريخ الدفعة
-        </label>
-        <input
-          type="date"
+        <DatePickerInput
+          label="تاريخ الدفعة"
           value={dateStr}
           min={format(debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate), 'yyyy-MM-dd')}
-          onChange={(e) => setDateStr(e.target.value)}
-          className="w-full rounded-xl border bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm outline-none border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          onChange={(val) => setDateStr(val)}
           required
         />
       </div>
@@ -297,7 +294,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="pt-2 flex items-center gap-3">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
         <Button
           type="submit"
           variant="primary"

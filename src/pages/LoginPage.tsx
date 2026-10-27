@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Navigate } from 'react-router'
 import {
   Wallet,
@@ -9,6 +9,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import {
@@ -24,12 +25,35 @@ export const LoginPage: React.FC = () => {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [signingInGoogle, setSigningInGoogle] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const passwordStrength = useMemo(() => {
+    if (!password) return { score: 0, label: '', color: 'bg-zinc-200 dark:bg-zinc-700' }
+    let score = 0
+    if (password.length >= 6) score += 1
+    if (password.length >= 8 && /[0-9]/.test(password)) score += 1
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1
+    if (/[^a-zA-Z0-9]/.test(password)) score += 1
+
+    switch (score) {
+      case 1:
+        return { score: 1, label: 'ضعيفة', color: 'bg-red-500' }
+      case 2:
+        return { score: 2, label: 'مقبولة', color: 'bg-amber-500' }
+      case 3:
+        return { score: 3, label: 'جيدة', color: 'bg-blue-500' }
+      case 4:
+      default:
+        return { score: 4, label: 'قوية', color: 'bg-emerald-500' }
+    }
+  }, [password])
 
   if (loading) {
     return (
@@ -71,6 +95,11 @@ export const LoginPage: React.FC = () => {
 
     if (mode === 'signup' && password.length < 6) {
       setError('كلمة المرور يجب أن لا تقل عن 6 خانات')
+      return
+    }
+
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError('كلمتا المرور غير متطابقتين')
       return
     }
 
@@ -156,10 +185,10 @@ export const LoginPage: React.FC = () => {
         {/* Brand Details */}
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white">
-            مصاريفي
+            بَصير
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
-            تابع مصاريفك ومداخيلك بسهولة
+            بصيرتك المالية لإدارة مصاريفك ومداخيلك بوضوح
           </p>
         </div>
 
@@ -173,6 +202,7 @@ export const LoginPage: React.FC = () => {
               setMode('login')
               setError(null)
               setSuccessMessage(null)
+              setConfirmPassword('')
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'login'
@@ -190,6 +220,7 @@ export const LoginPage: React.FC = () => {
               setMode('signup')
               setError(null)
               setSuccessMessage(null)
+              setConfirmPassword('')
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'signup'
@@ -295,7 +326,71 @@ export const LoginPage: React.FC = () => {
                 </button>
               </div>
             )}
+            {mode === 'signup' && password.length > 0 && (
+              <div className="space-y-1.5 pt-1.5" aria-label="مستوى قوة كلمة المرور">
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span className="text-slate-500 dark:text-slate-400">قوة كلمة المرور:</span>
+                  <span
+                    className={
+                      passwordStrength.score === 1
+                        ? 'text-red-500'
+                        : passwordStrength.score === 2
+                          ? 'text-amber-500'
+                          : passwordStrength.score === 3
+                            ? 'text-blue-500'
+                            : 'text-emerald-500'
+                    }
+                  >
+                    {passwordStrength.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                  {[1, 2, 3, 4].map((step) => (
+                    <div
+                      key={step}
+                      className={`h-full rounded-full transition-colors ${
+                        step <= passwordStrength.score
+                          ? passwordStrength.color
+                          : 'bg-slate-200 dark:bg-slate-700'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label
+                htmlFor="signup-confirm-password"
+                className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                تأكيد كلمة المرور
+              </label>
+              <div className="relative">
+                <input
+                  id="signup-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  dir="ltr"
+                  required={mode === 'signup'}
+                  className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-start"
+                />
+                <Lock className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  aria-label={showConfirmPassword ? 'إخفاء تأكيد كلمة المرور' : 'إظهار تأكيد كلمة المرور'}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -354,6 +449,12 @@ export const LoginPage: React.FC = () => {
             )}
             <span>{signingInGoogle ? 'جاري تسجيل الدخول...' : 'الدخول بحساب Google'}</span>
           </button>
+        </div>
+
+        {/* Trust & Security Footnote */}
+        <div className="pt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+          <span>بياناتك مشفرة ومحمية بالكامل ولا يطلع عليها أحد</span>
         </div>
       </div>
     </div>

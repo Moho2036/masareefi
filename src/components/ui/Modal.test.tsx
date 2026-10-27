@@ -141,4 +141,69 @@ describe('Modal Component', () => {
     expect(handleClose1).not.toHaveBeenCalled()
     expect(handleClose2).not.toHaveBeenCalled()
   })
+
+  it('in nested modals, only the topmost modal responds to Escape', () => {
+    const handleCloseParent = vi.fn()
+    const handleCloseChild = vi.fn()
+
+    render(
+      <>
+        <Modal isOpen={true} onClose={handleCloseParent} title="النافذة الأم">
+          <div>محتوى الأم</div>
+        </Modal>
+        <Modal isOpen={true} onClose={handleCloseChild} title="النافذة الابنة">
+          <div>محتوى الابنة</div>
+        </Modal>
+      </>
+    )
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(handleCloseChild).toHaveBeenCalledTimes(1)
+    expect(handleCloseParent).not.toHaveBeenCalled()
+  })
+
+  it('in nested modals, only the topmost modal responds to popstate', () => {
+    const handleCloseParent = vi.fn()
+    const handleCloseChild = vi.fn()
+
+    render(
+      <>
+        <Modal isOpen={true} onClose={handleCloseParent} title="النافذة الأم">
+          <div>محتوى الأم</div>
+        </Modal>
+        <Modal isOpen={true} onClose={handleCloseChild} title="النافذة الابنة">
+          <div>محتوى الابنة</div>
+        </Modal>
+      </>
+    )
+
+    fireEvent(window, new PopStateEvent('popstate'))
+
+    expect(handleCloseChild).toHaveBeenCalledTimes(1)
+    expect(handleCloseParent).not.toHaveBeenCalled()
+  })
+
+  it('dismisses modal on touch swipe-down exceeding 70px', () => {
+    const handleClose = vi.fn()
+    render(
+      <Modal isOpen={true} onClose={handleClose} title="نافذة السحب">
+        <div>محتوى السحب</div>
+      </Modal>
+    )
+
+    const titleEl = screen.getByText('نافذة السحب')
+    const dragContainer = titleEl.closest('.touch-none') || titleEl
+
+    // Simulate drag down: start at 100, move to 180 (diff = 80px > 70px), end
+    fireEvent.touchStart(dragContainer, {
+      touches: [{ clientY: 100 }],
+    })
+    fireEvent.touchMove(dragContainer, {
+      touches: [{ clientY: 180 }],
+    })
+    fireEvent.touchEnd(dragContainer)
+
+    expect(handleClose).toHaveBeenCalledTimes(1)
+  })
 })

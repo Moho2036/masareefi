@@ -21,6 +21,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { Modal } from '../components/ui/Modal'
 import { Toggle } from '../components/ui/Toggle'
 import { RecurringForm } from '../components/RecurringForm'
+import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
@@ -443,10 +444,10 @@ export const RecurringPage: React.FC = () => {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${color}25` }}
                     >
-                      {icon}
+                      <CategoryIcon icon={icon} color={color} size="md" />
                     </div>
                     <div className="min-w-0">
                       <span className="font-bold text-sm text-slate-800 dark:text-slate-100 block truncate">

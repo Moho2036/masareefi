@@ -1,5 +1,6 @@
 import React from 'react'
 import { cn } from '../../lib/cn'
+import { triggerHaptic } from '../../lib/haptics'
 
 export interface ToggleProps {
   checked: boolean
@@ -24,12 +25,18 @@ export const Toggle: React.FC<ToggleProps> = ({
   const labelId = toggleId && label ? `${toggleId}-label` : undefined
   const descId = toggleId && description ? `${toggleId}-desc` : undefined
 
+  const handleToggle = () => {
+    if (disabled) return
+    triggerHaptic('light')
+    onChange(!checked)
+  }
+
   return (
     <div className={cn('flex items-center justify-between gap-3', className)}>
       {(label || description) && (
         <div
           className={cn('flex-1', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}
-          onClick={() => !disabled && onChange(!checked)}
+          onClick={handleToggle}
         >
           {label && (
             <span
@@ -60,7 +67,7 @@ export const Toggle: React.FC<ToggleProps> = ({
         aria-labelledby={labelId}
         aria-describedby={descId}
         disabled={disabled}
-        onClick={() => onChange(!checked)}
+        onClick={handleToggle}
         className={cn(
           'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
           checked

@@ -48,6 +48,7 @@ import {
 } from '../lib/dates'
 import { calculateForecast } from '../lib/forecast'
 import { SafeDailySpendCard } from '../components/reports/SafeDailySpendCard'
+import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { cn } from '../lib/cn'
 
 export const ReportsPage: React.FC = () => {
@@ -99,9 +100,12 @@ export const ReportsPage: React.FC = () => {
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
-  const effectiveRollover = isRolloverEnabled
-    ? (isCurrentFiscalMonth ? (appData?.rolloverBalanceFils ?? 0) : effectiveLocalRollover)
-    : 0
+  const effectiveRollover =
+    (isRolloverEnabled
+      ? isCurrentFiscalMonth
+        ? (appData?.rolloverBalanceFils ?? 0)
+        : effectiveLocalRollover
+      : 0) + (settings?.openingBalanceFils ?? 0)
 
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
@@ -153,9 +157,21 @@ export const ReportsPage: React.FC = () => {
       debts,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
+      rolloverBalanceFils:
+        isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
+          ? effectiveRollover
+          : undefined,
     })
-  }, [monthTransactions, recurring, debts, monthStartDay, range, effectiveRollover, isRolloverEnabled])
+  }, [
+    monthTransactions,
+    recurring,
+    debts,
+    monthStartDay,
+    range,
+    effectiveRollover,
+    isRolloverEnabled,
+    settings?.openingBalanceFils,
+  ])
 
   // Yearly data hooks
   const defaultYear = useMemo(() => range.start.getFullYear(), [range.start])
@@ -443,7 +459,7 @@ export const ReportsPage: React.FC = () => {
                 {format(monthSums.balance)}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                {isRolloverEnabled && effectiveRollover !== 0
+                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0
                   ? `صافي الشهر المستقل (الرصيد المتاح مع المرحّل: ${format(monthSums.balance + effectiveRollover)})`
                   : 'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'}
               </div>
@@ -515,8 +531,22 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               {monthLoading ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  جاري تحميل التصنيفات...
+                <div className="space-y-4 animate-pulse">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+                          <div className="w-24 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+                          <div className="w-8 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
+                        </div>
+                      </div>
+                      <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full" />
+                    </div>
+                  ))}
                 </div>
               ) : monthCategoryDist.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
@@ -531,7 +561,7 @@ export const ReportsPage: React.FC = () => {
                     <div key={item.categoryId} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm">{item.icon}</span>
+                          <CategoryIcon icon={item.icon} color={item.color} size="sm" />
                           <span className="font-bold text-slate-700 dark:text-slate-200">
                             {item.name}
                           </span>
@@ -732,8 +762,8 @@ export const ReportsPage: React.FC = () => {
             <MonthlyBarChart data={yearlyBreakdown} className="pt-2" />
           </Card>
 
-          {/* Yearly Bottom Row: Top Categories & Monthly Breakdown Table */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Yearly Bottom Row: Top Categories & Monthly Breakdown Table (Stacked full width for desktop clarity) */}
+          <div className="space-y-6">
             {/* Top Categories Annual */}
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
@@ -746,8 +776,22 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               {yearLoading ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  جاري تحميل التصنيفات...
+                <div className="space-y-4 animate-pulse">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+                          <div className="w-24 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+                          <div className="w-8 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
+                        </div>
+                      </div>
+                      <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full" />
+                    </div>
+                  ))}
                 </div>
               ) : yearCategoryDist.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
@@ -762,7 +806,7 @@ export const ReportsPage: React.FC = () => {
                     <div key={item.categoryId} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm">{item.icon}</span>
+                          <CategoryIcon icon={item.icon} color={item.color} size="sm" />
                           <span className="font-bold text-slate-700 dark:text-slate-200">
                             {item.name}
                           </span>

@@ -101,9 +101,6 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 - Pure logic (`src/lib/*`) must have Vitest unit tests next to it (`*.test.ts`).
 - No `any`. No unused code. Keep components small.
 
-## Documentation & Project Bible (Mandatory Auto-Update Rule)
-Whenever ANY feature, calculation, UI layout, component, or database field is added, modified, or removed in the codebase, you MUST immediately update `docs/PROJECT_BIBLE.md` in the same task so it always remains 100% synchronized with the actual code.
-
 ## Required checks before reporting done
 ```
 npm run typecheck   # tsc -b --noEmit (or tsc --noEmit -p tsconfig.app.json)
