@@ -1091,7 +1091,13 @@ export function isUserTurnMonth(
   if (diffMonths < 0 || diffMonths + 1 > circle.membersCount) {
     return false
   }
-  return diffMonths + 1 === circle.myTurnMonth
+  const currentMonth = diffMonths + 1
+  return (
+    currentMonth === circle.myTurnMonth ||
+    (circle.shareType === 'double' &&
+      circle.secondTurnMonth !== undefined &&
+      currentMonth === circle.secondTurnMonth)
+  )
 }
 
 /**
@@ -1105,6 +1111,13 @@ export function isCircleFullyPaid(circle: MoneyCircle): boolean {
   for (let month = 1; month <= circle.membersCount; month++) {
     for (const member of circle.members) {
       if (member.turnMonth === month) continue // Exempt receiver for this month
+      if (
+        circle.shareType === 'double' &&
+        circle.secondTurnMonth === month &&
+        member.turnMonth === circle.myTurnMonth
+      ) {
+        continue // Exempt user for second turn month in double-share circle
+      }
       const isPaid =
         member.paidMonths?.includes(month) ||
         member.paymentsByMonth?.[String(month)] === true

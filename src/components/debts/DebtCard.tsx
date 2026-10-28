@@ -41,7 +41,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
     <div
       className={cn(
         'group rounded-2xl p-4 sm:p-5 border transition-all flex flex-col justify-between shadow-xs hover:shadow-sm space-y-3.5 relative overflow-hidden',
-        'bg-white dark:bg-slate-800',
+        'bg-white dark:bg-[#121215]',
         debt.settled
           ? 'border-slate-200/60 dark:border-slate-700/40 opacity-75'
           : overdue
@@ -104,7 +104,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
       </div>
 
       {/* Middle: Remaining Amount & Breakdown */}
-      <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+      <div className="p-3 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/50 space-y-2">
         <div className="flex items-end justify-between gap-2">
           <div>
             <span className="text-[11px] font-bold text-slate-400 dark:text-slate-400 block mb-0.5">

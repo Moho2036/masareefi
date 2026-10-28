@@ -164,7 +164,10 @@ export function exportRecurringToCsv(
   const frequencyMap: Record<string, string> = {
     daily: 'يومي',
     weekly: 'أسبوعي',
+    biweekly: 'كل أسبوعين',
     monthly: 'شهري',
+    quarterly: 'ربع سنوي',
+    semiannual: 'نصف سنوي',
     yearly: 'سنوي',
   }
 

@@ -492,7 +492,7 @@ describe('PaymentHistoryModal', () => {
     expect(screen.getByText('سلفة أولى')).toBeInTheDocument()
 
     // Open add entry form
-    const addEntryBtn = screen.getByText('+ إضافة سلفة جديدة على هذا الحساب')
+    const addEntryBtn = screen.getByText('إضافة سلفة جديدة على هذا الحساب')
     fireEvent.click(addEntryBtn)
 
     expect(screen.getByPlaceholderText('0.000')).toBeInTheDocument()
@@ -514,10 +514,6 @@ describe('PaymentHistoryModal', () => {
         expect.any(Object)
       )
     })
-
-    // Open share menu
-    const shareOptionsBtn = screen.getByText('خيارات المشاركة')
-    fireEvent.click(shareOptionsBtn)
 
     expect(screen.getByText('نسخ للحافظة')).toBeInTheDocument()
     expect(screen.getByText('إرسال عبر واتساب')).toBeInTheDocument()

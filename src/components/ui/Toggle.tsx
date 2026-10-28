@@ -42,7 +42,7 @@ export const Toggle: React.FC<ToggleProps> = ({
             <span
               id={labelId}
               className={cn(
-                'text-sm font-medium text-slate-800 dark:text-slate-200 select-none block',
+                'text-sm font-medium text-zinc-900 dark:text-zinc-100 select-none block',
                 disabled ? 'cursor-not-allowed' : 'cursor-pointer'
               )}
             >
@@ -52,7 +52,7 @@ export const Toggle: React.FC<ToggleProps> = ({
           {description && (
             <p
               id={descId}
-              className="text-xs text-slate-500 dark:text-slate-400 select-none"
+              className="text-xs text-zinc-500 dark:text-zinc-400 select-none"
             >
               {description}
             </p>
@@ -69,10 +69,10 @@ export const Toggle: React.FC<ToggleProps> = ({
         disabled={disabled}
         onClick={handleToggle}
         className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
           checked
-            ? 'bg-emerald-500 dark:bg-emerald-500'
-            : 'bg-slate-300 dark:bg-slate-700',
+            ? 'bg-blue-600 dark:bg-blue-500'
+            : 'bg-zinc-300 dark:bg-zinc-700',
         )}
       >
         <span

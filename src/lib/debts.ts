@@ -303,20 +303,18 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
 export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ'): string {
   const isLent = debt.type === 'lent'
   const typeText = isLent ? 'مستحقات لك (سلف / إقراض)' : 'التزامات عليك (اقتراض)'
-  const statusText = debt.settled ? 'مسدد بالكامل ✅' : 'قيد السداد ⏳'
+  const statusText = debt.settled ? 'مسدد بالكامل' : 'قيد السداد'
   const remaining = getDebtRemainingFils(debt)
 
-  let entriesText = ''
-  if (debt.entries && debt.entries.length > 0) {
-    entriesText = debt.entries
-      .map(
-        (e, idx) =>
-          `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${fromFils(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
-      )
-      .join('\n')
-  } else {
-    entriesText = `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${fromFils(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
-  }
+  const entriesText =
+    debt.entries && debt.entries.length > 0
+      ? debt.entries
+          .map(
+            (e, idx) =>
+              `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${fromFils(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
+          )
+          .join('\n')
+      : `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${fromFils(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
 
   let paymentsText = 'لا توجد دفعات مسجلة بعد.'
   if (debt.payments && debt.payments.length > 0) {
@@ -328,22 +326,22 @@ export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ')
       .join('\n')
   }
 
-  return `📋 *كشف حساب مالي - تطبيق بَصير*
+  return `*كشف حساب مالي - تطبيق بَصير*
 ────────────────
-👤 *الطرف:* ${debt.personName}
-🔖 *نوع المعاملة:* ${typeText}
-📌 *الحالة:* ${statusText}
+*الطرف:* ${debt.personName}
+*نوع المعاملة:* ${typeText}
+*الحالة:* ${statusText}
 
-💰 *تفاصيل السلف وأصل الدين:*
+*تفاصيل السلف وأصل الدين:*
 ${entriesText}
 
-💳 *سجل الدفعات المسددة:*
+*سجل الدفعات المسددة:*
 ${paymentsText}
 
 ────────────────
-💵 *إجمالي المبلغ:* ${fromFils(debt.amountFils)} ${currencySymbol}
-✅ *المسدد:* ${fromFils(debt.paidFils || 0)} ${currencySymbol}
-⏳ *المتبقي:* ${fromFils(remaining)} ${currencySymbol}
+*إجمالي المبلغ:* ${fromFils(debt.amountFils)} ${currencySymbol}
+*المسدد:* ${fromFils(debt.paidFils || 0)} ${currencySymbol}
+*المتبقي:* ${fromFils(remaining)} ${currencySymbol}
 ────────────────
 تم إنشاء كشف الحساب في ${format(new Date(), 'yyyy/MM/dd')}`
 }

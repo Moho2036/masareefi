@@ -20,8 +20,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
-    const baseStyles =
-      'inline-flex items-center justify-center gap-2 font-medium transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
+    const hasCustomDisplay = Boolean(className && /\b(hidden|flex|block|inline-block|grid)\b/.test(className))
+    const baseStyles = cn(
+      !hasCustomDisplay && 'inline-flex',
+      'items-center justify-center gap-2 font-medium transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
+    )
 
     const sizeStyles = {
       sm: 'text-xs px-3 py-1.5 rounded-lg',
@@ -33,11 +36,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       primary:
         'bg-zinc-900 hover:bg-zinc-800 text-white shadow-xs focus-visible:ring-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500',
       outline:
-        'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 focus-visible:ring-slate-400',
+        'border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 focus-visible:ring-zinc-400',
       ghost:
-        'bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 focus-visible:ring-slate-400',
+        'bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 focus-visible:ring-zinc-400',
       danger:
-        'bg-red-500 hover:bg-red-600 text-white shadow-sm focus-visible:ring-red-500 dark:bg-red-600 dark:hover:bg-red-500',
+        'bg-red-600 hover:bg-red-700 text-white shadow-xs focus-visible:ring-red-500 dark:bg-red-600 dark:hover:bg-red-500',
     }[variant]
 
     return (

@@ -59,10 +59,8 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     return (
       <Card
         className={cn(
-          'relative overflow-hidden border-2 transition-all',
-          isSurplus
-            ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent'
-            : 'border-red-500/40 bg-gradient-to-br from-red-500/5 via-transparent to-transparent',
+          'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
+          isSurplus ? 'border-emerald-500/30' : 'border-red-500/40',
           className
         )}
       >
@@ -83,9 +81,6 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
                 ميزانية وأداء الشهر المالي
               </h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                ملخص ختامي لأداء الشهر بعد اكتمال جميع أيامه
-              </p>
             </div>
           </div>
 
@@ -218,13 +213,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     return (
       <Card
         className={cn(
-          'relative overflow-hidden border-2 transition-all',
-          healthStatus === 'safe' &&
-            'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent',
-          healthStatus === 'warning' &&
-            'border-amber-500/40 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent',
-          healthStatus === 'danger' &&
-            'border-red-500/40 bg-gradient-to-br from-red-500/5 via-transparent to-transparent',
+          'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
+          healthStatus === 'safe' && 'border-emerald-500/30',
+          healthStatus === 'warning' && 'border-amber-500/40',
+          healthStatus === 'danger' && 'border-red-500/40',
           className
         )}
       >
@@ -247,9 +239,6 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
                 ميزانية وتوقّع الشهر القادم
               </h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                خطة الصرف الاستباقية لكامل أيام الدورة القادمة
-              </p>
             </div>
           </div>
 
@@ -306,9 +295,6 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 <span className="text-xs font-semibold text-slate-400">/ اليوم</span>
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-              المبلغ التقديري اليومي المتاح عبر كامل أيام الشهر ({totalDays} يوماً) بعد حجز الالتزامات.
-            </p>
           </div>
 
           {/* Projected Free Balance vs Reserved */}
@@ -391,13 +377,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
   return (
     <Card
       className={cn(
-        'relative overflow-hidden border-2 transition-all',
-        healthStatus === 'safe' &&
-          'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent',
-        healthStatus === 'warning' &&
-          'border-amber-500/40 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent',
-        healthStatus === 'danger' &&
-          'border-red-500/40 bg-gradient-to-br from-red-500/5 via-transparent to-transparent',
+        'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
+        healthStatus === 'safe' && 'border-emerald-500/30',
+        healthStatus === 'warning' && 'border-amber-500/40',
+        healthStatus === 'danger' && 'border-red-500/40',
         className
       )}
     >
@@ -420,9 +403,6 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
               ميزانية الأمان اليومي وتوقّع الشهر
             </h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              تحليل استباقي يراعي الفواتير المتكررة والديون القادمة
-            </p>
           </div>
         </div>
 
@@ -480,9 +460,6 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               <span className="text-xs font-semibold text-slate-400">/ اليوم</span>
             </div>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-            المبلغ الأقصى المسموح بصرفه اليوم لضمان سداد التزاماتك دون عجز.
-          </p>
         </div>
 
         {/* Actual Spend Pace vs Free Balance */}

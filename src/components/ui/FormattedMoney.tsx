@@ -31,7 +31,7 @@ export const FormattedMoney: React.FC<FormattedMoneyProps> = ({
   const customDecimals = settings?.customCurrencyDecimals
   const isMasked = maskAmount !== undefined ? maskAmount : Boolean(settings?.hideBalances)
   const shouldHideZeroDecimals =
-    hideZeroDecimals !== undefined ? hideZeroDecimals : Boolean(settings?.hideZeroDecimals)
+    hideZeroDecimals !== undefined ? hideZeroDecimals : (settings?.hideZeroDecimals ?? true)
 
   const config = useMemo(
     () => getCurrencyConfig(currency, customDecimals),
@@ -78,13 +78,15 @@ export const FormattedMoney: React.FC<FormattedMoneyProps> = ({
 
   return (
     <span className={cn('inline-flex items-baseline tabular-nums select-none', className)}>
-      {signPrefix && <span className="me-0.5">{signPrefix}</span>}
-      <span className="font-bold">{integerPart}</span>
-      {decimalPart !== undefined && (
-        <span className={cn('text-[0.72em] opacity-80 font-medium', decimalClassName)}>
-          .{decimalPart}
-        </span>
-      )}
+      <span dir="ltr" className="inline-flex items-baseline">
+        {signPrefix && <span className="me-0.5">{signPrefix}</span>}
+        <span className="font-bold">{integerPart}</span>
+        {decimalPart !== undefined && (
+          <span className={cn('text-[0.72em] opacity-80 font-medium', decimalClassName)}>
+            .{decimalPart}
+          </span>
+        )}
+      </span>
       {showCurrency && (
         <span className={cn('ms-1 text-[0.72em] opacity-80 font-medium', symbolClassName)}>
           {config.symbol}

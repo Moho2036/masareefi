@@ -110,6 +110,7 @@ export function useNotifications() {
           if (legacyStorageKey) {
             window.localStorage.setItem(legacyStorageKey, payload)
           }
+          window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
         } catch {
           // ignore
         }
@@ -117,6 +118,20 @@ export function useNotifications() {
     },
     [storageKey, legacyStorageKey]
   )
+
+  // Sync readIds across all mounted hook instances (e.g. AppShell bell badge & NotificationCenterModal)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleSync = () => {
+      setReadIds(getStoredReadIds())
+    }
+    window.addEventListener('baseer-notifications-sync', handleSync)
+    window.addEventListener('storage', handleSync)
+    return () => {
+      window.removeEventListener('baseer-notifications-sync', handleSync)
+      window.removeEventListener('storage', handleSync)
+    }
+  }, [getStoredReadIds])
 
   // Generate all active notifications
   const allNotifications = useMemo(() => {

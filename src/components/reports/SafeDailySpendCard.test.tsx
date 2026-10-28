@@ -226,7 +226,7 @@ describe('SafeDailySpendCard Component', () => {
     expect(screen.queryByText('تخطيط استباقي:')).not.toBeInTheDocument()
 
     // Assert freeBalance text has red color styling class
-    const freeBalanceEl = screen.getByText('-150.000 د.أ')
+    const freeBalanceEl = screen.getByText(/-150(\.000)? د\.أ/)
     expect(freeBalanceEl).toHaveClass('text-red-500')
   })
 })

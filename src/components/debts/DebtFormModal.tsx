@@ -77,6 +77,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   useEffect(() => {
     if (!isEditing && !syncManuallyToggled) {
       if (isPastDebt) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSyncTransaction(false)
       } else {
         setSyncTransaction(true)
@@ -296,7 +297,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
           المبلغ الكلي
         </label>
-        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20">
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
           <input
             type="text"
             inputMode="decimal"
@@ -330,7 +331,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           <label htmlFor="pre-paid-input" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
             المبلغ المسدد مسبقاً من هذا الدين (اختياري)
           </label>
-          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20">
+          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
             <input
               id="pre-paid-input"
               type="text"
@@ -406,11 +407,6 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           maxLength={500}
         />
       </div>
-
-      {/* Informational Note */}
-      <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed px-1">
-        ملاحظة: دفتر الديون مخصص لتتبع الحقوق والالتزامات بشكل مستقل ولا يخصم أو يضيف تلقائياً إلى رصيد المعاملات الشهرية إلا إذا قمت بتفعيل خيار الربط بالرصيد أدناه.
-      </p>
 
       {/* 7. Accounting Sync Toggle */}
       <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 space-y-2">

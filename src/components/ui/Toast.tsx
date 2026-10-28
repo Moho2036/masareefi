@@ -36,14 +36,14 @@ export const ToastContainer: React.FC = () => {
             <div className="flex items-center gap-2.5">
               {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
               {isError && <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />}
-              {!isSuccess && !isError && <Info className="w-5 h-5 text-slate-500 shrink-0" />}
+              {!isSuccess && !isError && <Info className="w-5 h-5 text-zinc-500 shrink-0" />}
               <span>{toast.message}</span>
             </div>
 
             <button
               type="button"
               onClick={() => dismissToast(toast.id)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
               aria-label="إغلاق الإشعار"
             >
               <X className="w-4 h-4" />

@@ -632,7 +632,7 @@ describe('MoneyCirclesManager Component', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف \(مكتملة\)\./i)
+        screen.getByText(/اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف \(مكتملة\)\./i)
       ).toBeInTheDocument()
     })
 

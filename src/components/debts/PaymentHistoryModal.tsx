@@ -83,7 +83,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [isDeletingEntry, setIsDeletingEntry] = useState(false)
 
   // Share statement menu state
-  const [showShareMenu, setShowShareMenu] = useState(false)
+  const [showShareMenu, setShowShareMenu] = useState(true)
 
   const handleClose = () => {
     setConfirmDeleteId(null)
@@ -405,16 +405,16 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         </div>
 
         {/* Share Account Statement Strip */}
-        <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl space-y-2">
+        <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] rounded-xl space-y-2 print-hide">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-              <Share2 className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
+              <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>مشاركة كشف الحساب (نسخ / واتساب / طباعة)</span>
             </div>
             <button
               type="button"
               onClick={() => setShowShareMenu((prev) => !prev)}
-              className="text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
               <span>{showShareMenu ? 'إغلاق الخيارات' : 'خيارات المشاركة'}</span>
               {showShareMenu ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -422,13 +422,13 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           </div>
 
           {showShareMenu && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-800/40">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 onClick={handleCopyStatement}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shadow-xs transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-xs transition-colors"
               >
-                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <Copy className="w-3.5 h-3.5 text-zinc-500" />
                 <span>نسخ للحافظة</span>
               </button>
               <button
@@ -442,9 +442,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shadow-xs transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-xs transition-colors"
               >
-                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                <Printer className="w-3.5 h-3.5 text-zinc-500" />
                 <span>طباعة الكشف</span>
               </button>
             </div>
@@ -460,10 +460,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             <button
               type="button"
               onClick={() => setIsAddingEntry((prev) => !prev)}
-              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer print-hide"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ إضافة سلفة جديدة على هذا الحساب</span>
+              <span>إضافة سلفة جديدة على هذا الحساب</span>
             </button>
           </div>
 
@@ -475,7 +475,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
           {/* Inline Add Entry Form */}
           {isAddingEntry && (
-            <form onSubmit={handleAddEntry} className="p-3 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 space-y-2.5">
+            <form onSubmit={handleAddEntry} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5 print-hide">
               <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
                 تسجيل سلفة إضافية جديدة لنفس الشخص
               </span>

@@ -411,7 +411,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
             error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20'
+              : 'border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
           )}
         >
           <input
@@ -469,7 +469,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   className={cn(
                     'flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none',
                     isSelected
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                      ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20'
                       : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   )}
                 >
@@ -484,7 +484,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                     {cat.archived ? ' (مؤرشف)' : ''}
                   </span>
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                   )}
                 </button>
               )
@@ -523,7 +523,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'weekly'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             )}
           >
@@ -541,7 +541,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'monthly'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             )}
           >
@@ -559,7 +559,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'yearly'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             )}
           >
@@ -574,7 +574,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
               ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(frequency)
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             )}
           >
@@ -617,7 +617,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 )}
               >
                 <span>{f.label}</span>
-                {frequency === f.value && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+                {frequency === f.value && <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
               </button>
             ))}
           </div>

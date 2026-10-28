@@ -24,20 +24,20 @@ describe('SpotlightTour Component', () => {
 
     // Step 1
     expect(screen.getByText('جولة بَصير السريعة')).toBeDefined()
-    expect(screen.getByText('تسجيل المعاملات بلمسة سريعة')).toBeDefined()
+    expect(screen.getByText('الرصيد المتاح وحد الصرف اليومي')).toBeDefined()
 
     // Next -> Step 2
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
-    expect(screen.getByText('كارت الحد اليومي الآمن والصحة المالية')).toBeDefined()
+    expect(screen.getByText('إضافة معاملة سريعة (+)')).toBeDefined()
 
     // Next -> Step 3
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
-    expect(screen.getByText('الأدوات الإضافية والديون والجمعيات')).toBeDefined()
+    expect(screen.getByText('دفتر الديون والالتزامات')).toBeDefined()
     expect(screen.getByRole('button', { name: /فهمت، ابدأ الآن/i })).toBeDefined()
 
     // Previous -> Step 2
     fireEvent.click(screen.getByRole('button', { name: 'السابق' }))
-    expect(screen.getByText('كارت الحد اليومي الآمن والصحة المالية')).toBeDefined()
+    expect(screen.getByText('إضافة معاملة سريعة (+)')).toBeDefined()
   })
 
   it('completes tour, saves flag in localStorage, and calls onFinish', () => {

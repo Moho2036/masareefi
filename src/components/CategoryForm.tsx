@@ -213,7 +213,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               onClick={() => setIcon(em)}
               className={cn(
                 'h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer select-none',
-                icon === em && 'bg-emerald-100 dark:bg-emerald-950 ring-2 ring-emerald-500'
+                icon === em && 'bg-blue-50 dark:bg-blue-950/60 ring-2 ring-blue-600'
               )}
             >
               <CategoryIcon icon={em} size="sm" />
@@ -256,7 +256,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               setIcon(chosen.slice(0, 16))
             }}
             placeholder="أو اكتب/الصق إيموجي مخصص..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all"
             maxLength={30}
           />
           <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">

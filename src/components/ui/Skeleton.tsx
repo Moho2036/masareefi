@@ -9,7 +9,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({ className, ...props }) => {
   return (
     <div
       className={cn(
-        'animate-pulse rounded-xl bg-slate-200/80 dark:bg-slate-750/70',
+        'animate-pulse rounded-xl bg-zinc-200/80 dark:bg-zinc-800/70',
         className
       )}
       {...props}

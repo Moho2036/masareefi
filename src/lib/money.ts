@@ -9,15 +9,15 @@ export interface CurrencyInfo {
 }
 
 export const PRESET_CURRENCIES: Record<string, CurrencyInfo> = {
-  JOD: { code: 'JOD', name: 'دينار أردني', symbol: 'د.أ', decimals: 3, flag: '🇯🇴' },
-  SAR: { code: 'SAR', name: 'ريال سعودي', symbol: 'ر.س', decimals: 2, flag: '🇸🇦' },
-  AED: { code: 'AED', name: 'درهم إماراتي', symbol: 'د.إ', decimals: 2, flag: '🇦🇪' },
-  KWD: { code: 'KWD', name: 'دينار كويتي', symbol: 'د.ك', decimals: 3, flag: '🇰🇼' },
-  BHD: { code: 'BHD', name: 'دينار بحريني', symbol: 'د.ب', decimals: 3, flag: '🇧🇭' },
-  OMR: { code: 'OMR', name: 'ريال عماني', symbol: 'ر.ع', decimals: 3, flag: '🇴🇲' },
-  EGP: { code: 'EGP', name: 'جنيه مصري', symbol: 'ج.م', decimals: 2, flag: '🇪🇬' },
-  USD: { code: 'USD', name: 'دولار أمريكي', symbol: '$', decimals: 2, flag: '🇺🇸' },
-  EUR: { code: 'EUR', name: 'يورو أوروبي', symbol: '€', decimals: 2, flag: '🇪🇺' },
+  JOD: { code: 'JOD', name: 'دينار أردني', symbol: 'د.أ', decimals: 3, flag: 'JOD' },
+  SAR: { code: 'SAR', name: 'ريال سعودي', symbol: 'ر.س', decimals: 2, flag: 'SAR' },
+  AED: { code: 'AED', name: 'درهم إماراتي', symbol: 'د.إ', decimals: 2, flag: 'AED' },
+  KWD: { code: 'KWD', name: 'دينار كويتي', symbol: 'د.ك', decimals: 3, flag: 'KWD' },
+  BHD: { code: 'BHD', name: 'دينار بحريني', symbol: 'د.ب', decimals: 3, flag: 'BHD' },
+  OMR: { code: 'OMR', name: 'ريال عماني', symbol: 'ر.ع', decimals: 3, flag: 'OMR' },
+  EGP: { code: 'EGP', name: 'جنيه مصري', symbol: 'ج.م', decimals: 2, flag: 'EGP' },
+  USD: { code: 'USD', name: 'دولار أمريكي', symbol: '$', decimals: 2, flag: 'USD' },
+  EUR: { code: 'EUR', name: 'يورو أوروبي', symbol: '€', decimals: 2, flag: 'EUR' },
 }
 
 const THREE_DECIMAL_CODES = new Set([
@@ -49,7 +49,7 @@ export function getCurrencyConfig(currencyCode?: string, customDecimals?: number
           name: clean,
           symbol: clean,
           decimals,
-          flag: '🪙',
+          flag: clean.slice(0, 3).toUpperCase(),
         }
       }
     }

@@ -103,23 +103,26 @@ export const TransactionsPage: React.FC = () => {
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showAllFilterCats, setShowAllFilterCats] = useState(false)
   const [prevFilterKey, setPrevFilterKey] = useState('')
   const PAGE_SIZE = 30
 
-  // Check URL search params for categoryId, allMonths, and type
-  useEffect(() => {
+  // Check URL search params for categoryId, allMonths, and type during render
+  const [prevSearchParams, setPrevSearchParams] = useState(searchParams.toString())
+  if (prevSearchParams !== searchParams.toString()) {
+    setPrevSearchParams(searchParams.toString())
     const typeParam = searchParams.get('type')
     if (typeParam === 'income' || typeParam === 'expense') {
       setFilterType(typeParam)
     }
     const cat = searchParams.get('categoryId')
-    if (cat && !selectedCategories.includes(cat)) {
+    if (cat) {
       setSelectedCategories([cat])
     }
     if (searchParams.get('allMonths') === 'true') {
       setAllMonths(true)
     }
-  }, [searchParams])
+  }
 
   // Check if txToDelete is linked to a debt payment
   const linkedDebtPayment = findLinkedDebtPayment(txToDelete?.id, debts)
@@ -403,17 +406,22 @@ export const TransactionsPage: React.FC = () => {
     const color = cat?.color ?? '#94A3B8'
     const name = cat?.name ?? 'غير مصنف'
     const isExpense = tx.type === 'expense'
+    const hasTitle = Boolean(tx.title?.trim())
+    const hasNote = Boolean(tx.note?.trim())
+    const primaryLabel = tx.title?.trim() || tx.note?.trim() || name
+    const showCategoryInSub = hasTitle || hasNote
+    const showNoteInSub = hasTitle && hasNote && tx.note.trim() !== tx.title!.trim()
 
     return (
       <div
         key={tx.id}
         onClick={() => openEdit(tx)}
-        className="group flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+        className="group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
       >
-        {/* Right side: Emoji circle + Category Name + Note */}
+        {/* Right side: Icon + Title + Subline */}
         <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
           <div
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${color}20` }}
           >
             <CategoryIcon icon={icon} color={color} size="md" />
@@ -421,11 +429,11 @@ export const TransactionsPage: React.FC = () => {
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
-                {tx.title || name}
+              <span className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                {primaryLabel}
               </span>
               {showDateBadge && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 font-semibold shrink-0">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   {formatDateInput(tx.date)}
                 </span>
               )}
@@ -438,31 +446,33 @@ export const TransactionsPage: React.FC = () => {
               {(tx.id.startsWith('circle_payout_') ||
                 /^circle_(.+)_m(\d+)$/.test(tx.id) ||
                 Boolean(tx.recurringId && circles.some((c) => c.recurringId === tx.recurringId))) && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 font-bold shrink-0">
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800 font-bold shrink-0">
                   <Users className="w-2.5 h-2.5" />
                   <span>جمعية</span>
                 </span>
               )}
               {tx.recurringId && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold shrink-0">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold shrink-0">
                   متكررة
                 </span>
               )}
             </div>
 
-            <div className="flex items-start gap-1.5 text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">
-              {tx.title ? (
-                <>
-                  <span className="font-medium text-slate-500 dark:text-slate-400 shrink-0">{name}</span>
-                  {tx.note ? <span>•</span> : null}
-                </>
-              ) : null}
-              {tx.note ? (
-                <span className="line-clamp-2 whitespace-pre-wrap text-slate-500 dark:text-slate-400">
-                  {tx.note}
-                </span>
-              ) : null}
-            </div>
+            {(showCategoryInSub || showNoteInSub) && (
+              <div className="flex items-start gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                {showCategoryInSub && (
+                  <>
+                    <span className="font-medium text-zinc-500 dark:text-zinc-400 shrink-0">{name}</span>
+                    {showNoteInSub ? <span>•</span> : null}
+                  </>
+                )}
+                {showNoteInSub && (
+                  <span className="line-clamp-2 whitespace-pre-wrap text-zinc-500 dark:text-zinc-400">
+                    {tx.note}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -617,7 +627,7 @@ export const TransactionsPage: React.FC = () => {
       {/* 2-Column Responsive Layout on Desktop (Filters/Totals in Sticky Sidebar, Transactions in Main) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Sidebar Column: Filter Bar & Monthly Totals */}
-        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20">
+        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20 print-hide">
           {/* Filter Bar */}
           <div className="bg-white dark:bg-slate-800 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs space-y-3 print-hide">
             {/* Search Input */}
@@ -790,7 +800,7 @@ export const TransactionsPage: React.FC = () => {
                     كل التصنيفات
                   </button>
 
-                  {relevantCategories.map((cat) => {
+                  {(showAllFilterCats ? relevantCategories : relevantCategories.slice(0, 8)).map((cat) => {
                     const isSelected = selectedCategories.includes(cat.id)
                     return (
                       <button
@@ -803,8 +813,8 @@ export const TransactionsPage: React.FC = () => {
                         className={cn(
                           'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
                           isSelected
-                            ? 'bg-emerald-500 text-white shadow-xs font-bold'
-                            : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                            ? 'bg-blue-600 text-white shadow-xs font-bold'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                         )}
                       >
                         <CategoryIcon icon={cat.icon} size="sm" />
@@ -812,6 +822,15 @@ export const TransactionsPage: React.FC = () => {
                       </button>
                     )
                   })}
+                  {relevantCategories.length > 8 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllFilterCats((prev) => !prev)}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors shrink-0 cursor-pointer"
+                    >
+                      {showAllFilterCats ? 'عرض أقل' : `+${relevantCategories.length - 8} أخرى`}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -854,48 +873,21 @@ export const TransactionsPage: React.FC = () => {
 
           {/* Active Filter & Search Summary Strip */}
           {isFilterActive && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl text-xs shadow-xs print-hide">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-200">
-                  <Search className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>النتائج:</span>
-                  <span className="px-1.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black">
-                    {filteredTransactions.length}
-                  </span>
+            <div className="flex items-center justify-between gap-2 px-3.5 py-2 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs shadow-xs print-hide">
+              <span className="inline-flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-200">
+                <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>النتائج المطابقة:</span>
+                <span className="px-1.5 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-black">
+                  {filteredTransactions.length}
                 </span>
-
-                <span className="text-emerald-300 dark:text-emerald-700">•</span>
-
-                <div className="flex items-center gap-1.5 flex-wrap font-medium text-slate-700 dark:text-slate-300">
-                  <span>المجموع:</span>
-                  {filterType === 'expense' ? (
-                    <span className="font-black text-red-600 dark:text-red-400">
-                      {format(totals.expense)}
-                    </span>
-                  ) : filterType === 'income' ? (
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">
-                      {format(totals.income)}
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-red-600 dark:text-red-400 font-bold">
-                        -{format(totals.expense)}
-                      </span>
-                      <span className="text-slate-300 dark:text-slate-600">/</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                        +{format(totals.income)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              </span>
 
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="self-end sm:self-auto text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-100 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-blue-700 dark:text-blue-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
               >
-                <span>مسح</span>
+                <span>مسح الفلتر</span>
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>

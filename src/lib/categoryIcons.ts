@@ -32,6 +32,12 @@ import {
   Wrench,
   RefreshCw,
   Users,
+  Globe,
+  Package,
+  Handshake,
+  Banknote,
+  Tag,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -73,6 +79,18 @@ export const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
   '🛠️': Wrench,
   '🔄': RefreshCw,
   '👥': Users,
+  '🤝': Handshake,
+  '🌐': Globe,
+  '📦': Package,
+  '🍽️': Utensils,
+  '💵': Banknote,
+  'tag': Tag,
+  'wallet': Wallet,
+  'utensils': Utensils,
+  'car': Car,
+  'briefcase': Briefcase,
+  'zap': Zap,
+  'folder': Folder,
 }
 
 export function getCategoryLucideIcon(iconStr?: string | null): LucideIcon | null {

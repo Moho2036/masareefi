@@ -22,11 +22,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       )}
     >
       <div>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight">
           {title}
         </h1>
         {subtitle && (
-          <p className="hidden sm:block text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="hidden sm:block text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             {subtitle}
           </p>
         )}

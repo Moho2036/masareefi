@@ -154,11 +154,11 @@ export const AppShell: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 antialiased font-sans">
       {/* Desktop Sidebar (start side / right side in RTL) */}
       <aside
         aria-label="القائمة الجانبية"
-        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-slate-900 border-e border-slate-200/80 dark:border-slate-800 p-6 min-h-screen sticky top-0 h-screen overflow-y-auto"
+        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-[#09090B] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-y-auto"
       >
         {/* App Logo */}
         <Link
@@ -170,11 +170,11 @@ export const AppShell: React.FC = () => {
           }}
           className="flex items-center gap-3 px-2 mb-8 cursor-pointer group"
         >
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-blue-500/40 text-white flex items-center justify-center shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-white flex items-center justify-center shadow-xs">
             <img src="/icons/icon.svg" alt="بَصير" className="w-6 h-6 object-contain" />
           </div>
           <div>
-            <span className="text-2xl font-black tracking-tight text-slate-800 dark:text-white">
+            <span className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
               بَصير
             </span>
           </div>
@@ -207,10 +207,10 @@ export const AppShell: React.FC = () => {
                       'flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all text-sm select-none',
                       isActive
                         ? 'bg-zinc-900 text-white dark:bg-blue-600 dark:text-white shadow-xs font-semibold'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80'
                     )}
                   >
-                    <Icon className={cn('w-4.5 h-4.5 shrink-0', isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500')} />
+                    <Icon className={cn('w-4.5 h-4.5 shrink-0', isActive ? 'text-white' : 'text-zinc-400 dark:text-zinc-500')} />
                     <span>{item.label}</span>
                   </Link>
                 )
@@ -220,10 +220,10 @@ export const AppShell: React.FC = () => {
         </nav>
 
         {/* Sidebar Footer / User Profile snippet */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+        <div className="pt-4 border-t border-[#E4E4E7] dark:border-[#27272A]">
           <Link
             to="/settings"
-            className="press-scale flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors w-full group"
+            className="press-scale flex items-center justify-between p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors w-full group"
             title="إعدادات الحساب الشخصي"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -231,24 +231,24 @@ export const AppShell: React.FC = () => {
                 <img
                   src={user.photoURL}
                   alt={displayName}
-                  className="w-9 h-9 rounded-full object-cover border border-emerald-200 dark:border-emerald-800 shrink-0"
+                  className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shrink-0"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center text-sm border border-emerald-200 dark:border-emerald-800 shrink-0">
+                <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm border border-blue-200 dark:border-blue-800 shrink-0">
                   {avatarInitial}
                 </div>
               )}
               <div className="truncate text-start">
-                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                   {displayName}
                 </div>
-                <div className="text-[11px] text-slate-400 truncate" dir="ltr">
+                <div className="text-[11px] text-zinc-400 truncate" dir="ltr">
                   {user?.email || ''}
                 </div>
               </div>
             </div>
-            <Settings className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 shrink-0 transition-colors" />
+            <Settings className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 shrink-0 transition-colors" />
           </Link>
         </div>
       </aside>
@@ -262,12 +262,12 @@ export const AppShell: React.FC = () => {
             className="bg-amber-500 text-amber-950 dark:bg-amber-600 dark:text-amber-50 text-xs font-bold py-2 px-4 text-center shadow-xs flex items-center justify-center gap-2 sticky top-0 z-30"
           >
             <WifiOff className="w-4 h-4 shrink-0" />
-            <span>أنت غير متصل بالإنترنت - يتم حفظ التغييرات محلياً وستتم المزامنة تلقائياً</span>
+            <span>غير متصل بالإنترنت — تُحفظ التغييرات محلياً</span>
           </div>
         )}
 
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-20 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all">
+        <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#09090B]/90 backdrop-blur-md border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all">
           {/* Mobile brand logo & User avatar shortcut */}
           <div className="flex items-center gap-2.5 lg:hidden shrink-0">
             <Link to="/settings" className="press-scale flex items-center gap-2" title="الإعدادات">
@@ -275,11 +275,11 @@ export const AppShell: React.FC = () => {
                 <img
                   src={user.photoURL}
                   alt={displayName}
-                  className="w-8 h-8 rounded-full object-cover border border-emerald-300 dark:border-emerald-700 shadow-xs"
+                  className="w-8 h-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-blue-500/40 text-white flex items-center justify-center shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-white flex items-center justify-center shadow-xs">
                   <img src="/icons/icon.svg" alt="بَصير" className="w-5 h-5 object-contain" />
                 </div>
               )}
@@ -289,11 +289,7 @@ export const AppShell: React.FC = () => {
             </span>
           </div>
 
-          <div className="hidden lg:block shrink-0">
-            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-              بَصير — نظام البصيرة والإدارة المالية الشخصية
-            </span>
-          </div>
+          <div className="hidden lg:block shrink-0" />
 
           {/* Top Header Actions / Month Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -319,7 +315,7 @@ export const AppShell: React.FC = () => {
                   <button
                     type="button"
                     onClick={goToCurrentMonth}
-                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 transition-colors"
+                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
                     title="العودة إلى الشهر الحالي"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -329,7 +325,7 @@ export const AppShell: React.FC = () => {
                 )}
                 <MonthSelector />
               </div>
-            ) : !['/debts', '/tools', '/recurring', '/categories', '/settings'].some((p) => pathname.startsWith(p)) ? (
+            ) : !['/debts', '/tools', '/recurring', '/categories', '/settings', '/reports'].some((p) => pathname.startsWith(p)) ? (
               <Button
                 variant="primary"
                 size="sm"

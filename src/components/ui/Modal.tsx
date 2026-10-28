@@ -255,7 +255,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fade-in"
         onMouseDown={handleBackdropMouseDown}
         onClick={handleBackdropClick}
         aria-hidden="true"
@@ -276,10 +276,10 @@ export const Modal: React.FC<ModalProps> = ({
           transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
         }}
         className={cn(
-          'relative z-10 w-full bg-white dark:bg-zinc-900 shadow-2xl outline-none smooth-touch-scroll flex flex-col',
+          'relative z-10 w-full bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xl outline-none smooth-touch-scroll flex flex-col',
           isNudging && 'scale-[1.015]',
           // Mobile: Bottom Sheet with dynamic max-height
-          'rounded-t-[2rem] max-h-[90dvh] p-5 pb-8',
+          'rounded-t-[2rem] max-h-[90dvh] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
           // Desktop >= lg: Centered Dialog
           'lg:rounded-2xl lg:max-w-lg lg:p-6 lg:m-4 lg:max-h-[85vh]',
           className

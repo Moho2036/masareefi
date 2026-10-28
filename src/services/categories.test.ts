@@ -10,30 +10,30 @@ const mockGetDocs = vi.fn()
 const mockDeleteDoc = vi.fn()
 const mockUpdateDoc = vi.fn()
 const mockCollection = vi.fn()
-const mockDoc = vi.fn((...parts: any[]) => ({ path: parts.slice(1).join('/') }))
+const mockDoc = vi.fn((...parts: unknown[]) => ({ path: parts.slice(1).join('/') }))
 const mockQuery = vi.fn()
 const mockWhere = vi.fn()
 const mockLimit = vi.fn()
 const mockBatchUpdate = vi.fn()
 const mockBatchDelete = vi.fn()
 const mockBatchCommit = vi.fn().mockResolvedValue(undefined)
-const mockWriteBatch = vi.fn((..._args: any[]) => ({
+const mockWriteBatch = vi.fn((..._args: unknown[]) => ({
   update: mockBatchUpdate,
   delete: mockBatchDelete,
   commit: mockBatchCommit,
 }))
 
 vi.mock('firebase/firestore', () => ({
-  collection: (...args: any[]) => mockCollection(...args),
-  doc: (...args: any[]) => mockDoc(...args),
-  query: (...args: any[]) => mockQuery(...args),
-  where: (...args: any[]) => mockWhere(...args),
-  limit: (...args: any[]) => mockLimit(...args),
-  getDoc: (...args: any[]) => mockGetDoc(...args),
-  getDocs: (...args: any[]) => mockGetDocs(...args),
-  deleteDoc: (...args: any[]) => mockDeleteDoc(...args),
-  updateDoc: (...args: any[]) => mockUpdateDoc(...args),
-  writeBatch: (...args: any[]) => mockWriteBatch(...args),
+  collection: (...args: unknown[]) => mockCollection(...args),
+  doc: (...args: unknown[]) => mockDoc(...args),
+  query: (...args: unknown[]) => mockQuery(...args),
+  where: (...args: unknown[]) => mockWhere(...args),
+  limit: (...args: unknown[]) => mockLimit(...args),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
   orderBy: vi.fn(),
   onSnapshot: vi.fn(),
   addDoc: vi.fn(),

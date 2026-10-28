@@ -29,7 +29,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
       const newToast: ToastItem = { id, message, type }
 
-      setToasts((prev) => [...prev, newToast])
+      setToasts([newToast])
 
       setTimeout(() => {
         dismissToast(id)

@@ -91,6 +91,7 @@ export const MoneyCirclesManager: React.FC = () => {
     return (
       active.find((c) => c.name.includes('الجمعيات المالية') || c.name.includes('الجمعيات')) ||
       active.find((c) => c.name.includes('استلام') || c.name.includes('دخل إضافي')) ||
+      active.find((c) => c.name === 'أخرى') ||
       active[0] ||
       categories.find((c) => c.type === 'income')
     )
@@ -1016,7 +1017,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   <div className="mt-3.5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-2.5 text-xs font-bold">
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span>🎉 اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف (مكتملة).</span>
+                      <span>اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف (مكتملة).</span>
                     </div>
                     <Button
                       type="button"
@@ -1588,7 +1589,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   .filter((c) => c.type === 'expense' && !c.archived)
                   .map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.icon ? `${cat.icon} ` : ''}{cat.name}
+                      {cat.name}
                     </option>
                   ))}
               </select>
@@ -1608,7 +1609,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   .filter((c) => c.type === 'income' && !c.archived)
                   .map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.icon ? `${cat.icon} ` : ''}{cat.name}
+                      {cat.name}
                     </option>
                   ))}
               </select>

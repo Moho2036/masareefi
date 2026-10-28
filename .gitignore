@@ -16,6 +16,7 @@ node_modules
 dist
 dist-ssr
 FULL_CODEBASE.txt
+full_code.txt
 
 # Environment and secrets
 .env

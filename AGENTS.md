@@ -1,6 +1,6 @@
-# مصاريفي — Engineering Conventions & Agent Rules (binding for every agent)
+# بَصير (Baseer) — Engineering Conventions & Agent Rules (binding for every agent)
 
-Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/design/*.jpg` (visual reference) before working.
+Read `docs/PROJECT_BIBLE.md` (architecture, data model, design system) before working.
 
 ---
 
@@ -79,16 +79,16 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 ## Stack (do not substitute)
 - React 19 + Vite + TypeScript (strict). Package manager: **npm**.
 - Tailwind CSS v4 via `@tailwindcss/vite` (no tailwind.config.js needed; theme tokens in `src/index.css` with `@theme`).
-- React Router (v7, `react-router` package), Recharts, date-fns (+ `ar` locale), Firebase JS SDK v11+ (modular API), vite-plugin-pwa, Vitest.
-- Icons: `lucide-react`. Category icons are emoji strings.
+- React Router (v8, `react-router` package), Recharts, date-fns (+ `ar` locale), Firebase JS SDK v12+ (modular API), vite-plugin-pwa, Vitest.
+- Icons: `lucide-react`. Category icons render via `CategoryIcon` component (emoji or SVG icon).
 
 ## UI rules
-- `<html lang="ar" dir="rtl">`. Font **Cairo** (Google Fonts).
+- `<html lang="ar" dir="rtl">`. Fonts: **IBM Plex Sans Arabic** + **Cairo** (Google Fonts).
 - Use logical Tailwind utilities only (`ms-/me-/ps-/pe-/start-/end-/text-start`), never `ml-/mr-/left-/right-` for layout.
-- Colors: primary emerald `#10B981` (Tailwind `emerald-500`), expense `red-500`, income `emerald-500`. Light bg `slate-50` + white cards; dark bg `#0F172A` (`slate-900`) + cards `slate-800`.
+- Colors (Swiss Carbon & Sapphire Clarity): primary sapphire `#2563EB` (Tailwind `blue-600`), hover `#3B82F6`, expense `#DC2626` (Tailwind `red-600`), income `#16A34A` (Tailwind `green-600`). Light bg `#F4F4F5` (`slate-50`) + white cards; dark bg `#09090B` (`slate-900`) + cards `#121215` (`slate-800`), border `#27272A` (`slate-700`).
 - Cards: `rounded-2xl`, soft shadow, `p-5`. Buttons `rounded-xl`.
 - Dark mode: class strategy on `<html>` (`.dark`), setting = system | light | dark (default system). Use `@custom-variant dark (&:where(.dark, .dark *));`.
-- Desktop (≥ lg): sidebar on the RIGHT (start side). Mobile: bottom nav (الرئيسية، المعاملات، [+ FAB]، التقارير، المزيد).
+- Desktop (≥ lg): sidebar on the RIGHT (start side). Mobile: bottom nav (الرئيسية، المعاملات، [+ FAB]، الديون، المزيد).
 - Zero blocking spinners: Use skeleton loading (`AppShellSkeleton`, `DashboardSkeleton`, `HeroCardSkeleton`, `PageSkeleton`) instead of full-screen spinners or blank screens. Guard balance hero cards against flashing deficit (`danger`) states during initial data resolution.
 - All user-facing text in Arabic. Numbers in Western digits (0-9) for readability: use `Intl.NumberFormat('ar-JO', { numberingSystem: 'latn' })`.
 
@@ -97,20 +97,21 @@ Read `docs/PLAN.md` (architecture, data model) and `docs/UI_DESIGN.md` + `docs/d
 - Dates stored as Firestore `Timestamp`. Month boundaries respect the user's `monthStartDay` (1–28).
 
 ## Code structure
-- Follow the tree in `docs/PLAN.md`. All Firestore access lives in `src/services/*`; components never import `firebase/firestore` directly.
+- Follow the specifications in `docs/PROJECT_BIBLE.md`. All Firestore access lives in `src/services/*`; components never import `firebase/firestore` directly.
 - Pure logic (`src/lib/*`) must have Vitest unit tests next to it (`*.test.ts`).
 - No `any`. No unused code. Keep components small.
 
 ## Required checks before reporting done
-```
-npm run typecheck   # tsc -b --noEmit (or tsc --noEmit -p tsconfig.app.json)
-npm run lint        # if configured
+```bash
+npm run typecheck   # tsc -b --noEmit
+npm run lint        # eslint .
 npm run test        # vitest run
-npm run build
+npm run build       # tsc -b && vite build
 ```
 All must pass. Report exact output summary.
 
 ## Do NOT
 - Deploy to production (Firebase Hosting / `firebase deploy`), run `firebase login`, or modify live projects UNLESS explicitly requested by the user. Otherwise, use local checks and the Firebase Emulator Suite only.
 - Write `firestore.rules` yourself (the manager handles it via a specialist).
+- Update `docs/PROJECT_BIBLE.md` on routine edits or feature extensions; update it ONLY upon major architectural changes or upon explicit user request.
 - Start long-running dev servers without stopping them.

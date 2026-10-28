@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useContext } from 'react'
 import {
   Clock,
   Briefcase,
@@ -16,6 +16,7 @@ import { useRecurring } from '../../hooks/useRecurring'
 import { useTransactions } from '../../hooks/useTransactions'
 import { useDebts } from '../../hooks/useDebts'
 import { useUserSettings } from '../../hooks/useUserSettings'
+import { AppDataContext } from '../../context/AppDataContext'
 import { toFils, fromFils } from '../../lib/money'
 import { toWesternDigits, getFinancialMonthRange } from '../../lib/dates'
 import { calculateForecast } from '../../lib/forecast'
@@ -182,6 +183,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   const [hasInteracted, setHasInteracted] = useState<boolean>(initialPrefs.hasInteracted)
 
   const { data: settings } = useUserSettings()
+  const appData = useContext(AppDataContext)
   const { data: recurringItems } = useRecurring()
   const { data: debts } = useDebts()
   const monthRange = useMemo(() => {
@@ -231,14 +233,23 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
   // Current Month Forecast for Purchasing Decision Insight
   const forecast = useMemo(() => {
+    const hasRollover = settings?.rolloverBalance ?? false
     return calculateForecast({
       transactions: currentMonthTransactions,
       recurring: recurringItems,
       debts,
       monthStartDay: settings?.monthStartDay ?? 1,
+      rolloverBalanceFils: hasRollover ? (appData?.rolloverBalanceFils ?? 0) : undefined,
       referenceDate: new Date(),
     })
-  }, [currentMonthTransactions, recurringItems, debts, settings?.monthStartDay])
+  }, [
+    currentMonthTransactions,
+    recurringItems,
+    debts,
+    settings?.monthStartDay,
+    settings?.rolloverBalance,
+    appData?.rolloverBalanceFils,
+  ])
 
   const [isTxModalOpen, setIsTxModalOpen] = useState(false)
 
@@ -330,16 +341,16 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   // Hourly wage in fils
   const hourlyWageFils = useMemo(() => {
     if (salary <= 0) return 0
-    const salaryFils = toFils(salary)
+    const salaryFils = toFils(salary, config.decimals)
     return Math.round(salaryFils / totalMonthlyHours)
-  }, [salary, totalMonthlyHours])
+  }, [salary, totalMonthlyHours, config.decimals])
 
   // Required hours of life to purchase item
   const requiredHours = useMemo(() => {
     if (hourlyWageFils <= 0 || itemPrice <= 0) return 0
-    const itemPriceFils = toFils(itemPrice)
+    const itemPriceFils = toFils(itemPrice, config.decimals)
     return itemPriceFils / hourlyWageFils
-  }, [hourlyWageFils, itemPrice])
+  }, [hourlyWageFils, itemPrice, config.decimals])
 
   const totalMinutes = Math.round(requiredHours * 60)
   const fullHours = Math.floor(totalMinutes / 60)
@@ -366,7 +377,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
         {/* Left Column: Work Settings & Item Input */}
         <div className="lg:col-span-5 space-y-5">
           {/* Work & Salary Card */}
-          <Card title="بيانات العمل والراتب" subtitle="تُستخدم لاحتساب قيمتك بالساعة بدقة">
+          <Card title="بيانات العمل والراتب">
             <div className="space-y-3.5 pt-1">
               <div>
                 <Input
@@ -455,7 +466,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
           </Card>
 
           {/* Item details */}
-          <Card title="السلعة المراد شراؤها" subtitle="ما الشيء الذي تفكر في شرائه الآن؟">
+          <Card title="السلعة المراد شراؤها">
             <div className="space-y-3.5 pt-1">
               <Input
                 label="اسم السلعة أو الخدمة"
@@ -531,7 +542,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               ) : (
                 <div className="py-2 text-center space-y-2">
                   <p className="text-xs font-semibold text-slate-400">
-                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر {format(toFils(itemPrice))}، تحتاج إلى:
+                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر {format(toFils(itemPrice, config.decimals))}، تحتاج إلى:
                   </p>
 
                   <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
@@ -641,7 +652,6 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
       {itemPrice > 0 && (
         <Card
           title="بصيرة القرار الشرائي على ميزانية هذا الشهر"
-          subtitle="تحليل مباشر لأثر هذا الشراء على سيولتك وحد صرفك اليومي الآمن"
           className="border border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
         >
           <div className="space-y-4 pt-1">
@@ -691,9 +701,11 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   نسبة الاستهلاك من الرصيد الحر
                 </span>
                 <span className="text-xl font-black text-slate-900 dark:text-white">
-                  {forecast.freeBalance > 0
-                    ? `%${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}`
-                    : '100%+ (عجز)'}
+                  {forecast.freeBalance <= 0
+                    ? '100%+ (عجز)'
+                    : toFils(itemPrice, config.decimals) > forecast.freeBalance
+                      ? '100%+ (يتجاوز المتاح)'
+                      : `${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}%`}
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
                   الرصيد الحر الحالي: {format(forecast.freeBalance)}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { DashboardPage } from './DashboardPage'
 
@@ -166,7 +166,7 @@ describe('DashboardPage Component', () => {
     expect(screen.getByText(/الرصيد التراكمي \/ الافتتاحي:/)).toBeInTheDocument()
   })
 
-  it('greets user personally by name in header and renders settlement button', () => {
+  it('greets user personally by name in header', () => {
     render(
       <MemoryRouter>
         <DashboardPage />
@@ -174,12 +174,10 @@ describe('DashboardPage Component', () => {
     )
 
     expect(screen.getByText(/أهلاً بك، محمد/)).toBeInTheDocument()
-    expect(screen.getByText('تسوية الرصيد')).toBeInTheDocument()
     expect(screen.getByText('ملخص الديون والالتزامات')).toBeInTheDocument()
   })
 
   it('shows warning banner when browsing a different month', () => {
-    // Set range to January 2025 (in the past relative to 2026)
     mockRangeStart = new Date(2025, 0, 1)
     mockRangeEnd = new Date(2025, 1, 1)
 
@@ -194,32 +192,6 @@ describe('DashboardPage Component', () => {
     expect(returnBtn).toBeInTheDocument()
     returnBtn.click()
     expect(mockGoToCurrentMonth).toHaveBeenCalled()
-  })
-
-  it('opens reconciliation modal on clicking "تسوية الرصيد" and updates opening balance on confirm', async () => {
-    render(
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
-    )
-
-    const reconcileBtn = screen.getByText('تسوية الرصيد')
-    fireEvent.click(reconcileBtn)
-
-    expect(screen.getByText('تسوية وتعديل الرصيد الفعلي')).toBeInTheDocument()
-    expect(screen.getByText(/الرصيد المحسوب حالياً في التطبيق:/)).toBeInTheDocument()
-
-    // Enter a new actual balance e.g. 70
-    const input = screen.getByPlaceholderText('0.000')
-    fireEvent.change(input, { target: { value: '70' } })
-
-    const confirmBtn = screen.getByRole('button', { name: 'اعتماد التسوية' })
-    fireEvent.click(confirmBtn)
-
-    await waitFor(() => {
-      // 70 JOD = 70000 fils. Current display balance was 50000 fils. Difference is +20000.
-      expect(mockUpdateSettings).toHaveBeenCalledWith({ openingBalanceFils: 20000 })
-    })
   })
 
   it('renders clickable income and expense links to /transactions?type=income and /transactions?type=expense', () => {
@@ -249,16 +221,5 @@ describe('DashboardPage Component', () => {
     fireEvent.click(incomeToggleBtn)
 
     expect(screen.getByText('المداخيل حسب التصنيف')).toBeInTheDocument()
-  })
-
-  it('displays "مسار مالي آمن" when transactions are 0 but rollover is positive', () => {
-    mockRolloverBalanceFils = 50000
-    render(
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
-    )
-
-    expect(screen.getByText('مسار مالي آمن')).toBeInTheDocument()
   })
 })

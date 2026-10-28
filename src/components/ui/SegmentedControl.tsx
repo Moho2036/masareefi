@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       className={cn(
-        'inline-flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 gap-1',
+        'inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-[#E4E4E7] dark:border-[#27272A] gap-1',
         disabled && 'opacity-60 cursor-not-allowed pointer-events-none',
         className,
       )}
@@ -47,8 +47,8 @@ export function SegmentedControl<T extends string>({
               'flex-1 inline-flex items-center justify-center gap-1.5 font-medium rounded-lg transition-all cursor-pointer select-none',
               size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
               isSelected
-                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-750',
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs font-semibold'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50',
               disabled && 'cursor-not-allowed',
             )}
           >
@@ -57,8 +57,8 @@ export function SegmentedControl<T extends string>({
                 className={cn(
                   'shrink-0',
                   isSelected
-                    ? 'text-emerald-500 dark:text-emerald-400'
-                    : 'text-slate-400 dark:text-slate-500',
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-zinc-400 dark:text-zinc-500',
                 )}
               >
                 {option.icon}

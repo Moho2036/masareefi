@@ -134,6 +134,17 @@ export async function updateRecurring(
     }
   }
 
+  if ('skipMonths' in rec) {
+    if (!Array.isArray(rec.skipMonths) || rec.skipMonths.length === 0) {
+      payload.skipMonths = deleteField()
+    } else {
+      payload.skipMonths = rec.skipMonths
+        .map(Number)
+        .filter((m) => Number.isFinite(m) && m >= 1 && m <= 50)
+        .slice(0, 10)
+    }
+  }
+
   if ('requireConfirmation' in rec) {
     if (rec.requireConfirmation === undefined || rec.requireConfirmation === null) {
       payload.requireConfirmation = deleteField()

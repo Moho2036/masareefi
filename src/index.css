@@ -26,9 +26,18 @@
   --color-slate-950: #050507;
 }
 
+html {
+  overscroll-behavior-y: none;
+  background-color: #f4f4f5;
+}
+
+html.dark {
+  background-color: #09090b;
+}
+
 body {
   font-family: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
-  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
+  @apply bg-[#F4F4F5] text-[#09090B] antialiased dark:bg-[#09090B] dark:text-[#F4F4F5];
   min-height: 100vh;
   overscroll-behavior-y: none;
   font-variant-numeric: tabular-nums;

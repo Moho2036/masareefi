@@ -1173,8 +1173,8 @@ export const ReportsPage: React.FC = () => {
                 return (
                   <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-slate-700 dark:text-slate-200">
-                        {tx.note?.trim() ? tx.note : selectedCategoryModal?.name}
+                      <div className="font-bold text-zinc-800 dark:text-zinc-100">
+                        {tx.title?.trim() || tx.note?.trim() || selectedCategoryModal?.name}
                       </div>
                       <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                         {toWesternDigits(formatDate(txDate, 'd MMMM yyyy', { locale: ar }))}

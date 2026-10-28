@@ -171,11 +171,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
       {/* "More" Bottom Sheet Drawer for Mobile */}
       {isMoreOpen && (
         <div
-          className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-xs transition-opacity lg:hidden"
+          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-xs transition-opacity lg:hidden"
           onClick={() => setIsMoreOpen(false)}
         >
           <div
-            className="fixed inset-x-0 bottom-0 bg-white dark:bg-zinc-900 rounded-t-[2.25rem] p-5 shadow-2xl border-t border-zinc-200/80 dark:border-zinc-800 max-w-lg mx-auto max-h-[88dvh] overflow-y-auto"
+            className="fixed inset-x-0 bottom-0 bg-white dark:bg-[#121215] rounded-t-[2rem] p-5 shadow-2xl border-t border-[#E4E4E7] dark:border-[#27272A] max-w-lg mx-auto max-h-[88dvh] overflow-y-auto"
             style={{
               transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
               transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
@@ -193,19 +193,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
-              <div>
-                <h3 className="font-extrabold text-base text-slate-800 dark:text-slate-100">
-                  جميع الأدوات والميزات
-                </h3>
-                <p className="text-xs text-slate-400 dark:text-slate-400 font-medium">
-                  تنقل فوري لكافة إمكانيات التطبيق
-                </p>
-              </div>
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
+              <h3 className="font-extrabold text-base text-zinc-900 dark:text-zinc-100">
+                جميع الأدوات والميزات
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsMoreOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center cursor-pointer transition-colors"
+                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 flex items-center justify-center cursor-pointer transition-colors"
                 aria-label="إغلاق القائمة"
               >
                 <X className="w-4 h-4" />
@@ -215,15 +210,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             {/* Section 1: Smart Tools */}
             <div className="space-y-2 mb-5">
               <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                  الميزات والأدوات الذكية
+                <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500">
+                  الأدوات المالية
                 </span>
                 <Link
                   to="/tools"
                   onClick={() => setIsMoreOpen(false)}
-                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                  className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  مركز الأدوات بالكامل
+                  مركز الأدوات
                 </Link>
               </div>
               <div className="space-y-2">
@@ -240,24 +235,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                       to={item.to}
                       onClick={() => setIsMoreOpen(false)}
                       className={cn(
-                        'press-scale flex items-center gap-3.5 p-3 rounded-2xl border transition-all text-start group cursor-pointer',
+                        'press-scale flex items-center gap-3 p-3 rounded-2xl border transition-all text-start group cursor-pointer',
                         isActive
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500/70 text-emerald-900 dark:text-emerald-100 shadow-xs'
-                          : 'bg-slate-50/80 dark:bg-slate-800/80 border-slate-200/70 dark:border-slate-750 hover:bg-slate-100 dark:hover:bg-slate-750'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/70 text-blue-900 dark:text-blue-100 shadow-xs'
+                          : 'bg-zinc-50/80 dark:bg-zinc-900/80 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       )}
                     >
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/40 flex items-center justify-center shrink-0 transition-colors">
-                        <Icon className="w-5 h-5 stroke-[2.2]" />
+                      <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
+                        <Icon className="w-4.5 h-4.5 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        <div className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                           {item.title}
                         </div>
-                        <div className="text-[11px] text-slate-400 dark:text-slate-400 truncate mt-0.5 font-medium">
-                          {item.subtitle}
-                        </div>
                       </div>
-                      <ChevronLeft className="w-4 h-4 text-slate-300 dark:text-slate-600 shrink-0" />
+                      <ChevronLeft className="w-4 h-4 text-zinc-400 dark:text-zinc-600 shrink-0" />
                     </Link>
                   )
                 })}
@@ -266,10 +258,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
 
             {/* Section 2: Management & Settings */}
             <div className="space-y-2">
-              <div className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1">
+              <div className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 px-1">
                 الإدارة والتنظيم
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {managementItems.map((item) => {
                   const Icon = item.icon
                   const isActive = pathname.startsWith(item.to)
@@ -279,21 +271,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                       to={item.to}
                       onClick={() => setIsMoreOpen(false)}
                       className={cn(
-                        'press-scale flex items-center gap-3 p-3 rounded-2xl border transition-all text-start group cursor-pointer',
+                        'press-scale flex items-center gap-2.5 p-3 rounded-2xl border transition-all text-start group cursor-pointer',
                         isActive
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500/70 text-emerald-900 dark:text-emerald-100 shadow-xs'
-                          : 'bg-slate-50/80 dark:bg-slate-800/80 border-slate-200/70 dark:border-slate-750 hover:bg-slate-100 dark:hover:bg-slate-750'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/70 text-blue-900 dark:text-blue-100 shadow-xs'
+                          : 'bg-zinc-50/80 dark:bg-zinc-900/80 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       )}
                     >
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/40 flex items-center justify-center shrink-0 transition-colors">
-                        <Icon className="w-4.5 h-4.5 stroke-[2.2]" />
+                      <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
+                        <Icon className="w-4 h-4 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                           {item.title}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-400 truncate mt-0.5">
-                          {item.subtitle}
                         </div>
                       </div>
                     </Link>
@@ -310,8 +299,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
         aria-label="شريط التنقل السفلي"
         className="fixed inset-x-0 bottom-0 z-30 lg:hidden px-3.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1 pointer-events-none"
       >
-        <div className="pointer-events-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/80 rounded-3xl shadow-xl shadow-slate-900/10 dark:shadow-black/40 px-3 py-1 flex items-center justify-around max-w-md mx-auto">
-            {/* 1. الرئيسية */}
+        <div className="pointer-events-auto bg-white/95 dark:bg-[#121215]/95 backdrop-blur-md border border-[#E4E4E7] dark:border-[#27272A] rounded-3xl shadow-lg px-3 py-1 flex items-center justify-around max-w-md mx-auto">
+          {/* 1. الرئيسية */}
           <Link
             to="/"
             onClick={() => {
@@ -323,7 +312,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/'
                 ? 'text-blue-600 dark:text-blue-400 font-extrabold'
-                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200'
             )}
           >
             <Home className="w-5 h-5" />
@@ -340,7 +329,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/transactions'
                 ? 'text-blue-600 dark:text-blue-400 font-extrabold'
-                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200'
             )}
           >
             <ArrowLeftRight className="w-5 h-5" />
@@ -350,7 +339,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
             )}
           </Link>
 
-          {/* 3. Central Animated FAB */}
+          {/* 3. Central FAB */}
           <div className="relative -top-5 flex items-center justify-center">
             <button
               type="button"
@@ -359,7 +348,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                 onOpenAddModal()
               }}
               aria-label="إضافة معاملة جديدة"
-              className="press-scale w-13 h-13 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-600/30 border-4 border-zinc-100 dark:border-zinc-950 active:scale-90 active:rotate-45 transition-all duration-200 cursor-pointer"
+              className="press-scale w-13 h-13 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md border-4 border-[#F4F4F5] dark:border-[#09090B] active:scale-90 transition-all duration-200 cursor-pointer"
             >
               <Plus className="w-6 h-6 stroke-[2.8]" />
             </button>
@@ -372,7 +361,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/debts'
                 ? 'text-blue-600 dark:text-blue-400 font-extrabold'
-                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200'
             )}
           >
             <HandCoins className="w-5 h-5" />
@@ -390,7 +379,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all cursor-pointer',
               isMoreActive || isMoreOpen
                 ? 'text-blue-600 dark:text-blue-400 font-extrabold'
-                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200'
             )}
           >
             <MoreHorizontal className="w-5 h-5" />

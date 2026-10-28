@@ -287,9 +287,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
   return (
     <Modal
       isOpen={isOpen}
-      onClose={() => {
-        /* Prevent closing by backdrop click without saving */
-      }}
+      onClose={handleSkip}
       enableHistoryBack={false}
       title=""
       className="max-w-xl p-0 overflow-hidden rounded-3xl"
@@ -371,7 +369,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                           : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300'
                       }`}
                     >
-                      <span className="text-xl mb-1">{curr.flag}</span>
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 mb-1">{curr.flag}</span>
                       <span className="text-xs font-black">{curr.symbol}</span>
                       <span className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-full">
                         {curr.name}
@@ -482,8 +480,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
             </div>
 
             <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                     ترحيل الرصيد التلقائي (Rollover)
                   </div>
@@ -530,8 +528,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
             </div>
 
             <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                     تسجيل الراتب الشهري المتكرر تلقائياً
                   </div>

@@ -8,18 +8,14 @@ import {
   ArrowUpRight,
   TrendingDown,
   TrendingUp,
-  Wallet,
   HandCoins,
-  Scale,
   ShieldCheck,
   Copy,
-  AlertTriangle,
   AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Modal } from '../components/ui/Modal'
 import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -42,14 +38,12 @@ import { useDebts } from '../hooks/useDebts'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useCurrency } from '../hooks/useCurrency'
 import { useTransactionModal } from '../hooks/useTransactionModal'
-import { useToast } from '../hooks/useToast'
 import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
 import { calculateCategoryDistribution, calculateDailyExpenses } from '../lib/reports'
 import { calculateDebtSummary } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
 import { isOccurrenceSkipped, advanceDateWithTargetDay } from '../lib/recurring'
-import { toFils, fromFils } from '../lib/money'
 import {
   toWesternDigits,
   formatDayHeader,
@@ -71,15 +65,11 @@ export const DashboardPage: React.FC = () => {
   const { data: categories } = useCategories()
   const { data: recurringList } = useRecurring()
   const { data: debts } = useDebts()
-  const { data: settings, updateSettings } = useUserSettings()
-  const { format, formatWithSign, config: currencyConfig } = useCurrency()
-  const { showToast } = useToast()
+  const { data: settings } = useUserSettings()
+  const { formatWithSign } = useCurrency()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
 
   const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
-  const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false)
-  const [reconcileInput, setReconcileInput] = useState('')
-  const [isReconciling, setIsReconciling] = useState(false)
   const [pieChartType, setPieChartType] = useState<'expense' | 'income'>('expense')
   const isRolloverEnabled = settings?.rolloverBalance ?? true
   const monthStartDay = settings?.monthStartDay ?? 1
@@ -164,6 +154,13 @@ export const DashboardPage: React.FC = () => {
 
   // Calculate active debts summary
   const debtSummary = useMemo(() => calculateDebtSummary(debts), [debts])
+
+  const nearestUpcomingDebt = useMemo(() => {
+    const activeWithDue = debts
+      .filter((d) => !d.settled && d.dueDate)
+      .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
+    return activeWithDue[0] || null
+  }, [debts])
 
   // Map categoryId to Category object
   const categoryMap = useMemo(() => {
@@ -262,13 +259,8 @@ export const DashboardPage: React.FC = () => {
   // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
   const isInitialOrLoading = txLoading && rawTransactions.length === 0
 
-  // Financial health and liquidity pool calculations (taking positive/negative rollover and opening balance into account)
   const hasRolloverEffect = isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
   const effectiveAvailableIncome = sums.income + (hasRolloverEffect ? effectiveRollover : 0)
-  const isZeroState =
-    sums.income === 0 &&
-    sums.expense === 0 &&
-    (!hasRolloverEffect || effectiveRollover === 0)
   const isTemporaryLiquidityDeficit =
     displayBalance < 0 && forecast.freeBalance > 0 && forecast.upcomingRecurringIncome > 0
   const isSpendingWithoutIncome =
@@ -277,111 +269,30 @@ export const DashboardPage: React.FC = () => {
     effectiveAvailableIncome > 0 ? sums.expense / effectiveAvailableIncome : 0
   const isHighConsumption = effectiveAvailableIncome > 0 && consumptionRatio >= 0.8
 
-  // Dynamic Hero Card Palette based on financial health:
-  // Clean Swiss surface with distinct top accent bar and badges
-  const heroTheme = useMemo(() => {
-    let status: 'safe' | 'warning' | 'danger'
-    if (isInitialOrLoading) {
-      status = 'safe'
-    } else if (isTemporaryLiquidityDeficit) {
-      status = 'warning'
-    } else if (
+  const heroTopBar = useMemo(() => {
+    if (isInitialOrLoading) return 'bg-emerald-500'
+    if (isTemporaryLiquidityDeficit) return 'bg-amber-500'
+    if (
       displayBalance < 0 ||
       forecast.freeBalance < 0 ||
       forecast.healthStatus === 'danger' ||
       isSpendingWithoutIncome
     ) {
-      status = 'danger'
-    } else if (isHighConsumption || forecast.healthStatus === 'warning') {
-      status = 'warning'
-    } else {
-      status = 'safe'
+      return 'bg-red-500'
     }
-
-    if (status === 'safe') {
-      return {
-        status,
-        topBar: 'bg-emerald-500',
-        badge:
-          'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60',
-        badgeText: isInitialOrLoading
-          ? 'جاري التحديث...'
-          : isZeroState
-            ? 'لا توجد معاملات بعد'
-            : rawTransactions.length === 0 && effectiveRollover > 0
-              ? 'مسار مالي آمن'
-              : 'فائض مالي',
-        stripBg:
-          'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:border-emerald-800/50 dark:text-emerald-200',
-      }
+    if (isHighConsumption || forecast.healthStatus === 'warning') {
+      return 'bg-amber-500'
     }
-    if (status === 'warning') {
-      return {
-        status,
-        topBar: 'bg-amber-500',
-        badge:
-          'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60',
-        badgeText: isTemporaryLiquidityDeficit
-          ? 'سيولة مؤقتة بانتظار الدخل'
-          : isHighConsumption
-            ? `استهلكت ${Math.round(consumptionRatio * 100)}% من الدخل`
-            : 'انتبه للوتيرة',
-        stripBg:
-          'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200',
-      }
-    }
-    return {
-      status,
-      topBar: 'bg-red-500',
-      badge:
-        'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800/60',
-      badgeText:
-        displayBalance < 0 || isSpendingWithoutIncome
-          ? 'عجز مالي'
-          : 'التزامات تفوق الرصيد',
-      stripBg:
-        'bg-red-50/70 hover:bg-red-100/70 border-red-200/80 text-red-900 dark:bg-red-950/30 dark:border-red-800/50 dark:text-red-200',
-    }
+    return 'bg-emerald-500'
   }, [
     isInitialOrLoading,
-    isZeroState,
-    rawTransactions.length,
-    effectiveRollover,
     isTemporaryLiquidityDeficit,
     isSpendingWithoutIncome,
     isHighConsumption,
-    consumptionRatio,
     forecast.healthStatus,
     forecast.freeBalance,
     displayBalance,
   ])
-
-  const targetReconcileFils = toFils(reconcileInput, currencyConfig.decimals)
-  const reconcileDiffFils = targetReconcileFils - displayBalance
-
-  const handleOpenReconcile = () => {
-    setReconcileInput(fromFils(displayBalance).toString())
-    setIsReconcileModalOpen(true)
-  }
-
-  const handleConfirmReconcile = async () => {
-    if (reconcileDiffFils === 0) {
-      setIsReconcileModalOpen(false)
-      return
-    }
-    setIsReconciling(true)
-    try {
-      const newOpeningBalanceFils = (settings?.openingBalanceFils ?? 0) + reconcileDiffFils
-      await updateSettings({ openingBalanceFils: newOpeningBalanceFils })
-      showToast('تمت تسوية وتحديث الرصيد بنجاح', 'success')
-      setIsReconcileModalOpen(false)
-    } catch (err) {
-      console.error('Failed to reconcile balance:', err)
-      showToast('تعذر تحديث الرصيد، يرجى المحاولة مرة أخرى', 'error')
-    } finally {
-      setIsReconciling(false)
-    }
-  }
 
   const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || ''
   const greetingSubtitle = displayName
@@ -427,166 +338,130 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Hero Card: Clean Swiss Surface & Financial Health Indicator */}
+      {/* 1. Hero Card: Clean Swiss Surface */}
       {isInitialOrLoading ? (
         <HeroCardSkeleton />
       ) : (
-        <div className="bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 border border-zinc-200 dark:border-zinc-800 shadow-sm relative overflow-hidden rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4 min-h-[260px] sm:min-h-[275px] flex flex-col justify-between transition-all">
+        <div className="bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] shadow-xs relative overflow-hidden rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-5 flex flex-col justify-between transition-all">
           {/* Top highlight bar */}
-          <div className={cn('h-1.5 w-full absolute top-0 inset-x-0', heroTheme.topBar)} />
+          <div className={cn('h-1 w-full absolute top-0 inset-x-0', heroTopBar)} />
 
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-              <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center">
-                <Wallet className="w-4 h-4 stroke-[2.2]" />
-              </div>
-              <span className="text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                {isRolloverEnabled ? 'الرصيد المتاح (شامل المرحّل)' : 'الرصيد المتاح (لهذا الشهر)'}
-              </span>
-              <button
-                type="button"
-                onClick={handleOpenReconcile}
-                className="text-[11px] font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:underline inline-flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="تسوية الرصيد الفعلي وتعديل الرصيد الافتتاحي"
-              >
-                <Scale className="w-3 h-3 text-emerald-500" />
-                <span>تسوية الرصيد</span>
-              </button>
-            </div>
-            <span
-              className={cn(
-                'text-xs font-black px-2.5 py-0.5 rounded-full select-none border',
-                heroTheme.badge
-              )}
-            >
-              {heroTheme.badgeText}
+          {/* Header Row */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <span className="text-xs sm:text-sm font-bold text-zinc-500 dark:text-zinc-400">
+              {isRolloverEnabled ? 'الرصيد المتاح (شامل المرحّل)' : 'الرصيد المتاح'}
             </span>
           </div>
 
-          <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50">
-            <FormattedMoney amountFils={displayBalance} />
+          {/* Main Balance & Clean Typographic Subline (Shown only when rollover or reserved > 0) */}
+          <div className="space-y-1.5">
+            <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50">
+              <FormattedMoney amountFils={displayBalance} />
+            </div>
+
+            {((isRolloverEnabled && effectiveRollover !== 0) ||
+              (settings?.openingBalanceFils ?? 0) > 0 ||
+              forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations > 0) && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 font-medium pt-1">
+                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) &&
+                  effectiveRollover !== 0 && (
+                    <>
+                      <span>
+                        صافي هذا الشهر:{' '}
+                        <strong className="font-bold text-zinc-800 dark:text-zinc-200">
+                          <FormattedMoney amountFils={sums.balance} withSign="auto" />
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        {(settings?.openingBalanceFils ?? 0) > 0
+                          ? 'الرصيد التراكمي / الافتتاحي:'
+                          : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}{' '}
+                        <strong className="font-bold text-zinc-800 dark:text-zinc-200">
+                          <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
+                        </strong>
+                      </span>
+                    </>
+                  )}
+                {forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations > 0 && (
+                  <>
+                    {effectiveRollover !== 0 && <span>•</span>}
+                    <span>
+                      محجوز للالتزامات:{' '}
+                      <strong className="font-bold text-amber-600 dark:text-amber-400">
+                        <FormattedMoney
+                          amountFils={
+                            forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations
+                          }
+                        />
+                      </strong>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Rollover Breakdown Subline */}
-          {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && (
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-medium -mt-1 pb-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[11px] sm:text-xs">صافي هذا الشهر:</span>
-                <span className="font-black text-zinc-900 dark:text-zinc-100">
-                  <FormattedMoney amountFils={sums.balance} withSign="auto" />
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[11px] sm:text-xs">
-                  {(settings?.openingBalanceFils ?? 0) > 0
-                    ? 'الرصيد التراكمي / الافتتاحي:'
-                    : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}
-                </span>
-                <span className="font-black text-zinc-900 dark:text-zinc-100">
-                  <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Total Income & Total Expenses Row */}
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+          {/* Income & Expenses Swiss Split Row (Zero nested boxes) */}
+          <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-3.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
             <Link
               to="/transactions?type=income"
-              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+              className="flex flex-col gap-1 pe-3 hover:opacity-80 transition-opacity cursor-pointer"
               title="عرض كافة معاملات الدخل"
             >
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-bold border border-emerald-200/60 dark:border-emerald-800/60 group-hover:scale-105 transition-transform">
-                <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>إجمالي المداخيل</span>
               </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                  إجمالي المداخيل
-                </div>
-                <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
-                  <FormattedMoney amountFils={sums.income} />
-                </div>
+              <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 truncate">
+                <FormattedMoney amountFils={sums.income} />
               </div>
             </Link>
 
             <Link
               to="/transactions?type=expense"
-              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+              className="flex flex-col gap-1 ps-4 hover:opacity-80 transition-opacity cursor-pointer"
               title="عرض كافة معاملات المصاريف"
             >
-              <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 font-bold border border-red-200/60 dark:border-red-800/60 group-hover:scale-105 transition-transform">
-                <TrendingDown className="w-4 h-4 stroke-[2.5]" />
+              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <TrendingDown className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
+                <span>إجمالي المصاريف</span>
               </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                  إجمالي المصاريف
-                </div>
-                <div className="text-sm sm:text-base font-black truncate text-zinc-900 dark:text-zinc-100">
-                  <FormattedMoney amountFils={sums.expense} />
-                </div>
+              <div className="text-base sm:text-lg font-black text-red-600 dark:text-red-400 truncate">
+                <FormattedMoney amountFils={sums.expense} />
               </div>
             </Link>
           </div>
 
-          {/* Daily Safe Budget Interactive Strip */}
-          {forecast.isCurrentMonth && (
-            <Link
-              to="/reports"
-              className={cn(
-                'press-scale flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors group cursor-pointer',
-                heroTheme.stripBg
+          {/* Daily Safe Budget Clean Footer Row */}
+          <Link
+            to="/reports"
+            className="flex items-center justify-between pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] text-xs hover:opacity-80 transition-opacity group cursor-pointer"
+            title="عرض التفاصيل في التقارير"
+          >
+            <div className="flex items-center gap-1.5 font-semibold text-zinc-600 dark:text-zinc-300">
+              <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                {forecast.isCurrentMonth
+                  ? 'ميزانية الأمان اليومي:'
+                  : forecast.isPastMonth
+                    ? 'صافي أداء الدورة:'
+                    : 'حد الصرف اليومي المقترح:'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-end font-bold text-zinc-900 dark:text-zinc-100">
+              <span className="text-sm sm:text-base font-black">
+                <FormattedMoney
+                  amountFils={forecast.isPastMonth ? displayBalance : forecast.dailySafeFils}
+                  withSign={forecast.isPastMonth ? 'auto' : undefined}
+                />
+              </span>
+              {!forecast.isPastMonth && (
+                <span className="text-[11px] font-normal text-zinc-400">/ اليوم</span>
               )}
-              title="عرض التفاصيل في التقارير"
-            >
-              <div className="flex items-center gap-2 font-medium">
-                <div className="w-6 h-6 rounded-lg bg-white/50 dark:bg-zinc-900/50 flex items-center justify-center">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <span>ميزانية الأمان اليومي:</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-end">
-                <span className="font-black text-sm sm:text-base">
-                  <FormattedMoney amountFils={forecast.dailySafeFils} />
-                </span>
-                <span className="text-[11px] font-medium opacity-80">
-                  / اليوم
-                </span>
-                <ChevronLeft className="w-3.5 h-3.5 opacity-80 group-hover:-translate-x-0.5 transition-transform" />
-              </div>
-            </Link>
-          )}
-        </div>
-      )}
-
-      {/* Financial Health Proactive Alert Banner */}
-      {!isInitialOrLoading && !isZeroState && (isSpendingWithoutIncome || isHighConsumption) && (
-        <div
-          className={cn(
-            'p-3.5 sm:p-4 rounded-2xl border flex items-center gap-3 text-xs sm:text-sm animate-fade-in shadow-xs',
-            isSpendingWithoutIncome
-              ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40 text-rose-800 dark:text-rose-200'
-              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'
-          )}
-        >
-          {isSpendingWithoutIncome ? (
-            <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-          )}
-          <div className="flex-1">
-            {isSpendingWithoutIncome ? (
-              <span>
-                <strong>عجز في السيولة:</strong> تم تسجيل مصاريف بقيمة{' '}
-                <strong>{format(sums.expense)}</strong> دون توفر دخل محصل أو رصيد مرحّل كافٍ لتغطيتها.
-              </span>
-            ) : (
-              <span>
-                <strong>تنبيه الاستهلاك:</strong> لقد استهلكت{' '}
-                <strong>{Math.round(consumptionRatio * 100)}%</strong> من إجمالي السيولة المتاحة (
-                {format(effectiveAvailableIncome)}) لهذا الشهر.
-              </span>
-            )}
-          </div>
+              <ChevronLeft className="w-3.5 h-3.5 text-zinc-400 group-hover:-translate-x-0.5 transition-transform" />
+            </div>
+          </Link>
         </div>
       )}
 
@@ -656,28 +531,30 @@ export const DashboardPage: React.FC = () => {
                   const isExpense = tx.type === 'expense'
                   const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
                   const dateHeader = formatDayHeader(txDate, today)
+                  const hasCustomLabel = Boolean(tx.title?.trim() || tx.note?.trim())
+                  const primaryLabel = tx.title?.trim() || tx.note?.trim() || (cat ? cat.name : 'معاملة')
 
                   return (
                     <div
                       key={tx.id}
                       onClick={() => openEdit(tx)}
-                      className="press-scale flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer group"
+                      className="press-scale flex items-center justify-between p-2.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer group"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <span
                           className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
                           style={{
-                            backgroundColor: cat ? `${cat.color}25` : '#94A3B825',
+                            backgroundColor: cat ? `${cat.color}20` : '#94A3B820',
                           }}
                         >
                           <CategoryIcon icon={cat?.icon || '📁'} color={cat?.color} size="md" />
                         </span>
                         <div className="min-w-0">
-                          <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            {tx.title || tx.note || (cat ? cat.name : 'معاملة')}
+                          <div className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {primaryLabel}
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-                            {cat && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+                            {cat && hasCustomLabel && (
                               <>
                                 <span className="truncate">{cat.name}</span>
                                 <span>•</span>
@@ -795,36 +672,30 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </Link>
 
-              {/* Net difference (الصافي) */}
-              <Link
-                to="/debts"
-                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/60 border border-slate-100 dark:border-slate-700/40 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-                title="عرض صفحة الديون"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs">
-                    <Scale className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                      صافي المركز
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      {debtSummary.netFils >= 0 ? 'فائض لصالحك' : 'عجز عليك'}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    'text-xs sm:text-sm font-black select-none',
-                    debtSummary.netFils >= 0
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-rose-600 dark:text-rose-400'
-                  )}
+              {nearestUpcomingDebt && nearestUpcomingDebt.dueDate && (
+                <Link
+                  to="/debts"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 hover:opacity-90 transition-opacity cursor-pointer"
+                  title="عرض الديون المستحقة"
                 >
-                  <FormattedMoney amountFils={debtSummary.netFils} withSign="auto" />
-                </div>
-              </Link>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
+                      <Calendar className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                        أقرب استحقاق: {nearestUpcomingDebt.personName}
+                      </div>
+                      <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                        {toWesternDigits(formatDate(new Date(nearestUpcomingDebt.dueDate), 'd MMMM', { locale: ar }))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs sm:text-sm font-black text-amber-700 dark:text-amber-400 select-none shrink-0 ps-2">
+                    <FormattedMoney amountFils={Math.max(0, nearestUpcomingDebt.amountFils - (nearestUpcomingDebt.paidFils || 0))} />
+                  </div>
+                </Link>
+              )}
             </div>
           </Card>
 
@@ -1004,83 +875,6 @@ export const DashboardPage: React.FC = () => {
           </div>
         </Card>
       </div>
-
-      {/* Balance Reconciliation Modal */}
-      <Modal
-        isOpen={isReconcileModalOpen}
-        onClose={() => {
-          if (!isReconciling) setIsReconcileModalOpen(false)
-        }}
-        title="تسوية وتعديل الرصيد الفعلي"
-      >
-        <div className="space-y-4">
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-            إذا كان المبلغ المتوفر معك حالياً يختلف عما هو مسجل في التطبيق، يمكنك إدخال المبلغ الفعلي ليتم تعديل الرصيد الافتتاحي تلقائياً ليتطابق مع واقعك.
-          </p>
-
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-xs sm:text-sm">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">الرصيد المحسوب حالياً في التطبيق:</span>
-            <span className="font-bold text-slate-800 dark:text-slate-100">
-              <FormattedMoney amountFils={displayBalance} />
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
-              كم المبلغ الفعلي الموجود معك الآن؟
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={reconcileInput}
-                onChange={(e) => setReconcileInput(e.target.value)}
-                placeholder="0.000"
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-              />
-              <span className="absolute end-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                {currencyConfig.symbol}
-              </span>
-            </div>
-          </div>
-
-          {/* Difference display */}
-          <div className="p-3 rounded-xl border flex items-center justify-between text-xs font-semibold bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-700/60">
-            <span className="text-slate-500 dark:text-slate-400">فارق التسوية:</span>
-            <span
-              className={cn(
-                'font-black',
-                reconcileDiffFils > 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : reconcileDiffFils < 0
-                    ? 'text-red-500 dark:text-red-400'
-                    : 'text-slate-400'
-              )}
-            >
-              {reconcileDiffFils > 0 ? `+ ${format(reconcileDiffFils)}` : reconcileDiffFils < 0 ? `- ${format(Math.abs(reconcileDiffFils))}` : 'مطابق تماماً (0)'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setIsReconcileModalOpen(false)}
-              disabled={isReconciling}
-            >
-              إلغاء
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleConfirmReconcile}
-              disabled={isReconciling}
-            >
-              {isReconciling ? 'جاري الاعتماد...' : 'اعتماد التسوية'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }

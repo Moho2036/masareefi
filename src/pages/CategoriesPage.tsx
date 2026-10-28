@@ -290,7 +290,7 @@ export const CategoriesPage: React.FC = () => {
     const currentMonthCount = currentMonthTxCounts[catId] || 0
 
     if (!details.isInUse) {
-      return 'لا توجد معاملات مسجلة (غير مستخدم)'
+      return 'غير مستخدم'
     }
 
     const parts: string[] = []
@@ -371,11 +371,11 @@ export const CategoriesPage: React.FC = () => {
 
       {/* Active Categories Grid */}
       {categoriesLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-36 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+              className="h-36 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] animate-pulse"
             />
           ))}
         </div>
@@ -398,13 +398,13 @@ export const CategoriesPage: React.FC = () => {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {activeCategories.map((cat, index) => {
             return (
               <div
                 key={cat.id}
                 className={cn(
-                  'group bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between',
+                  'group bg-white dark:bg-[#121215] rounded-2xl p-5 border border-[#E4E4E7] dark:border-[#27272A] shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between',
                   lastMovedId === cat.id && 'ring-2 ring-blue-500/70 scale-[1.02] shadow-md z-10'
                 )}
               >
@@ -701,7 +701,7 @@ export const CategoriesPage: React.FC = () => {
                         >
                           {otherActiveCats.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.icon} {c.name}
+                              {c.name}
                             </option>
                           ))}
                         </select>

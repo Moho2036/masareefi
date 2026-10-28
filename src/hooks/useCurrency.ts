@@ -20,7 +20,7 @@ export function useCurrency(): UseCurrencyResult {
   const currency = settings?.currency || 'JOD'
   const customDecimals = settings?.customCurrencyDecimals
   const hideBalances = Boolean(settings?.hideBalances)
-  const hideZeroDecimals = Boolean(settings?.hideZeroDecimals)
+  const hideZeroDecimals = settings?.hideZeroDecimals ?? true
 
   const config = useMemo(
     () => getCurrencyConfig(currency, customDecimals),

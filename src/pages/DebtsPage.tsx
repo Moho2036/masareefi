@@ -232,41 +232,37 @@ export const DebtsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card: صافي المركز المالي */}
-        <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between col-span-2 lg:col-span-1">
+        {/* Card 3: الديون المتأخرة والمستحقة قريباً */}
+        <div className="bg-white dark:bg-[#121215] p-3.5 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-xs flex items-center justify-between col-span-2 lg:col-span-1">
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
-              صافي الفارق (لك - عليك)
+            <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500 block mb-1">
+              {summary.overdueCount > 0 ? 'ديون متأخرة السداد' : 'استحقاقات خلال 7 أيام'}
             </span>
             <span
               className={cn(
                 'text-lg sm:text-2xl font-black',
-                summary.netFils >= 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-red-500 dark:text-red-400'
+                summary.overdueCount > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : summary.upcomingCount > 0
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-zinc-700 dark:text-zinc-300'
               )}
             >
-              {summary.netFils >= 0 ? '+' : ''}
-              {format(summary.netFils)}
+              {summary.overdueCount > 0
+                ? format(summary.overdueFils)
+                : summary.upcomingCount > 0
+                  ? format(summary.upcomingFils)
+                  : format(0)}
             </span>
-            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block mt-1">
-              {summary.netFils > 0
-                ? 'فائض مستحق لصالحك'
-                : summary.netFils < 0
-                  ? 'عجز مستحق عليك'
-                  : 'متعادل تماماً'}
-              {summary.overdueCount > 0 ? (
-                <span className="text-amber-600 dark:text-amber-400 font-bold ms-1">
-                  • {summary.overdueCount} متأخرة ({format(summary.overdueFils)})
-                </span>
-              ) : summary.upcomingCount > 0 ? (
-                <span className="text-blue-600 dark:text-blue-400 font-bold ms-1">
-                  • {summary.upcomingCount} قريبة ({format(summary.upcomingFils)})
-                </span>
-              ) : null}
+            <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 block mt-1">
+              {summary.overdueCount > 0
+                ? `${summary.overdueCount} ديون تجاوزت موعد الاستحقاق`
+                : summary.upcomingCount > 0
+                  ? `${summary.upcomingCount} ديون يحل موعدها قريباً`
+                  : 'لا توجد ديون متأخرة'}
             </span>
           </div>
-          <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center justify-center shrink-0">
             <Scale className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>

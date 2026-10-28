@@ -84,14 +84,21 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
-    const handleTouchOutside = (e: TouchEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    const dismissTooltip = () => {
+      if (containerRef.current) {
         containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
       }
     }
+    const handleTouchOutside = (e: TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        dismissTooltip()
+      }
+    }
     document.addEventListener('touchstart', handleTouchOutside, { passive: true })
+    window.addEventListener('scroll', dismissTooltip, { passive: true, capture: true })
     return () => {
       document.removeEventListener('touchstart', handleTouchOutside)
+      window.removeEventListener('scroll', dismissTooltip, { capture: true })
       if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
     }
   }, [])
@@ -102,7 +109,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       if (containerRef.current) {
         containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
       }
-    }, 2000)
+    }, 1000)
   }
 
   const chartData = React.useMemo(

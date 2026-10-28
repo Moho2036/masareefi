@@ -51,7 +51,7 @@ import {
   reauthenticateCurrentGoogle,
   deleteUserAccount,
 } from '../services/auth'
-import { getAllTransactions } from '../services/transactions'
+import { getAllTransactions, addTransaction } from '../services/transactions'
 import { getAllDebts } from '../services/debts'
 import { processDueRecurring } from '../services/recurring'
 import { resetUserData, deleteUserFirestoreData } from '../services/userProfile'
@@ -414,6 +414,7 @@ export const SettingsPage: React.FC = () => {
   }
 
   const handleSaveReconciliation = async () => {
+    if (!uid) return
     const parsed = parseFloat(reconcileAmount)
     if (isNaN(parsed) || parsed < 0) {
       showToast('يرجى إدخال مبلغ صالح', 'error')
@@ -421,8 +422,37 @@ export const SettingsPage: React.FC = () => {
     }
     setSavingReconcile(true)
     try {
-      const fils = toFils(parsed, activeCurrency)
-      await updateSettings({ openingBalanceFils: fils })
+      const decimals = settings?.customCurrencyDecimals ?? PRESET_CURRENCIES[activeCurrency]?.decimals ?? 3
+      const targetFils = toFils(parsed, decimals)
+
+      const allTxs = await getAllTransactions(uid)
+      const netTxFils = allTxs.reduce((acc, tx) => {
+        return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
+      }, 0)
+
+      const requiredOpening = targetFils - netTxFils
+
+      if (requiredOpening >= 0) {
+        await updateSettings({ openingBalanceFils: requiredOpening })
+      } else {
+        await updateSettings({ openingBalanceFils: 0 })
+        const diffExpenseFils = -requiredOpening
+        const expenseCategory =
+          categories.find((c) => c.type === 'expense' && (c.name === 'أخرى' || c.name.includes('أخرى'))) ||
+          categories.find((c) => c.type === 'expense')
+
+        if (expenseCategory) {
+          await addTransaction(uid, {
+            type: 'expense',
+            amountFils: diffExpenseFils,
+            categoryId: expenseCategory.id,
+            title: 'تسوية رصيد (فرق جرد)',
+            note: 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي',
+            date: new Date(),
+          })
+        }
+      }
+
       showToast('تمت تسوية وتحديث الرصيد الفعلي بنجاح', 'success')
       setShowReconcileModal(false)
       refreshData?.()
@@ -979,7 +1009,7 @@ export const SettingsPage: React.FC = () => {
                 <span>وضع الخصوصية وإخفاء الأرقام</span>
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                إخفاء قيم الأرصدة والمبالغ النقدية برمز (•••••) في جميع الشاشات لحماية خصوصيتك في الأماكن العامة.
+                إخفاء قيم الأرصدة والمبالغ برمز (•••••) في جميع الشاشات.
               </p>
             </div>
             <Toggle
@@ -997,7 +1027,7 @@ export const SettingsPage: React.FC = () => {
                 <span>إخفاء الكسور الصفرية</span>
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                إخفاء الأصفار بعد الفاصلة في المبالغ الكاملة (عرض 50 د.أ بدلاً من 50.000 د.أ).
+                إخفاء الأصفار بعد الفاصلة في المبالغ الصحيحة (عرض 50 د.أ بدلاً من 50.000 د.أ).
               </p>
             </div>
             <Toggle
@@ -1014,7 +1044,7 @@ export const SettingsPage: React.FC = () => {
                 ترتيب التصنيفات حسب الأكثر استخداماً
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                عند التفعيل، تظهر تصنيفاتك الأكثر تسجيلاً للمصاريف في مقدمة القوائم لتسريع الإدخال اليومي.
+                إظهار التصنيفات الأكثر استخداماً أولاً في القوائم.
               </p>
             </div>
             <Toggle
@@ -1048,7 +1078,7 @@ export const SettingsPage: React.FC = () => {
                 ترحيل الرصيد المتبقي من الأشهر السابقة تلقائياً (Rollover)
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                عند التفعيل، يُضاف الفائض أو العجز المتراكم من الأشهر السابقة إلى رصيد الشهر الحالي لمنحك ميزانية واقعية.
+                ترحيل الفائض أو العجز المتراكم تلقائياً إلى رصيد الشهر التالي.
               </p>
             </div>
             <Toggle
@@ -1065,7 +1095,7 @@ export const SettingsPage: React.FC = () => {
                 بدء احتساب الترحيل من هذا الشهر فقط (تصفير العجز السابق)
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                مفيد إذا كان لديك عجز قديم متراكم وتريد بدء صفحة مالية جديدة دون احتساب ديون الفترات السابقة في رصيدك المتاح.
+                تصفير العجز السابق وبدء احتساب الترحيل من دورة هذا الشهر فصاعداً.
               </p>
             </div>
             <Toggle
@@ -1123,7 +1153,7 @@ export const SettingsPage: React.FC = () => {
                       : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
                   )}
                 >
-                  <span className="text-xl select-none">{curr.flag}</span>
+                  <span className="px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-mono font-black text-zinc-700 dark:text-zinc-300 select-none shrink-0">{curr.flag}</span>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold truncate">{curr.name}</div>
                     <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">

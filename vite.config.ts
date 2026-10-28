@@ -16,7 +16,7 @@ export default defineConfig({
         name: 'بَصير - البصيرة والإدارة المالية الشخصية',
         short_name: 'بَصير',
         description: 'تطبيق بَصير لإدارة المصاريف والمداخيل وتتبع الميزانية الشخصية بوضوح',
-        theme_color: '#18181B',
+        theme_color: '#09090B',
         background_color: '#F4F4F5',
         display: 'standalone',
         orientation: 'any',

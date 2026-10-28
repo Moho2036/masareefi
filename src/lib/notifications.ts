@@ -1,6 +1,6 @@
 import { isBefore, startOfDay, format, differenceInDays } from 'date-fns'
 import type { Debt, MoneyCircle, Recurring, UserSettings, Transaction } from '../types'
-import { fromFils } from './money'
+import { formatMoney } from './money'
 
 export type NotificationCategory = 'urgent' | 'recurring' | 'debt' | 'circle' | 'budget' | 'system'
 export type NotificationFilter = 'all' | 'urgent' | 'recurring' | 'debt_circle' | 'unread'
@@ -48,6 +48,13 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
   const todayStr = format(todayMidnight, 'yyyy-MM-dd')
   const prefs = settings?.notificationPrefs || {}
 
+  const fmtAmount = (fils: number) =>
+    formatMoney(fils, settings?.currency || 'JOD', {
+      customDecimals: settings?.customCurrencyDecimals,
+      maskAmount: Boolean(settings?.hideBalances),
+      hideZeroDecimals: Boolean(settings?.hideZeroDecimals),
+    })
+
   // 1. Debts Reminders
   if (prefs.debtReminders !== false) {
     const reminderDays = prefs.debtReminderDaysBefore ?? 3
@@ -59,7 +66,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       const diffDays = differenceInDays(dueMidnight, todayMidnight)
       const dueDateStr = format(dueMidnight, 'yyyy-MM-dd')
       const remainingFils = Math.max(0, debt.amountFils - debt.paidFils)
-      const remainingFormatted = `${fromFils(remainingFils).toFixed(settings?.customCurrencyDecimals ?? 2)} ${settings?.currency || 'د.أ'}`
+      const remainingFormatted = fmtAmount(remainingFils)
 
       if (isBefore(dueMidnight, todayMidnight)) {
         // Overdue
@@ -111,7 +118,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       if (diffMonths >= 1 && diffMonths <= circle.membersCount) {
         // Active month in range
         if (circle.myTurnMonth === diffMonths) {
-          const totalFormatted = `${fromFils(circle.totalAmountFils).toFixed(settings?.customCurrencyDecimals ?? 2)} ${settings?.currency || 'د.أ'}`
+          const totalFormatted = fmtAmount(circle.totalAmountFils)
           items.push({
             id: `circle_turn_${circle.id}_m${diffMonths}`,
             title: `دوري في القبض: جمعية ${circle.name}`,
@@ -119,7 +126,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
             category: 'circle',
             isUrgent: true,
             createdAt: todayMidnight,
-            actionPath: '/circles',
+            actionPath: '/tools?tool=circles',
             actionLabel: 'تفاصيل الجمعية',
           })
         }
@@ -141,7 +148,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
               category: 'circle',
               isUrgent: false,
               createdAt: todayMidnight,
-              actionPath: '/circles',
+              actionPath: '/tools?tool=circles',
               actionLabel: 'متابعة الجمعية',
             })
           }
@@ -158,7 +165,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       const nextMidnight = startOfDay(rec.nextDate)
       const diffDays = differenceInDays(nextMidnight, todayMidnight)
       const nextDateStr = format(nextMidnight, 'yyyy-MM-dd')
-      const amountFormatted = `${fromFils(rec.amountFils).toFixed(settings?.customCurrencyDecimals ?? 2)} ${settings?.currency || 'د.أ'}`
+      const amountFormatted = fmtAmount(rec.amountFils)
 
       if (rec.requireConfirmation && diffDays <= 0) {
         items.push({

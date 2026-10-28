@@ -1,11 +1,11 @@
-# مصاريفي (Masareefi) — Gemini & Antigravity Developer Guide
+# بَصير (Baseer) — Gemini & Antigravity Developer Guide
 
-This repository contains **مصاريفي (Masareefi)**, a privacy-first, bilingual (Arabic UI, Western digits) personal expense and financial tracking web application built with React 19, Vite, TypeScript, Tailwind CSS v4, and Firebase Firestore.
+This repository contains **بَصير (Baseer)**, a privacy-first, bilingual (Arabic UI, Western digits 0-9) personal finance and wealth management Progressive Web App (PWA) built with React 19, Vite, TypeScript, Tailwind CSS v4, and Firebase Firestore.
 
 Before starting any task, read:
 1. `AGENTS.md` (Always-on binding agent rules)
 2. `docs/CONVENTIONS.md` (Strict engineering conventions)
-3. `docs/PLAN.md` (Architecture, data models, state management)
+3. `docs/PROJECT_BIBLE.md` (Unified architectural single source of truth & data models)
 
 ---
 
@@ -84,10 +84,13 @@ Before starting any task, read:
 ## Core Stack & Architectural Rules
 
 - **Frontend:** React 19, Vite, TypeScript (strict mode, zero `any`), Tailwind CSS v4 (`@tailwindcss/vite`).
-- **Icons & UI:** `lucide-react`, Cairo font, RTL logical properties (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`).
-- **Zero Blocking Spinners:** Use skeleton loaders (`AppShellSkeleton`, `PageSkeleton`, etc.).
+- **Design System:** Swiss Carbon & Sapphire Clarity (`#2563EB` / `#3B82F6`, IBM Plex Sans Arabic + Cairo font). Logical RTL utilities (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`).
+- **Icons & Visuals:** `lucide-react` for system icons, `CategoryIcon` for categories.
+- **Navigation:** Desktop Sidebar on the right (`start`), Mobile Bottom Nav (`الرئيسية`, `المعاملات`, `[+]`, `الديون`, `المزيد`).
+- **Zero Blocking Spinners:** Use skeleton loaders (`AppShellSkeleton`, `DashboardSkeleton`, `PageSkeleton`).
 - **Currency Storage:** Integer fils (`amountFils`, 1 JOD = 1000 fils). Never use floating point numbers for currency values.
 - **Firestore Access:** All database reads and writes MUST go through `src/services/*`. UI components must never import `firebase/firestore` directly.
+- **Documentation Maintenance:** Do NOT update `docs/PROJECT_BIBLE.md` on routine edits; update it ONLY upon major architectural changes or upon explicit user request.
 
 ---
 
@@ -96,6 +99,7 @@ Before starting any task, read:
 Before reporting any task complete, verify that all of the following commands exit cleanly with code 0:
 ```bash
 npm run typecheck
+npm run lint
 npm run test
 npm run build
 ```

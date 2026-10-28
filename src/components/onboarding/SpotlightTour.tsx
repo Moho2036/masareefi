@@ -28,25 +28,22 @@ interface TourStep {
 
 const TOUR_STEPS: TourStep[] = [
   {
-    title: 'تسجيل المعاملات بلمسة سريعة',
-    description:
-      'استخدم زر (+) لإضافة أي مصروف أو دخل فور حدوثه بكل سهولة، مع تحديد التصنيف والمبلغ والتاريخ دون أي تعقيد.',
-    icon: Plus,
-    badge: 'الخطوة 1 من 3',
-    color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400',
-  },
-  {
-    title: 'كارت الحد اليومي الآمن والصحة المالية',
-    description:
-      'يحسب لك بَصير الميزانية الآمنة للصرف يومياً تلقائياً بناءً على ما تبقى من دورتك الشهرية، والتزاماتك المتوقعة حتى لا تقع في عجز مالي.',
+    title: 'الرصيد المتاح وحد الصرف اليومي',
+    description: 'يعكس صافي سيولتك المالية المتبقية ومعدل إنفاقك اليومي الموصى به.',
     icon: ShieldCheck,
-    badge: 'الخطوة 2 من 3',
+    badge: 'الخطوة 1 من 3',
     color: 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400',
   },
   {
-    title: 'الأدوات الإضافية والديون والجمعيات',
-    description:
-      'تابع التزاماتك المالية، سجل سلفك وسدادات ديونك، ودر جمعياتك المالية الشهرية وحساب ساعات العمل من خلال شريط القوائم.',
+    title: 'إضافة معاملة سريعة (+)',
+    description: 'زر تسجيل المصاريف أو المداخيل بضغطة زر واحدة أينما كنت في التطبيق.',
+    icon: Plus,
+    badge: 'الخطوة 2 من 3',
+    color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400',
+  },
+  {
+    title: 'دفتر الديون والالتزامات',
+    description: 'تتبع ما لك وما عليك من التزامات وديون وجدولتها وسدادها بدقة.',
     icon: Calculator,
     badge: 'الخطوة 3 من 3',
     color: 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400',

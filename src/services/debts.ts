@@ -71,7 +71,7 @@ export async function getOrCreateDebtCategory(
       id: '',
       name: 'الديون والسلف',
       type: 'expense',
-      icon: '🤝',
+      icon: '💳',
       color: '#D97706',
       archived: false,
       order: 0,
@@ -96,7 +96,7 @@ export async function getOrCreateDebtCategory(
       id: '',
       name: 'الديون والسلف',
       type: 'income',
-      icon: '🤝',
+      icon: '💳',
       color: '#10B981',
       archived: false,
       order: 0,
@@ -1230,23 +1230,20 @@ export async function addDebtEntry(
   }
 
   const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-  let existingEntries: DebtEntry[] = []
-
-  if (Array.isArray(debt.entries) && debt.entries.length > 0) {
-    existingEntries = [...debt.entries]
-  } else {
-    existingEntries = [
-      {
-        id: `entry_base_${debt.id}`,
-        amountFils: debt.amountFils,
-        date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
-        title: 'أصل الدين الأول',
-        note: debt.note || '',
-        transactionId: `debt_init_${debt.id}`,
-        createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
-      },
-    ]
-  }
+  const existingEntries: DebtEntry[] =
+    Array.isArray(debt.entries) && debt.entries.length > 0
+      ? [...debt.entries]
+      : [
+          {
+            id: `entry_base_${debt.id}`,
+            amountFils: debt.amountFils,
+            date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+            title: 'أصل الدين الأول',
+            note: debt.note || '',
+            transactionId: `debt_init_${debt.id}`,
+            createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
+          },
+        ]
 
   let txId: string | undefined
   const batch = writeBatch(db)
