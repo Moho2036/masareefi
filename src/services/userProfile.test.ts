@@ -43,6 +43,7 @@ vi.mock('firebase/firestore', () => ({
     commit: mockBatchCommit,
   }),
   onSnapshot: vi.fn(),
+  deleteField: () => ({ _method: 'deleteField' }),
   serverTimestamp: () => ({ _method: 'serverTimestamp' }),
 }))
 
@@ -95,6 +96,42 @@ describe('userProfile service', () => {
           openingBalanceFils: 250000,
         })
       )
+    })
+
+    it('calls updateDoc with deleteField() when rolloverStartDate is null and customCurrencyDecimals is undefined', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ displayName: 'سعيد' }),
+      })
+
+      await updateUserSettings('uid-del', {
+        rolloverStartDate: null,
+        customCurrencyDecimals: undefined,
+      })
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          rolloverStartDate: { _method: 'deleteField' },
+          customCurrencyDecimals: { _method: 'deleteField' },
+        })
+      )
+    })
+
+    it('omits deleted fields when user document does not exist and setDoc is called', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      await updateUserSettings('uid-new-del', {
+        rolloverStartDate: null,
+        customCurrencyDecimals: undefined,
+      })
+
+      expect(mockSetDoc).toHaveBeenCalledTimes(1)
+      const fullPayload = mockSetDoc.mock.calls[0][1]
+      expect(fullPayload.rolloverStartDate).toBeUndefined()
+      expect(fullPayload.customCurrencyDecimals).toBeUndefined()
     })
 
     it('merges DEFAULT_SETTINGS, cleanUpdates, and adds serverTimestamp when user doc does not exist', async () => {

@@ -6,6 +6,7 @@ import {
   connectFirestoreEmulator,
   persistentLocalCache,
   persistentMultipleTabManager,
+  type Firestore,
 } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -23,7 +24,7 @@ export const auth = getAuth(app)
 
 const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || undefined
 
-let firestoreInstance
+let firestoreInstance: Firestore
 try {
   firestoreInstance = databaseId
     ? initializeFirestore(

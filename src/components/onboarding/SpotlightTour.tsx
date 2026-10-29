@@ -7,7 +7,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Sparkles,
-  X,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -91,10 +90,10 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
           <button
             type="button"
             onClick={handleFinishTour}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="px-2 py-1 rounded-lg text-xs font-semibold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             aria-label="إغلاق الجولة"
           >
-            <X className="w-4 h-4" />
+            تخطي
           </button>
         </div>
 

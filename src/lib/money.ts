@@ -25,7 +25,7 @@ const THREE_DECIMAL_CODES = new Set([
   'د.أ', 'د.ك', 'د.ب', 'ر.ع', 'د.ت', 'د.ل', 'د.ع'
 ])
 
-export function getCurrencyConfig(currencyCode?: string, customDecimals?: number): CurrencyInfo {
+export function getCurrencyConfig(currencyCode?: string, customDecimals?: number | null): CurrencyInfo {
   let baseConfig: CurrencyInfo
   if (!currencyCode || currencyCode === 'JOD') {
     baseConfig = PRESET_CURRENCIES.JOD
@@ -55,7 +55,7 @@ export function getCurrencyConfig(currencyCode?: string, customDecimals?: number
     }
   }
 
-  if (customDecimals !== undefined && [0, 2, 3].includes(customDecimals)) {
+  if (customDecimals != null && [0, 2, 3].includes(customDecimals)) {
     return { ...baseConfig, decimals: customDecimals }
   }
   return baseConfig
@@ -75,7 +75,7 @@ export interface FormatOptions {
   currency?: string
   hideZeroDecimals?: boolean
   maskAmount?: boolean
-  customDecimals?: number
+  customDecimals?: number | null
 }
 
 export type FormatJODOptions = FormatOptions

@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   type Unsubscribe,
   type DocumentReference,
+  type DocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { Debt, DebtPayment, DebtEntry, TxType } from '../types'
@@ -41,8 +42,8 @@ export function subscribeDebts(
 
 /**
  * Resolves or creates a suitable category for debt transactions.
- * Expense: looks for 'سداد الديون والأقساط', then 'أخرى', then any expense category.
- * Income: looks for 'أخرى', then any income category.
+ * Expense: looks for 'الديون والسلف' or 'سداد الديون والأقساط', then 'أخرى', otherwise creates 'الديون والسلف'.
+ * Income: looks for 'الديون والسلف' or 'سداد الديون والأقساط', then 'أخرى', otherwise creates 'الديون والسلف'.
  */
 export async function getOrCreateDebtCategory(
   uid: string,
@@ -63,23 +64,27 @@ export async function getOrCreateDebtCategory(
     )
     if (otherCat) return otherCat.id
 
-    const anyCat = categories.find((c) => c.type === 'expense' && !c.archived)
-    if (anyCat) return anyCat.id
-
-    const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
-    await setDoc(newDocRef, {
-      id: '',
-      name: 'الديون والسلف',
-      type: 'expense',
-      icon: '💳',
-      color: '#D97706',
-      archived: false,
-      order: 0,
-    })
-    return newDocRef.id
+    try {
+      const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
+      await setDoc(newDocRef, {
+        id: '',
+        name: 'الديون والسلف',
+        type: 'expense',
+        icon: '💳',
+        color: '#D97706',
+        archived: false,
+        order: 0,
+      })
+      return newDocRef.id
+    } catch (err) {
+      console.error('Failed to create expense debt category:', err)
+      const anyCat = categories.find((c) => c.type === 'expense' && !c.archived)
+      if (anyCat) return anyCat.id
+      throw err
+    }
   } else {
     const debtCat = categories.find(
-      (c) => c.type === 'income' && !c.archived && c.name === 'الديون والسلف'
+      (c) => c.type === 'income' && !c.archived && (c.name === 'الديون والسلف' || c.name === 'سداد الديون والأقساط')
     )
     if (debtCat) return debtCat.id
 
@@ -88,20 +93,24 @@ export async function getOrCreateDebtCategory(
     )
     if (otherCat) return otherCat.id
 
-    const anyCat = categories.find((c) => c.type === 'income' && !c.archived)
-    if (anyCat) return anyCat.id
-
-    const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
-    await setDoc(newDocRef, {
-      id: '',
-      name: 'الديون والسلف',
-      type: 'income',
-      icon: '💳',
-      color: '#10B981',
-      archived: false,
-      order: 0,
-    })
-    return newDocRef.id
+    try {
+      const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
+      await setDoc(newDocRef, {
+        id: '',
+        name: 'الديون والسلف',
+        type: 'income',
+        icon: '💳',
+        color: '#10B981',
+        archived: false,
+        order: 0,
+      })
+      return newDocRef.id
+    } catch (err) {
+      console.error('Failed to create income debt category:', err)
+      const anyCat = categories.find((c) => c.type === 'income' && !c.archived)
+      if (anyCat) return anyCat.id
+      throw err
+    }
   }
 }
 
@@ -496,8 +505,8 @@ export async function updateDebt(
 
       for (const p of payments) {
         if (!p.id) continue
-        let payTxRef = null
-        let payTxSnap = null
+        let payTxRef: DocumentReference | null = null
+        let payTxSnap: DocumentSnapshot | null = null
 
         const candidateIds = [p.transactionId, `debt_pay_${p.id}`].filter(Boolean) as string[]
         for (const cId of candidateIds) {
@@ -966,7 +975,7 @@ export async function updateDebtPayment(
 
   // 1. Look up existing transaction for this payment
   let existingTxId: string | null = null
-  let existingTxRef = null
+  let existingTxRef: DocumentReference | null = null
 
   const candidateIds = [existingPayment.transactionId, `debt_pay_${paymentId}`].filter(Boolean) as string[]
   for (const cId of candidateIds) {

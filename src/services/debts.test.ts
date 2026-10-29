@@ -100,6 +100,34 @@ describe('debts service with accounting link', () => {
       expect(catId).toBe('mock-generated-id')
       expect(mockSetDoc).toHaveBeenCalledTimes(1)
     })
+
+    it('creates "الديون والسلف" category instead of picking random category like "طعام" or "راتب" when "أخرى" does not exist', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { data: () => ({ id: 'cat-food', name: 'طعام وبقالة', type: 'expense', archived: false }) },
+        ],
+      })
+
+      const catIdExp = await getOrCreateDebtCategory('user-1', 'expense')
+      expect(catIdExp).toBe('mock-generated-id')
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ name: 'الديون والسلف', type: 'expense' })
+      )
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          { data: () => ({ id: 'cat-salary', name: 'راتب', type: 'income', archived: false }) },
+        ],
+      })
+
+      const catIdInc = await getOrCreateDebtCategory('user-1', 'income')
+      expect(catIdInc).toBe('mock-generated-id')
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ name: 'الديون والسلف', type: 'income' })
+      )
+    })
   })
 
   describe('addDebt with accounting link', () => {

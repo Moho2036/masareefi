@@ -25,23 +25,23 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/icons/icon.svg',
+            src: '/icons/icon.svg?v=2.5',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable',
           },
           {
-            src: '/icons/icon-192.png',
+            src: '/icons/icon-192.png?v=2.5',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/icons/icon-512.png?v=2.5',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: '/icons/icon-512-maskable.png',
+            src: '/icons/icon-512-maskable.png?v=2.5',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

@@ -26,10 +26,12 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [duplicateTransaction, setDuplicateTransaction] = useState<Transaction | null>(null)
   const [defaultType, setDefaultType] = useState<TxType>('expense')
+  const [isFormDirty, setIsFormDirty] = useState(false)
 
   const openAdd = useCallback((type: TxType = 'expense') => {
     setEditingTransaction(null)
     setDuplicateTransaction(null)
+    setIsFormDirty(false)
     setDefaultType(type)
     setIsOpen(true)
   }, [])
@@ -37,6 +39,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
   const openEdit = useCallback((tx: Transaction) => {
     setEditingTransaction(tx)
     setDuplicateTransaction(null)
+    setIsFormDirty(false)
     setDefaultType(tx.type)
     setIsOpen(true)
   }, [])
@@ -44,6 +47,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
   const openDuplicate = useCallback((tx: Transaction) => {
     setEditingTransaction(null)
     setDuplicateTransaction(tx)
+    setIsFormDirty(false)
     setDefaultType(tx.type)
     setIsOpen(true)
   }, [])
@@ -52,6 +56,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
     setIsOpen(false)
     setEditingTransaction(null)
     setDuplicateTransaction(null)
+    setIsFormDirty(false)
   }, [])
 
   const value = useMemo(
@@ -78,7 +83,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
         isOpen={isOpen}
         onClose={closeModal}
         title={modalTitle}
-        closeOnBackdropClick={false}
+        closeOnBackdropClick={!isFormDirty && !editingTransaction && !duplicateTransaction}
       >
         {isOpen && (
           <TransactionForm
@@ -94,6 +99,7 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
             initialType={defaultType}
             onClose={closeModal}
             onDuplicate={openDuplicate}
+            onDirtyChange={setIsFormDirty}
           />
         )}
       </Modal>

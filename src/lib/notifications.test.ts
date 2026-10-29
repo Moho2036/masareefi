@@ -126,6 +126,7 @@ describe('notifications engine', () => {
         members: [],
         status: 'active',
         createdAt: new Date(),
+        recurringId: 'rec-circle-1',
       },
     ]
 
@@ -139,6 +140,13 @@ describe('notifications engine', () => {
     expect(circleTurn).toBeDefined()
     expect(circleTurn?.isUrgent).toBe(true)
     expect(circleTurn?.message).toContain('استلامك لمبلغ الجمعية بالكامل')
+
+    const circleExempt = items.find((i) => i.id.startsWith('circle_exempt_c-1'))
+    expect(circleExempt).toBeDefined()
+    expect(circleExempt?.category).toBe('recurring')
+    expect(circleExempt?.isUrgent).toBe(false)
+    expect(circleExempt?.actionPath).toBe('/tools?tool=circles')
+    expect(circleExempt?.actionLabel).toBe('إيداع الصافي الآن')
   })
 
   it('generates recurring payment notification when due today or upcoming', () => {
@@ -167,6 +175,93 @@ describe('notifications engine', () => {
     expect(recDue).toBeDefined()
     expect(recDue?.category).toBe('recurring')
     expect(recDue?.isUrgent).toBe(true)
+  })
+
+  it('generates confirmation required notification for recurring items when requireConfirmation is true', () => {
+    const recurring: Recurring[] = [
+      {
+        id: 'rec-confirm',
+        type: 'expense',
+        amountFils: 45000,
+        categoryId: 'cat-1',
+        title: 'فاتورة المياه المتغيرة',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-15T00:00:00Z'),
+        nextDate: new Date('2026-05-15T00:00:00Z'), // today
+        active: true,
+        requireConfirmation: true,
+      },
+    ]
+
+    const items = generateNotifications({
+      recurring,
+      settings: baseSettings,
+      today,
+    })
+
+    const confirmItem = items.find((i) => i.id.startsWith('recurring_confirm_rec-confirm'))
+    expect(confirmItem).toBeDefined()
+    expect(confirmItem?.category).toBe('recurring')
+    expect(confirmItem?.isUrgent).toBe(true)
+    expect(confirmItem?.actionPath).toBe('/recurring?confirmId=rec-confirm')
+    expect(confirmItem?.actionLabel).toBe('تأكيد المبلغ وتسجيل الدفع')
+  })
+
+  it('generates notification for auto-recorded recurring transactions within the last 3 days', () => {
+    const transactions = [
+      {
+        id: 'tx-recent-rec',
+        type: 'expense' as const,
+        amountFils: 15000,
+        categoryId: 'cat-1',
+        date: new Date('2026-05-14T09:00:00Z'), // 1 day ago
+        title: 'اشتراك الإنترنت',
+        note: '',
+        createdAt: new Date('2026-05-14T09:00:00Z'),
+        recurringId: 'rec-internet',
+      },
+      {
+        id: 'tx-old-rec',
+        type: 'expense' as const,
+        amountFils: 10000,
+        categoryId: 'cat-1',
+        date: new Date('2026-05-10T09:00:00Z'), // 5 days ago (> 3 days)
+        title: 'اشتراك قديم',
+        note: '',
+        createdAt: new Date('2026-05-10T09:00:00Z'),
+        recurringId: 'rec-old',
+      },
+      {
+        id: 'tx-manual',
+        type: 'expense' as const,
+        amountFils: 5000,
+        categoryId: 'cat-1',
+        date: new Date('2026-05-15T09:00:00Z'),
+        title: 'شراء يدوي',
+        note: '',
+        createdAt: new Date('2026-05-15T09:00:00Z'),
+      },
+    ]
+
+    const items = generateNotifications({
+      settings: baseSettings,
+      transactions,
+      today,
+    })
+
+    const autoRec = items.find((i) => i.id === 'recurring_auto_recorded_tx-recent-rec')
+    expect(autoRec).toBeDefined()
+    expect(autoRec?.category).toBe('recurring')
+    expect(autoRec?.isUrgent).toBe(false)
+    expect(autoRec?.actionPath).toBe('/transactions')
+    expect(autoRec?.actionLabel).toBe('عرض المعاملة')
+
+    const oldRec = items.find((i) => i.id === 'recurring_auto_recorded_tx-old-rec')
+    expect(oldRec).toBeUndefined()
+
+    const manual = items.find((i) => i.id === 'recurring_auto_recorded_tx-manual')
+    expect(manual).toBeUndefined()
   })
 
   it('generates budget deficit and spending percentage warnings', () => {

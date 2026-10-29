@@ -7,7 +7,9 @@ import type { Category } from '../../types'
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
 const mockAddRecurring = vi.fn().mockResolvedValue('rec-new-1')
 const mockArchiveCategory = vi.fn().mockResolvedValue(undefined)
+const mockArchiveCategoriesBatch = vi.fn().mockResolvedValue(undefined)
 const mockAddCategory = vi.fn().mockResolvedValue('cat-custom-1')
+const mockProcessDueRecurring = vi.fn().mockResolvedValue(0)
 
 const mockCategories: Category[] = [
   { id: 'cat-1', name: 'طعام', type: 'expense', icon: 'utensils', color: '#10b981', archived: false, order: 1 },
@@ -36,11 +38,13 @@ vi.mock('../../hooks/useCategories', () => ({
 
 vi.mock('../../services/categories', () => ({
   archiveCategory: (...args: unknown[]) => mockArchiveCategory(...args),
+  archiveCategoriesBatch: (...args: unknown[]) => mockArchiveCategoriesBatch(...args),
   addCategory: (...args: unknown[]) => mockAddCategory(...args),
 }))
 
 vi.mock('../../services/recurring', () => ({
   addRecurring: (...args: unknown[]) => mockAddRecurring(...args),
+  processDueRecurring: (...args: unknown[]) => mockProcessDueRecurring(...args),
 }))
 
 describe('OnboardingWizard Component', () => {
@@ -143,9 +147,8 @@ describe('OnboardingWizard Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /ريال سعودي/i }))
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
 
-    // Step 2: Set start day to 25
-    const slider = screen.getByLabelText(/يوم بداية الدورة المالية/i)
-    fireEvent.change(slider, { target: { value: '25' } })
+    // Step 2: Set start day to 25 via quick-select button
+    fireEvent.click(screen.getByRole('button', { name: 'يوم 25' }))
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
 
     // Step 3: Set opening balance to 500 and enable salary with 1000
@@ -178,7 +181,7 @@ describe('OnboardingWizard Component', () => {
           frequency: 'monthly',
         })
       )
-      expect(mockArchiveCategory).toHaveBeenCalledWith('user-wiz-1', 'cat-1', true)
+      expect(mockArchiveCategoriesBatch).toHaveBeenCalledWith('user-wiz-1', ['cat-1'], true)
       expect(onComplete).toHaveBeenCalled()
       expect(window.localStorage.getItem('baseer_onboarding_done_user-wiz-1')).toBe('true')
     })
@@ -259,5 +262,34 @@ describe('OnboardingWizard Component', () => {
         })
       )
     })
+  })
+
+  it('triggers processDueRecurring immediately if salary start date is today or earlier', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const mockNow = new Date(2026, 9, 25, 14, 0, 0)
+    vi.setSystemTime(mockNow)
+
+    render(<OnboardingWizard isOpen={true} onComplete={vi.fn()} />)
+
+    // Step 1 -> Step 2
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+
+    // Step 2: Set start day to 25 (today)
+    fireEvent.click(screen.getByRole('button', { name: 'يوم 25' }))
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+
+    // Step 3: Enable recurring salary
+    fireEvent.click(screen.getByLabelText(/تسجيل الراتب تلقائياً/i))
+    fireEvent.change(screen.getByLabelText('قيمة الراتب الشهري'), { target: { value: '1000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+
+    // Step 4: Finish
+    fireEvent.click(screen.getByRole('button', { name: /إتمام وبدء الاستخدام/i }))
+
+    await waitFor(() => {
+      expect(mockProcessDueRecurring).toHaveBeenCalledWith('user-wiz-1')
+    })
+
+    vi.useRealTimers()
   })
 })

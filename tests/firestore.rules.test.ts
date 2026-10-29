@@ -829,6 +829,15 @@ describe('user profile validation', () => {
         notificationPrefs: {},
       }),
     );
+
+    // Update with null customCurrencyDecimals and null rolloverStartDate
+    await assertSucceeds(
+      setDoc(doc(aliceDb(), `users/${ALICE}`), {
+        ...validProfile(),
+        customCurrencyDecimals: null,
+        rolloverStartDate: null,
+      }),
+    );
   });
 
   it('denies invalid hideBalances and hideZeroDecimals', async () => {

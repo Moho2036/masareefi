@@ -10,6 +10,8 @@ import {
 import { Card } from '../ui/Card'
 import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
+import { Modal } from '../ui/Modal'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { TransactionForm } from '../TransactionForm'
 import { useCurrency } from '../../hooks/useCurrency'
 import { useRecurring } from '../../hooks/useRecurring'
@@ -160,7 +162,7 @@ export interface WorkHoursCalculatorProps {
 export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   initialWorkDaysMode,
 }) => {
-  const { format, config } = useCurrency()
+  const { config } = useCurrency()
   const benchmarks = useMemo(() => getCurrencyBenchmarks(config.code), [config.code])
 
   const initialPrefs = useMemo(() => loadStoredPrefs(config.code), [config.code])
@@ -422,7 +424,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                         }}
                         className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
                           workDaysMode === 'month'
-                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                            ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
                         }`}
                       >
@@ -437,7 +439,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                         }}
                         className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
                           workDaysMode === 'week'
-                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                            ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
                         }`}
                       >
@@ -458,8 +460,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
               <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-750/60 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                 <span className="font-medium">صافي أجرك في الساعة الواحدة:</span>
-                <span className="font-black text-emerald-600 dark:text-emerald-400">
-                  {format(hourlyWageFils)} / ساعة
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  <FormattedMoney amountFils={hourlyWageFils} /> / ساعة
                 </span>
               </div>
             </div>
@@ -542,7 +544,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               ) : (
                 <div className="py-2 text-center space-y-2">
                   <p className="text-xs font-semibold text-slate-400">
-                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر {format(toFils(itemPrice, config.decimals))}، تحتاج إلى:
+                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر <FormattedMoney amountFils={toFils(itemPrice, config.decimals)} />، تحتاج إلى:
                   </p>
 
                   <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
@@ -593,8 +595,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                     </div>
                     <div>
                       <div className="text-[11px] font-medium text-slate-400">أجرك في الساعة</div>
-                      <div className="text-sm font-black text-slate-800 dark:text-slate-100">
-                        {format(hourlyWageFils)}
+                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        <FormattedMoney amountFils={hourlyWageFils} />
                       </div>
                     </div>
                   </div>
@@ -660,8 +662,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 flex items-start gap-3 text-rose-800 dark:text-rose-200 text-xs">
                 <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-black block text-sm mb-0.5">
-                    تحذير: لا يوجد رصيد حر متاح هذا الشهر ({format(forecast.freeBalance)})
+                  <span className="font-bold block text-sm mb-0.5">
+                    تحذير: لا يوجد رصيد حر متاح هذا الشهر (<FormattedMoney amountFils={forecast.freeBalance} />)
                   </span>
                   <span>
                     ميزانيتك للشهر الحالي مستنفدة بالكامل أو في حالة عجز مالي. إتمام هذا الشراء سيزيد من العجز المرحّل للشهر القادم.
@@ -672,11 +674,11 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3 text-amber-800 dark:text-amber-200 text-xs">
                 <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-black block text-sm mb-0.5">
+                  <span className="font-bold block text-sm mb-0.5">
                     تنبيه: سعر السلعة يتجاوز رصيدك الحر المتبقي!
                   </span>
                   <span>
-                    سعر السلعة ({format(toFils(itemPrice, config.decimals))}) أكبر من رصيدك الحر المتبقي ({format(forecast.freeBalance)}) بمقدار {format(toFils(itemPrice, config.decimals) - forecast.freeBalance)}.
+                    سعر السلعة (<FormattedMoney amountFils={toFils(itemPrice, config.decimals)} />) أكبر من رصيدك الحر المتبقي (<FormattedMoney amountFils={forecast.freeBalance} />) بمقدار <FormattedMoney amountFils={toFils(itemPrice, config.decimals) - forecast.freeBalance} />.
                   </span>
                 </div>
               </div>
@@ -684,11 +686,11 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3 text-emerald-800 dark:text-emerald-200 text-xs">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-black block text-sm mb-0.5">
+                  <span className="font-bold block text-sm mb-0.5">
                     قرار شراء آمن ضمن حدود رصيدك المتاح
                   </span>
                   <span>
-                    سعر السلعة يقع بالكامل ضمن رصيدك الحر المتبقي لهذا الشهر ({format(forecast.freeBalance)}).
+                    سعر السلعة يقع بالكامل ضمن رصيدك الحر المتبقي لهذا الشهر (<FormattedMoney amountFils={forecast.freeBalance} />).
                   </span>
                 </div>
               </div>
@@ -708,7 +710,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                       : `${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}%`}
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  الرصيد الحر الحالي: {format(forecast.freeBalance)}
+                  الرصيد الحر الحالي: <FormattedMoney amountFils={forecast.freeBalance} />
                 </span>
               </div>
 
@@ -717,10 +719,10 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   الأثر على حد الصرف اليومي
                 </span>
                 <span className="text-xl font-black text-rose-600 dark:text-rose-400">
-                  - {format(Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays)))} / يوم
+                  - <FormattedMoney amountFils={Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays))} /> / يوم
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  ينخفض من {format(forecast.dailySafeFils)} إلى {format(Math.max(0, forecast.dailySafeFils - Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays))))}
+                  ينخفض من <FormattedMoney amountFils={forecast.dailySafeFils} /> إلى <FormattedMoney amountFils={Math.max(0, forecast.dailySafeFils - Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays)))} />
                 </span>
               </div>
 
@@ -757,23 +759,29 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
       )}
 
       {/* Quick Add Expense Modal */}
-      {isTxModalOpen && (
-        <TransactionForm
-          initialType="expense"
-          duplicateFrom={{
-            id: '',
-            type: 'expense',
-            amountFils: toFils(itemPrice, config.decimals),
-            title: itemName || 'مشتريات جديدة',
-            note: `شراء ${itemName || 'سلعة'} (محسوبة من حاسبة ساعات العمل)`,
-            categoryId: '',
-            date: new Date(),
-            createdAt: new Date(),
-          }}
-          onClose={() => setIsTxModalOpen(false)}
-          onSuccess={() => setIsTxModalOpen(false)}
-        />
-      )}
+      <Modal
+        isOpen={isTxModalOpen}
+        onClose={() => setIsTxModalOpen(false)}
+        title="تسجيل مصروف السلعة"
+      >
+        {isTxModalOpen && (
+          <TransactionForm
+            initialType="expense"
+            duplicateFrom={{
+              id: '',
+              type: 'expense',
+              amountFils: toFils(itemPrice, config.decimals),
+              title: itemName || 'مشتريات جديدة',
+              note: `شراء ${itemName || 'سلعة'} (محسوبة من حاسبة ساعات العمل)`,
+              categoryId: '',
+              date: new Date(),
+              createdAt: new Date(),
+            }}
+            onClose={() => setIsTxModalOpen(false)}
+            onSuccess={() => setIsTxModalOpen(false)}
+          />
+        )}
+      </Modal>
     </div>
   )
 }

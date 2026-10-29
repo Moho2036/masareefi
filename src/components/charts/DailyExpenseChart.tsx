@@ -55,6 +55,8 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
   className,
   height = 240,
 }) => {
+  const { format: formatCurrency } = useCurrency()
+  const isMasked = formatCurrency(1000).includes('•••••')
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -156,7 +158,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
             axisLine={false}
             tick={{ fontSize: 11, fill: 'currentColor' }}
             className="text-slate-400 dark:text-slate-500"
-            tickFormatter={formatCompactNumber}
+            tickFormatter={(val: number) => (isMasked ? '•••' : formatCompactNumber(val))}
           />
           <Tooltip content={<CustomDailyTooltip />} />
           <Area

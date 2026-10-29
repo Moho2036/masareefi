@@ -30,16 +30,44 @@ export function migrateLegacyStorage(): void {
       localStorage.setItem('baseer_category_usage', legacyCategoryUsage)
     }
 
-    // 4. Categories seed v2 per uid
-    const prefix = 'masareefi_categories_seed_v2_'
+    // 4. User-scoped keys migration
+    const userScopedPrefixes: { oldPrefix: string; newPrefix: string }[] = [
+      {
+        oldPrefix: 'masareefi_categories_seed_v2_',
+        newPrefix: 'baseer_categories_seed_v2_',
+      },
+      {
+        oldPrefix: 'masareefi_onboarding_done_',
+        newPrefix: 'baseer_onboarding_done_',
+      },
+      {
+        oldPrefix: 'masareefi_tour_shown_',
+        newPrefix: 'baseer_tour_shown_',
+      },
+      {
+        oldPrefix: 'masareefi_pin_hash_',
+        newPrefix: 'baseer_pin_hash_',
+      },
+      {
+        oldPrefix: 'masareefi_notifications_read_',
+        newPrefix: 'baseer_notifications_read_',
+      },
+    ]
+
     const keysToMigrate: { oldKey: string; newKey: string }[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
-      if (key && key.startsWith(prefix)) {
-        const uid = key.slice(prefix.length)
-        keysToMigrate.push({ oldKey: key, newKey: `baseer_categories_seed_v2_${uid}` })
+      if (!key) continue
+
+      for (const { oldPrefix, newPrefix } of userScopedPrefixes) {
+        if (key.startsWith(oldPrefix)) {
+          const suffix = key.slice(oldPrefix.length)
+          keysToMigrate.push({ oldKey: key, newKey: `${newPrefix}${suffix}` })
+          break
+        }
       }
     }
+
     for (const { oldKey, newKey } of keysToMigrate) {
       if (!localStorage.getItem(newKey)) {
         const val = localStorage.getItem(oldKey)

@@ -26,6 +26,7 @@ import { Button } from '../components/ui/Button'
 import { CategoryPieChart } from '../components/charts/CategoryPieChart'
 import { MonthlyBarChart } from '../components/charts/MonthlyBarChart'
 import { DailyExpenseChart } from '../components/charts/DailyExpenseChart'
+import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { useAuth } from '../hooks/useAuth'
 import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from '../hooks/useSelectedMonth'
@@ -359,7 +360,7 @@ export const ReportsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={goToCurrentMonth}
-                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 transition-colors cursor-pointer"
+                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
                     title="العودة إلى الشهر الحالي"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -403,7 +404,7 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                {format(monthSums.income)}
+                <FormattedMoney amountFils={monthSums.income} />
               </div>
               <div className="mt-1">
                 {monthIncomeComparison ? (
@@ -454,7 +455,7 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                {format(monthSums.expense)}
+                <FormattedMoney amountFils={monthSums.expense} />
               </div>
               <div className="mt-1">
                 {monthComparison ? (
@@ -512,7 +513,7 @@ export const ReportsPage: React.FC = () => {
                     : 'text-red-500 dark:text-red-400'
                 )}
               >
-                {format(monthSums.balance)}
+                <FormattedMoney amountFils={monthSums.balance} />
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0
@@ -682,7 +683,7 @@ export const ReportsPage: React.FC = () => {
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
@@ -714,7 +715,7 @@ export const ReportsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowAllMonthCategories((v) => !v)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline py-1 px-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
                       >
                         <span>
                           {showAllMonthCategories
@@ -743,8 +744,8 @@ export const ReportsPage: React.FC = () => {
         <div className="space-y-6">
           {/* Financial Year Period Banner when monthStartDay > 1 */}
           {monthStartDay > 1 && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-              <Calendar className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
+              <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>السنة المالية: {financialYearLabel}</span>
             </div>
           )}
@@ -762,7 +763,7 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                {format(yearSums.income)}
+                <FormattedMoney amountFils={yearSums.income} />
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 إجمالي الدخل خلال سنة {selectedYear}
@@ -780,7 +781,7 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                {format(yearSums.expense)}
+                <FormattedMoney amountFils={yearSums.expense} />
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 إجمالي المصاريف خلال سنة {selectedYear}
@@ -805,7 +806,7 @@ export const ReportsPage: React.FC = () => {
                     : 'text-red-500 dark:text-red-400'
                 )}
               >
-                {format(yearSums.balance)}
+                <FormattedMoney amountFils={yearSums.balance} />
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                 الفائض المالي السنوي
@@ -844,7 +845,7 @@ export const ReportsPage: React.FC = () => {
                 %{yearlySavingsRate}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                <div>متوسط الصرف: {format(monthlyAverage)} / شهر</div>
+                <div>متوسط الصرف: <FormattedMoney amountFils={monthlyAverage} /> / شهر</div>
                 {annualSummary.note && (
                   <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
                     ({annualSummary.note})
@@ -858,14 +859,14 @@ export const ReportsPage: React.FC = () => {
           <Card className="p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-emerald-500" />
+                <CalendarDays className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   المداخيل والمصاريف لكل شهر
                 </h2>
               </div>
               <div className="flex items-center gap-2">
                 {monthStartDay > 1 && (
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/40">
                     يبدأ الشهر المالي يوم {monthStartDay}
                   </span>
                 )}
@@ -954,7 +955,7 @@ export const ReportsPage: React.FC = () => {
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
@@ -986,7 +987,7 @@ export const ReportsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowAllYearCategories((v) => !v)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline py-1 px-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
                       >
                         <span>
                           {showAllYearCategories
@@ -1051,14 +1052,14 @@ export const ReportsPage: React.FC = () => {
                           className={cn(
                             'border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors',
                             isCurrentRowMonth &&
-                              'bg-emerald-50/70 dark:bg-emerald-950/40 font-bold border-s-4 border-emerald-500'
+                              'bg-blue-50/70 dark:bg-blue-950/40 font-bold border-s-4 border-blue-600'
                           )}
                         >
                           <td className="p-2.5 font-bold text-slate-700 dark:text-slate-200">
                             <span className="inline-flex items-center gap-1.5 flex-wrap">
                               <span>{row.monthName}</span>
                               {isCurrentRowMonth && (
-                                <span className="px-1.5 py-0.5 text-[10px] rounded-md bg-emerald-500 text-white font-bold">
+                                <span className="px-1.5 py-0.5 text-[10px] rounded-md bg-blue-600 text-white font-bold">
                                   الشهر الحالي
                                 </span>
                               )}
@@ -1070,7 +1071,7 @@ export const ReportsPage: React.FC = () => {
                                 لم يبدأ بعد
                               </span>
                             ) : (
-                              format(row.income)
+                              <FormattedMoney amountFils={row.income} />
                             )}
                           </td>
                           <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
@@ -1079,7 +1080,7 @@ export const ReportsPage: React.FC = () => {
                                 لم يبدأ بعد
                               </span>
                             ) : (
-                              format(row.expense)
+                              <FormattedMoney amountFils={row.expense} />
                             )}
                           </td>
                           <td
@@ -1095,7 +1096,7 @@ export const ReportsPage: React.FC = () => {
                                 -
                               </span>
                             ) : (
-                              format(row.balance)
+                              <FormattedMoney amountFils={row.balance} />
                             )}
                           </td>
                         </tr>
@@ -1108,10 +1109,10 @@ export const ReportsPage: React.FC = () => {
                         الإجمالي السنوي
                       </td>
                       <td className="p-2.5 text-emerald-600 dark:text-emerald-400 font-black">
-                        {format(yearSums.income)}
+                        <FormattedMoney amountFils={yearSums.income} />
                       </td>
                       <td className="p-2.5 text-red-500 dark:text-red-400 font-black">
-                        {format(yearSums.expense)}
+                        <FormattedMoney amountFils={yearSums.expense} />
                       </td>
                       <td
                         className={cn(
@@ -1121,7 +1122,7 @@ export const ReportsPage: React.FC = () => {
                             : 'text-red-500 dark:text-red-400'
                         )}
                       >
-                        {format(yearSums.balance)}
+                        <FormattedMoney amountFils={yearSums.balance} />
                       </td>
                     </tr>
                   </tfoot>

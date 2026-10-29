@@ -186,7 +186,7 @@ export const DebtsPage: React.FC = () => {
 
       {/* Subtle Explanatory Note */}
       <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-500 dark:text-slate-400">
-        <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
         <span>
           دفتر الديون يتيح لك تتبع الحقوق والالتزامات، مع إمكانية اختيار ربط الدين أو دفعاته برصيد المعاملات الشهرية تلقائياً عند الإضافة أو السداد.
         </span>
@@ -198,7 +198,7 @@ export const DebtsPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
               مستحقات لي على الآخرين
             </span>
-            <span className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-lg sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
               {format(summary.lentFils)}
             </span>
             <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block mt-1">
@@ -218,7 +218,7 @@ export const DebtsPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
               التزامات عليّ للآخرين
             </span>
-            <span className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400">
+            <span className="text-lg sm:text-2xl font-bold text-red-500 dark:text-red-400">
               {format(summary.borrowedFils)}
             </span>
             <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block mt-1">
@@ -240,7 +240,7 @@ export const DebtsPage: React.FC = () => {
             </span>
             <span
               className={cn(
-                'text-lg sm:text-2xl font-black',
+                'text-lg sm:text-2xl font-bold',
                 summary.overdueCount > 0
                   ? 'text-amber-600 dark:text-amber-400'
                   : summary.upcomingCount > 0
@@ -280,7 +280,7 @@ export const DebtsPage: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ابحث باسم الشخص أو الملاحظة..."
-            className="w-full ps-10 pe-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+            className="w-full ps-10 pe-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all font-medium"
           />
           {search && (
             <button
@@ -372,7 +372,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'all'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
             )}
           >
@@ -384,7 +384,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'active'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
             )}
           >
@@ -408,7 +408,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'settled'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-400 hover:border-slate-300'
             )}
           >
@@ -492,7 +492,7 @@ export const DebtsPage: React.FC = () => {
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center shrink-0">
                       <Users className="w-5 h-5" />
                     </div>
                     <div>
@@ -528,7 +528,7 @@ export const DebtsPage: React.FC = () => {
                         onClick={() =>
                           setMergeTarget({ debts: lentDebts, personName: group.canonicalName })
                         }
-                        className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        className="flex items-center gap-1.5 text-xs text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                       >
                         <GitMerge className="w-3.5 h-3.5" />
                         <span>دمج ديون {group.canonicalName} في سجل موحد</span>
@@ -636,7 +636,7 @@ export const DebtsPage: React.FC = () => {
                 type="checkbox"
                 checked={deleteTransactions}
                 onChange={(e) => setDeleteTransactions(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                className="w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-600 cursor-pointer"
               />
             </div>
           )}
@@ -674,7 +674,7 @@ export const DebtsPage: React.FC = () => {
       >
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-slate-800 dark:text-slate-200">
-            <GitMerge className="w-5 h-5 text-emerald-600 shrink-0" />
+            <GitMerge className="w-5 h-5 text-blue-600 shrink-0" />
             <p className="text-sm font-semibold">
               هل ترغب في دمج {mergeTarget?.debts.length} سجلات ديون لـ &quot;{mergeTarget?.personName}&quot; في سجل دين موحد؟
             </p>

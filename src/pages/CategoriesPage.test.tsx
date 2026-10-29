@@ -342,4 +342,42 @@ describe('CategoriesPage component category management & protection', () => {
     // Should open smart modal
     expect(screen.getByText(/هذا التصنيف مرتبط بسجلات مالية حالية/i)).toBeInTheDocument()
   })
+
+  it('displays order badges (#1, #2, ...) when sort mode is manual and renders single column grid', () => {
+    mockUserSettings = {
+      currency: 'JOD',
+      categorySortMode: 'manual',
+      monthStartDay: 1,
+    }
+
+    render(<CategoriesPage />)
+
+    expect(screen.getByText('#1')).toBeInTheDocument()
+    expect(screen.getByText('#2')).toBeInTheDocument()
+    expect(screen.getByText('#3')).toBeInTheDocument()
+  })
+
+  it('normalizes sparse category orders when reordering from usage mode to prevent erratic jumping', async () => {
+    // Categories with sparse orders: 0, 15, 9
+    mockCategories = [
+      { id: 'cat-1', name: 'تصنيف أ', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-2', name: 'تصنيف ب', type: 'expense', icon: '🌐', color: '#3B82F6', archived: false, order: 15 },
+      { id: 'cat-3', name: 'تصنيف ج', type: 'expense', icon: '📁', color: '#94A3B8', archived: false, order: 9 },
+    ]
+    mockTransactions = []
+
+    render(<CategoriesPage />)
+
+    // In usage mode with 0 txs, sorted by order: cat-1 (order 0), cat-3 (order 9), cat-2 (order 15)
+    // Moving cat-3 (at index 1) up to index 0:
+    const moveUpCat3 = screen.getByLabelText('تحريك تصنيف تصنيف ج للأعلى')
+    fireEvent.click(moveUpCat3)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ categorySortMode: 'manual' })
+      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-3', { order: 0 })
+      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-1', { order: 1 })
+      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-2', { order: 2 })
+    })
+  })
 })

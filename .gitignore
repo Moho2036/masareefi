@@ -17,6 +17,7 @@ dist
 dist-ssr
 FULL_CODEBASE.txt
 full_code.txt
+ai_studio_review/
 
 # Environment and secrets
 .env

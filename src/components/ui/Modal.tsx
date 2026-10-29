@@ -142,6 +142,7 @@ export const Modal: React.FC<ModalProps> = ({
         isPushedRef.current = false
         try {
           if (
+            window.location.pathname !== '/login' &&
             window.location.pathname + window.location.search === openedPath &&
             window.history.state?.modalId === modalId
           ) {

@@ -1089,4 +1089,36 @@ describe('MoneyCirclesManager Component', () => {
       )
     })
   })
+
+  it('prevents duplicate "أنت" when changing turn before toggling manager mode', async () => {
+    mockCircles = []
+
+    render(<MoneyCirclesManager />)
+
+    // Open add circle modal
+    const addBtn = screen.getAllByRole('button', { name: /إنشاء جمعية جديدة/i })[0]
+    fireEvent.click(addBtn)
+
+    expect(screen.getByText(/إنشاء جمعية مالية جديدة/i)).toBeInTheDocument()
+
+    // Change turn month to 4 before enabling manager
+    const turnInput = screen.getByLabelText(/دورك في الاستلام/i)
+    fireEvent.change(turnInput, { target: { value: '4' } })
+    fireEvent.blur(turnInput)
+
+    // Enable manager toggle
+    const managerToggle = screen.getByLabelText(/أنا مدير الجمعية/i)
+    fireEvent.click(managerToggle)
+
+    // Verify member 1 is "عضو 1" and member 4 is "أنت"
+    const member1Input = screen.getByPlaceholderText('اسم العضو رقم 1') as HTMLInputElement
+    const member4Input = screen.getByPlaceholderText('اسم العضو رقم 4') as HTMLInputElement
+
+    expect(member1Input.value).toBe('عضو 1')
+    expect(member4Input.value).toBe('أنت')
+
+    // Verify "أنت" appears exactly once in the custom members list
+    const youInputs = screen.getAllByDisplayValue('أنت')
+    expect(youInputs).toHaveLength(1)
+  })
 })

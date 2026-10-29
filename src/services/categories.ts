@@ -106,6 +106,21 @@ export async function archiveCategory(
   await updateDoc(docRef, { archived })
 }
 
+export async function archiveCategoriesBatch(
+  uid: string,
+  ids: string[],
+  archived: boolean = true
+): Promise<void> {
+  if (!ids || ids.length === 0) return
+  const batch = writeBatch(db)
+  for (const id of ids) {
+    if (!id) continue
+    const docRef = doc(db, 'users', uid, 'categories', id)
+    batch.update(docRef, { archived })
+  }
+  await batch.commit()
+}
+
 export async function deleteCategory(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
   const catSnap = await getDoc(docRef)

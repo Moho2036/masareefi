@@ -12,6 +12,7 @@ import { addDebt, updateDebt, checkDebtInitialTransactionExists } from '../../se
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 import type { Debt, DebtType } from '../../types'
 
@@ -26,12 +27,14 @@ interface DebtFormContentProps {
   initialDebt?: Debt | null
   onClose: () => void
   onSuccess?: () => void
+  onDirtyChange?: (isDirty: boolean) => void
 }
 
 const DebtFormContent: React.FC<DebtFormContentProps> = ({
   initialDebt,
   onClose,
   onSuccess,
+  onDirtyChange,
 }) => {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -60,6 +63,18 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   const [checkingSync, setCheckingSync] = useState(isEditing)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (initialDebt) return
+    onDirtyChange?.(
+      Boolean(
+        personName.trim() ||
+          amountStr.trim() ||
+          note.trim() ||
+          initialPaidStr.trim()
+      )
+    )
+  }, [onDirtyChange, initialDebt, personName, amountStr, note, initialPaidStr])
 
   const isPastDebt = React.useMemo(() => {
     if (isEditing) return false
@@ -192,6 +207,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           },
           { syncTransaction }
         )
+        triggerHaptic('light')
         showToast('تم تحديث بيانات الدين بنجاح', 'success')
       } else {
         const initialPaidFils = !isEditing && initialPaidStr.trim() ? toFils(initialPaidStr, config.decimals) : 0
@@ -224,6 +240,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             initialPaymentNote: 'سداد مسبق (توثيقي)',
           }
         )
+        triggerHaptic('light')
         showToast('تمت إضافة الدين بنجاح', 'success')
       }
 
@@ -433,7 +450,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
         <Button
           type="submit"
           variant="primary"
@@ -461,12 +478,14 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
   initialDebt,
   onSuccess,
 }) => {
+  const [isDirty, setIsDirty] = useState(false)
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={initialDebt ? 'تعديل بيانات الدين' : 'إضافة دين جديد'}
-      closeOnBackdropClick={false}
+      closeOnBackdropClick={!isDirty && !initialDebt}
     >
       {isOpen && (
         <DebtFormContent
@@ -474,6 +493,7 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
           initialDebt={initialDebt}
           onClose={onClose}
           onSuccess={onSuccess}
+          onDirtyChange={setIsDirty}
         />
       )}
     </Modal>

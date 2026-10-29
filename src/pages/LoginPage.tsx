@@ -17,6 +17,7 @@ import {
   signUpWithEmail,
   resetPassword,
 } from '../services/auth'
+import { AppShellSkeleton } from '../components/skeletons/AppShellSkeleton'
 
 export const LoginPage: React.FC = () => {
   const { user, loading } = useAuth()
@@ -55,12 +56,7 @@ export const LoginPage: React.FC = () => {
   }, [password])
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900" role="status">
-        <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-        <span className="sr-only">جاري التحميل...</span>
-      </div>
-    )
+    return <AppShellSkeleton />
   }
 
   if (user) {
@@ -174,8 +170,8 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans">
-      <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 border border-slate-100 dark:border-slate-700/60 shadow-xl text-center space-y-6">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 font-sans">
+      <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-3xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
         {/* App Logo */}
         <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-3xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shadow-lg p-3">
           <img src="/icons/icon.svg" alt="Baseer Logo" className="w-full h-full object-contain" />
@@ -183,16 +179,16 @@ export const LoginPage: React.FC = () => {
 
         {/* Brand Details */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white">
+          <h1 className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white">
             بَصير
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
             بصيرتك المالية لإدارة مصاريفك ومداخيلك بوضوح
           </p>
         </div>
 
         {/* Mode Switcher Tabs */}
-        <div role="tablist" aria-label="نوع المصادقة" className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-750/70 rounded-2xl text-xs font-bold">
+        <div role="tablist" aria-label="نوع المصادقة" className="grid grid-cols-2 p-1 bg-zinc-100 dark:bg-zinc-900 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl text-xs font-bold">
           <button
             type="button"
             role="tab"
@@ -205,8 +201,8 @@ export const LoginPage: React.FC = () => {
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'login'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
             }`}
           >
             تسجيل الدخول
@@ -223,8 +219,8 @@ export const LoginPage: React.FC = () => {
             }}
             className={`py-2 rounded-xl transition-all cursor-pointer ${
               mode === 'signup'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
             }`}
           >
             حساب جديد
@@ -251,7 +247,7 @@ export const LoginPage: React.FC = () => {
         <form noValidate onSubmit={handleEmailSubmit} className="space-y-3.5 text-start">
           {mode === 'signup' && (
             <div>
-              <label htmlFor="signup-name" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label htmlFor="signup-name" className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
                 الاسم الكامل
               </label>
               <div className="relative">
@@ -262,15 +258,15 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: محمد أحمد"
                   required={mode === 'signup'}
-                  className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+                  className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
                 />
-                <UserIcon className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+                <UserIcon className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
               </div>
             </div>
           )}
 
           <div>
-            <label htmlFor="login-email" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label htmlFor="login-email" className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
               البريد الإلكتروني
             </label>
             <div className="relative">
@@ -282,14 +278,14 @@ export const LoginPage: React.FC = () => {
                 placeholder="name@example.com"
                 dir="ltr"
                 required
-                className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
               />
-              <Mail className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
             </div>
           </div>
 
           <div>
-            <label htmlFor="login-password" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label htmlFor="login-password" className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
               كلمة المرور
             </label>
             <div className="relative">
@@ -301,14 +297,14 @@ export const LoginPage: React.FC = () => {
                 placeholder="••••••••"
                 dir="ltr"
                 required
-                className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
               />
-              <Lock className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
+                className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -328,7 +324,7 @@ export const LoginPage: React.FC = () => {
             {mode === 'signup' && password.length > 0 && (
               <div className="space-y-1.5 pt-1.5" aria-label="مستوى قوة كلمة المرور">
                 <div className="flex items-center justify-between text-[11px] font-bold">
-                  <span className="text-slate-500 dark:text-slate-400">قوة كلمة المرور:</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">قوة كلمة المرور:</span>
                   <span
                     className={
                       passwordStrength.score === 1
@@ -350,7 +346,7 @@ export const LoginPage: React.FC = () => {
                       className={`h-full rounded-full transition-colors ${
                         step <= passwordStrength.score
                           ? passwordStrength.color
-                          : 'bg-slate-200 dark:bg-slate-700'
+                          : 'bg-zinc-200 dark:bg-zinc-700'
                       }`}
                     />
                   ))}
@@ -363,7 +359,7 @@ export const LoginPage: React.FC = () => {
             <div>
               <label
                 htmlFor="signup-confirm-password"
-                className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5"
+                className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5"
               >
                 تأكيد كلمة المرور
               </label>
@@ -376,14 +372,14 @@ export const LoginPage: React.FC = () => {
                   placeholder="••••••••"
                   dir="ltr"
                   required={mode === 'signup'}
-                  className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                  className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
                 />
-                <Lock className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword((prev) => !prev)}
                   aria-label={showConfirmPassword ? 'إخفاء تأكيد كلمة المرور' : 'إظهار تأكيد كلمة المرور'}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
+                  className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 absolute end-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -409,9 +405,9 @@ export const LoginPage: React.FC = () => {
         {/* Divider */}
         <div className="relative flex items-center justify-center py-1">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+            <div className="w-full border-t border-[#E4E4E7] dark:border-[#27272A]" />
           </div>
-          <span className="relative bg-white dark:bg-slate-800 px-3 text-xs font-semibold text-slate-400">
+          <span className="relative bg-white dark:bg-[#121215] px-3 text-xs font-semibold text-zinc-400">
             أو
           </span>
         </div>
@@ -422,7 +418,7 @@ export const LoginPage: React.FC = () => {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={signingInGoogle || submitting}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70 font-bold text-sm shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 font-bold text-sm shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {signingInGoogle ? (
               <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -451,7 +447,7 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Trust & Security Footnote */}
-        <div className="pt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+        <div className="pt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
           <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
           <span>بياناتك مشفرة ومحمية بالكامل ولا يطلع عليها أحد</span>
         </div>

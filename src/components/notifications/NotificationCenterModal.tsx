@@ -6,6 +6,7 @@ import {
   Repeat,
   Users,
   CheckCheck,
+  Trash2,
   ExternalLink,
   Settings as SettingsIcon,
   Sparkles,
@@ -13,6 +14,7 @@ import {
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { useNotifications } from '../../hooks/useNotifications'
+import { useTransactionModal } from '../../hooks/useTransactionModal'
 import type { NotificationFilter, NotificationItem } from '../../lib/notifications'
 
 export interface NotificationCenterModalProps {
@@ -25,12 +27,14 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   onClose,
 }) => {
   const navigate = useNavigate()
+  const { openAdd } = useTransactionModal()
   const {
     notifications,
     unreadCount,
     filterNotifications,
     markAsRead,
     markAllAsRead,
+    clearRead,
     isRead,
   } = useNotifications()
 
@@ -40,6 +44,11 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
 
   const handleAction = (item: NotificationItem) => {
     markAsRead(item.id)
+    if (item.id.startsWith('daily_reminder_')) {
+      onClose()
+      openAdd('expense')
+      return
+    }
     if (item.actionPath) {
       navigate(item.actionPath)
       onClose()
@@ -108,6 +117,17 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               >
                 <CheckCheck className="w-4 h-4" />
                 <span className="hidden sm:inline">تحديد الكل</span>
+              </button>
+            )}
+            {notifications.some((n) => isRead(n.id)) && (
+              <button
+                type="button"
+                onClick={clearRead}
+                title="مسح المقروءة"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">مسح المقروءة</span>
               </button>
             )}
             <button

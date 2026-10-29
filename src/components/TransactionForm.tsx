@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useContext } from 'react'
+import React, { useState, useRef, useMemo, useContext, useEffect } from 'react'
 import {
   Check,
   Trash2,
@@ -18,6 +18,7 @@ import { Input } from './ui/Input'
 import { DatePickerInput } from './ui/DatePickerInput'
 import { Toggle } from './ui/Toggle'
 import { CategoryIcon } from './ui/CategoryIcon'
+import { FormattedMoney } from './ui/FormattedMoney'
 import { CategoryForm } from './CategoryForm'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
@@ -38,7 +39,7 @@ import {
 import { addRecurring, processDueRecurring } from '../services/recurring'
 import { updateDebtPayment, removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
-import { toFils, fromFils, formatMoney } from '../lib/money'
+import { toFils, fromFils } from '../lib/money'
 import { parseLocalDateInput, formatDateInput, toWesternDigits } from '../lib/dates'
 import { normalizeArabic } from '../lib/aggregate'
 import { findLinkedDebtPayment } from '../lib/debts'
@@ -49,6 +50,7 @@ import {
 } from '../lib/categoryUsage'
 import { calculateForecast } from '../lib/forecast'
 import { advanceDate } from '../lib/recurring'
+import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType, Frequency } from '../types'
 
@@ -106,6 +108,7 @@ export interface TransactionFormProps {
   onSuccess?: () => void
   onDuplicate?: (tx: Transaction) => void
   isSourceDeleted?: boolean
+  onDirtyChange?: (isDirty: boolean) => void
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -116,6 +119,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   onSuccess,
   onDuplicate,
   isSourceDeleted,
+  onDirtyChange,
 }) => {
   const { user } = useAuth()
   const appData = useContext(AppDataContext)
@@ -240,6 +244,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  useEffect(() => {
+    onDirtyChange?.(
+      Boolean(
+        initialTransaction ||
+          duplicateFrom ||
+          amountStr.trim() ||
+          title.trim() ||
+          note.trim()
+      )
+    )
+  }, [onDirtyChange, initialTransaction, duplicateFrom, amountStr, title, note])
   const [deleting, setDeleting] = useState(false)
 
   // Track category usage frequencies to prioritize top categories (read once on open)
@@ -548,6 +564,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         )
       }
 
+      triggerHaptic('light')
+
       if (isOutsideMonth) {
         setSelectedDate(parsedDate)
       }
@@ -651,6 +669,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           : 'تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية',
         'success'
       )
+
+      triggerHaptic('light')
 
       if (isOutsideMonth) {
         setSelectedDate(parsedDate)
@@ -855,18 +875,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Linked Circle Payout Warning Banner */}
       {isLinkedToCircle && isCircleExists && !isSourceDeleted && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-2">
-          <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
-            <AlertCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-2">
+          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+            <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span>معاملة مرتبطة بإيداع جمعية مالية</span>
           </div>
-          <p className="text-[11px] leading-relaxed text-emerald-700/90 dark:text-emerald-300/80 pe-1">
+          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
             هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لتعديل المبلغ أو حذفها يرجى الانتقال إلى صفحة الجمعيات، أو يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
           </p>
           <Link
             to="/tools?tool=circles"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-xs"
           >
             <span>الانتقال إلى صفحة الجمعيات</span>
             <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
@@ -876,12 +896,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Linked Circle Installment Warning Banner */}
       {isLinkedToCircleInstallment && isCircleInstallmentExists && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
-            <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+            <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span>معاملة مرتبطة بقسط جمعية ({linkedCircleInstallment?.name || 'جمعية'}) - شهر {circleInstallmentMonth}</span>
           </div>
-          <p className="text-[11px] leading-relaxed text-emerald-700/90 dark:text-emerald-300/80 pe-1">
+          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
             عند حذف هذه المعاملة، سيتم تلقائياً تحديث حالة القسط في جدول الجمعية وإلغاء تسجيل الدفع.
           </p>
         </div>
@@ -1020,13 +1040,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     : 'text-slate-700 dark:text-slate-200'
                 )}
               >
-                {formatMoney(forecast.freeBalance, currencyConfig.code)}
+                <FormattedMoney amountFils={forecast.freeBalance} />
               </strong>
             </span>
             <span>
               حد الصرف اليومي الآمن:{' '}
               <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
-                {formatMoney(forecast.dailySafeFils, currencyConfig.code)}
+                <FormattedMoney amountFils={forecast.dailySafeFils} />
               </strong>
             </span>
           </div>
@@ -1243,7 +1263,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     className={cn(
                       'py-1.5 text-xs font-bold rounded-lg transition-all',
                       recurringFrequency === 'weekly'
-                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     )}
                   >
@@ -1260,7 +1280,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     className={cn(
                       'py-1.5 text-xs font-bold rounded-lg transition-all',
                       recurringFrequency === 'monthly'
-                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     )}
                   >
@@ -1277,7 +1297,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     className={cn(
                       'py-1.5 text-xs font-bold rounded-lg transition-all',
                       recurringFrequency === 'yearly'
-                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     )}
                   >
@@ -1293,7 +1313,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     className={cn(
                       'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
                       ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(recurringFrequency)
-                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     )}
                   >
@@ -1331,13 +1351,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                         className={cn(
                           'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
                           recurringFrequency === f.value
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
                             : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
                         )}
                       >
                         <span>{f.label}</span>
                         {recurringFrequency === f.value && (
-                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                         )}
                       </button>
                     ))}
@@ -1372,7 +1392,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     type="checkbox"
                     checked={scheduleNextIfPast}
                     onChange={(e) => setScheduleNextIfPast(e.target.checked)}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                   />
                 </div>
               )}
@@ -1423,7 +1443,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : null}
 
       {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
           <Button
             type="submit"
@@ -1458,7 +1478,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               variant="outline"
               onClick={handleDuplicateCurrent}
               disabled={submitting || deleting}
-              icon={<Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+              icon={<Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
               className="text-xs sm:text-sm font-semibold whitespace-nowrap"
             >
               تكرار هذه المعاملة

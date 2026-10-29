@@ -202,24 +202,19 @@ export const CategoriesPage: React.FC = () => {
       }
     }
 
-    const adjacentCat = activeCategories[targetIndex]
-    let currentOrder = cat.order ?? 0
-    let adjacentOrder = adjacentCat.order ?? 0
-
-    if (currentOrder === adjacentOrder) {
-      if (direction === 'up') {
-        adjacentOrder = currentOrder
-        currentOrder = currentOrder + 1
-      } else {
-        adjacentOrder = currentOrder + 1
-      }
-    }
+    const reordered = [...activeCategories]
+    const temp = reordered[currentIndex]
+    reordered[currentIndex] = reordered[targetIndex]
+    reordered[targetIndex] = temp
 
     try {
-      await Promise.all([
-        updateCategory(user.uid, cat.id, { order: adjacentOrder }),
-        updateCategory(user.uid, adjacentCat.id, { order: currentOrder }),
-      ])
+      const updates: Promise<void>[] = []
+      reordered.forEach((item, idx) => {
+        if (item.order !== idx || idx === currentIndex || idx === targetIndex) {
+          updates.push(updateCategory(user.uid, item.id, { order: idx }))
+        }
+      })
+      await Promise.all(updates)
     } catch (err) {
       console.error('Failed to reorder category:', err)
       showToast('تعذر تغيير ترتيب التصنيف', 'error')
@@ -371,7 +366,14 @@ export const CategoriesPage: React.FC = () => {
 
       {/* Active Categories Grid */}
       {categoriesLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div
+          className={cn(
+            'grid gap-3.5',
+            userSettings?.categorySortMode === 'manual'
+              ? 'grid-cols-1 max-w-3xl mx-auto w-full'
+              : 'grid-cols-1 md:grid-cols-2'
+          )}
+        >
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
@@ -398,7 +400,14 @@ export const CategoriesPage: React.FC = () => {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div
+          className={cn(
+            'grid gap-3.5',
+            userSettings?.categorySortMode === 'manual'
+              ? 'grid-cols-1 max-w-3xl mx-auto w-full'
+              : 'grid-cols-1 md:grid-cols-2'
+          )}
+        >
           {activeCategories.map((cat, index) => {
             return (
               <div
@@ -418,9 +427,19 @@ export const CategoriesPage: React.FC = () => {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-base text-slate-800 dark:text-slate-100 truncate">
-                      {cat.name}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-base text-slate-800 dark:text-slate-100 truncate">
+                        {cat.name}
+                      </h3>
+                      {userSettings?.categorySortMode === 'manual' && (
+                        <span
+                          dir="ltr"
+                          className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200/60 dark:border-zinc-700/60 shrink-0"
+                        >
+                          #{index + 1}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       {currentMonthStats[cat.id]?.count > 0 ? (
                         <span className="inline-flex items-center gap-1.5 flex-wrap">
@@ -639,7 +658,7 @@ export const CategoriesPage: React.FC = () => {
                         className={cn(
                           'flex items-center gap-2.5 p-3 rounded-xl border text-xs sm:text-sm font-semibold cursor-pointer transition-all',
                           deleteMode === 'archive'
-                            ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                            ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 text-blue-950 dark:text-blue-100 ring-2 ring-blue-600/20'
                             : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                         )}
                       >
@@ -648,7 +667,7 @@ export const CategoriesPage: React.FC = () => {
                           name="delete-action"
                           checked={deleteMode === 'archive'}
                           onChange={() => setDeleteMode('archive')}
-                          className="text-emerald-600 focus:ring-emerald-500"
+                          className="text-blue-600 focus:ring-blue-600"
                         />
                         <div className="min-w-0">
                           <div className="font-bold">أرشفة التصنيف (مستحسن)</div>
@@ -662,7 +681,7 @@ export const CategoriesPage: React.FC = () => {
                         className={cn(
                           'flex items-center gap-2.5 p-3 rounded-xl border text-xs sm:text-sm font-semibold cursor-pointer transition-all',
                           deleteMode === 'reassign'
-                            ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                            ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 text-blue-950 dark:text-blue-100 ring-2 ring-blue-600/20'
                             : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                         )}
                       >
@@ -671,7 +690,7 @@ export const CategoriesPage: React.FC = () => {
                           name="delete-action"
                           checked={deleteMode === 'reassign'}
                           onChange={() => setDeleteMode('reassign')}
-                          className="text-emerald-600 focus:ring-emerald-500"
+                          className="text-blue-600 focus:ring-blue-600"
                         />
                         <div className="min-w-0">
                           <div className="font-bold">نقل كافة السجلات إلى تصنيف آخر وحذفه نهائياً</div>
@@ -697,7 +716,7 @@ export const CategoriesPage: React.FC = () => {
                         <select
                           value={targetReassignCatId}
                           onChange={(e) => setTargetReassignCatId(e.target.value)}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600"
                         >
                           {otherActiveCats.map((c) => (
                             <option key={c.id} value={c.id}>

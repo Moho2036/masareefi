@@ -16,8 +16,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { useCategories } from '../../hooks/useCategories'
 import { PRESET_CURRENCIES, toFils, detectDefaultCurrency } from '../../lib/money'
-import { archiveCategory, addCategory } from '../../services/categories'
-import { addRecurring } from '../../services/recurring'
+import { archiveCategory, archiveCategoriesBatch, addCategory } from '../../services/categories'
+import { addRecurring, processDueRecurring } from '../../services/recurring'
 import type { Category } from '../../types'
 
 export interface OnboardingWizardProps {
@@ -172,10 +172,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
     if (!uid) return
     setSubmitting(true)
     try {
-      const openingBalanceFils = openingBalance ? Math.max(0, toFils(openingBalance, currency)) : 0
-      const safeMonthStartDay = Math.min(28, Math.max(1, Math.round(monthStartDay || 1)))
-
       const isCustom = isCustomCurrency || !PRESET_CURRENCIES[currency]
+      const decimalsOrCurrency = isCustom ? customCurrencyDecimals : currency
+      const openingBalanceFils = openingBalance ? Math.max(0, toFils(openingBalance, decimalsOrCurrency)) : 0
+      const safeMonthStartDay = Math.min(28, Math.max(1, Math.round(monthStartDay || 1)))
 
       // 1. Update user settings in Firestore
       if (updateSettings) {
@@ -192,7 +192,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
 
       // 2. Add recurring salary rule if chosen
       if (addSalary && salaryAmount) {
-        const salaryFils = toFils(salaryAmount, currency)
+        const salaryFils = toFils(salaryAmount, decimalsOrCurrency)
         if (salaryFils > 0) {
           const incomeCategories = categories.filter((c) => c.type === 'income' && !c.archived)
           const salaryCat =
@@ -200,8 +200,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
 
           if (salaryCat) {
             const today = new Date()
-            const startDate = new Date(today.getFullYear(), today.getMonth(), safeMonthStartDay)
-            if (startDate < today) {
+            const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0)
+            const startDate = new Date(today.getFullYear(), today.getMonth(), safeMonthStartDay, 12, 0, 0, 0)
+            if (startDate < todayStart) {
               startDate.setMonth(startDate.getMonth() + 1)
             }
 
@@ -216,6 +217,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
               nextDate: startDate,
               active: true,
             })
+
+            if (startDate <= today) {
+              await processDueRecurring(uid).catch(() => {})
+            }
           }
 
           // Save work hours preferences
@@ -235,11 +240,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
 
       // 3. Archive deselected categories in background
       if (deselectedCategoryIds.length > 0) {
-        await Promise.all(
-          deselectedCategoryIds.map((catId) =>
-            archiveCategory(uid, catId, true).catch((e) => console.warn('Failed to archive category:', e))
+        if (typeof archiveCategoriesBatch === 'function') {
+          await archiveCategoriesBatch(uid, deselectedCategoryIds, true).catch((e) =>
+            console.warn('Failed to batch archive categories:', e)
           )
-        )
+        } else {
+          await Promise.all(
+            deselectedCategoryIds.map((catId) =>
+              archiveCategory(uid, catId, true).catch((e) => console.warn('Failed to archive category:', e))
+            )
+          )
+        }
       }
 
       markCompletedLocally()
@@ -474,8 +485,24 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                 onChange={(e) => setMonthStartDay(Number(e.target.value))}
                 className="w-full accent-blue-600 cursor-pointer"
               />
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {[1, 15, 25, 26, 27, 28].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setMonthStartDay(d)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                      monthStartDay === d
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    يوم {d}
+                  </button>
+                ))}
+              </div>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
-                تبدأ جميع تقاريرك الشهرية وحسابات الصرف والحد اليومي الآمن من هذا اليوم.
+                تبدأ جميع تقاريرك الشهرية وحسابات الصرف والحد اليومي الآمن من هذا اليوم (أقصى يوم هو 28 لضمان انتظام الحساب في شهر فبراير وكافة الأشهر).
               </p>
             </div>
 

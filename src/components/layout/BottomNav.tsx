@@ -94,6 +94,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
   useEffect(() => {
     if (!isMoreOpen) return
 
+    const openedPath = window.location.pathname + window.location.search
+
     isClosingFromPopStateRef.current = false
     try {
       window.history.pushState({ moreDrawerOpen: true }, '')
@@ -121,7 +123,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
       if (isPushedRef.current && !isClosingFromPopStateRef.current) {
         isPushedRef.current = false
         try {
-          if (window.history.state?.moreDrawerOpen) {
+          if (
+            window.location.pathname !== '/login' &&
+            window.location.pathname + window.location.search === openedPath &&
+            window.history.state?.moreDrawerOpen
+          ) {
             window.history.back()
           }
         } catch {

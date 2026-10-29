@@ -197,6 +197,12 @@ describe('money lib', () => {
       expect(getCurrencyConfig('د.ع').decimals).toBe(3)
       expect(getCurrencyConfig('ريال قطري').decimals).toBe(2)
     })
+
+    it('gracefully handles null customDecimals by falling back to base currency decimals', () => {
+      expect(getCurrencyConfig('USD', null).decimals).toBe(2)
+      expect(getCurrencyConfig('JOD', null).decimals).toBe(3)
+      expect(formatMoney(1000, 'USD', { customDecimals: null })).toContain('1.00')
+    })
   })
 
   describe('formatCompactNumber', () => {

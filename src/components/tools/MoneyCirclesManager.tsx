@@ -48,6 +48,7 @@ import {
 import { toFils, fromFils } from '../../lib/money'
 import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
 import { getNextCircleDueDate } from '../../lib/recurring'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 import type { MoneyCircle, CircleMember } from '../../types'
 
@@ -283,41 +284,44 @@ export const MoneyCirclesManager: React.FC = () => {
     })
   }
 
-  // Update turn month and sync custom member names when user is manager
+  // Update turn month and sync custom member names
   const handleMyTurnMonthChange = (newTurn: number) => {
     const safeTurn = Math.max(1, Math.min(membersCount, newTurn))
     const oldTurn = myTurnMonth
     setMyTurnMonth(safeTurn)
 
-    if (isManager) {
-      setCustomMembers((prev) => {
-        const next = [...prev]
-        while (next.length < membersCount) {
-          const idx = next.length + 1
-          next.push(idx === safeTurn ? 'أنت' : `عضو ${idx}`)
-        }
-        const oldIndex = oldTurn - 1
-        const newIndex = safeTurn - 1
-        if (oldIndex !== newIndex) {
-          const displacedName = next[newIndex]
-          if (oldIndex >= 0 && oldIndex < next.length) {
-            if (
-              displacedName &&
-              displacedName !== 'أنت' &&
-              displacedName !== `عضو ${safeTurn}`
-            ) {
-              next[oldIndex] = displacedName
-            } else if (!next[oldIndex] || next[oldIndex] === 'أنت') {
-              next[oldIndex] = `عضو ${oldTurn}`
-            }
-          }
-          if (newIndex >= 0 && newIndex < next.length) {
-            next[newIndex] = 'أنت'
+    setCustomMembers((prev) => {
+      const next = [...prev]
+      while (next.length < membersCount) {
+        const idx = next.length + 1
+        next.push(idx === safeTurn ? 'أنت' : `عضو ${idx}`)
+      }
+      const oldIndex = oldTurn - 1
+      const newIndex = safeTurn - 1
+      if (oldIndex !== newIndex) {
+        const displacedName = next[newIndex]
+        if (oldIndex >= 0 && oldIndex < next.length) {
+          if (
+            displacedName &&
+            displacedName !== 'أنت' &&
+            displacedName !== `عضو ${safeTurn}`
+          ) {
+            next[oldIndex] = displacedName
+          } else if (!next[oldIndex] || next[oldIndex] === 'أنت') {
+            next[oldIndex] = `عضو ${oldTurn}`
           }
         }
-        return next
-      })
-    }
+        if (newIndex >= 0 && newIndex < next.length) {
+          next[newIndex] = 'أنت'
+        }
+      }
+      for (let idx = 0; idx < next.length; idx++) {
+        if (idx !== newIndex && next[idx] === 'أنت') {
+          next[idx] = `عضو ${idx + 1}`
+        }
+      }
+      return next
+    })
   }
 
   const handleOpenAddModal = () => {
@@ -575,6 +579,7 @@ export const MoneyCirclesManager: React.FC = () => {
           return next
         })
 
+        triggerHaptic('light')
         showToast('تم تعديل الجمعية بنجاح', 'success')
       } else {
         const members: CircleMember[] = []
@@ -624,6 +629,7 @@ export const MoneyCirclesManager: React.FC = () => {
           }
         }
 
+        triggerHaptic('light')
         showToast('تم إنشاء الجمعية بنجاح', 'success')
       }
 
@@ -1255,7 +1261,7 @@ export const MoneyCirclesManager: React.FC = () => {
                             className={cn(
                               'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0',
                               viewingMonth === mNum
-                                ? 'bg-emerald-600 text-white shadow-xs'
+                                ? 'bg-blue-600 text-white shadow-xs'
                                 : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                             )}
                           >
@@ -1408,7 +1414,7 @@ export const MoneyCirclesManager: React.FC = () => {
           setEditingCircle(null)
         }}
         title={editingCircle ? 'تعديل الجمعية المالية' : 'إنشاء جمعية مالية جديدة'}
-        closeOnBackdropClick={false}
+        closeOnBackdropClick={Boolean(!editingCircle && !name.trim())}
       >
         <form onSubmit={handleSaveCircle} noValidate className="space-y-4">
           {formError && (
@@ -1517,7 +1523,7 @@ export const MoneyCirclesManager: React.FC = () => {
                 className={cn(
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'full'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
                     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                 )}
               >
@@ -1529,7 +1535,7 @@ export const MoneyCirclesManager: React.FC = () => {
                 className={cn(
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'half'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
                     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                 )}
               >
@@ -1541,7 +1547,7 @@ export const MoneyCirclesManager: React.FC = () => {
                 className={cn(
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'double'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
                     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                 )}
               >
@@ -1647,7 +1653,30 @@ export const MoneyCirclesManager: React.FC = () => {
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-750/50 border border-slate-200/80 dark:border-slate-700/60">
             <Toggle
               checked={isManager}
-              onChange={setIsManager}
+              onChange={(val) => {
+                setIsManager(val)
+                if (val) {
+                  setCustomMembers((prev) => {
+                    const next = [...prev]
+                    while (next.length < membersCount) {
+                      const idx = next.length + 1
+                      next.push(idx === myTurnMonth ? 'أنت' : `عضو ${idx}`)
+                    }
+                    const turnIdx = myTurnMonth - 1
+                    if (turnIdx >= 0 && turnIdx < next.length) {
+                      if (!next[turnIdx] || next[turnIdx].startsWith('عضو ')) {
+                        next[turnIdx] = 'أنت'
+                      }
+                    }
+                    for (let idx = 0; idx < next.length; idx++) {
+                      if (idx !== turnIdx && next[idx] === 'أنت') {
+                        next[idx] = `عضو ${idx + 1}`
+                      }
+                    }
+                    return next
+                  })
+                }
+              }}
               label="أنا مدير الجمعية (تتبع أسماء ودفعات جميع الأعضاء)"
               description="فعّل هذا الخيار إذا كنت أنت من يدير الجمعية وترغب بتسجيل أسماء جميع المشتركين ومتابعة من دفع ومن لم يدفع كل شهر."
             />
@@ -1689,7 +1718,7 @@ export const MoneyCirclesManager: React.FC = () => {
             </div>
           )}
 
-          <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
+          <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
             <Button
               type="button"
               variant="ghost"

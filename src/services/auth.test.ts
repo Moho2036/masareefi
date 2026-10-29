@@ -50,6 +50,7 @@ describe('auth service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('signInWithGoogle calls signInWithPopup', async () => {
@@ -90,17 +91,23 @@ describe('auth service', () => {
     expect(result).toBe(cred)
   })
 
-  it('signOutUser clears masareefi local storage keys and calls signOut', async () => {
+  it('signOutUser clears masareefi local storage keys, session unlock keys and calls signOut', async () => {
     localStorage.setItem('masareefi_work_hours_prefs', JSON.stringify({ hourlyWage: 5 }))
     localStorage.setItem('masareefi_category_usage', JSON.stringify({ cat1: 10 }))
     localStorage.setItem('other_app_key', 'keep_me')
+    sessionStorage.setItem('baseer_session_unlocked_u-current', 'true')
+    sessionStorage.setItem('baseer_onboarding_draft_u-current', '{"step":2}')
+    sessionStorage.setItem('other_session_key', 'keep_session')
     vi.mocked(firebaseAuth.signOut).mockResolvedValueOnce(undefined)
 
     await signOutUser()
 
-    expect(localStorage.getItem('masareefi_work_hours_prefs')).toBeNull()
+    expect(localStorage.getItem('masareefi_work_hours_prefs')).toBe(JSON.stringify({ hourlyWage: 5 }))
     expect(localStorage.getItem('masareefi_category_usage')).toBeNull()
     expect(localStorage.getItem('other_app_key')).toBe('keep_me')
+    expect(sessionStorage.getItem('baseer_session_unlocked_u-current')).toBeNull()
+    expect(sessionStorage.getItem('baseer_onboarding_draft_u-current')).toBeNull()
+    expect(sessionStorage.getItem('other_session_key')).toBe('keep_session')
     expect(firebaseAuth.signOut).toHaveBeenCalledTimes(1)
   })
 

@@ -80,6 +80,8 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   className,
   height = 300,
 }) => {
+  const { format: formatCurrency } = useCurrency()
+  const isMasked = formatCurrency(1000).includes('•••••')
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -187,7 +189,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               axisLine={false}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-slate-400 dark:text-slate-500"
-              tickFormatter={formatCompactNumber}
+              tickFormatter={(val: number) => (isMasked ? '•••' : formatCompactNumber(val))}
             />
             <Tooltip content={<CustomBarTooltip />} />
             <Bar

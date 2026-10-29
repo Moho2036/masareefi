@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { addCategory, updateCategory } from '../services/categories'
+import { triggerHaptic } from '../lib/haptics'
+import { getCategoryLucideIcon } from '../lib/categoryIcons'
 import { cn } from '../lib/cn'
 import type { Category, TxType } from '../types'
 
@@ -105,6 +107,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           icon: trimmedIcon,
           color,
         })
+        triggerHaptic('light')
         showToast('تم تعديل التصنيف بنجاح', 'success')
       } else {
         const maxOrder = categories.reduce(
@@ -121,6 +124,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           archived: false,
           order,
         })
+        triggerHaptic('light')
         showToast('تمت إضافة التصنيف بنجاح', 'success')
       }
 
@@ -138,15 +142,17 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
     typeof window !== 'undefined' &&
     ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
 
+  const isMappedIcon = Boolean(getCategoryLucideIcon(icon))
+
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {/* Type toggle (locked when editing) */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+        <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1.5">
           نوع التصنيف
         </label>
         {isEditing ? (
-          <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
+          <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300">
             {type === 'expense' ? 'مصروف' : 'دخل'} (لا يمكن تغيير نوع التصنيف بعد إنشائه)
           </div>
         ) : (
@@ -189,14 +195,14 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
       {/* Selected preview & Emoji quick-picker */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+          <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
             الأيقونة واللون
           </label>
           {/* Visual preview pill */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-750 text-xs font-bold">
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-bold">
             <span
               className="w-5 h-5 rounded-md flex items-center justify-center text-xs"
-              style={{ backgroundColor: `${color}30` }}
+              style={{ backgroundColor: `${color}1F` }}
             >
               <CategoryIcon icon={icon} color={color} size="sm" />
             </span>
@@ -205,14 +211,14 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         </div>
 
         {/* Quick-pick Emojis Grid */}
-        <div className="grid grid-cols-10 gap-1.5 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto mb-2">
+        <div className="grid grid-cols-10 gap-1.5 p-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-700 max-h-32 overflow-y-auto mb-2">
           {COMMON_EMOJIS.map((em) => (
             <button
               key={em}
               type="button"
               onClick={() => setIcon(em)}
               className={cn(
-                'h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer select-none',
+                'h-8 w-8 rounded-lg flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer select-none',
                 icon === em && 'bg-blue-50 dark:bg-blue-950/60 ring-2 ring-blue-600'
               )}
             >
@@ -223,49 +229,69 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
 
         {/* Custom Emoji Input */}
         <div className="flex items-center gap-2 mb-3">
-          <input
-            type="text"
-            value={icon}
-            onChange={(e) => {
-              const val = e.target.value.trim()
-              if (!val) {
-                setIcon('')
-                return
-              }
-              const segments: string[] =
-                typeof Intl !== 'undefined' && 'Segmenter' in Intl
-                  ? Array.from(
-                      new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(val),
-                      (s) => s.segment
-                    )
-                  : Array.from(val)
+          <div className="relative flex-1 flex items-center">
+            {isMappedIcon && (
+              <div className="absolute inset-0 pointer-events-none flex items-center gap-2 px-3">
+                <span
+                  className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: `${color}1F` }}
+                >
+                  <CategoryIcon icon={icon} color={color} size="sm" />
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate font-medium">
+                  أيقونة خطية مختارة (أو اكتب إيموجي مخصص...)
+                </span>
+              </div>
+            )}
+            <input
+              type="text"
+              value={icon}
+              onChange={(e) => {
+                const val = e.target.value.trim()
+                if (!val) {
+                  setIcon('')
+                  return
+                }
+                const segments: string[] =
+                  typeof Intl !== 'undefined' && 'Segmenter' in Intl
+                    ? Array.from(
+                        new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(val),
+                        (s) => s.segment
+                      )
+                    : Array.from(val)
 
-              if (segments.length === 0) {
-                setIcon('')
-                return
-              }
+                if (segments.length === 0) {
+                  setIcon('')
+                  return
+                }
 
-              let chosen: string
-              if (segments.length > 1) {
-                const newSegment = segments.find((s) => s !== icon)
-                chosen = newSegment ?? segments[segments.length - 1]
-              } else {
-                chosen = segments[0]
-              }
+                let chosen: string
+                if (segments.length > 1) {
+                  const newSegment = segments.find((s) => s !== icon)
+                  chosen = newSegment ?? segments[segments.length - 1]
+                } else {
+                  chosen = segments[0]
+                }
 
-              setIcon(chosen.slice(0, 16))
-            }}
-            placeholder="أو اكتب/الصق إيموجي مخصص..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all"
-            maxLength={30}
-          />
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+                setIcon(chosen.slice(0, 16))
+              }}
+              placeholder="أو اكتب/الصق إيموجي مخصص..."
+              className={cn(
+                'w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 placeholder:text-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all',
+                isMappedIcon
+                  ? 'text-transparent caret-zinc-900 dark:caret-zinc-100'
+                  : 'text-zinc-800 dark:text-zinc-100'
+              )}
+              maxLength={30}
+            />
+          </div>
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0 font-medium">
             إيموجي مخصص
           </span>
         </div>
 
         {/* Color Palette */}
-        <div className="flex items-center justify-between gap-1 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-x-auto">
+        <div className="flex items-center justify-between gap-1 p-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-x-auto">
           {PALETTE_COLORS.map((c) => (
             <button
               key={c}
@@ -275,7 +301,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               className={cn(
                 'w-6 h-6 rounded-full shrink-0 transition-transform cursor-pointer',
                 color === c
-                  ? 'ring-2 ring-offset-2 ring-slate-800 dark:ring-slate-100 scale-110'
+                  ? 'ring-2 ring-offset-2 ring-zinc-800 dark:ring-zinc-100 scale-110'
                   : 'hover:scale-105'
               )}
               aria-label={`اختيار اللون ${c}`}
@@ -292,7 +318,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
       )}
 
       {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
         <Button
           type="button"
           variant="outline"

@@ -42,6 +42,9 @@ import { useToast } from '../hooks/useToast'
 import { usePWAInstall } from '../hooks/usePWAInstall'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { SelectedMonthContext } from '../hooks/useSelectedMonth'
+import { AppDataContext } from '../context/AppDataContext'
+import { registerBiometricCredential } from '../components/security/PinLockGate'
+import { toWesternDigits, getFinancialMonthRange } from '../lib/dates'
 import {
   signOutUser,
   updateUserDisplayName,
@@ -93,11 +96,13 @@ export const SettingsPage: React.FC = () => {
   const { showToast } = useToast()
   const { isInstallable, isInstalled, isIOS, promptInstall } = usePWAInstall()
   const selectedMonth = useContext(SelectedMonthContext)
+  const appData = useContext(AppDataContext)
   const refreshData = selectedMonth?.refreshData
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const [showSignOutModal, setShowSignOutModal] = useState(false)
+  const [showManualInstallGuide, setShowManualInstallGuide] = useState(false)
 
   // Export & Backup states
   const [exportingTxs, setExportingTxs] = useState(false)
@@ -299,7 +304,11 @@ export const SettingsPage: React.FC = () => {
     setIsCustomCurrency(false)
     if (code === activeCurrency) return
     try {
-      await updateSettings({ currency: code, customCurrencyDecimals: undefined })
+      const payload: { currency: string; customCurrencyDecimals?: number | null } = { currency: code }
+      if (settings?.customCurrencyDecimals !== undefined) {
+        payload.customCurrencyDecimals = null
+      }
+      await updateSettings(payload)
       showToast(`تم تغيير العملة إلى ${PRESET_CURRENCIES[code]?.name || code} بنجاح`, 'success')
     } catch (err) {
       console.error('Failed to update currency:', err)
@@ -400,7 +409,10 @@ export const SettingsPage: React.FC = () => {
 
   const handleToggleRolloverStartDate = async (checked: boolean) => {
     try {
-      const nextDate = checked ? new Date() : null
+      const currentCycleStart =
+        selectedMonth?.range?.start ??
+        getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1).start
+      const nextDate = checked ? currentCycleStart : null
       await updateSettings({ rolloverStartDate: nextDate })
       showToast(
         checked
@@ -415,18 +427,43 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveReconciliation = async () => {
     if (!uid) return
-    const parsed = parseFloat(reconcileAmount)
-    if (isNaN(parsed) || parsed < 0) {
+    const trimmed = reconcileAmount.trim()
+    if (!trimmed || trimmed.startsWith('-')) {
+      showToast('يرجى إدخال مبلغ صالح', 'error')
+      return
+    }
+    const decimals = settings?.customCurrencyDecimals ?? PRESET_CURRENCIES[activeCurrency]?.decimals ?? 3
+    const targetFils = toFils(trimmed, decimals)
+    if (isNaN(targetFils) || targetFils < 0) {
       showToast('يرجى إدخال مبلغ صالح', 'error')
       return
     }
     setSavingReconcile(true)
     try {
-      const decimals = settings?.customCurrencyDecimals ?? PRESET_CURRENCIES[activeCurrency]?.decimals ?? 3
-      const targetFils = toFils(parsed, decimals)
+      const currentCycle =
+        selectedMonth?.range ??
+        getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
 
       const allTxs = await getAllTransactions(uid)
-      const netTxFils = allTxs.reduce((acc, tx) => {
+      const relevantTxs = allTxs.filter((tx) => {
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+        if (settings?.rolloverBalance === false) {
+          return txDate >= currentCycle.start && txDate < currentCycle.end
+        }
+        if (settings?.rolloverStartDate) {
+          const rawStart = settings.rolloverStartDate
+          const startDate =
+            rawStart instanceof Date
+              ? rawStart
+              : typeof (rawStart as { toDate?: () => Date }).toDate === 'function'
+              ? (rawStart as { toDate: () => Date }).toDate()
+              : new Date(rawStart as unknown as string | number)
+          return txDate >= startDate
+        }
+        return true
+      })
+
+      const netTxFils = relevantTxs.reduce((acc, tx) => {
         return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
       }, 0)
 
@@ -456,6 +493,9 @@ export const SettingsPage: React.FC = () => {
       showToast('تمت تسوية وتحديث الرصيد الفعلي بنجاح', 'success')
       setShowReconcileModal(false)
       refreshData?.()
+      if (appData) {
+        // AppDataContext active
+      }
     } catch (err) {
       console.error('Failed to reconcile balance:', err)
       showToast('تعذر تحديث الرصيد', 'error')
@@ -532,14 +572,33 @@ export const SettingsPage: React.FC = () => {
     showToast('تم إلغاء قفل التطبيق', 'info')
   }
 
-  const handleToggleBiometrics = (checked: boolean) => {
-    if (!bioKey) return
+  const handleToggleBiometrics = async (checked: boolean) => {
+    if (!bioKey || !uid) return
     if (checked) {
-      localStorage.setItem(bioKey, 'true')
-      setBioEnabled(true)
-      showToast('تم تفعيل الفتح بالبصمة / Face ID', 'success')
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          window.PublicKeyCredential &&
+          typeof navigator.credentials?.create === 'function'
+        ) {
+          const registered = await registerBiometricCredential(uid, effectiveDisplayName)
+          if (!registered) {
+            showToast('تعذر تسجيل البصمة أو تم إلغاء العملية من قبل المستخدم', 'error')
+            return
+          }
+        }
+        localStorage.setItem(bioKey, 'true')
+        setBioEnabled(true)
+        showToast('تم تفعيل الفتح بالبصمة / Face ID', 'success')
+      } catch (err) {
+        console.warn('Failed to enable biometrics:', err)
+        showToast('تعذر تفعيل الفتح بالبصمة على هذا الجهاز', 'error')
+      }
     } else {
       localStorage.removeItem(bioKey)
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(`baseer_biometrics_cred_${uid}`)
+      }
       setBioEnabled(false)
       showToast('تم تعطيل الفتح بالبصمة', 'info')
     }
@@ -793,13 +852,18 @@ export const SettingsPage: React.FC = () => {
   }
 
   const avatarColors = ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#8b5cf6', '#ec4899', '#18181b']
-  const userCreationDate = user?.metadata?.creationTime
+  const rawCreationDate = user?.metadata?.creationTime
     ? new Date(user.metadata.creationTime).toLocaleDateString('ar-JO', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       })
     : null
+  const userCreationDate = rawCreationDate ? toWesternDigits(rawCreationDate) : null
+  const isGoogleOnly = Boolean(
+    user?.providerData?.length &&
+      user.providerData.every((p) => p.providerId === 'google.com')
+  )
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-slide-up text-start">
@@ -813,15 +877,24 @@ export const SettingsPage: React.FC = () => {
         <div className="pt-2 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div
-                style={{ backgroundColor: settings?.avatarColor || undefined }}
-                className={cn(
-                  'w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-sm shrink-0 transition-colors',
-                  !settings?.avatarColor && 'bg-blue-600'
-                )}
-              >
-                {effectiveDisplayName.charAt(0) || 'ب'}
-              </div>
+              {user?.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={effectiveDisplayName}
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-2xl object-cover shadow-xs shrink-0 border border-zinc-200 dark:border-zinc-800"
+                />
+              ) : (
+                <div
+                  style={{ backgroundColor: settings?.avatarColor || undefined }}
+                  className={cn(
+                    'w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-xs shrink-0 transition-colors',
+                    !settings?.avatarColor && 'bg-blue-600'
+                  )}
+                >
+                  {effectiveDisplayName.charAt(0) || 'ب'}
+                </div>
+              )}
 
               <div className="min-w-0 flex-1">
                 {isEditingName ? (
@@ -873,8 +946,15 @@ export const SettingsPage: React.FC = () => {
                     </button>
                   </div>
                 )}
-                <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5" dir="ltr">
-                  {user?.email || 'بدون بريد إلكتروني'}
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span className="text-xs text-zinc-400 dark:text-zinc-500 truncate" dir="ltr">
+                    {user?.email || 'بدون بريد إلكتروني'}
+                  </span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    {user?.providerData?.some((p) => p.providerId === 'google.com')
+                      ? 'حساب Google'
+                      : 'حساب بريد إلكتروني'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -963,15 +1043,17 @@ export const SettingsPage: React.FC = () => {
             <div>
               {userCreationDate && <span>عضو منذ: {userCreationDate}</span>}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<KeyRound className="w-3.5 h-3.5 text-zinc-500" />}
-              onClick={() => setShowPasswordModal(true)}
-              className="text-xs font-bold"
-            >
-              تغيير كلمة المرور
-            </Button>
+            {!isGoogleOnly && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<KeyRound className="w-3.5 h-3.5 text-zinc-500" />}
+                onClick={() => setShowPasswordModal(true)}
+                className="text-xs font-bold"
+              >
+                تغيير كلمة المرور
+              </Button>
+            )}
           </div>
         </div>
       </Card>
@@ -1032,7 +1114,7 @@ export const SettingsPage: React.FC = () => {
             </div>
             <Toggle
               id="hide-zero-decimals-toggle"
-              checked={settings?.hideZeroDecimals ?? false}
+              checked={settings?.hideZeroDecimals ?? true}
               onChange={(checked) => updateSettings({ hideZeroDecimals: checked })}
             />
           </div>
@@ -1068,7 +1150,7 @@ export const SettingsPage: React.FC = () => {
               value={currentStartDay}
               onChange={handleStartDayChange}
               options={dayOptions}
-              helperText="تبدأ جميع تقاريرك الشهرية وحسابات الصرف والحد اليومي الآمن من هذا اليوم."
+              helperText="تبدأ جميع تقاريرك الشهرية وحسابات الصرف والحد اليومي الآمن من هذا اليوم (أقصى يوم هو 28 لضمان انتظام الحساب في شهر فبراير وكافة الأشهر)."
             />
           </div>
 
@@ -1199,14 +1281,26 @@ export const SettingsPage: React.FC = () => {
                     helperText="سيظهر هذا الرمز بجانب جميع المبالغ المالية في التطبيق."
                   />
                 </div>
-                <Button
-                  onClick={handleSaveCustomCurrency}
-                  disabled={!customCurrencyInput.trim() || savingCurrency}
-                  variant="primary"
-                  className="w-full sm:w-auto font-bold"
-                >
-                  {savingCurrency ? 'جاري الحفظ...' : 'تطبيق العملة'}
-                </Button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    onClick={handleSaveCustomCurrency}
+                    disabled={!customCurrencyInput.trim() || savingCurrency}
+                    variant="primary"
+                    className="w-full sm:w-auto font-bold"
+                  >
+                    {savingCurrency ? 'جاري الحفظ...' : 'تطبيق العملة'}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setIsCustomCurrency(false)
+                      setCustomCurrencyInput('')
+                    }}
+                    variant="outline"
+                    className="w-full sm:w-auto font-bold"
+                  >
+                    إلغاء
+                  </Button>
+                </div>
               </div>
 
               {/* Decimals Selector */}
@@ -1248,6 +1342,10 @@ export const SettingsPage: React.FC = () => {
               </span>
             </span>
           </div>
+
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 pt-1 leading-relaxed">
+            ملاحظة: تغيير العملة يحدّث رمز وطريقة عرض المبالغ فقط ولا يقوم بتحويل الأرقام المسجلة سابقاً بأسعار الصرف.
+          </p>
         </div>
       </Card>
 
@@ -1495,9 +1593,14 @@ export const SettingsPage: React.FC = () => {
                 <span>أجهزة آبل iOS</span>
               </div>
             ) : (
-              <span className="text-xs text-zinc-400 font-medium">
-                متاح للتثبيت من متصفحك عبر زر المشاركة أو القائمة
-              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowManualInstallGuide((prev) => !prev)}
+                className="font-bold text-xs shrink-0"
+              >
+                طريقة التثبيت اليدوي
+              </Button>
             )}
           </div>
 
@@ -1508,7 +1611,7 @@ export const SettingsPage: React.FC = () => {
                 <Share2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
                 <span>خطوات تثبيت التطبيق على الآيفون والآيباد (iOS Safari):</span>
               </div>
-              <ol className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300 list-decimal list-inside pr-1">
+              <ol className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300 list-decimal list-inside ps-1">
                 <li className="leading-relaxed">
                   اضغط على زر{' '}
                   <span className="font-bold text-zinc-900 dark:text-white inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-2xs">
@@ -1524,6 +1627,27 @@ export const SettingsPage: React.FC = () => {
                 </li>
                 <li className="leading-relaxed">
                   اضغط على <span className="font-bold text-zinc-900 dark:text-white">"إضافة" (Add)</span> في الزاوية العلوية ليظهر التطبيق كأيقونة مستقلة على شاشتك.
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {/* Manual Install Instructions for Chrome / Edge / Android */}
+          {!isInstalled && !isInstallable && !isIOS && showManualInstallGuide && (
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700/80 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                <Smartphone className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>خطوات التثبيت اليدوي عبر متصفح Chrome أو Edge أو أندرويد:</span>
+              </div>
+              <ol className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300 list-decimal list-inside ps-1">
+                <li className="leading-relaxed">
+                  اضغط على قائمة المتصفح (أيقونة الثلاث نقاط <span className="font-bold text-zinc-900 dark:text-white">⋮</span> أعلى أو أسفل الشاشة).
+                </li>
+                <li className="leading-relaxed">
+                  اختر <span className="font-bold text-zinc-900 dark:text-white">"تثبيت التطبيق"</span> أو <span className="font-bold text-zinc-900 dark:text-white">"الإضافة إلى الشاشة الرئيسية" (Add to Home Screen)</span>.
+                </li>
+                <li className="leading-relaxed">
+                  أكّد التثبيت ليظهر تطبيق بَصير مباشرة على جهازك ويعمل بدون إنترنت وبشاشة كاملة.
                 </li>
               </ol>
             </div>
@@ -1552,7 +1676,7 @@ export const SettingsPage: React.FC = () => {
                 </p>
                 {settings?.lastBackupAt && (
                   <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
-                    آخر نسخة تم تنزيلها: {new Date(settings.lastBackupAt).toLocaleString('ar-JO')}
+                    آخر نسخة تم تنزيلها: {toWesternDigits(new Date(settings.lastBackupAt).toLocaleString('ar-JO'))}
                   </p>
                 )}
               </div>
@@ -1732,6 +1856,7 @@ export const SettingsPage: React.FC = () => {
       <Modal
         isOpen={showSignOutModal}
         onClose={() => setShowSignOutModal(false)}
+        enableHistoryBack={false}
         title="تأكيد تسجيل الخروج"
       >
         <div className="space-y-4">
@@ -2122,12 +2247,29 @@ export const SettingsPage: React.FC = () => {
           setShowResetModal(false)
           setResetConfirmText('')
         }}
+        enableHistoryBack={false}
         title="تأكيد تصفير بيانات الحساب"
       >
         <div className="space-y-4">
           <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-800 dark:text-red-300 leading-relaxed">
             <span className="font-bold block mb-1">تحذير لا رجعة فيه:</span>
             سيتم حذف كافة المعاملات والديون والجمعيات والمعاملات المتكررة وتصفير الرصيد الافتتاحي. سيتم الاحتفاظ بحسابك الشخصي وتصنيفاتك وإعدادات المظهر والعملة.
+          </div>
+
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-xs text-zinc-600 dark:text-zinc-400">
+              ننصح بحفظ نسخة احتياطية من بياناتك قبل المتابعة:
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Download className="w-3.5 h-3.5" />}
+              onClick={handleDownloadJsonBackup}
+              disabled={exportingJson || !user}
+              className="font-bold text-xs shrink-0"
+            >
+              {exportingJson ? 'جاري التنزيل...' : 'تنزيل نسخة احتياطية أولاً'}
+            </Button>
           </div>
 
           <div>
@@ -2173,6 +2315,7 @@ export const SettingsPage: React.FC = () => {
           setShowDeleteModal(false)
           setDeleteConfirmText('')
         }}
+        enableHistoryBack={false}
         title="حذف الحساب نهائياً"
       >
         <div className="space-y-4">
@@ -2222,6 +2365,7 @@ export const SettingsPage: React.FC = () => {
       <Modal
         isOpen={showReauthModal}
         onClose={() => setShowReauthModal(false)}
+        enableHistoryBack={false}
         title="تأكيد الهوية (إعادة تسجيل الدخول)"
       >
         <div className="space-y-4">

@@ -387,7 +387,7 @@ export function validateBackup(jsonText: string): BackupValidationResult {
 
     const backup: MasareefiBackup = {
       version: 1,
-      app: 'masareefi',
+      app: parsed.app === 'masareefi' ? 'masareefi' : 'baseer',
       exportedAt,
       data: {
         settings,

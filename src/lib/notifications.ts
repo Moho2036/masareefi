@@ -52,7 +52,7 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
     formatMoney(fils, settings?.currency || 'JOD', {
       customDecimals: settings?.customCurrencyDecimals,
       maskAmount: Boolean(settings?.hideBalances),
-      hideZeroDecimals: Boolean(settings?.hideZeroDecimals),
+      hideZeroDecimals: settings?.hideZeroDecimals ?? true,
     })
 
   // 1. Debts Reminders
@@ -129,6 +129,19 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
             actionPath: '/tools?tool=circles',
             actionLabel: 'تفاصيل الجمعية',
           })
+
+          if (circle.recurringId) {
+            items.push({
+              id: `circle_exempt_${circle.id}_m${diffMonths}`,
+              title: `إعفاء قسط الجمعية: ${circle.name}`,
+              message: `هذا الشهر هو دورك في جمعية ${circle.name}؛ تم إعفاؤك تلقائياً من خصم القسط الشهري.`,
+              category: 'recurring',
+              isUrgent: false,
+              createdAt: todayMidnight,
+              actionPath: '/tools?tool=circles',
+              actionLabel: 'إيداع الصافي الآن',
+            })
+          }
         }
 
         // If user is manager, notify if members haven't paid this month
@@ -172,11 +185,11 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           id: `recurring_confirm_${rec.id}_${nextDateStr}`,
           title: `مطلوب تأكيد دفعة: ${rec.title || 'معاملة دورية'}`,
           message: `دفعة ${rec.type === 'expense' ? 'المصروف' : 'الدخل'} بقيمة ${amountFormatted} مستحقة وبانتظار تأكيدك أو تعديل المبلغ.`,
-          category: 'urgent',
+          category: 'recurring',
           isUrgent: true,
           createdAt: todayMidnight,
-          actionPath: '/recurring',
-          actionLabel: 'تأكيد الدفعة الآن',
+          actionPath: `/recurring?confirmId=${rec.id}`,
+          actionLabel: 'تأكيد المبلغ وتسجيل الدفع',
         })
         continue
       }
@@ -203,6 +216,27 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           actionPath: '/recurring',
           actionLabel: 'المعاملات الدورية',
         })
+      }
+    }
+
+    // Auto-recorded recurring transactions alert for recently recorded items (within last 3 days)
+    if (params.transactions && params.transactions.length > 0) {
+      for (const tx of params.transactions) {
+        if (!tx.recurringId) continue
+        const txMidnight = startOfDay(tx.date instanceof Date ? tx.date : new Date(tx.date))
+        const txDiff = differenceInDays(todayMidnight, txMidnight)
+        if (txDiff >= 0 && txDiff <= 3) {
+          items.push({
+            id: `recurring_auto_recorded_${tx.id}`,
+            title: `تم تسجيل معاملة دورية تلقائياً: ${tx.title || 'معاملة دورية'}`,
+            message: `قام التطبيق بتسجيل دفعة ${tx.type === 'expense' ? 'مصروف' : 'دخل'} بقيمة ${fmtAmount(tx.amountFils)} تلقائياً في سجل معاملاتك.`,
+            category: 'recurring',
+            isUrgent: false,
+            createdAt: txMidnight,
+            actionPath: '/transactions',
+            actionLabel: 'عرض المعاملة',
+          })
+        }
       }
     }
   }

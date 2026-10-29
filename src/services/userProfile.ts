@@ -11,6 +11,7 @@ import {
   deleteDoc,
   onSnapshot,
   serverTimestamp,
+  deleteField,
   Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -120,6 +121,7 @@ export async function updateUserSettings(
 ): Promise<void> {
   const userRef = doc(db, 'users', uid)
   const cleanUpdates: Record<string, unknown> = {}
+  const deletedFields = new Set<string>()
 
   if (partial.displayName !== undefined) {
     cleanUpdates.displayName = partial.displayName.slice(0, 100)
@@ -156,16 +158,18 @@ export async function updateUserSettings(
   if (partial.categorySortMode === 'usage' || partial.categorySortMode === 'manual') {
     cleanUpdates.categorySortMode = partial.categorySortMode
   }
-  if (
-    partial.customCurrencyDecimals !== undefined &&
-    partial.customCurrencyDecimals !== null &&
-    [0, 2, 3].includes(Number(partial.customCurrencyDecimals))
-  ) {
-    cleanUpdates.customCurrencyDecimals = Number(partial.customCurrencyDecimals)
+  if ('customCurrencyDecimals' in partial) {
+    if (partial.customCurrencyDecimals === null || partial.customCurrencyDecimals === undefined) {
+      cleanUpdates.customCurrencyDecimals = deleteField()
+      deletedFields.add('customCurrencyDecimals')
+    } else if ([0, 2, 3].includes(Number(partial.customCurrencyDecimals))) {
+      cleanUpdates.customCurrencyDecimals = Number(partial.customCurrencyDecimals)
+    }
   }
-  if (partial.rolloverStartDate !== undefined) {
-    if (partial.rolloverStartDate === null) {
-      cleanUpdates.rolloverStartDate = null
+  if ('rolloverStartDate' in partial) {
+    if (partial.rolloverStartDate === null || partial.rolloverStartDate === undefined) {
+      cleanUpdates.rolloverStartDate = deleteField()
+      deletedFields.add('rolloverStartDate')
     } else if (partial.rolloverStartDate instanceof Timestamp) {
       cleanUpdates.rolloverStartDate = partial.rolloverStartDate
     } else if (partial.rolloverStartDate instanceof Date) {
@@ -223,9 +227,13 @@ export async function updateUserSettings(
       await updateDoc(userRef, cleanUpdates)
     }
   } else {
+    const payloadUpdates = { ...cleanUpdates }
+    for (const field of deletedFields) {
+      delete payloadUpdates[field]
+    }
     const fullPayload = {
       ...DEFAULT_SETTINGS,
-      ...cleanUpdates,
+      ...payloadUpdates,
       createdAt: serverTimestamp(),
     }
     await setDoc(userRef, fullPayload)

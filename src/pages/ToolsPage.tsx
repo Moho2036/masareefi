@@ -34,14 +34,14 @@ export const ToolsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleBackToDirectory}
-            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/50 shadow-xs cursor-pointer transition-all"
+            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-xs cursor-pointer transition-all"
           >
             <ArrowRight className="w-4 h-4 rtl:rotate-0" />
             <span>العودة إلى قائمة الأدوات</span>
           </button>
 
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-            <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>أداة الجمعيات والصناديق المشتركة</span>
           </div>
         </div>
@@ -59,14 +59,14 @@ export const ToolsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleBackToDirectory}
-            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/50 shadow-xs cursor-pointer transition-all"
+            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-xs cursor-pointer transition-all"
           >
             <ArrowRight className="w-4 h-4 rtl:rotate-0" />
             <span>العودة إلى قائمة الأدوات</span>
           </button>
 
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-            <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>حاسبة الشراء بساعات العمل</span>
           </div>
         </div>

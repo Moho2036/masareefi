@@ -36,7 +36,6 @@ import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
 import { useDebts } from '../hooks/useDebts'
 import { useUserSettings } from '../hooks/useUserSettings'
-import { useCurrency } from '../hooks/useCurrency'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
@@ -66,7 +65,6 @@ export const DashboardPage: React.FC = () => {
   const { data: recurringList } = useRecurring()
   const { data: debts } = useDebts()
   const { data: settings } = useUserSettings()
-  const { formatWithSign } = useCurrency()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
 
   const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
@@ -353,53 +351,51 @@ export const DashboardPage: React.FC = () => {
             </span>
           </div>
 
-          {/* Main Balance & Clean Typographic Subline (Shown only when rollover or reserved > 0) */}
+          {/* Main Balance & Clean Typographic Subline (Persistent min-h to prevent layout shifts) */}
           <div className="space-y-1.5">
             <div className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50">
               <FormattedMoney amountFils={displayBalance} />
             </div>
 
-            {((isRolloverEnabled && effectiveRollover !== 0) ||
-              (settings?.openingBalanceFils ?? 0) > 0 ||
-              forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations > 0) && (
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 font-medium pt-1">
-                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) &&
-                  effectiveRollover !== 0 && (
-                    <>
-                      <span>
-                        صافي هذا الشهر:{' '}
-                        <strong className="font-bold text-zinc-800 dark:text-zinc-200">
-                          <FormattedMoney amountFils={sums.balance} withSign="auto" />
-                        </strong>
-                      </span>
-                      <span>•</span>
-                      <span>
-                        {(settings?.openingBalanceFils ?? 0) > 0
-                          ? 'الرصيد التراكمي / الافتتاحي:'
-                          : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}{' '}
-                        <strong className="font-bold text-zinc-800 dark:text-zinc-200">
-                          <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
-                        </strong>
-                      </span>
-                    </>
-                  )}
-                {forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations > 0 && (
+            <div className="min-h-[1.5rem] flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 font-medium pt-1">
+              <span>
+                صافي هذا الشهر:{' '}
+                <strong className="font-bold text-zinc-800 dark:text-zinc-200">
+                  <FormattedMoney amountFils={sums.balance} withSign="auto" />
+                </strong>
+              </span>
+
+              {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) &&
+                effectiveRollover !== 0 && (
                   <>
-                    {effectiveRollover !== 0 && <span>•</span>}
+                    <span>•</span>
                     <span>
-                      محجوز للالتزامات:{' '}
-                      <strong className="font-bold text-amber-600 dark:text-amber-400">
-                        <FormattedMoney
-                          amountFils={
-                            forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations
-                          }
-                        />
+                      {(settings?.openingBalanceFils ?? 0) > 0
+                        ? 'الرصيد التراكمي / الافتتاحي:'
+                        : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}{' '}
+                      <strong className="font-bold text-zinc-800 dark:text-zinc-200">
+                        <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
                       </strong>
                     </span>
                   </>
                 )}
-              </div>
-            )}
+
+              {forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations > 0 && (
+                <>
+                  <span>•</span>
+                  <span>
+                    محجوز للالتزامات:{' '}
+                    <strong className="font-bold text-amber-600 dark:text-amber-400">
+                      <FormattedMoney
+                        amountFils={
+                          forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations
+                        }
+                      />
+                    </strong>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Income & Expenses Swiss Split Row (Zero nested boxes) */}
@@ -475,14 +471,14 @@ export const DashboardPage: React.FC = () => {
           <Card className="p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
               <div className="flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-emerald-500" />
+                <Receipt className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   آخر المعاملات
                 </h2>
               </div>
               <Link
                 to="/transactions"
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
               >
                 <span>عرض الكل</span>
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -532,7 +528,10 @@ export const DashboardPage: React.FC = () => {
                   const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
                   const dateHeader = formatDayHeader(txDate, today)
                   const hasCustomLabel = Boolean(tx.title?.trim() || tx.note?.trim())
-                  const primaryLabel = tx.title?.trim() || tx.note?.trim() || (cat ? cat.name : 'معاملة')
+                  const isDebtInitOrEntry = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_entry_')
+                  const rawCatName = cat ? cat.name : 'معاملة'
+                  const catName = isDebtInitOrEntry && rawCatName === 'سداد الديون والأقساط' ? 'الديون والسلف' : rawCatName
+                  const primaryLabel = tx.title?.trim() || tx.note?.trim() || catName
 
                   return (
                     <div
@@ -556,7 +555,7 @@ export const DashboardPage: React.FC = () => {
                           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
                             {cat && hasCustomLabel && (
                               <>
-                                <span className="truncate">{cat.name}</span>
+                                <span className="truncate">{catName}</span>
                                 <span>•</span>
                               </>
                             )}
@@ -577,7 +576,7 @@ export const DashboardPage: React.FC = () => {
                               e.stopPropagation()
                               openDuplicate(tx)
                             }}
-                            className="hidden sm:inline-flex sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                            className="hidden sm:inline-flex sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-all cursor-pointer"
                             aria-label="تكرار المعاملة"
                             title="تكرار المعاملة"
                           >
@@ -592,7 +591,7 @@ export const DashboardPage: React.FC = () => {
                               : 'text-emerald-600 dark:text-emerald-400'
                           )}
                         >
-                          {formatWithSign(tx.amountFils, tx.type)}
+                          <FormattedMoney amountFils={tx.amountFils} withSign={tx.type} />
                         </div>
                       </div>
                     </div>
@@ -609,14 +608,14 @@ export const DashboardPage: React.FC = () => {
           <Card className="p-4 sm:p-5 border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 rounded-2xl">
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
               <div className="flex items-center gap-2">
-                <HandCoins className="w-4 h-4 text-emerald-500" />
+                <HandCoins className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   ملخص الديون والالتزامات
                 </h2>
               </div>
               <Link
                 to="/debts"
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
               >
                 <span>إدارة الديون</span>
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -703,14 +702,14 @@ export const DashboardPage: React.FC = () => {
           <Card className="p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700/60">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-emerald-500" />
+                <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   المتكررات القادمة
                 </h2>
               </div>
               <Link
                 to="/recurring"
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
               >
                 <span>إدارة المتكررة</span>
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -722,7 +721,7 @@ export const DashboardPage: React.FC = () => {
                 <p className="font-semibold mb-2">لا توجد معاملات متكررة نشطة</p>
                 <Link
                   to="/recurring"
-                  className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
+                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-bold"
                 >
                   <span>ضبط معاملة متكررة جديدة</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
@@ -775,7 +774,7 @@ export const DashboardPage: React.FC = () => {
                               : 'text-emerald-600 dark:text-emerald-400'
                           )}
                         >
-                          {formatWithSign(item.amountFils, item.type)}
+                          <FormattedMoney amountFils={item.amountFils} withSign={item.type} />
                         </div>
                       </div>
                     </Link>

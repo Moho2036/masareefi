@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { format, addMonths } from 'date-fns'
 import { Check, Info, ChevronDown } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -19,6 +19,7 @@ import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
 import { calculateNextDateOnEdit, advanceDateWithTargetDay, getNextCircleDueDate } from '../lib/recurring'
+import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
 
@@ -52,6 +53,7 @@ interface RecurringFormContentProps {
   onClose: () => void
   onSuccess?: () => void
   onSubmit?: (payload: RecurringSubmitPayload) => Promise<void> | void
+  onDirtyChange?: (isDirty: boolean) => void
 }
 
 const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
@@ -60,6 +62,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   onClose,
   onSuccess,
   onSubmit,
+  onDirtyChange,
 }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
@@ -113,6 +116,17 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const [note, setNote] = useState<string>(initialRecurring?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    onDirtyChange?.(
+      Boolean(
+        initialRecurring ||
+          amountStr.trim() ||
+          title.trim() ||
+          note.trim()
+      )
+    )
+  }, [onDirtyChange, initialRecurring, amountStr, title, note])
 
   const { data: circles } = useMoneyCircles()
   const { data: recurringList } = useRecurring()
@@ -296,6 +310,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         }
 
         await processDueRecurring(user.uid)
+        triggerHaptic('light')
         showToast('تم تعديل المعاملة المتكررة بنجاح', 'success')
       } else {
         const linkedCircle = circleId ? circles.find((c) => c.id === circleId) : null
@@ -349,6 +364,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         }
 
         await processDueRecurring(user.uid)
+        triggerHaptic('light')
         showToast('تمت إضافة المعاملة المتكررة بنجاح', 'success')
       }
 
@@ -746,7 +762,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       )}
 
       {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
         <Button
           type="button"
           variant="outline"
@@ -775,12 +791,14 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
   onSuccess,
   onSubmit,
 }) => {
+  const [isDirty, setIsDirty] = useState(false)
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={initialRecurring ? 'تعديل المعاملة المتكررة' : 'إضافة معاملة متكررة'}
-      closeOnBackdropClick={false}
+      closeOnBackdropClick={!isDirty && !initialRecurring}
     >
       <RecurringFormContent
         key={initialRecurring ? `edit-${initialRecurring.id}` : `new-${defaultType}`}
@@ -789,6 +807,7 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
         onClose={onClose}
         onSuccess={onSuccess}
         onSubmit={onSubmit}
+        onDirtyChange={setIsDirty}
       />
     </Modal>
   )

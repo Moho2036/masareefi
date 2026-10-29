@@ -13,6 +13,7 @@ import { toFils, fromFils } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils } from '../../lib/debts'
 import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 import type { Debt } from '../../types'
 
@@ -130,6 +131,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         { syncTransaction }
       )
 
+      triggerHaptic('light')
       showToast('تم تسجيل الدفعة بنجاح', 'success')
       onSuccess?.()
       onClose()
@@ -294,7 +296,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
+      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
         <Button
           type="submit"
           variant="primary"

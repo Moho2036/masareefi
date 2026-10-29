@@ -22,7 +22,7 @@ export const AppShellSkeleton: React.FC = () => {
       >
         {/* App Logo */}
         <div className="flex items-center gap-3 px-2 mb-8 animate-pulse">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/30 flex items-center justify-center" />
+          <div className="w-10 h-10 rounded-xl bg-blue-600/30 flex items-center justify-center" />
           <div className="w-24 h-6 rounded bg-slate-200 dark:bg-slate-700" />
         </div>
 
@@ -105,7 +105,7 @@ export const AppShellSkeleton: React.FC = () => {
             <Skeleton className="w-8 h-2 rounded" />
           </div>
           <div className="relative -top-4">
-            <div className="w-13 h-13 rounded-full bg-emerald-500/30 border-4 border-slate-50 dark:border-slate-900 animate-pulse" />
+            <div className="w-13 h-13 rounded-full bg-blue-600/30 border-4 border-slate-50 dark:border-slate-900 animate-pulse" />
           </div>
           <div className="flex flex-col items-center gap-1">
             <Skeleton className="w-5 h-5 rounded-md" />

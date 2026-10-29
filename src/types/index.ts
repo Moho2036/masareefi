@@ -69,7 +69,7 @@ export interface UserSettings {
   hideBalances?: boolean
   hideZeroDecimals?: boolean
   categorySortMode?: 'usage' | 'manual'
-  customCurrencyDecimals?: number // 0, 2, or 3
+  customCurrencyDecimals?: number | null // 0, 2, or 3
   rolloverStartDate?: Date | Timestamp | null
   lastBackupAt?: string
   avatarColor?: string

@@ -47,13 +47,26 @@ export async function signUpWithEmail(
 export async function signOutUser(): Promise<void> {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem('baseer_work_hours_prefs')
-      window.localStorage.removeItem('masareefi_work_hours_prefs')
       window.localStorage.removeItem('baseer_category_usage')
       window.localStorage.removeItem('masareefi_category_usage')
     }
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const sessionKeysToRemove: string[] = []
+      for (let i = 0; i < window.sessionStorage.length; i++) {
+        const key = window.sessionStorage.key(i)
+        if (
+          key &&
+          (key.startsWith('baseer_session_unlocked_') || key.startsWith('baseer_onboarding_draft_'))
+        ) {
+          sessionKeysToRemove.push(key)
+        }
+      }
+      for (const key of sessionKeysToRemove) {
+        window.sessionStorage.removeItem(key)
+      }
+    }
   } catch (e) {
-    console.warn('Failed to clear local storage on sign out:', e)
+    console.warn('Failed to clear storage on sign out:', e)
   }
   return signOut(auth)
 }

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import { Link } from 'react-router'
+import React, { useState, useMemo, useEffect } from 'react'
+import { Link, useSearchParams, useInRouterContext } from 'react-router'
 import { format as formatDate, addMonths } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
@@ -26,6 +26,7 @@ import { Toggle } from '../components/ui/Toggle'
 import { Input } from '../components/ui/Input'
 import { RecurringForm } from '../components/RecurringForm'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
+import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
@@ -49,14 +50,39 @@ import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
 import type { Recurring, Frequency } from '../types'
 
+const ParamWatcher: React.FC<{
+  recurringItems: Recurring[]
+  onConfirm: (item: Recurring) => void
+}> = ({ recurringItems, onConfirm }) => {
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const confirmId = searchParams.get('confirmId')
+    if (!confirmId || recurringItems.length === 0) return
+    const target = recurringItems.find((r) => r.id === confirmId)
+    if (target) {
+      onConfirm(target)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('confirmId')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [searchParams, setSearchParams, recurringItems, onConfirm])
+
+  return null
+}
+
 export const RecurringPage: React.FC = () => {
+  const inRouter = useInRouterContext()
   const { user } = useAuth()
   const { data: settings } = useUserSettings()
   const monthStartDay = settings?.monthStartDay ?? 1
   const { data: recurringItems, loading: recurringLoading } = useRecurring()
   const { data: categories } = useCategories()
   const { data: circles } = useMoneyCircles()
-  const { format, formatWithSign } = useCurrency()
   const { showToast } = useToast()
 
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -274,6 +300,16 @@ export const RecurringPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-slide-up">
+      {inRouter && (
+        <ParamWatcher
+          recurringItems={recurringItems}
+          onConfirm={(item) => {
+            setConfirmingItem(item)
+            setConfirmAmountStr(String(fromFils(item.amountFils)))
+            setConfirmError(null)
+          }}
+        />
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
@@ -302,7 +338,7 @@ export const RecurringPage: React.FC = () => {
               مداخيل ثابتة شهرياً
             </span>
             <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
-              {format(monthlyStats.monthlyIncome)}
+              <FormattedMoney amountFils={monthlyStats.monthlyIncome} />
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -317,7 +353,7 @@ export const RecurringPage: React.FC = () => {
               مصاريف ثابتة شهرياً
             </span>
             <span className="text-2xl sm:text-3xl font-black text-red-500 dark:text-red-400">
-              {format(monthlyStats.monthlyExpense)}
+              <FormattedMoney amountFils={monthlyStats.monthlyExpense} />
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
@@ -331,12 +367,12 @@ export const RecurringPage: React.FC = () => {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
-              <Users className="w-4 h-4 text-emerald-500" />
+              <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>أقساط الجمعيات والصناديق المشتركة</span>
             </h3>
             <Link
               to="/tools?tool=circles"
-              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
             >
               إدارة الجمعيات ←
             </Link>
@@ -370,7 +406,7 @@ export const RecurringPage: React.FC = () => {
                       {circle.name}
                     </span>
                     {isUserTurn ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
                         <Crown className="w-3 h-3" />
                         <span>دورك في الاستلام!</span>
                       </span>
@@ -397,9 +433,11 @@ export const RecurringPage: React.FC = () => {
                           : 'text-red-500 dark:text-red-400'
                       )}
                     >
-                      {isUserTurn
-                        ? `+ ${format(circle.totalAmountFils)}`
-                        : `- ${format(circle.monthlyAmountFils)}`}
+                      {isUserTurn ? (
+                        <FormattedMoney amountFils={circle.totalAmountFils} withSign="income" />
+                      ) : (
+                        <FormattedMoney amountFils={circle.monthlyAmountFils} withSign="expense" />
+                      )}
                     </span>
                   </div>
 
@@ -430,7 +468,7 @@ export const RecurringPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleScheduleCircle(circle)}
-                        className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <Zap className="w-3 h-3 text-amber-500 shrink-0" />
                         <span>جدولة القسط شهرياً</span>
@@ -576,7 +614,7 @@ export const RecurringPage: React.FC = () => {
                           <Crown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                           <span>دورك في الاستلام هذا الشهر!</span>
                         </span>
-                        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-black">
+                        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">
                           معفى من الخصم تلقائياً
                         </span>
                       </div>
@@ -599,7 +637,7 @@ export const RecurringPage: React.FC = () => {
                         : 'text-emerald-600 dark:text-emerald-400'
                     )}
                   >
-                    {formatWithSign(item.amountFils, item.type)}
+                    <FormattedMoney amountFils={item.amountFils} withSign={item.type} />
                   </div>
                 </div>
 
@@ -871,7 +909,7 @@ export const RecurringPage: React.FC = () => {
                               : 'text-emerald-600 dark:text-emerald-400'
                           )}
                         >
-                          {formatWithSign(tx.amountFils, tx.type)}
+                          <FormattedMoney amountFils={tx.amountFils} withSign={tx.type} />
                         </span>
                       </div>
                     )

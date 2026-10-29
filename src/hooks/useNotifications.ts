@@ -30,6 +30,10 @@ export function useNotifications() {
   const storageKey = uid ? `baseer_notifications_read_${uid}` : null
   const legacyStorageKey = uid ? `masareefi_notifications_read_${uid}` : null
 
+  // Dismissed IDs from localStorage
+  const dismissedStorageKey = uid ? `baseer_notifications_dismissed_${uid}` : null
+  const legacyDismissedStorageKey = uid ? `masareefi_notifications_dismissed_${uid}` : null
+
   const getStoredReadIds = useCallback((): Set<string> => {
     if (!storageKey || typeof window === 'undefined' || !window.localStorage) {
       return new Set<string>()
@@ -50,7 +54,28 @@ export function useNotifications() {
     return new Set<string>()
   }, [storageKey, legacyStorageKey])
 
+  const getStoredDismissedIds = useCallback((): Set<string> => {
+    if (!dismissedStorageKey || typeof window === 'undefined' || !window.localStorage) {
+      return new Set<string>()
+    }
+    try {
+      const raw =
+        window.localStorage.getItem(dismissedStorageKey) ||
+        (legacyDismissedStorageKey ? window.localStorage.getItem(legacyDismissedStorageKey) : null)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          return new Set<string>(parsed)
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return new Set<string>()
+  }, [dismissedStorageKey, legacyDismissedStorageKey])
+
   const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds())
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => getStoredDismissedIds())
 
   // Adjust state during render when uid changes
   const [prevUid, setPrevUid] = useState(uid)
@@ -58,6 +83,7 @@ export function useNotifications() {
     setPrevUid(uid)
     setCurrentMonthTransactions([])
     setReadIds(getStoredReadIds())
+    setDismissedIds(getStoredDismissedIds())
   }
 
   // Subscribe to current financial month transactions for budget warnings
@@ -119,11 +145,32 @@ export function useNotifications() {
     [storageKey, legacyStorageKey]
   )
 
-  // Sync readIds across all mounted hook instances (e.g. AppShell bell badge & NotificationCenterModal)
+  // Save dismissedIds helper
+  const persistDismissedIds = useCallback(
+    (nextSet: Set<string>) => {
+      setDismissedIds(nextSet)
+      if (dismissedStorageKey && typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const payload = JSON.stringify(Array.from(nextSet))
+          window.localStorage.setItem(dismissedStorageKey, payload)
+          if (legacyDismissedStorageKey) {
+            window.localStorage.setItem(legacyDismissedStorageKey, payload)
+          }
+          window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [dismissedStorageKey, legacyDismissedStorageKey]
+  )
+
+  // Sync readIds and dismissedIds across all mounted hook instances (e.g. AppShell bell badge & NotificationCenterModal)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const handleSync = () => {
       setReadIds(getStoredReadIds())
+      setDismissedIds(getStoredDismissedIds())
     }
     window.addEventListener('baseer-notifications-sync', handleSync)
     window.addEventListener('storage', handleSync)
@@ -131,11 +178,11 @@ export function useNotifications() {
       window.removeEventListener('baseer-notifications-sync', handleSync)
       window.removeEventListener('storage', handleSync)
     }
-  }, [getStoredReadIds])
+  }, [getStoredReadIds, getStoredDismissedIds])
 
   // Generate all active notifications
   const allNotifications = useMemo(() => {
-    return generateNotifications({
+    const raw = generateNotifications({
       debts,
       circles: moneyCircles,
       recurring,
@@ -146,7 +193,18 @@ export function useNotifications() {
       currentMonthSpendingFils: spendingFils,
       priorBalanceFils: rolloverBalanceFils,
     })
-  }, [debts, moneyCircles, recurring, settings, currentMonthTransactions, incomeFils, spendingFils, rolloverBalanceFils])
+    return raw.filter((item) => !dismissedIds.has(item.id))
+  }, [
+    debts,
+    moneyCircles,
+    recurring,
+    settings,
+    currentMonthTransactions,
+    incomeFils,
+    spendingFils,
+    rolloverBalanceFils,
+    dismissedIds,
+  ])
 
   // Count unread
   const unreadCount = useMemo(() => {
@@ -173,8 +231,13 @@ export function useNotifications() {
   }, [allNotifications, persistReadIds])
 
   const clearRead = useCallback(() => {
-    persistReadIds(new Set())
-  }, [persistReadIds])
+    if (readIds.size === 0) return
+    const nextDismissed = new Set(dismissedIds)
+    for (const id of readIds) {
+      nextDismissed.add(id)
+    }
+    persistDismissedIds(nextDismissed)
+  }, [readIds, dismissedIds, persistDismissedIds])
 
   const filterNotifications = useCallback(
     (filter: NotificationFilter): NotificationItem[] => {
@@ -199,6 +262,7 @@ export function useNotifications() {
     notifications: allNotifications,
     unreadCount,
     readIds,
+    dismissedIds,
     markAsRead,
     markAllAsRead,
     clearRead,

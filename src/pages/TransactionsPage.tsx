@@ -83,7 +83,7 @@ export const TransactionsPage: React.FC = () => {
   const { data: circles } = useMoneyCircles()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
-  const { format, formatWithSign, config: currencyConfig } = useCurrency()
+  const { formatWithSign, config: currencyConfig } = useCurrency()
 
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -404,7 +404,9 @@ export const TransactionsPage: React.FC = () => {
     const cat = categoryMap.get(tx.categoryId)
     const icon = cat?.icon ?? '➕'
     const color = cat?.color ?? '#94A3B8'
-    const name = cat?.name ?? 'غير مصنف'
+    const isDebtInitOrEntry = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_entry_')
+    const rawName = cat?.name ?? 'غير مصنف'
+    const name = isDebtInitOrEntry && rawName === 'سداد الديون والأقساط' ? 'الديون والسلف' : rawName
     const isExpense = tx.type === 'expense'
     const hasTitle = Boolean(tx.title?.trim())
     const hasNote = Boolean(tx.note?.trim())
@@ -517,7 +519,7 @@ export const TransactionsPage: React.FC = () => {
                         e.stopPropagation()
                         openDuplicate(tx)
                       }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                       aria-label="تكرار المعاملة"
                       title="تكرار المعاملة"
                     >
@@ -554,7 +556,7 @@ export const TransactionsPage: React.FC = () => {
                     <Link
                       to="/tools?tool=circles"
                       onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors"
+                      className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
                       aria-label="الانتقال إلى صفحة الجمعيات"
                       title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
                     >
@@ -640,7 +642,7 @@ export const TransactionsPage: React.FC = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="ابحث في العنوان، الملاحظات، الفئة، أو المبلغ..."
-                className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
               />
             </div>
 
@@ -676,7 +678,7 @@ export const TransactionsPage: React.FC = () => {
                   className={cn(
                     'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
                     allMonths
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                   )}
                   title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
@@ -699,7 +701,7 @@ export const TransactionsPage: React.FC = () => {
                   className={cn(
                     'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
                     isCustomDateRange
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                   )}
                   title="فلترة المعاملات ضمن نطاق زمني مخصص"
@@ -759,7 +761,7 @@ export const TransactionsPage: React.FC = () => {
                       className={cn(
                         'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
                         isSelected
-                          ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                          ? 'bg-blue-600 text-white shadow-xs font-bold'
                           : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                       )}
                     >
@@ -777,7 +779,7 @@ export const TransactionsPage: React.FC = () => {
                   التصنيفات
                 </label>
                 {selectedCategories.length > 0 && !selectedCategories.includes('all') && (
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">
                     ({selectedCategories.length} محدد)
                   </span>
                 )}
@@ -793,7 +795,7 @@ export const TransactionsPage: React.FC = () => {
                     className={cn(
                       'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
                       selectedCategories.length === 0 || selectedCategories.includes('all')
-                        ? 'bg-emerald-500 text-white shadow-xs font-bold'
+                        ? 'bg-blue-600 text-white shadow-xs font-bold'
                         : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                     )}
                   >
@@ -844,7 +846,7 @@ export const TransactionsPage: React.FC = () => {
                   setSortBy(e.target.value as TransactionSortOption)
                   setCurrentPage(1)
                 }}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-600 cursor-pointer"
               >
                 <option value="newest">الأحدث أولاً</option>
                 <option value="oldest">الأقدم أولاً</option>
@@ -994,11 +996,7 @@ export const TransactionsPage: React.FC = () => {
                                   : 'text-slate-400'
                             )}
                           >
-                            {dayNetFils > 0
-                              ? `+ ${format(dayNetFils)}`
-                              : dayNetFils < 0
-                                ? `- ${format(Math.abs(dayNetFils))}`
-                                : format(0)}
+                            <FormattedMoney amountFils={dayNetFils} withSign="auto" />
                           </span>
                         </div>
                       </div>

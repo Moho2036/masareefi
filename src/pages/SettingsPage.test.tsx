@@ -399,7 +399,7 @@ describe('SettingsPage Extended Features', () => {
 
     await waitFor(() => {
       expect(mockUpdateSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ hideZeroDecimals: true })
+        expect.objectContaining({ hideZeroDecimals: false })
       )
     })
   })
@@ -416,5 +416,43 @@ describe('SettingsPage Extended Features', () => {
         })
       )
     })
+  })
+
+  it('cancels custom currency selection when clicking إلغاء', () => {
+    render(<SettingsPage />)
+    const customBtn = screen.getByRole('button', { name: /عملة أخرى/i })
+    fireEvent.click(customBtn)
+
+    expect(screen.getByPlaceholderText(/مثال: ج\.م أو د\.ك أو QAR أو ليرة/)).toBeDefined()
+
+    const cancelBtn = screen.getByRole('button', { name: 'إلغاء' })
+    fireEvent.click(cancelBtn)
+
+    expect(screen.queryByPlaceholderText(/مثال: ج\.م أو د\.ك أو QAR أو ليرة/)).toBeNull()
+  })
+
+  it('toggles manual PWA install instructions on non-iOS non-installable devices', () => {
+    mockPWAInstallState = {
+      isInstallable: false,
+      isInstalled: false,
+      isIOS: false,
+      promptInstall: vi.fn(),
+    }
+
+    render(<SettingsPage />)
+
+    const guideBtn = screen.getByRole('button', { name: 'طريقة التثبيت اليدوي' })
+    fireEvent.click(guideBtn)
+
+    expect(screen.getByText(/خطوات التثبيت اليدوي عبر متصفح Chrome أو Edge أو أندرويد:/)).toBeDefined()
+  })
+
+  it('provides a shortcut button to download backup inside reset modal', () => {
+    render(<SettingsPage />)
+
+    const resetModalBtn = screen.getByRole('button', { name: 'تصفير البيانات' })
+    fireEvent.click(resetModalBtn)
+
+    expect(screen.getByRole('button', { name: 'تنزيل نسخة احتياطية أولاً' })).toBeDefined()
   })
 })

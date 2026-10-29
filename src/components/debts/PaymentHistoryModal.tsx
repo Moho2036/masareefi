@@ -30,6 +30,7 @@ import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils, formatDebtAccountStatement } from '../../lib/debts'
 import { toWesternDigits, parseLocalDateInput } from '../../lib/dates'
 import { fromFils, toFils } from '../../lib/money'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 import type { Debt, DebtPayment, DebtEntry } from '../../types'
 
@@ -206,6 +207,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         note: editNote.trim(),
         syncTransaction: editSyncTx,
       })
+      triggerHaptic('light')
       showToast('تم تعديل الدفعة وتحديث الرصيد', 'success')
       setEditingPaymentId(null)
       onSuccess?.()
@@ -274,6 +276,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         },
         { syncTransaction: newEntrySync }
       )
+      triggerHaptic('light')
       showToast('تمت إضافة السلفة وتحديث إجمالي الدين بنجاح', 'success')
       setIsAddingEntry(false)
       setNewEntryAmountStr('')
@@ -317,6 +320,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         title: editEntryTitle.trim() || undefined,
         note: editEntryNote.trim() || undefined,
       })
+      triggerHaptic('light')
       showToast('تم تحديث السلفة بنجاح', 'success')
       setEditingEntryId(null)
       onSuccess?.()
@@ -475,7 +479,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
           {/* Inline Add Entry Form */}
           {isAddingEntry && (
-            <form onSubmit={handleAddEntry} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5 print-hide">
+            <form onSubmit={handleAddEntry} noValidate className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5 print-hide">
               <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
                 تسجيل سلفة إضافية جديدة لنفس الشخص
               </span>
@@ -962,7 +966,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         )}
         </div>
 
-        <div className="pt-2">
+        <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800">
           <Button
             type="button"
             variant="outline"
