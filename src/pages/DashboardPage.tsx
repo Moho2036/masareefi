@@ -51,7 +51,7 @@ import {
   getFinancialMonthRange,
   formatFinancialMonthLabel,
 } from '../lib/dates'
-import { format as formatDate } from 'date-fns'
+import { format as formatDate, differenceInDays, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { cn } from '../lib/cn'
 import type { Recurring } from '../types'
@@ -391,6 +391,20 @@ export const DashboardPage: React.FC = () => {
                           forecast.upcomingRecurringExpenses + forecast.upcomingDebtObligations
                         }
                       />
+                    </strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    الحر للصرف:{' '}
+                    <strong
+                      className={cn(
+                        'font-bold',
+                        forecast.freeBalance < 0
+                          ? 'text-red-500 dark:text-red-400'
+                          : 'text-zinc-800 dark:text-zinc-200'
+                      )}
+                    >
+                      <FormattedMoney amountFils={forecast.freeBalance} />
                     </strong>
                   </span>
                 </>
@@ -739,6 +753,21 @@ export const DashboardPage: React.FC = () => {
                   const nextDateFormatted = toWesternDigits(
                     formatDate(nextDate, 'd MMMM', { locale: ar })
                   )
+                  const diffDays = differenceInDays(startOfDay(nextDate), startOfDay(today))
+                  let relativeText: string
+                  if (diffDays < 0) {
+                    relativeText = 'مستحقة'
+                  } else if (diffDays === 0) {
+                    relativeText = 'اليوم'
+                  } else if (diffDays === 1) {
+                    relativeText = 'غداً'
+                  } else if (diffDays === 2) {
+                    relativeText = 'بعد يومين'
+                  } else if (diffDays >= 3 && diffDays <= 10) {
+                    relativeText = `بعد ${diffDays} أيام`
+                  } else {
+                    relativeText = `بعد ${diffDays} يوماً`
+                  }
 
                   return (
                     <Link
@@ -760,7 +789,7 @@ export const DashboardPage: React.FC = () => {
                             {item.title || item.note || (cat ? cat.name : 'معاملة متكررة')}
                           </div>
                           <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                            {nextDateFormatted}
+                            {nextDateFormatted} • {relativeText}
                           </div>
                         </div>
                       </div>

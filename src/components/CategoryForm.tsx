@@ -18,7 +18,7 @@ export interface CategoryFormProps {
   onClose: () => void
   initialCategory?: Category | null
   defaultType?: TxType
-  onSuccess?: () => void
+  onSuccess?: (newCategoryId?: string, newCategoryType?: TxType) => void
 }
 
 const COMMON_EMOJIS = [
@@ -36,7 +36,7 @@ interface CategoryFormContentProps {
   initialCategory?: Category | null
   defaultType: TxType
   onClose: () => void
-  onSuccess?: () => void
+  onSuccess?: (newCategoryId?: string, newCategoryType?: TxType) => void
 }
 
 const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
@@ -109,6 +109,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         })
         triggerHaptic('light')
         showToast('تم تعديل التصنيف بنجاح', 'success')
+        onSuccess?.(initialCategory.id, initialCategory.type)
       } else {
         const maxOrder = categories.reduce(
           (max, c) => Math.max(max, c.order ?? 0),
@@ -116,7 +117,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         )
         const order = maxOrder + 1
 
-        await addCategory(user.uid, {
+        const newCatId = await addCategory(user.uid, {
           name: trimmedName,
           type,
           icon: trimmedIcon,
@@ -126,9 +127,9 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         })
         triggerHaptic('light')
         showToast('تمت إضافة التصنيف بنجاح', 'success')
+        onSuccess?.(newCatId, type)
       }
 
-      onSuccess?.()
       onClose()
     } catch (err) {
       console.error('Failed to save category:', err)

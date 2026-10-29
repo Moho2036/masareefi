@@ -627,8 +627,13 @@ export async function updateMoneyCircle(
   await batch.commit()
 }
 
-export async function checkCirclePayoutExists(uid: string, circleId: string): Promise<boolean> {
-  const txRef = doc(db, 'users', uid, 'transactions', `circle_payout_${circleId}`)
+export async function checkCirclePayoutExists(
+  uid: string,
+  circleId: string,
+  isSecondTurn?: boolean
+): Promise<boolean> {
+  const txId = isSecondTurn ? `circle_payout_${circleId}_t2` : `circle_payout_${circleId}`
+  const txRef = doc(db, 'users', uid, 'transactions', txId)
   const snap = await getDoc(txRef)
   return snap.exists()
 }
@@ -672,9 +677,10 @@ export async function checkCircleHasTransactions(
 export async function depositCircleNetPayout(
   uid: string,
   circle: MoneyCircle,
-  categoryId: string
+  categoryId: string,
+  isSecondTurn?: boolean
 ): Promise<string> {
-  const payoutTxId = `circle_payout_${circle.id}`
+  const payoutTxId = isSecondTurn ? `circle_payout_${circle.id}_t2` : `circle_payout_${circle.id}`
   const txRef = doc(db, 'users', uid, 'transactions', payoutTxId)
   const snap = await getDoc(txRef)
   if (snap.exists()) {
@@ -700,7 +706,9 @@ export async function depositCircleNetPayout(
 
   const now = new Date()
   const start = circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate)
-  const expectedTurnDate = addMonths(start, Math.max(0, circle.myTurnMonth - 1))
+  const turnMonthNum =
+    isSecondTurn && circle.secondTurnMonth ? circle.secondTurnMonth : circle.myTurnMonth
+  const expectedTurnDate = addMonths(start, Math.max(0, turnMonthNum - 1))
 
   const isSameMonth =
     now.getFullYear() === expectedTurnDate.getFullYear() &&
@@ -708,14 +716,16 @@ export async function depositCircleNetPayout(
 
   const txDate = isSameMonth ? now : expectedTurnDate
 
+  const titleTurnSuffix = isSecondTurn ? ' (الدور الثاني)' : ''
+
   const batch = writeBatch(db)
 
   batch.set(txRef, {
     type: 'income',
     amountFils: netAmountFils,
     categoryId,
-    title: `استلام صافي جمعية ${circle.name}`.slice(0, 100),
-    note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circle.name})`.slice(0, 500),
+    title: `استلام صافي جمعية ${circle.name}${titleTurnSuffix}`.slice(0, 100),
+    note: `استلام صافي الجمعية بعد خصم قسط الشهر (${circle.name})${titleTurnSuffix}`.slice(0, 500),
     date: Timestamp.fromDate(txDate),
     createdAt: Timestamp.fromDate(now),
   })
@@ -725,8 +735,13 @@ export async function depositCircleNetPayout(
   return payoutTxId
 }
 
-export async function deleteCirclePayout(uid: string, circleId: string): Promise<void> {
-  const txRef = doc(db, 'users', uid, 'transactions', `circle_payout_${circleId}`)
+export async function deleteCirclePayout(
+  uid: string,
+  circleId: string,
+  isSecondTurn?: boolean
+): Promise<void> {
+  const txId = isSecondTurn ? `circle_payout_${circleId}_t2` : `circle_payout_${circleId}`
+  const txRef = doc(db, 'users', uid, 'transactions', txId)
   await deleteDoc(txRef).catch(() => {})
 }
 
@@ -919,6 +934,10 @@ export async function deleteMoneyCircle(
     // Delete payout transaction if exists
     const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
     batch.delete(payoutTxRef)
+    if (circleData?.shareType === 'double') {
+      const payoutTxRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
+      batch.delete(payoutTxRef2)
+    }
 
     // Delete manual installment transactions (circle_${id}_m1 through circle_${id}_m${membersCount})
     const totalMembers = circleData?.membersCount || 0

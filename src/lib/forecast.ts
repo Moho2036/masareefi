@@ -112,6 +112,9 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       for (const p of d.payments || []) {
         if (p.transactionId) linkedDebtTxIds.add(p.transactionId)
       }
+      for (const e of d.entries || []) {
+        if (e.transactionId) linkedDebtTxIds.add(e.transactionId)
+      }
     }
   }
 
@@ -130,6 +133,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
         tx.recurringId ||
           (typeof tx.id === 'string' &&
             (tx.id.startsWith('debt_init_') ||
+              tx.id.startsWith('debt_entry_') ||
               tx.id.startsWith('debt_pay_') ||
               tx.id.startsWith('circle_') ||
               linkedDebtTxIds.has(tx.id)))

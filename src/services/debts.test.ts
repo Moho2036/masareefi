@@ -658,6 +658,33 @@ describe('debts service with accounting link', () => {
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
+    it('deletes transactions linked to debt entries when deleteTransactions is true', async () => {
+      mockBatchDelete.mockClear()
+      mockBatchCommit.mockClear()
+
+      mockGetDoc.mockResolvedValueOnce({
+        data: () => ({
+          payments: [],
+          entries: [
+            { id: 'e1', transactionId: 'tx-custom-entry' },
+            { id: 'e2' },
+          ],
+        }),
+      })
+
+      await deleteDebt('user-1', 'debt-123', { deleteTransactions: true })
+
+      // 1 debt + 1 initTx (debt_init_debt-123) + 1 tx-custom-entry + 1 debt_entry_e2 = 4 delete calls
+      expect(mockBatchDelete).toHaveBeenCalledTimes(4)
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/tx-custom-entry' })
+      )
+      expect(mockBatchDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/user-1/transactions/debt_entry_e2' })
+      )
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
     it('deletes legacy init and payment transactions when found during deleteDebt with deleteTransactions: true', async () => {
       mockBatchDelete.mockClear()
       mockBatchCommit.mockClear()
@@ -1130,6 +1157,42 @@ describe('debts service with accounting link', () => {
         'debt_pay_p-4',
         'debt_pay_p-5',
       ])
+    })
+
+    it('preserves custom notes of merged payments inside the consolidated payment note', async () => {
+      const mockPayments = Array.from({ length: 15 }, (_, i) => ({
+        id: `p-${i + 1}`,
+        amountFils: 2000,
+        date: new Date(2026, 9, i + 1),
+        createdAt: new Date(2026, 9, i + 1),
+        note:
+          i === 0
+            ? 'دفعة كاش من المحل'
+            : i === 1
+              ? 'دفعة سداد' // generic - should be ignored
+              : i === 2
+                ? 'حوالة بنكية CliQ'
+                : undefined,
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-notes',
+          amountFils: 100000,
+          paidFils: 30000,
+          settled: false,
+          payments: mockPayments,
+        }),
+      })
+
+      const result = await compactDebtPayments('user-1', 'debt-compact-notes')
+      expect(result.mergedCount).toBe(5)
+
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      expect(updatedData.payments[0].note).toBe(
+        'رصيد دفعات سابقة مدمجة (5 دفعة): دفعة كاش من المحل ، حوالة بنكية CliQ'
+      )
     })
 
     it('deletes all mergedTransactionIds when deleting a merged payment', async () => {

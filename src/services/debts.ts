@@ -643,6 +643,15 @@ export async function deleteDebt(
         }
       }
     }
+
+    // Synchronize: Delete all entry transactions
+    for (const e of debt?.entries || []) {
+      if (e.transactionId) {
+        addRefToDelete(doc(db, 'users', uid, 'transactions', e.transactionId))
+      } else if (e.id) {
+        addRefToDelete(doc(db, 'users', uid, 'transactions', `debt_entry_${e.id}`))
+      }
+    }
   }
 
   if (refsToDelete.length <= 450) {
@@ -1194,11 +1203,38 @@ export async function compactDebtPayments(
     }
   }
 
+  const genericNotes = new Set([
+    'دفعة سداد',
+    'دفعة استرداد دين',
+    'دفعة سداد دين',
+    'استرداد دفعة دين',
+    'سداد دفعة دين',
+  ])
+  const customNotes: string[] = []
+  for (const p of toMerge) {
+    if (p.note && typeof p.note === 'string') {
+      const trimmed = p.note.trim()
+      if (trimmed && !genericNotes.has(trimmed)) {
+        const cleaned = trimmed
+          .replace(/^رصيد دفعات سابقة مدمجة \(\d+\s*دفعة\):?\s*/, '')
+          .trim()
+        if (cleaned && !customNotes.includes(cleaned)) {
+          customNotes.push(cleaned)
+        }
+      }
+    }
+  }
+  const baseMergedNote = `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`
+  const finalMergedNote =
+    customNotes.length > 0
+      ? `${baseMergedNote}: ${customNotes.join(' ، ')}`.slice(0, 500)
+      : baseMergedNote
+
   const consolidatedPayment: DebtPayment = {
     id: `compacted_${generatePaymentId()}`,
     amountFils: mergedAmountFils,
     date: mergedDate,
-    note: `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`,
+    note: finalMergedNote,
     createdAt: new Date(),
     isMerged: true,
     mergedTransactionIds: mergedTxIds,

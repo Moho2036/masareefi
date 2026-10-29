@@ -36,6 +36,7 @@ import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
+import { useUserSettings } from '../hooks/useUserSettings'
 import { deleteTransaction } from '../services/transactions'
 import { removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
@@ -45,7 +46,7 @@ import { exportTransactionsToCsv } from '../lib/exportCsv'
 import { getOccurrenceMonthIndex } from '../lib/recurring'
 import {
   getCategoryUsageMap,
-  sortCategoriesByUsage,
+  sortCategoriesUnified,
   buildUsageFromTransactions,
   syncCategoryUsageCache,
 } from '../lib/categoryUsage'
@@ -84,6 +85,7 @@ export const TransactionsPage: React.FC = () => {
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
   const { formatWithSign, config: currencyConfig } = useCurrency()
+  const { data: userSettings } = useUserSettings()
 
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -200,8 +202,8 @@ export const TransactionsPage: React.FC = () => {
       if (!matchesType) return false
       return !c.archived || usedCategoryIds.has(c.id)
     })
-    return sortCategoriesByUsage(filtered, usageMap)
-  }, [categories, filterType, usageMap, rawTransactions])
+    return sortCategoriesUnified(filtered, usageMap, userSettings?.categorySortMode || 'usage')
+  }, [categories, filterType, usageMap, rawTransactions, userSettings?.categorySortMode])
 
   // Filtered transactions (using deferredQuery to prevent keyboard lag on mobile)
   const filteredTransactions = useMemo(() => {
@@ -337,6 +339,18 @@ export const TransactionsPage: React.FC = () => {
       const debtExists = debts.some((d) => d.id === debtId)
       if (debtExists) {
         showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+        setTxToDelete(null)
+        return
+      }
+    }
+    if (txToDelete.id.startsWith('debt_entry_')) {
+      const isDebtEntryExists = debts.some((d) =>
+        (d.entries || []).some(
+          (e) => e.transactionId === txToDelete.id || `debt_entry_${e.id}` === txToDelete.id
+        )
+      )
+      if (isDebtEntryExists) {
+        showToast('لا يمكن حذف معاملة السلفة الإضافية من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
         setTxToDelete(null)
         return
       }
@@ -500,6 +514,16 @@ export const TransactionsPage: React.FC = () => {
               const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
               const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
 
+              const isDebtEntry = tx.id.startsWith('debt_entry_')
+              const isDebtEntryExists = Boolean(
+                isDebtEntry &&
+                  debts.some((d) =>
+                    (d.entries || []).some(
+                      (e) => e.transactionId === tx.id || `debt_entry_${e.id}` === tx.id
+                    )
+                  )
+              )
+
               const isCirclePayout = tx.id.startsWith('circle_payout_')
               const circleId = isCirclePayout ? tx.id.replace('circle_payout_', '') : null
               const isCircleExists = Boolean(
@@ -507,7 +531,8 @@ export const TransactionsPage: React.FC = () => {
                   circles.some((c) => c.id === circleId || tx.id.startsWith(`circle_payout_${c.id}`))
               )
 
-              const isLockedDebt = (isDebtInit && isDebtExists) || isMergedDebtPayment
+              const isLockedDebt =
+                (isDebtInit && isDebtExists) || isDebtEntryExists || isMergedDebtPayment
               const isLockedCircle = isCirclePayout && isCircleExists
 
               return (

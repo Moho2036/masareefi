@@ -79,6 +79,53 @@ describe('aggregate helpers', () => {
       expect(filtered[0].id).toBe('1')
     })
 
+    it('filters by sourceType including debt_init_, debt_entry_, and debt_pay_', () => {
+      const mixedTxs: Transaction[] = [
+        {
+          id: 'debt_init_1',
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'cat-debt',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'debt_entry_2',
+          type: 'expense',
+          amountFils: 20000,
+          categoryId: 'cat-debt',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'debt_pay_3',
+          type: 'income',
+          amountFils: 10000,
+          categoryId: 'cat-debt',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'manual_1',
+          type: 'expense',
+          amountFils: 15000,
+          categoryId: 'cat-food',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const debtTxs = filterTransactions(mixedTxs, { sourceType: 'debt' })
+      expect(debtTxs.map((t) => t.id)).toEqual(['debt_init_1', 'debt_entry_2', 'debt_pay_3'])
+
+      const manualTxs = filterTransactions(mixedTxs, { sourceType: 'manual' })
+      expect(manualTxs.map((t) => t.id)).toEqual(['manual_1'])
+    })
+
     it('filters by Arabic query tolerant of hamza and taa marbuta in note and title', () => {
       // Searching without hamza matches note with hamza "إيجار"
       const result = filterTransactions(txs, { query: 'ايجار' })

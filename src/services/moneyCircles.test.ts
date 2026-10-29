@@ -489,6 +489,40 @@ describe('moneyCircles service', () => {
       const expectedSeconds = Math.floor(new Date(2025, 0, 1).getTime() / 1000)
       expect(txData.date.seconds).toBe(expectedSeconds)
     })
+
+    it('deposits second turn payout with ID circle_payout_${id}_t2 when isSecondTurn is true', async () => {
+      const { depositCircleNetPayout } = await import('./moneyCircles')
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      const doubleCircle: MoneyCircle = {
+        id: 'c-double-1',
+        name: 'جمعية بسهمين',
+        monthlyAmountFils: 50000,
+        membersCount: 5,
+        totalAmountFils: 250000,
+        myTurnMonth: 1,
+        shareType: 'double',
+        secondTurnMonth: 4,
+        startDate: new Date(2026, 0, 1),
+        members: [
+          { id: 'm1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+          { id: 'm2', name: 'أنت (سهم 2)', turnMonth: 4, paidMonths: [] },
+        ],
+        status: 'active',
+        createdAt: new Date(),
+      }
+
+      const txId = await depositCircleNetPayout('uid-1', doubleCircle, 'cat-income', true)
+      expect(txId).toBe('circle_payout_c-double-1_t2')
+
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      const call = mockBatchSet.mock.calls[0]
+      expect(call[0].path).toBe('users/uid-1/transactions/circle_payout_c-double-1_t2')
+      expect(call[1].amountFils).toBe(150000)
+    })
   })
 
   describe('checkCircleHasTransactions', () => {

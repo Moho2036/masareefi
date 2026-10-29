@@ -167,6 +167,32 @@ html.dark aside[aria-label="القائمة الجانبية"],
     font-size: 11pt !important;
   }
 
+  body {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  body:has([role="dialog"]) #root {
+    display: none !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: 1px solid #d4d4d8 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  [role="dialog"] * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
   .grid {
     display: block !important;
   }
@@ -176,8 +202,8 @@ html.dark aside[aria-label="القائمة الجانبية"],
   }
 
   .card,
-  div[class*="rounded-2xl"],
-  div[class*="rounded-xl"] {
+  tr,
+  .print-avoid-break {
     break-inside: avoid;
     box-shadow: none !important;
     border: 1px solid #d4d4d8 !important;

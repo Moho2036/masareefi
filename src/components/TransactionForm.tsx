@@ -144,6 +144,19 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const debtId = isLinkedToDebtInit && initialTransaction ? initialTransaction.id.replace('debt_init_', '') : null
   const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
 
+  const isLinkedToDebtEntry = Boolean(
+    initialTransaction?.id && initialTransaction.id.startsWith('debt_entry_')
+  )
+  const isDebtEntryExists = Boolean(
+    isLinkedToDebtEntry &&
+      initialTransaction &&
+      debts.some((d) =>
+        (d.entries || []).some(
+          (e) => e.transactionId === initialTransaction.id || `debt_entry_${e.id}` === initialTransaction.id
+        )
+      )
+  )
+
   const isLinkedToDebtPayment = Boolean(
     linkedDebtPayment ||
       (initialTransaction?.id &&
@@ -176,13 +189,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const isSourceMissing =
     isSourceDeleted ??
-    ((isLinkedToDebtInit && !isDebtExists) || (isLinkedToCircle && !isCircleExists))
+    ((isLinkedToDebtInit && !isDebtExists) ||
+      (isLinkedToDebtEntry && !isDebtEntryExists) ||
+      (isLinkedToCircle && !isCircleExists))
 
   // Only completely lock amount & date for debt_init_ and circle_payout_ if their source still exists!
   // Also completely lock merged debt payment transactions.
   // If the source debt/circle was deleted, the orphaned transaction is unlocked.
   const isLockedTransaction =
-    !isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle || isMergedPaymentTx)
+    !isSourceMissing &&
+    (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle || isMergedPaymentTx)
   const [duplicateCleared, setDuplicateCleared] = useState(false)
   const activeDuplicateFrom = duplicateCleared ? null : duplicateFrom
   const amountInputRef = useRef<HTMLInputElement>(null)
@@ -238,7 +254,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [showExtraFrequencyDropdown, setShowExtraFrequencyDropdown] = useState(false)
   const [hasEndDate, setHasEndDate] = useState(false)
   const [endDateStr, setEndDateStr] = useState('')
-  const [scheduleNextIfPast, setScheduleNextIfPast] = useState(true)
+  const [scheduleNextIfPast, setScheduleNextIfPast] = useState(false)
   const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(false)
   const [isCreateCatOpen, setIsCreateCatOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -326,7 +342,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const titleSuggestions = useMemo(() => {
     if (!monthTransactions || monthTransactions.length === 0) return []
     const matching = monthTransactions.filter(
-      (t) => t.type === type && t.title && t.title.trim()
+      (t) =>
+        t.type === type &&
+        t.title &&
+        t.title.trim() &&
+        !t.id.startsWith('debt_') &&
+        !t.id.startsWith('circle_')
     )
     const uniqueMap = new Map<string, { title: string; categoryId: string }>()
     const cleanCurrentTitle = normalizeArabic(toWesternDigits(title.trim()))
@@ -728,6 +749,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       setError('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
       return
     }
+    if (isLinkedToDebtEntry && isDebtEntryExists && !isSourceDeleted) {
+      setError('لا يمكن حذف معاملة السلفة الإضافية من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
+      return
+    }
     if (isLinkedToCircle && isCircleExists && !isSourceDeleted) {
       setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
       return
@@ -815,26 +840,33 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
-      {/* Linked Debt Init Warning Banner */}
-      {isLinkedToDebtInit && isDebtExists && !isSourceDeleted && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
-          <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>معاملة أصل الدين متزامنة مع سجل الديون</span>
+      {/* Linked Debt Init or Entry Warning Banner */}
+      {((isLinkedToDebtInit && isDebtExists) || (isLinkedToDebtEntry && isDebtEntryExists)) &&
+        !isSourceDeleted && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>
+                {isLinkedToDebtEntry
+                  ? 'معاملة سلفة إضافية متزامنة مع سجل الديون'
+                  : 'معاملة أصل الدين متزامنة مع سجل الديون'}
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+              {isLinkedToDebtEntry
+                ? 'هذه المعاملة تمثل سلفة إضافية مرتبطة بالدين. لتعديل المبلغ أو حذف السلفة، يرجى إدارتها من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'
+                : 'هذه المعاملة تمثل نشوء الدين الأصلي. لتعديل المبلغ أو حذف الدين، يرجى إدارته من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'}
+            </p>
+            <Link
+              to="/debts"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+            >
+              <span>الانتقال إلى سجل الديون</span>
+              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+            </Link>
           </div>
-          <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
-            هذه المعاملة تمثل نشوء الدين الأصلي. لتعديل المبلغ أو حذف الدين، يرجى إدارته من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.
-          </p>
-          <Link
-            to="/debts"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
-          >
-            <span>الانتقال إلى سجل الديون</span>
-            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-          </Link>
-        </div>
-      )}
+        )}
 
       {/* Linked Debt Payment Warning Banner */}
       {isLinkedToDebtPayment && (
@@ -908,12 +940,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* Orphaned Unlocked Banner */}
-      {isSourceMissing && (isLinkedToDebtInit || isLinkedToCircle) && (
-        <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
-          <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
-        </div>
-      )}
+      {isSourceMissing &&
+        (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle) && (
+          <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+            <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
+          </div>
+        )}
 
       {/* Type Toggle: مصروف / دخل */}
       <div>
@@ -1513,7 +1546,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           isOpen={isCreateCatOpen}
           onClose={() => setIsCreateCatOpen(false)}
           defaultType={type}
-          onSuccess={() => setIsCreateCatOpen(false)}
+          onSuccess={(newCatId, newCatType) => {
+            if (newCatId) {
+              if (newCatType && newCatType !== type && !isLockedTransaction && !isLinkedToDebtPayment) {
+                setType(newCatType)
+              }
+              setCategoryId(newCatId)
+            }
+            setIsCreateCatOpen(false)
+          }}
         />
       )}
     </form>

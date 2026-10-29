@@ -143,11 +143,19 @@ export const MoneyCirclesManager: React.FC = () => {
 
       const now = new Date()
       const eligibleToCheck = circles.filter((c) => {
-        if (depositedCircleIds.has(c.id)) return false
         const currentMonth = getCurrentCircleMonth(c, now, monthStartDay)
-        if (currentMonth < c.myTurnMonth) return false
-        if (checkedCirclesRef.current.has(c.id)) return false
-        return true
+        const checkTurn1 =
+          currentMonth >= c.myTurnMonth &&
+          !depositedCircleIds.has(c.id) &&
+          !checkedCirclesRef.current.has(c.id)
+        const checkTurn2 = Boolean(
+          c.shareType === 'double' &&
+            c.secondTurnMonth &&
+            currentMonth >= c.secondTurnMonth &&
+            !depositedCircleIds.has(`${c.id}_t2`) &&
+            !checkedCirclesRef.current.has(`${c.id}_t2`)
+        )
+        return checkTurn1 || checkTurn2
       })
 
       if (eligibleToCheck.length === 0) return
@@ -155,11 +163,31 @@ export const MoneyCirclesManager: React.FC = () => {
       const newlyDeposited: string[] = []
       await Promise.all(
         eligibleToCheck.map(async (c) => {
+          const currentMonth = getCurrentCircleMonth(c, now, monthStartDay)
           try {
-            const exists = await checkCirclePayoutExists(user.uid, c.id)
-            checkedCirclesRef.current.add(c.id)
-            if (exists) {
-              newlyDeposited.push(c.id)
+            if (
+              currentMonth >= c.myTurnMonth &&
+              !depositedCircleIds.has(c.id) &&
+              !checkedCirclesRef.current.has(c.id)
+            ) {
+              const exists = await checkCirclePayoutExists(user.uid, c.id)
+              checkedCirclesRef.current.add(c.id)
+              if (exists) {
+                newlyDeposited.push(c.id)
+              }
+            }
+            if (
+              c.shareType === 'double' &&
+              c.secondTurnMonth &&
+              currentMonth >= c.secondTurnMonth &&
+              !depositedCircleIds.has(`${c.id}_t2`) &&
+              !checkedCirclesRef.current.has(`${c.id}_t2`)
+            ) {
+              const exists2 = await checkCirclePayoutExists(user.uid, c.id, true)
+              checkedCirclesRef.current.add(`${c.id}_t2`)
+              if (exists2) {
+                newlyDeposited.push(`${c.id}_t2`)
+              }
             }
           } catch {
             // ignore
@@ -244,6 +272,7 @@ export const MoneyCirclesManager: React.FC = () => {
         (editingCircleAny?.depositedMonths ?? []).length > 0 ||
         (editingCircleAny?.paidManualMonths ?? []).length > 0 ||
         depositedCircleIds.has(editingCircle.id) ||
+        depositedCircleIds.has(`${editingCircle.id}_t2`) ||
         hasRecurringProgressed ||
         hasLinkedTx)
   )
@@ -645,7 +674,8 @@ export const MoneyCirclesManager: React.FC = () => {
 
   const handleScheduleCircle = async (circle: MoneyCircle) => {
     if (!user) return
-    if (!defaultExpenseCategory) {
+    const targetCatId = circle.expenseCategoryId || defaultExpenseCategory?.id
+    if (!targetCatId) {
       showToast('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
       return
     }
@@ -662,7 +692,7 @@ export const MoneyCirclesManager: React.FC = () => {
         {
           monthStartDay,
           createRecurringRule: true,
-          defaultCategoryId: defaultExpenseCategory.id,
+          defaultCategoryId: targetCatId,
         }
       )
       await processDueRecurring(user.uid)
@@ -677,13 +707,22 @@ export const MoneyCirclesManager: React.FC = () => {
     if (!user) return
     setDepositingCircleId(circle.id)
     try {
-      let incomeCatId = defaultIncomeCategory?.id
+      let incomeCatId = circle.incomeCategoryId || defaultIncomeCategory?.id
       if (!incomeCatId) {
         incomeCatId = await getOrCreateDebtCategory(user.uid, 'income')
       }
 
-      await depositCircleNetPayout(user.uid, circle, incomeCatId)
-      setDepositedCircleIds((prev) => new Set([...prev, circle.id]))
+      const currentMonth = getCurrentCircleMonth(circle, new Date(), monthStartDay)
+      const isSecondTurnDeposit = Boolean(
+        circle.shareType === 'double' &&
+          circle.secondTurnMonth &&
+          currentMonth >= circle.secondTurnMonth &&
+          depositedCircleIds.has(circle.id)
+      )
+
+      await depositCircleNetPayout(user.uid, circle, incomeCatId, isSecondTurnDeposit)
+      const depositedKey = isSecondTurnDeposit ? `${circle.id}_t2` : circle.id
+      setDepositedCircleIds((prev) => new Set([...prev, depositedKey]))
       showToast('تم إيداع صافي الجمعية في رصيدك بنجاح', 'success')
     } catch (err) {
       console.error('Failed to deposit circle net:', err)
@@ -697,13 +736,21 @@ export const MoneyCirclesManager: React.FC = () => {
     if (!user) return
     setDepositingCircleId(circle.id)
     try {
-      await deleteCirclePayout(user.uid, circle.id)
+      const isSecondTurn = Boolean(
+        circle.shareType === 'double' && depositedCircleIds.has(`${circle.id}_t2`)
+      )
+      await deleteCirclePayout(user.uid, circle.id, isSecondTurn)
       setDepositedCircleIds((prev) => {
         const next = new Set(prev)
-        next.delete(circle.id)
+        if (isSecondTurn) {
+          next.delete(`${circle.id}_t2`)
+          checkedCirclesRef.current.delete(`${circle.id}_t2`)
+        } else {
+          next.delete(circle.id)
+          checkedCirclesRef.current.delete(circle.id)
+        }
         return next
       })
-      checkedCirclesRef.current.delete(circle.id)
       showToast('تم إلغاء إيداع صافي الجمعية من الرصيد', 'info')
     } catch (err) {
       console.error('Failed to undo deposit circle net:', err)
@@ -905,9 +952,29 @@ export const MoneyCirclesManager: React.FC = () => {
             const isExpanded = expandedCircleId === circle.id
             const viewingMonth = selectedCircleMonth[circle.id] || currentMonth
 
-            // Check if user has already received / deposited net turn payout
-            const canDepositNet = isStarted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
-            const netAmountFils = circle.totalAmountFils - circle.monthlyAmountFils
+            // Calculate user amounts based on shareType
+            const userMonthlyFils =
+              circle.shareType === 'half'
+                ? Math.round(circle.monthlyAmountFils / 2)
+                : circle.shareType === 'double'
+                  ? circle.monthlyAmountFils * 2
+                  : circle.monthlyAmountFils
+            const userGrossFils =
+              circle.shareType === 'half'
+                ? Math.round(circle.totalAmountFils / 2)
+                : circle.totalAmountFils
+            const netAmountFils = userGrossFils - userMonthlyFils
+
+            // Check if user has already received / deposited net turn payout (turn 1 or turn 2)
+            const canDepositTurn1 = isStarted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
+            const canDepositTurn2 = Boolean(
+              isStarted &&
+                circle.shareType === 'double' &&
+                circle.secondTurnMonth &&
+                currentMonth >= circle.secondTurnMonth &&
+                !depositedCircleIds.has(`${circle.id}_t2`)
+            )
+            const canDepositNet = canDepositTurn1 || canDepositTurn2
             const linkedRec = getLinkedRecurring(circle)
             const isScheduledActive = Boolean(linkedRec && linkedRec.active !== false)
             const isScheduledPaused = Boolean(linkedRec && linkedRec.active === false)
@@ -947,8 +1014,18 @@ export const MoneyCirclesManager: React.FC = () => {
                       )}
                     </div>
                     <div>
-                      <h4 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <h4 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
                         <span>{circle.name}</span>
+                        {circle.shareType === 'half' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+                            نصف سهم
+                          </span>
+                        )}
+                        {circle.shareType === 'double' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                            سهمان: شهر {circle.myTurnMonth} و {circle.secondTurnMonth}
+                          </span>
+                        )}
                         {circle.isManager && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                             أنت المدير
@@ -961,7 +1038,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         )}
                       </h4>
                       <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                        <span>قسط: {format(circle.monthlyAmountFils)} / شهر</span>
+                        <span>قسط: {format(userMonthlyFils)} / شهر</span>
                         <span>•</span>
                         <span>{circle.membersCount} أشهر ({circle.membersCount} أعضاء)</span>
                       </div>
@@ -985,7 +1062,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     <div className="text-end me-2">
                       <div className="text-[11px] text-slate-400">إجمالي المقبوض</div>
                       <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
-                        {format(circle.totalAmountFils)}
+                        {format(userGrossFils)}
                       </div>
                     </div>
 
@@ -1056,7 +1133,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   <div className="mt-3.5 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 text-xs font-bold">
                       <Crown className="w-5 h-5 text-emerald-500 shrink-0" />
-                      <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(circle.totalAmountFils)}.</span>
+                      <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(userGrossFils)}.</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-emerald-500 text-white shrink-0">
@@ -1116,7 +1193,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         <span>حان موعد استلام حصتك من الجمعية!</span>
                       </div>
                       <div className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                        الصافي بعد حسم قسطك لهذا الشهر ({format(circle.monthlyAmountFils)}):{' '}
+                        الصافي بعد حسم قسطك لهذا الشهر ({format(userMonthlyFils)}):{' '}
                         <strong className="text-emerald-700 dark:text-emerald-400 font-black text-sm">
                           {format(netAmountFils)}
                         </strong>

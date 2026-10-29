@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { format, addMonths } from 'date-fns'
-import { Check, Info, ChevronDown } from 'lucide-react'
+import { Check, Info, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -8,17 +8,20 @@ import { DatePickerInput } from './ui/DatePickerInput'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Toggle } from './ui/Toggle'
 import { CategoryIcon } from './ui/CategoryIcon'
+import { CategoryForm } from './CategoryForm'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useRecurring } from '../hooks/useRecurring'
 import { useToast } from '../hooks/useToast'
+import { useUserSettings } from '../hooks/useUserSettings'
 import { addRecurring, updateRecurring, processDueRecurring } from '../services/recurring'
 import { updateMoneyCircle } from '../services/moneyCircles'
 import { toFils, fromFils } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
 import { calculateNextDateOnEdit, advanceDateWithTargetDay, getNextCircleDueDate } from '../lib/recurring'
+import { getCategoryUsageMap, sortCategoriesUnified } from '../lib/categoryUsage'
 import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
 import type { Recurring, TxType, Frequency } from '../types'
@@ -114,6 +117,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
   const [title, setTitle] = useState<string>(initialRecurring?.title ?? '')
   const [note, setNote] = useState<string>(initialRecurring?.note ?? '')
+  const [scheduleNextIfPast, setScheduleNextIfPast] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -160,19 +164,45 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
   const isCircleLinked = Boolean(initialRecurring?.circleId)
   const hasSelectedCircle = Boolean(circleId || isCircleLinked)
 
+  const { data: userSettings } = useUserSettings()
+  const usageMap = useMemo(() => getCategoryUsageMap(), [])
+
+  const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(false)
+  const [isCreateCatOpen, setIsCreateCatOpen] = useState(false)
+
   // Filter available categories for current transaction type
-  // Preserve recurring item's category even if archived
+  // Preserve recurring item's category even if archived and sort unified
   const originalCatId = initialRecurring?.categoryId
   const availableCategories = useMemo(() => {
-    return categories.filter(
+    const filtered = categories.filter(
       (c) => c.type === type && (!c.archived || c.id === originalCatId)
     )
-  }, [categories, type, originalCatId])
+    return sortCategoriesUnified(
+      filtered,
+      usageMap,
+      userSettings?.categorySortMode || 'usage'
+    )
+  }, [categories, type, originalCatId, usageMap, userSettings?.categorySortMode])
 
   const activeCategoryId =
     categoryId && availableCategories.some((c) => c.id === categoryId)
       ? categoryId
       : availableCategories[0]?.id ?? ''
+
+  // Foldable categories grid: first 6 (ensuring selected category is visible if chosen) or all
+  const displayedCategories = useMemo(() => {
+    if (isCategoriesExpanded || availableCategories.length <= 6) {
+      return availableCategories
+    }
+    const top6 = availableCategories.slice(0, 6)
+    if (activeCategoryId && !top6.some((c) => c.id === activeCategoryId)) {
+      const selected = availableCategories.find((c) => c.id === activeCategoryId)
+      if (selected) {
+        return [...availableCategories.slice(0, 5), selected]
+      }
+    }
+    return top6
+  }, [availableCategories, isCategoriesExpanded, activeCategoryId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -330,7 +360,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         startOfToday.setHours(0, 0, 0, 0)
         const startOfStart = new Date(parsedStartDate.getTime())
         startOfStart.setHours(0, 0, 0, 0)
-        if (!linkedCircle && startOfStart < startOfToday) {
+        if (!linkedCircle && startOfStart < startOfToday && scheduleNextIfPast) {
           initialNextDate = calculateNextDateOnEdit(parsedStartDate, frequency)
         }
 
@@ -451,9 +481,40 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
       {/* Category Chips Grid */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-          التصنيف
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+            التصنيف
+          </label>
+          <div className="flex items-center gap-2">
+            {availableCategories.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setIsCategoriesExpanded((prev) => !prev)}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                {isCategoriesExpanded ? (
+                  <>
+                    <span>طي التصنيفات</span>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </>
+                ) : (
+                  <>
+                    <span>عرض كل التصنيفات ({availableCategories.length})</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsCreateCatOpen(true)}
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>تصنيف جديد</span>
+            </button>
+          </div>
+        </div>
         {categoriesLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -471,8 +532,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             لا توجد تصنيفات متاحة لهذا النوع
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1">
-            {availableCategories.map((cat) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+            {displayedCategories.map((cat) => {
               const isSelected = activeCategoryId === cat.id
               return (
                 <button
@@ -718,6 +779,23 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         ) : null}
       </div>
 
+      {!isEditing &&
+        !hasSelectedCircle &&
+        parseLocalDateInput(startDateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+          <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 flex items-center justify-between gap-2">
+            <span>
+              تاريخ البداية في الماضي؛ سيتم جدولة الاستحقاق القادم من تاريخ اليوم فصاعداً دون تسجيل
+              دفعات سابقة بأثر رجعي.
+            </span>
+            <input
+              type="checkbox"
+              checked={scheduleNextIfPast}
+              onChange={(e) => setScheduleNextIfPast(e.target.checked)}
+              className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+          </div>
+        )}
+
       {/* Checkbox toggle for end date */}
       <div>
         <Toggle
@@ -779,6 +857,23 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           {submitting ? 'جاري الحفظ...' : isEditing ? 'تعديل المعاملة' : 'حفظ'}
         </Button>
       </div>
+
+      {isCreateCatOpen && (
+        <CategoryForm
+          isOpen={isCreateCatOpen}
+          onClose={() => setIsCreateCatOpen(false)}
+          defaultType={type}
+          onSuccess={(newCatId, newCatType) => {
+            if (newCatId) {
+              if (newCatType && newCatType !== type && !isEditing && !hasSelectedCircle) {
+                setType(newCatType)
+              }
+              setCategoryId(newCatId)
+            }
+            setIsCreateCatOpen(false)
+          }}
+        />
+      )}
     </form>
   )
 }

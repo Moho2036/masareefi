@@ -60,7 +60,10 @@ export function filterTransactions(
 
     // Source filtering
     if (sourceType && sourceType !== 'all') {
-      const isDebt = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_pay_')
+      const isDebt =
+        tx.id.startsWith('debt_init_') ||
+        tx.id.startsWith('debt_entry_') ||
+        tx.id.startsWith('debt_pay_')
       const isCircle = tx.id.startsWith('circle_')
       const isRecurring = Boolean(tx.recurringId) && !isCircle
 

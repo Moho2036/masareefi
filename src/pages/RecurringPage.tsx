@@ -682,6 +682,36 @@ export const RecurringPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {item.active &&
+                      !isCircleItem &&
+                      !(
+                        item.requireConfirmation &&
+                        (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
+                          new Date()
+                      ) && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenConfirm(item)}
+                            className="p-2 rounded-xl text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                            aria-label="تسجيل دفعة هذه الدورة الآن"
+                            title="تسجيل دفعة هذه الدورة الآن"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={skippingId === item.id}
+                            onClick={() => handleSkipOccurrence(item)}
+                            className="p-2 rounded-xl text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer disabled:opacity-50"
+                            aria-label="تخطي الدورة القادمة"
+                            title="تخطي هذه الدورة والانتقال للموعد التالي"
+                          >
+                            <SkipForward className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+
                     {/* Payment History button */}
                     <button
                       type="button"

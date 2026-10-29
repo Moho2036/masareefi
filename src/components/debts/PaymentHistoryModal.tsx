@@ -680,7 +680,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     </div>
                   </div>
                   {debt.entries && debt.entries.length > 0 && (
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 print-hide">
                       <button
                         type="button"
                         onClick={() => handleStartEditEntry(e)}
@@ -931,7 +931,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0 print-hide">
                           {!isMerged && (
                             <button
                               type="button"
@@ -966,7 +966,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         )}
         </div>
 
-        <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 print-hide">
           <Button
             type="button"
             variant="outline"
