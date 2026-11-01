@@ -54,5 +54,8 @@ export function useCurrency(): UseCurrencyResult {
     [currency, hideBalances, hideZeroDecimals, customDecimals]
   )
 
-  return { currency, config, format, formatWithSign }
+  return useMemo(
+    () => ({ currency, config, format, formatWithSign }),
+    [currency, config, format, formatWithSign]
+  )
 }

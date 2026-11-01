@@ -229,4 +229,86 @@ describe('SafeDailySpendCard Component', () => {
     const freeBalanceEl = screen.getByText(/-150(\.000)? د\.أ/)
     expect(freeBalanceEl).toHaveClass('text-red-500')
   })
+
+  it('renders neutral guidance banner when month is completely empty (isEmptyMonth)', () => {
+    const emptyForecast: ForecastResult = {
+      ...baseForecast,
+      currentIncome: 0,
+      currentExpense: 0,
+      monthNet: 0,
+      rolloverBalance: 0,
+      availableBalance: 0,
+      availablePool: 0,
+      upcomingRecurringExpenses: 0,
+      upcomingRecurringIncome: 0,
+      upcomingDebtObligations: 0,
+      freeBalance: 0,
+      dailySafeFils: 0,
+      actualDailySpendFils: 0,
+      surplusAmount: 0,
+      deficitAmount: 0,
+      isDeficitProjected: false,
+    }
+
+    render(<SafeDailySpendCard forecast={emptyForecast} />)
+
+    expect(screen.getByText('بانتظار تسجيل المعاملات:')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي\./
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('مسارك المالي ممتاز!')).not.toBeInTheDocument()
+  })
+
+  it('renders red warning banner when freeBalance is exhausted (freeBalance <= 0) due to obligations', () => {
+    const exhaustedForecast: ForecastResult = {
+      ...baseForecast,
+      currentIncome: 200000,
+      currentExpense: 100000,
+      monthNet: 100000,
+      availableBalance: 100000,
+      upcomingRecurringExpenses: 100000,
+      upcomingDebtObligations: 0,
+      freeBalance: 0,
+      dailySafeFils: 0,
+      actualDailySpendFils: 6667,
+      healthStatus: 'danger',
+      isDeficitProjected: false,
+    }
+
+    render(<SafeDailySpendCard forecast={exhaustedForecast} />)
+
+    expect(screen.getByText('استنفاد الرصيد الحر المتاح:')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /لقد استهلكت كامل الرصيد المتاح للصرف اليومي أو تم حجزه بالكامل للالتزامات المتبقية/
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('مسارك المالي ممتاز!')).not.toBeInTheDocument()
+  })
+
+  it('renders amber warning banner when spending pace exceeds safe daily spend', () => {
+    const overspendingForecast: ForecastResult = {
+      ...baseForecast,
+      currentIncome: 500000,
+      currentExpense: 300000,
+      availableBalance: 200000,
+      freeBalance: 200000,
+      dailySafeFils: 12500,
+      actualDailySpendFils: 20000,
+      healthStatus: 'warning',
+      isDeficitProjected: false,
+    }
+
+    render(<SafeDailySpendCard forecast={overspendingForecast} />)
+
+    expect(screen.getByText('تنبيه وتيرة الإنفاق:')).toBeInTheDocument()
+    expect(screen.getByText(/معدل صرفك اليومي الحالي.*يتجاوز حد الأمان/)).toBeInTheDocument()
+    expect(screen.queryByText('مسارك المالي ممتاز!')).not.toBeInTheDocument()
+
+    // Assert actualDailySpendFils has amber warning color styling class
+    const actualSpendEl = screen.getAllByText(/20(\.000)? د\.أ/)[0]
+    expect(actualSpendEl).toHaveClass('text-amber-600')
+  })
 })

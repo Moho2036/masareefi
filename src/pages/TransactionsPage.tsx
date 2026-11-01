@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useDeferredValue } from 'react'
+/* eslint-disable react-hooks/refs */
+import React, { useState, useMemo, useEffect, useDeferredValue, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import {
   ArrowLeftRight,
@@ -41,7 +42,6 @@ import { deleteTransaction } from '../services/transactions'
 import { removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
 import { formatDayHeader, formatDateInput, parseLocalDateInput } from '../lib/dates'
-import { findLinkedDebtPayment } from '../lib/debts'
 import { exportTransactionsToCsv } from '../lib/exportCsv'
 import { getOccurrenceMonthIndex } from '../lib/recurring'
 import {
@@ -58,7 +58,7 @@ import {
   type TransactionSortOption,
 } from '../lib/aggregate'
 import { cn } from '../lib/cn'
-import type { Transaction, TxType } from '../types'
+import type { Transaction, TxType, Debt } from '../types'
 
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
@@ -79,6 +79,14 @@ export const TransactionsPage: React.FC = () => {
 
   const fetchAll = allMonths || isCustomDateRange
   const { data: rawTransactions, loading: txLoading } = useTransactions(fetchAll ? undefined : range)
+
+  const hasLoadedOnceRef = useRef(false)
+
+  useEffect(() => {
+    if (!txLoading) {
+      hasLoadedOnceRef.current = true
+    }
+  }, [txLoading])
   const { data: categories } = useCategories()
   const { data: debts } = useDebts()
   const { data: circles } = useMoneyCircles()
@@ -86,6 +94,54 @@ export const TransactionsPage: React.FC = () => {
   const { showToast } = useToast()
   const { formatWithSign, config: currencyConfig } = useCurrency()
   const { data: userSettings } = useUserSettings()
+
+  const circleIdsSet = useMemo(() => {
+    return new Set(circles.map((c) => c.id))
+  }, [circles])
+
+  const circleRecurringIdsSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of circles) {
+      if (c.recurringId) {
+        set.add(c.recurringId)
+      }
+    }
+    return set
+  }, [circles])
+
+  const debtLookup = useMemo(() => {
+    const debtIdsSet = new Set<string>()
+    const entryTxIdsSet = new Set<string>()
+    const paymentByTxIdMap = new Map<string, { debt: Debt; payment: Debt['payments'][number] }>()
+
+    for (const d of debts) {
+      debtIdsSet.add(d.id)
+      if (d.entries) {
+        for (const e of d.entries) {
+          if (e.transactionId) entryTxIdsSet.add(e.transactionId)
+          entryTxIdsSet.add(`debt_entry_${e.id}`)
+        }
+      }
+      if (d.payments) {
+        for (const p of d.payments) {
+          const item = { debt: d, payment: p }
+          if (p.transactionId) paymentByTxIdMap.set(p.transactionId, item)
+          paymentByTxIdMap.set(`debt_pay_${p.id}`, item)
+          if (Array.isArray(p.mergedTransactionIds)) {
+            for (const mid of p.mergedTransactionIds) {
+              if (mid) paymentByTxIdMap.set(mid, item)
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      debtIdsSet,
+      entryTxIdsSet,
+      paymentByTxIdMap,
+    }
+  }, [debts])
 
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -127,7 +183,7 @@ export const TransactionsPage: React.FC = () => {
   }
 
   // Check if txToDelete is linked to a debt payment
-  const linkedDebtPayment = findLinkedDebtPayment(txToDelete?.id, debts)
+  const linkedDebtPayment = txToDelete?.id ? debtLookup.paymentByTxIdMap.get(txToDelete.id) ?? null : null
 
   // Automatically reset to page 1 during render whenever filters change
   const currentFilterKey = `${fetchAll ? 'all' : range.start.getTime()}_${deferredQuery}_${filterType}_${selectedCategories.join(',')}_${selectedSource}_${isCustomDateRange}_${customDateFrom}_${customDateTo}_${sortBy}`
@@ -281,7 +337,16 @@ export const TransactionsPage: React.FC = () => {
     if (sortBy === 'highest' || sortBy === 'lowest') {
       return []
     }
-    return groupByDay(paginatedTransactions)
+    const rawGroups = groupByDay(paginatedTransactions)
+    return rawGroups.map((group) => {
+      const netFils = group.transactions.reduce((acc, tx) => {
+        return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
+      }, 0)
+      return {
+        ...group,
+        dayNetFils: netFils,
+      }
+    })
   }, [paginatedTransactions, sortBy])
 
   const handlePageChange = (newPage: number) => {
@@ -336,7 +401,10 @@ export const TransactionsPage: React.FC = () => {
 
     if (txToDelete.id.startsWith('debt_init_')) {
       const debtId = txToDelete.id.replace('debt_init_', '')
-      const debtExists = debts.some((d) => d.id === debtId)
+      const debtExists = Boolean(
+        (debtId && debtLookup.debtIdsSet.has(debtId)) ||
+          debtLookup.entryTxIdsSet.has(txToDelete.id)
+      )
       if (debtExists) {
         showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
         setTxToDelete(null)
@@ -344,11 +412,7 @@ export const TransactionsPage: React.FC = () => {
       }
     }
     if (txToDelete.id.startsWith('debt_entry_')) {
-      const isDebtEntryExists = debts.some((d) =>
-        (d.entries || []).some(
-          (e) => e.transactionId === txToDelete.id || `debt_entry_${e.id}` === txToDelete.id
-        )
-      )
+      const isDebtEntryExists = debtLookup.entryTxIdsSet.has(txToDelete.id)
       if (isDebtEntryExists) {
         showToast('لا يمكن حذف معاملة السلفة الإضافية من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
         setTxToDelete(null)
@@ -357,7 +421,7 @@ export const TransactionsPage: React.FC = () => {
     }
     if (txToDelete.id.startsWith('circle_payout_')) {
       const circleId = txToDelete.id.replace('circle_payout_', '')
-      const circleExists = circles.some((c) => c.id === circleId || txToDelete.id.startsWith(`circle_payout_${c.id}`))
+      const circleExists = Boolean(circleId && circleIdsSet.has(circleId))
       if (circleExists) {
         showToast('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.', 'error')
         setTxToDelete(null)
@@ -461,7 +525,7 @@ export const TransactionsPage: React.FC = () => {
               )}
               {(tx.id.startsWith('circle_payout_') ||
                 /^circle_(.+)_m(\d+)$/.test(tx.id) ||
-                Boolean(tx.recurringId && circles.some((c) => c.recurringId === tx.recurringId))) && (
+                Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))) && (
                 <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800 font-bold shrink-0">
                   <Users className="w-2.5 h-2.5" />
                   <span>جمعية</span>
@@ -507,28 +571,25 @@ export const TransactionsPage: React.FC = () => {
 
           <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             {(() => {
-              const linkedPaymentItem = findLinkedDebtPayment(tx.id, debts)
+              const linkedPaymentItem = debtLookup.paymentByTxIdMap.get(tx.id)
               const isMergedDebtPayment = Boolean(linkedPaymentItem?.payment?.isMerged)
 
               const isDebtInit = tx.id.startsWith('debt_init_')
               const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
-              const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
+              const isDebtExists = Boolean(
+                (debtId && debtLookup.debtIdsSet.has(debtId)) ||
+                  debtLookup.entryTxIdsSet.has(tx.id)
+              )
 
               const isDebtEntry = tx.id.startsWith('debt_entry_')
               const isDebtEntryExists = Boolean(
-                isDebtEntry &&
-                  debts.some((d) =>
-                    (d.entries || []).some(
-                      (e) => e.transactionId === tx.id || `debt_entry_${e.id}` === tx.id
-                    )
-                  )
+                isDebtEntry && debtLookup.entryTxIdsSet.has(tx.id)
               )
 
               const isCirclePayout = tx.id.startsWith('circle_payout_')
               const circleId = isCirclePayout ? tx.id.replace('circle_payout_', '') : null
               const isCircleExists = Boolean(
-                isCirclePayout &&
-                  circles.some((c) => c.id === circleId || tx.id.startsWith(`circle_payout_${c.id}`))
+                isCirclePayout && circleId && circleIdsSet.has(circleId)
               )
 
               const isLockedDebt =
@@ -954,7 +1015,7 @@ export const TransactionsPage: React.FC = () => {
 
         {/* Main Column: Transactions List */}
         <main className="lg:col-span-8 space-y-4">
-          {txLoading && rawTransactions.length === 0 ? (
+          {!hasLoadedOnceRef.current && txLoading && rawTransactions.length === 0 ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
                 <div
@@ -997,9 +1058,7 @@ export const TransactionsPage: React.FC = () => {
               ) : (
                 /* Grouped by day for date-based sorting */
                 dayGroups.map((group) => {
-                  const dayNetFils = group.transactions.reduce((acc, tx) => {
-                    return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
-                  }, 0)
+                  const dayNetFils = group.dayNetFils
 
                   return (
                     <div key={group.dateKey} className="space-y-2">

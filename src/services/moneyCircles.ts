@@ -18,8 +18,10 @@ import {
   type FirestoreDataConverter,
   type QueryDocumentSnapshot,
   type DocumentData,
+  type DocumentReference,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { MoneyCircle } from '../types'
 
 interface FirestoreCircleMember {
@@ -163,6 +165,9 @@ export async function addMoneyCircle(
   if (monthlyAmount <= 0) {
     throw new Error('القسط الشهري يجب أن يكون مبلغاً موجباً')
   }
+  if (monthlyAmount > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
 
   const membersCount = Math.round(Number(circle.membersCount))
   if (membersCount < 2 || membersCount > 50) {
@@ -170,6 +175,9 @@ export async function addMoneyCircle(
   }
 
   const totalAmount = monthlyAmount * membersCount
+  if (totalAmount > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
   const myTurn = Math.round(Number(circle.myTurnMonth))
   if (myTurn < 1 || myTurn > membersCount) {
     throw new Error('دورك في الاستلام يجب أن يكون بين 1 وعدد الأعضاء')
@@ -230,15 +238,36 @@ export async function updateMoneyCircle(
   const updates: Record<string, unknown> = {}
 
   if (partial.name !== undefined) updates.name = partial.name.trim().slice(0, 100)
-  if (partial.monthlyAmountFils !== undefined) updates.monthlyAmountFils = Math.round(partial.monthlyAmountFils)
+  if (partial.monthlyAmountFils !== undefined) {
+    const monthly = Math.round(partial.monthlyAmountFils)
+    if (monthly > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+    }
+    updates.monthlyAmountFils = monthly
+  }
   if (partial.membersCount !== undefined) updates.membersCount = Math.round(partial.membersCount)
-  if (partial.totalAmountFils !== undefined) updates.totalAmountFils = Math.round(partial.totalAmountFils)
+  if (partial.totalAmountFils !== undefined) {
+    const total = Math.round(partial.totalAmountFils)
+    if (total > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+    }
+    updates.totalAmountFils = total
+  }
   if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
   if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
   if (partial.status !== undefined) updates.status = partial.status
-  if (partial.expenseCategoryId !== undefined) updates.expenseCategoryId = partial.expenseCategoryId
-  if (partial.incomeCategoryId !== undefined) updates.incomeCategoryId = partial.incomeCategoryId
-  if (partial.categoryId !== undefined) updates.categoryId = partial.categoryId
+  if (partial.expenseCategoryId !== undefined) {
+    const trimmed = partial.expenseCategoryId.trim().slice(0, 128)
+    updates.expenseCategoryId = trimmed ? trimmed : deleteField()
+  }
+  if (partial.incomeCategoryId !== undefined) {
+    const trimmed = partial.incomeCategoryId.trim().slice(0, 128)
+    updates.incomeCategoryId = trimmed ? trimmed : deleteField()
+  }
+  if (partial.categoryId !== undefined) {
+    const trimmed = partial.categoryId.trim().slice(0, 128)
+    updates.categoryId = trimmed ? trimmed : deleteField()
+  }
   if (partial.shareType !== undefined) updates.shareType = partial.shareType
   if (partial.secondTurnMonth !== undefined) {
     if (
@@ -279,6 +308,15 @@ export async function updateMoneyCircle(
     partial.membersCount !== undefined
       ? Math.round(partial.membersCount)
       : currentCircle.membersCount
+  const effectiveTotal =
+    partial.totalAmountFils !== undefined
+      ? Math.round(partial.totalAmountFils)
+      : (partial.monthlyAmountFils !== undefined || partial.membersCount !== undefined
+          ? effectiveMonthly * effectiveMembersCount
+          : currentCircle.totalAmountFils)
+  if (effectiveMonthly > MAX_AMOUNT_FILS || effectiveTotal > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
   const effectiveTurn =
     partial.myTurnMonth !== undefined
       ? Math.round(partial.myTurnMonth)
@@ -498,25 +536,32 @@ export async function updateMoneyCircle(
   }
 
   // 2. Sync circle payout transaction if it exists
+  let monthStartDay = options?.monthStartDay
+  let diffMonths = -1
+  let currentMonthIndex = -1
+
+  const ensureCycleComputed = async () => {
+    if (diffMonths >= 0) return
+    if (monthStartDay === undefined) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', uid))
+        if (userSnap?.exists?.()) {
+          monthStartDay = userSnap.data()?.monthStartDay
+        }
+      } catch {
+        // fallback
+      }
+    }
+    const now = new Date()
+    diffMonths = getCircleCycleIndex(effectiveStartDate, now, monthStartDay)
+    currentMonthIndex = diffMonths + 1
+  }
+
   const payoutRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
   try {
     const payoutSnap = await getDoc(payoutRef)
     if (payoutSnap?.exists?.()) {
-      let monthStartDay = options?.monthStartDay
-      if (monthStartDay === undefined) {
-        try {
-          const userSnap = await getDoc(doc(db, 'users', uid))
-          if (userSnap?.exists?.()) {
-            monthStartDay = userSnap.data()?.monthStartDay
-          }
-        } catch {
-          // fallback
-        }
-      }
-      const now = new Date()
-      const diffMonths = getCircleCycleIndex(effectiveStartDate, now, monthStartDay)
-      const currentMonthIndex = diffMonths + 1
-
+      await ensureCycleComputed()
       if (diffMonths < 0 || currentMonthIndex < effectiveTurn) {
         batch.delete(payoutRef)
       } else {
@@ -567,9 +612,77 @@ export async function updateMoneyCircle(
     console.error('Failed to sync circle payout transaction:', err)
   }
 
+  // Sync turn 2 payout transaction if it exists (for double share circles)
+  const mayHaveSecondPayout =
+    currentCircle.shareType === 'double' ||
+    partial.shareType === 'double' ||
+    currentCircle.secondTurnMonth !== undefined ||
+    partial.secondTurnMonth !== undefined
+
+  if (mayHaveSecondPayout) {
+    const payoutRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
+    try {
+      const payoutSnap2 = await getDoc(payoutRef2)
+      if (payoutSnap2?.exists?.()) {
+        await ensureCycleComputed()
+        if (
+          effectiveShareType !== 'double' ||
+          !effectiveSecondTurn ||
+          diffMonths < 0 ||
+          currentMonthIndex < effectiveSecondTurn
+        ) {
+          batch.delete(payoutRef2)
+        } else {
+          const userMonthly = effectiveMonthly * 2
+          const userGross = effectiveMonthly * effectiveMembersCount
+          const netAmountFils = userGross - userMonthly
+          if (netAmountFils > 0) {
+            const payoutUpdates2: Record<string, unknown> = {
+              amountFils: netAmountFils,
+              title: `استلام صافي جمعية ${effectiveName} (الدور الثاني)`.slice(0, 100),
+            }
+
+            const existingPayoutData2 =
+              typeof payoutSnap2?.data === 'function'
+                ? (payoutSnap2.data() as Record<string, unknown> | undefined)
+                : undefined
+            const existingNote2 = typeof existingPayoutData2?.note === 'string' ? existingPayoutData2.note.trim() : ''
+            const oldDefaultNote2 = currentCircle?.name
+              ? `استلام صافي الجمعية بعد خصم قسط الشهر (${currentCircle.name}) (الدور الثاني)`
+              : ''
+            const isDefaultNote2 = !existingNote2 || existingNote2 === oldDefaultNote2
+
+            if (partial.name !== undefined && isDefaultNote2) {
+              payoutUpdates2.note = `استلام صافي الجمعية بعد خصم قسط الشهر (${effectiveName}) (الدور الثاني)`.slice(0, 500)
+            }
+
+            if (partial.startDate !== undefined || partial.secondTurnMonth !== undefined) {
+              const expectedTurnDate2 = addMonths(
+                effectiveStartDate,
+                Math.max(0, effectiveSecondTurn - 1)
+              )
+              payoutUpdates2.date = Timestamp.fromDate(expectedTurnDate2)
+            }
+
+            batch.update(payoutRef2, payoutUpdates2)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync circle payout transaction (turn 2):', err)
+    }
+  }
+
   // 3. Update installment transactions if monthly amount or circle name changed
-  const oldMonthly = currentCircle.monthlyAmountFils
-  const amountChanged = partial.monthlyAmountFils !== undefined && effectiveMonthly !== oldMonthly
+  const oldUserInstallment =
+    currentCircle.shareType === 'half'
+      ? Math.round(currentCircle.monthlyAmountFils / 2)
+      : currentCircle.shareType === 'double'
+        ? currentCircle.monthlyAmountFils * 2
+        : currentCircle.monthlyAmountFils
+  const amountChanged =
+    (partial.monthlyAmountFils !== undefined || partial.shareType !== undefined) &&
+    userInstallmentAmount !== oldUserInstallment
   const nameChanged = partial.name !== undefined && partial.name.trim() !== currentCircle.name.trim()
 
   if (amountChanged || nameChanged) {
@@ -591,7 +704,10 @@ export async function updateMoneyCircle(
           query(collection(db, 'users', uid, 'transactions'), where('recurringId', '==', rId))
         )
         for (const txDoc of txSnap.docs) {
-          const verifiedTx = await getDoc(txDoc.ref)
+          const verifiedTx =
+            typeof txDoc.data === 'function' && typeof txDoc.exists === 'function'
+              ? txDoc
+              : await getDoc(txDoc.ref)
           if (verifiedTx.exists()) {
             const txData = typeof verifiedTx.data === 'function' ? verifiedTx.data() : undefined
             const rawDate = txData?.date
@@ -607,7 +723,7 @@ export async function updateMoneyCircle(
 
             const txUpdates: Record<string, unknown> = {}
             if (amountChanged && !isPastMonthTx) {
-              txUpdates.amountFils = effectiveMonthly
+              txUpdates.amountFils = userInstallmentAmount
             }
             if (nameChanged) {
               txUpdates.title = ('قسط ' + effectiveName).slice(0, 100)
@@ -635,7 +751,7 @@ export async function checkCirclePayoutExists(
   const txId = isSecondTurn ? `circle_payout_${circleId}_t2` : `circle_payout_${circleId}`
   const txRef = doc(db, 'users', uid, 'transactions', txId)
   const snap = await getDoc(txRef)
-  return snap.exists()
+  return Boolean(snap?.exists?.())
 }
 
 /**
@@ -648,9 +764,11 @@ export async function checkCircleHasTransactions(
   recurringId?: string
 ): Promise<boolean> {
   try {
-    // 1. Check if net payout transaction exists
+    // 1. Check if net payout transaction exists (turn 1 or turn 2)
     const payoutExists = await checkCirclePayoutExists(uid, circleId)
     if (payoutExists) return true
+    const payout2Exists = await checkCirclePayoutExists(uid, circleId, true)
+    if (payout2Exists) return true
 
     // 2. Check if recurring rule transactions exist
     if (recurringId) {
@@ -908,15 +1026,21 @@ export async function deleteMoneyCircle(
   const circleSnap = await getDoc(docRef)
   const circleData = circleSnap.data()
 
-  const batch = writeBatch(db)
-  batch.delete(docRef)
+  const refsToDelete: DocumentReference[] = [docRef]
+  const seenPaths = new Set<string>([docRef.path])
+  const addRefToDelete = (ref: DocumentReference) => {
+    if (!seenPaths.has(ref.path)) {
+      seenPaths.add(ref.path)
+      refsToDelete.push(ref)
+    }
+  }
 
   const recIds = new Set<string>()
 
   // 1. Clean up associated recurring transaction if linked by recurringId
   if (circleData?.recurringId) {
     const recRef = doc(db, 'users', uid, 'recurring', circleData.recurringId)
-    batch.delete(recRef)
+    addRefToDelete(recRef)
     recIds.add(circleData.recurringId)
   }
 
@@ -925,7 +1049,7 @@ export async function deleteMoneyCircle(
   const q = query(recColRef, where('circleId', '==', id))
   const recSnap = await getDocs(q)
   for (const recDoc of recSnap.docs) {
-    batch.delete(recDoc.ref)
+    addRefToDelete(recDoc.ref)
     recIds.add(recDoc.id)
   }
 
@@ -933,17 +1057,17 @@ export async function deleteMoneyCircle(
   if (deleteWalletTransactions) {
     // Delete payout transaction if exists
     const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
-    batch.delete(payoutTxRef)
+    addRefToDelete(payoutTxRef)
     if (circleData?.shareType === 'double') {
       const payoutTxRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
-      batch.delete(payoutTxRef2)
+      addRefToDelete(payoutTxRef2)
     }
 
     // Delete manual installment transactions (circle_${id}_m1 through circle_${id}_m${membersCount})
     const totalMembers = circleData?.membersCount || 0
     for (let m = 1; m <= totalMembers; m++) {
       const manualTxRef = doc(db, 'users', uid, 'transactions', `circle_${id}_m${m}`)
-      batch.delete(manualTxRef)
+      addRefToDelete(manualTxRef)
     }
 
     // Delete installment transactions created by the recurring schedules of this circle
@@ -953,13 +1077,21 @@ export async function deleteMoneyCircle(
       const txSnap = await getDocs(txQuery)
       if (txSnap?.docs) {
         for (const txDoc of txSnap.docs) {
-          batch.delete(txDoc.ref)
+          addRefToDelete(txDoc.ref)
         }
       }
     }
   }
 
-  await batch.commit()
+  const CHUNK_SIZE = 400
+  for (let i = 0; i < refsToDelete.length; i += CHUNK_SIZE) {
+    const chunk = refsToDelete.slice(i, i + CHUNK_SIZE)
+    const batch = writeBatch(db)
+    for (const ref of chunk) {
+      batch.delete(ref)
+    }
+    await batch.commit()
+  }
 }
 
 export const deleteCircle = deleteMoneyCircle
@@ -1196,12 +1328,27 @@ export async function swapMemberTurns(
     }
   }
 
+  const cleanMemberForNewTurn = (m: typeof m1, newTurn: number) => {
+    const cleanedPaid = (m.paidMonths || []).filter((mn) => mn !== newTurn)
+    const cleanedMap = m.paymentsByMonth ? { ...m.paymentsByMonth } : undefined
+    if (cleanedMap) {
+      delete cleanedMap[newTurn]
+      delete cleanedMap[String(newTurn)]
+    }
+    return {
+      ...m,
+      turnMonth: newTurn,
+      paidMonths: cleanedPaid,
+      ...(cleanedMap ? { paymentsByMonth: cleanedMap } : {}),
+    }
+  }
+
   const updatedMembers = circle.members.map((m) => {
     if (m.id === memberId1) {
-      return { ...m, turnMonth: turn2 }
+      return cleanMemberForNewTurn(m, turn2)
     }
     if (m.id === memberId2) {
-      return { ...m, turnMonth: turn1 }
+      return cleanMemberForNewTurn(m, turn1)
     }
     return m
   })

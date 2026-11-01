@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateForecast } from './forecast'
-import type { Transaction, Recurring, Debt } from '../types'
+import type { Transaction, Recurring, Debt, MoneyCircle } from '../types'
 
 describe('forecast lib', () => {
   const midMonthDate = new Date(2026, 9, 15) // Oct 15, 2026 (month range Oct 1 - Nov 1)
@@ -1302,5 +1302,339 @@ describe('forecast lib', () => {
     expect(res.freeBalance).toBe(450000)
     expect(res.isDeficitProjected).toBe(false)
     expect(res.healthStatus).toBe('warning')
+  })
+
+  it('correctly calculates 30-day month forecast without double-counting the current day', () => {
+    // April 2026: 30 days (April 1 to May 1)
+    const range = {
+      start: new Date(2026, 3, 1),
+      end: new Date(2026, 4, 1),
+    }
+
+    const incomeTx: Transaction = {
+      id: 'tx-inc-30d',
+      type: 'income',
+      amountFils: 300000, // 300 JOD
+      categoryId: 'cat-inc',
+      date: new Date(2026, 3, 1),
+      note: 'راتب',
+      createdAt: new Date(),
+    }
+
+    const dayOneExpenseTx: Transaction = {
+      id: 'tx-exp-day1',
+      type: 'expense',
+      amountFils: 10000, // 10 JOD on day 1
+      categoryId: 'cat-exp',
+      date: new Date(2026, 3, 1),
+      note: 'مصروف اليوم الأول',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [incomeTx, dayOneExpenseTx],
+      periodRange: range,
+      referenceDate: new Date(2026, 3, 1), // Day 1 of the cycle
+    })
+
+    expect(res.totalDays).toBe(30)
+    expect(res.elapsedDays).toBe(1)
+    expect(res.remainingDays).toBe(30)
+    expect(res.actualDailySpendFils).toBe(10000)
+    // 10,000 spent today + 10,000 * 29 future unelapsed days = 300,000 projected expense
+    expect(res.projectedExpense).toBe(300000)
+    expect(res.projectedNet).toBe(0)
+    expect(res.isDeficitProjected).toBe(false)
+  })
+
+  it('does not inflate actualDailySpendFils when inventory difference reconciliation transaction is present', () => {
+    // Current date: Oct 2 (2 days elapsed)
+    const refDate = new Date(2026, 9, 2)
+
+    const incomeTx: Transaction = {
+      id: 'tx-inc',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 9, 1),
+      note: 'راتب',
+      createdAt: new Date(),
+    }
+
+    const regularExpenseTx: Transaction = {
+      id: 'tx-reg-exp',
+      type: 'expense',
+      amountFils: 10000, // 10 JOD regular spending over 2 days -> pace = 5000 fils/day
+      categoryId: 'cat-exp',
+      date: new Date(2026, 9, 1),
+      note: 'بقالة',
+      createdAt: new Date(),
+    }
+
+    const inventoryDiffTx: Transaction = {
+      id: 'tx-inventory-diff',
+      type: 'expense',
+      amountFils: 40000, // 40 JOD automated reconciliation
+      categoryId: 'cat-other',
+      date: new Date(2026, 9, 1),
+      title: 'تسوية رصيد (فرق جرد)',
+      note: 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [incomeTx, regularExpenseTx, inventoryDiffTx],
+      monthStartDay: 1,
+      referenceDate: refDate,
+    })
+
+    expect(res.currentExpense).toBe(50000) // Both entered currentExpense
+    // Inventory difference should be excluded from flexible daily pace calculation:
+    // Only regularExpense (10000) / 2 elapsed days = 5000 fils/day (not 50000 / 2 = 25000)
+    expect(res.actualDailySpendFils).toBe(5000)
+  })
+
+  it('does not double count recurring circle installment in upcomingRecurringExpenses when circle_ manual transaction exists', () => {
+    const circleId = 'circle-xyz'
+    const recurringCircleRule: Recurring = {
+      id: 'rec-circle-rule',
+      circleId,
+      type: 'expense',
+      amountFils: 50000, // 50 JOD
+      categoryId: 'cat-circle',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 1),
+      nextDate: new Date(2026, 9, 1),
+      active: true,
+      note: 'قسط جمعية',
+    }
+
+    // Manual payment transaction recorded for Month 1
+    const manualCircleTx: Transaction = {
+      id: `circle_${circleId}_m1`,
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-circle',
+      date: new Date(2026, 9, 2),
+      note: 'قسط جمعية مدفوع يدوياً',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [manualCircleTx],
+      recurring: [recurringCircleRule],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 5),
+    })
+
+    // Because circle_${circleId}_m1 is recorded, upcoming recurring should be 0 (no double deduction)
+    expect(res.upcomingRecurringExpenses).toBe(0)
+    expect(res.currentExpense).toBe(50000)
+  })
+
+  it('reserves unpaid circle installment in upcomingRecurringExpenses for active circle when user has not paid', () => {
+    const circle: MoneyCircle = {
+      id: 'circle-active-1',
+      name: 'جمعية نشطة',
+      monthlyAmountFils: 60000,
+      membersCount: 5,
+      totalAmountFils: 300000,
+      myTurnMonth: 3,
+      startDate: new Date(2026, 9, 1),
+      members: [
+        { id: 'm-me', name: 'أنا', turnMonth: 3, paidMonths: [] },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 10), // Month 1 of circle, not user's turn (turn 3)
+    })
+
+    // Unpaid installment (60.000) should be reserved in upcomingRecurringExpenses
+    expect(res.upcomingRecurringExpenses).toBe(60000)
+    expect(res.freeBalance).toBe(-60000) // availableBalance (0) - 60000
+  })
+
+  it('reserves unpaid circle installment when auto-pay was unchecked and rec.nextDate jumped to next month', () => {
+    const circleId = 'circle-jumped'
+    const circle: MoneyCircle = {
+      id: circleId,
+      name: 'جمعية معلقة',
+      monthlyAmountFils: 50000,
+      membersCount: 4,
+      totalAmountFils: 200000,
+      myTurnMonth: 4,
+      startDate: new Date(2026, 9, 1),
+      members: [
+        {
+          id: 'm-me',
+          name: 'أنا',
+          turnMonth: 4,
+          paidMonths: [],
+          paymentsByMonth: { '1': false }, // unchecked
+        },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    // Recurring rule nextDate jumped to next month (Nov 1)
+    const jumpedRecurringRule: Recurring = {
+      id: 'rec-jumped',
+      circleId,
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-circle',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 1),
+      nextDate: new Date(2026, 10, 1), // Nov 1
+      active: true,
+      note: 'قسط جمعية',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [jumpedRecurringRule],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15), // Oct 15
+    })
+
+    // Because recurring rule has nextDate in Nov, the recurring loop did not book it for Oct.
+    // But the circles logic detects unpaid month 1 and reserves 50.000 in upcomingRecurringExpenses!
+    expect(res.upcomingRecurringExpenses).toBe(50000)
+  })
+
+  it('does not double count circle installment when recurring rule already booked it in current cycle', () => {
+    const circleId = 'circle-already-booked'
+    const circle: MoneyCircle = {
+      id: circleId,
+      name: 'جمعية عادية',
+      monthlyAmountFils: 70000,
+      membersCount: 4,
+      totalAmountFils: 280000,
+      myTurnMonth: 3,
+      startDate: new Date(2026, 9, 1),
+      members: [
+        { id: 'm-me', name: 'أنا', turnMonth: 3, paidMonths: [] },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    const activeRecurringRule: Recurring = {
+      id: 'rec-circle-oct',
+      circleId,
+      type: 'expense',
+      amountFils: 70000,
+      categoryId: 'cat-circle',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 1),
+      nextDate: new Date(2026, 9, 20), // Oct 20
+      active: true,
+      note: 'قسط جمعية',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [activeRecurringRule],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 10),
+    })
+
+    // It should only be counted once (70.000, not 140.000)
+    expect(res.upcomingRecurringExpenses).toBe(70000)
+  })
+
+  it('calculates nextCycleSoonObligationsFils and count when within 3 days of cycle end', () => {
+    // Current cycle Oct 1 - Nov 1 (refDate: Oct 30, rangeEnd: Nov 1)
+    // 3 days horizon from Oct 30 is Nov 2 23:59:59.999 >= rangeEnd (Nov 1)
+    const refDate = new Date(2026, 9, 30)
+
+    const upcomingRent: Recurring = {
+      id: 'rec-rent',
+      type: 'expense',
+      amountFils: 300000, // 300 JOD
+      categoryId: 'cat-rent',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 1),
+      nextDate: new Date(2026, 10, 1), // Nov 1 (falls within [rangeEnd, threeDaysHorizon])
+      active: true,
+      note: 'إيجار المنزل',
+    }
+
+    const dueDebt: Debt = {
+      id: 'debt-due-soon',
+      personName: 'أبو أحمد',
+      type: 'borrowed',
+      amountFils: 100000, // 100 JOD
+      paidFils: 20000, // remaining 80 JOD
+      settled: false,
+      startDate: new Date(2026, 8, 1),
+      note: 'سلفة',
+      payments: [],
+      dueDate: new Date(2026, 10, 2), // Nov 2 (falls within [rangeEnd, threeDaysHorizon])
+      createdAt: new Date(),
+    }
+
+    const farDebt: Debt = {
+      id: 'debt-far',
+      personName: 'خالد',
+      type: 'borrowed',
+      amountFils: 50000,
+      paidFils: 0,
+      settled: false,
+      startDate: new Date(2026, 8, 1),
+      note: 'سلفة ثانية',
+      payments: [],
+      dueDate: new Date(2026, 10, 10), // Nov 10 (beyond 3-day horizon)
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [upcomingRent],
+      debts: [dueDebt, farDebt],
+      monthStartDay: 1,
+      referenceDate: refDate,
+    })
+
+    expect(res.isCurrentMonth).toBe(true)
+    // Rent (300.000) + Due debt (80.000) = 380.000
+    expect(res.nextCycleSoonObligationsFils).toBe(380000)
+    expect(res.nextCycleSoonCount).toBe(2)
+  })
+
+  it('does not calculate nextCycleSoonObligationsFils when far from cycle end', () => {
+    // RefDate: Oct 15 -> 3-day horizon is Oct 18, far from Nov 1
+    const refDate = new Date(2026, 9, 15)
+
+    const upcomingRent: Recurring = {
+      id: 'rec-rent',
+      type: 'expense',
+      amountFils: 300000,
+      categoryId: 'cat-rent',
+      frequency: 'monthly',
+      startDate: new Date(2026, 8, 1),
+      nextDate: new Date(2026, 10, 1),
+      active: true,
+      note: 'إيجار المنزل',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [upcomingRent],
+      monthStartDay: 1,
+      referenceDate: refDate,
+    })
+
+    expect(res.nextCycleSoonObligationsFils).toBe(0)
+    expect(res.nextCycleSoonCount).toBe(0)
   })
 })

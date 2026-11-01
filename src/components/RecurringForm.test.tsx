@@ -584,4 +584,66 @@ describe('RecurringForm component nextDate calculation on edit', () => {
       }
     )
   })
+
+  it('preserves skipMonths when editing a recurring transaction linked to a double-share circle', async () => {
+    const doubleShareCircle: MoneyCircle = {
+      id: 'circle-double',
+      name: 'جمعية الأسرة',
+      monthlyAmountFils: 100000,
+      totalAmountFils: 1000000,
+      status: 'active',
+      startDate: new Date('2026-01-01'),
+      membersCount: 10,
+      myTurnMonth: 3,
+      shareType: 'double',
+      secondTurnMonth: 7,
+      members: [
+        { id: 'm-1', name: 'أنت', turnMonth: 3, paidMonths: [] },
+      ],
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockCirclesData = [doubleShareCircle]
+
+    const existingRecurring: Recurring = {
+      id: 'rec-double-1',
+      type: 'expense',
+      amountFils: 100000,
+      categoryId: 'c-rent',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-01-01'),
+      title: 'قسط جمعية الأسرة',
+      note: '',
+      active: true,
+      circleId: 'circle-double',
+      skipMonth: 3,
+      skipMonths: [3, 7],
+      createdAt: new Date('2026-01-01'),
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={existingRecurring}
+      />
+    )
+
+    // Submit without changing circle
+    const submitBtn = screen.getByRole('button', { name: /تعديل المعاملة/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.updateRecurring).toHaveBeenCalledWith(
+        'user-123',
+        'rec-double-1',
+        expect.objectContaining({
+          circleId: 'circle-double',
+          skipMonth: 3,
+          skipMonths: [3, 7],
+        })
+      )
+    })
+  })
 })

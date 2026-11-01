@@ -43,6 +43,7 @@ export interface AppDataContextValue {
 
   rolloverBalanceFils: number
   setRolloverBalanceFils: (amount: number) => void
+  rolloverLoading?: boolean
 }
 
 export const AppDataContext = createContext<AppDataContextValue | null>(null)
@@ -71,6 +72,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [moneyCirclesError, setMoneyCirclesError] = useState<Error | null>(null)
 
   const [rolloverBalanceFils, setRolloverBalanceFils] = useState<number>(0)
+  const [rolloverLoading, setRolloverLoading] = useState<boolean>(false)
 
   const userId = user?.uid
   const [prevUserId, setPrevUserId] = useState(userId)
@@ -94,6 +96,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setMoneyCirclesError(null)
 
     setRolloverBalanceFils(0)
+    setRolloverLoading(Boolean(userId))
 
     setSettingsLoading(Boolean(userId))
     setCategoriesLoading(Boolean(userId))
@@ -208,7 +211,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return
       }
-      setCurrentDayKey(formatDateInput(new Date()))
+      setCurrentDayKey((prev) => {
+        const next = formatDateInput(new Date())
+        return prev === next ? prev : next
+      })
     }
 
     window.addEventListener('focus', handleDayCheck)
@@ -221,8 +227,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Real-time rollover prior balance sync: calculates cumulative balance before financial cycle start
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!userId || !hasSettings || !isRolloverEnabled) {
+      if (hasSettings && !isRolloverEnabled) {
+        setRolloverLoading(false)
+      }
       return
     }
 
@@ -235,14 +245,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : new Date(settings.rolloverStartDate as unknown as string)
       : null
 
+    if (rolloverStartDate && periodRange.start.getTime() <= rolloverStartDate.getTime()) {
+      setRolloverBalanceFils(0)
+      setRolloverLoading(false)
+      return
+    }
+
+    setRolloverLoading(true)
+
     const unsub = subscribePriorBalance(
       userId,
       periodRange.start,
       (bal) => {
-        setRolloverBalanceFils(bal)
+        setRolloverBalanceFils((prev) => (prev === bal ? prev : bal))
+        setRolloverLoading(false)
       },
       (err) => {
         console.error('Failed to subscribe prior balance in AppDataContext:', err)
+        setRolloverLoading(false)
       },
       rolloverStartDate
     )
@@ -251,6 +271,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       unsub()
     }
   }, [userId, hasSettings, isRolloverEnabled, monthStartDay, currentDayKey, settings?.rolloverStartDate])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSetRolloverBalanceFils = useCallback(
     (amount: number) => {
@@ -289,12 +310,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         rolloverBalanceFils: 0,
         setRolloverBalanceFils: handleSetRolloverBalanceFils,
+        rolloverLoading: false,
       }
     }
 
     const openingFils = settings?.openingBalanceFils ?? 0
     const effectiveRolloverBalanceFils =
       (user && isRolloverEnabled ? rolloverBalanceFils : 0) + openingFils
+    const calculatedRolloverLoading = !user
+      ? false
+      : settingsLoading || (isRolloverEnabled && rolloverLoading)
 
     return {
       settings,
@@ -320,6 +345,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       rolloverBalanceFils: effectiveRolloverBalanceFils,
       setRolloverBalanceFils: handleSetRolloverBalanceFils,
+      rolloverLoading: calculatedRolloverLoading,
     }
   }, [
     user,
@@ -342,6 +368,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     moneyCirclesError,
     rolloverBalanceFils,
     handleSetRolloverBalanceFils,
+    rolloverLoading,
   ])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>

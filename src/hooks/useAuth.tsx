@@ -4,6 +4,8 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
+  useMemo,
   type ReactNode,
 } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
@@ -23,23 +25,34 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const ensuredUidRef = useRef<string | null>(null)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setLoading(false)
       if (currentUser) {
-        ensureUserProfile(currentUser).catch((err) => {
-          console.error('Failed to ensure user profile:', err)
-        })
+        if (ensuredUidRef.current !== currentUser.uid) {
+          ensureUserProfile(currentUser)
+            .then(() => {
+              ensuredUidRef.current = currentUser.uid
+            })
+            .catch((err) => {
+              console.error('Failed to ensure user profile:', err)
+            })
+        }
+      } else {
+        ensuredUidRef.current = null
       }
     })
 
     return () => unsubscribe()
   }, [])
 
+  const value = useMemo(() => ({ user, loading }), [user, loading])
+
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

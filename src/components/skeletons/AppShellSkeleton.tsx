@@ -13,12 +13,12 @@ export const AppShellSkeleton: React.FC = () => {
     <div
       role="status"
       aria-label="جاري تحميل التطبيق"
-      className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased font-sans"
+      className="min-h-screen flex flex-col lg:flex-row bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-950 dark:text-zinc-50 antialiased font-sans"
     >
       {/* Desktop Sidebar Skeleton (RTL Start / Right side) */}
       <aside
         aria-label="القائمة الجانبية"
-        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-slate-900 border-e border-slate-200/80 dark:border-slate-800 p-6 min-h-screen sticky top-0 h-screen overflow-hidden"
+        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-[#121215] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-hidden"
       >
         {/* App Logo */}
         <div className="flex items-center gap-3 px-2 mb-8 animate-pulse">
@@ -58,7 +58,7 @@ export const AppShellSkeleton: React.FC = () => {
         </div>
 
         {/* Sidebar Footer Skeleton */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3 px-2">
+        <div className="pt-4 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center gap-3 px-2">
           <Skeleton className="w-9 h-9 rounded-full" />
           <div className="space-y-1 flex-1">
             <Skeleton className="w-20 h-3.5 rounded" />
@@ -70,7 +70,7 @@ export const AppShellSkeleton: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header Bar Skeleton */}
-        <header className="sticky top-0 z-20 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4">
+        <header className="sticky top-0 z-20 bg-white/85 dark:bg-[#121215]/85 backdrop-blur-xl border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2.5 lg:hidden">
             <Skeleton className="w-8 h-8 rounded-xl" />
             <Skeleton className="w-20 h-5 rounded" />
@@ -94,29 +94,32 @@ export const AppShellSkeleton: React.FC = () => {
       </div>
 
       {/* Mobile Bottom Navigation Bar Skeleton */}
-      <div className="fixed bottom-0 inset-x-0 z-30 lg:hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800 px-3 py-2 pb-safe">
-        <div className="flex items-center justify-around max-w-md mx-auto">
-          <div className="flex flex-col items-center gap-1">
+      <nav
+        aria-label="شريط التنقل السفلي"
+        className="fixed inset-x-0 bottom-0 z-30 lg:hidden px-3.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1 pointer-events-none"
+      >
+        <div className="pointer-events-auto bg-white/95 dark:bg-[#121215]/95 backdrop-blur-md border border-[#E4E4E7] dark:border-[#27272A] rounded-3xl shadow-lg px-3 py-1 flex items-center justify-around max-w-md mx-auto">
+          <div className="flex flex-col items-center gap-1 py-1">
             <Skeleton className="w-5 h-5 rounded-md" />
             <Skeleton className="w-8 h-2 rounded" />
           </div>
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 py-1">
             <Skeleton className="w-5 h-5 rounded-md" />
             <Skeleton className="w-8 h-2 rounded" />
           </div>
-          <div className="relative -top-4">
-            <div className="w-13 h-13 rounded-full bg-blue-600/30 border-4 border-slate-50 dark:border-slate-900 animate-pulse" />
+          <div className="relative -top-5 flex items-center justify-center">
+            <div className="w-13 h-13 rounded-full bg-blue-600/30 border-4 border-[#F4F4F5] dark:border-[#09090B] animate-pulse" />
           </div>
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 py-1">
             <Skeleton className="w-5 h-5 rounded-md" />
             <Skeleton className="w-8 h-2 rounded" />
           </div>
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 py-1">
             <Skeleton className="w-5 h-5 rounded-md" />
             <Skeleton className="w-8 h-2 rounded" />
           </div>
         </div>
-      </div>
+      </nav>
     </div>
   )
 }

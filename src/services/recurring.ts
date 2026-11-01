@@ -15,9 +15,10 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { Recurring, MoneyCircle } from '../types'
 import { recurringConverter } from './converters'
-import { calculateDueOccurrences, getDeterministicTxId, advanceDateWithTargetDay } from '../lib/recurring'
+import { calculateDueOccurrences, getDeterministicTxId, advanceDateWithTargetDay, isOccurrenceSkipped } from '../lib/recurring'
 import { getCircleCycleIndex, circleConverter } from './moneyCircles'
 
 export function subscribeRecurring(
@@ -47,6 +48,9 @@ export async function addRecurring(
   if (!Number.isInteger(rec.amountFils) || rec.amountFils <= 0) {
     throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
+  if (rec.amountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
 
   const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
   const docRef = await addDoc(colRef, {
@@ -67,6 +71,9 @@ export async function updateRecurring(
   if (rec.amountFils !== undefined) {
     if (!Number.isInteger(rec.amountFils) || rec.amountFils <= 0) {
       throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+    }
+    if (rec.amountFils > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
     }
   }
 
@@ -335,16 +342,20 @@ export async function processDueRecurring(
       if (rec.circleId && circleMap.has(rec.circleId)) {
         const circle = circleMap.get(rec.circleId)!
         const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        const isExemptCycle =
+          cycleIndex === circle.myTurnMonth ||
+          (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
         if (
           cycleIndex >= 1 &&
           cycleIndex <= circle.membersCount &&
-          cycleIndex !== circle.myTurnMonth
+          !isExemptCycle
         ) {
           const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
           if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
             userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
-            if (userMember.paymentsByMonth) {
-              userMember.paymentsByMonth[String(cycleIndex)] = true
+            userMember.paymentsByMonth = {
+              ...(userMember.paymentsByMonth || {}),
+              [String(cycleIndex)]: true,
             }
             circleModified.add(circle.id)
           }
@@ -404,6 +415,9 @@ export async function confirmRecurringOccurrence(
   if (!Number.isInteger(amountToCharge) || amountToCharge <= 0) {
     throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
+  if (amountToCharge > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
 
   const occDate = rec.nextDate instanceof Date ? rec.nextDate : new Date(rec.nextDate)
   const txId = getDeterministicTxId(rec.id, occDate)
@@ -412,7 +426,11 @@ export async function confirmRecurringOccurrence(
 
   const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
   const targetDay = startDate.getDate()
-  const newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+  let newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+  let skipGuard = 50
+  while (isOccurrenceSkipped(rec, newNextDate) && skipGuard-- > 0) {
+    newNextDate = advanceDateWithTargetDay(newNextDate, rec.frequency, targetDay)
+  }
 
   const endOfEndDate = rec.endDate
     ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
@@ -454,10 +472,13 @@ export async function confirmRecurringOccurrence(
       if (circleSnap.exists()) {
         const circle = circleSnap.data()
         const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        const isExemptCycle =
+          cycleIndex === circle.myTurnMonth ||
+          (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
         if (
           cycleIndex >= 1 &&
           cycleIndex <= circle.membersCount &&
-          cycleIndex !== circle.myTurnMonth
+          !isExemptCycle
         ) {
           const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
           if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
@@ -496,7 +517,11 @@ export async function skipRecurringOccurrence(
   const occDate = rec.nextDate instanceof Date ? rec.nextDate : new Date(rec.nextDate)
   const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
   const targetDay = startDate.getDate()
-  const newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+  let newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+  let skipGuard = 50
+  while (isOccurrenceSkipped(rec, newNextDate) && skipGuard-- > 0) {
+    newNextDate = advanceDateWithTargetDay(newNextDate, rec.frequency, targetDay)
+  }
 
   const endOfEndDate = rec.endDate
     ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())

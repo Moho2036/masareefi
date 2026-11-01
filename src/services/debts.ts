@@ -16,6 +16,7 @@ import {
   type DocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { Debt, DebtPayment, DebtEntry, TxType } from '../types'
 import { debtConverter, categoryConverter } from './converters'
 
@@ -132,6 +133,9 @@ export async function addDebt(
 
   if (!Number.isInteger(debt.amountFils) || debt.amountFils <= 0) {
     throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+  if (debt.amountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
   }
 
   const debtsCol = collection(db, 'users', uid, 'debts').withConverter(debtConverter)
@@ -368,6 +372,9 @@ export async function updateDebt(
     if (effectiveAmountFils < currentPaidFils) {
       throw new Error('لا يمكن أن يكون إجمالي الدين أقل من المبلغ المسدد بالفعل')
     }
+    if (effectiveAmountFils > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+    }
   }
 
   const updates: Record<string, unknown> = {}
@@ -503,35 +510,37 @@ export async function updateDebt(
         newPayCatId = await getOrCreateDebtCategory(uid, payTxType)
       }
 
-      for (const p of payments) {
-        if (!p.id) continue
-        let payTxRef: DocumentReference | null = null
-        let payTxSnap: DocumentSnapshot | null = null
+      const resolvedPaymentUpdates = await Promise.all(
+        payments.map(async (p) => {
+          if (!p.id) return []
+          const results: { ref: DocumentReference; updates: Record<string, unknown> }[] = []
 
-        const candidateIds = [p.transactionId, `debt_pay_${p.id}`].filter(Boolean) as string[]
-        for (const cId of candidateIds) {
-          const candidateRef = doc(db, 'users', uid, 'transactions', cId)
-          const snap = await getDoc(candidateRef)
-          if (snap.exists()) {
-            payTxRef = candidateRef
-            payTxSnap = snap
-            break
-          }
-        }
+          let payTxRef: DocumentReference | null = null
+          let payTxSnap: DocumentSnapshot | null = null
 
-        if (!payTxRef && currentDebt) {
-          const legacyTxId = await findLegacyPaymentTransactionId(uid, id, currentDebt, p)
-          if (legacyTxId) {
-            const legRef = doc(db, 'users', uid, 'transactions', legacyTxId)
-            const snap = await getDoc(legRef)
+          const candidateIds = [p.transactionId, `debt_pay_${p.id}`].filter(Boolean) as string[]
+          for (const cId of candidateIds) {
+            const candidateRef = doc(db, 'users', uid, 'transactions', cId)
+            const snap = await getDoc(candidateRef)
             if (snap.exists()) {
-              payTxRef = legRef
+              payTxRef = candidateRef
               payTxSnap = snap
+              break
             }
           }
-        }
 
-        if (payTxRef && payTxSnap && payTxSnap.exists()) {
+          if (!payTxRef && currentDebt) {
+            const legacyTxId = await findLegacyPaymentTransactionId(uid, id, currentDebt, p)
+            if (legacyTxId) {
+              const legRef = doc(db, 'users', uid, 'transactions', legacyTxId)
+              const snap = await getDoc(legRef)
+              if (snap.exists()) {
+                payTxRef = legRef
+                payTxSnap = snap
+              }
+            }
+          }
+
           const payTxUpdates: Record<string, unknown> = {
             title: (
               effectiveType === 'lent'
@@ -552,31 +561,90 @@ export async function updateDebt(
           } else if (typeChanged) {
             payTxUpdates.note = effectiveType === 'lent' ? 'دفعة استرداد دين' : 'دفعة سداد دين'
           }
-          batch.update(payTxRef, payTxUpdates)
-        }
 
-        if (Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0) {
-          const payTxUpdates: Record<string, unknown> = {
-            title: (
-              effectiveType === 'lent'
-                ? `استرداد دفعة دين: ${effectivePersonName}`
-                : `سداد دفعة دين: ${effectivePersonName}`
-            ).slice(0, 100),
+          if (payTxRef && payTxSnap && payTxSnap.exists()) {
+            results.push({ ref: payTxRef, updates: payTxUpdates })
           }
-          if (typeChanged) {
-            payTxUpdates.type = payTxType
-            if (newPayCatId) {
-              payTxUpdates.categoryId = newPayCatId
+
+          if (Array.isArray(p.mergedTransactionIds) && p.mergedTransactionIds.length > 0) {
+            const mergedResults = await Promise.all(
+              p.mergedTransactionIds.map(async (mergedTxId) => {
+                if (!mergedTxId) return null
+                const mergedRef = doc(db, 'users', uid, 'transactions', mergedTxId)
+                const mergedSnap = await getDoc(mergedRef)
+                if (mergedSnap.exists()) {
+                  return { ref: mergedRef, updates: payTxUpdates }
+                }
+                return null
+              })
+            )
+            for (const item of mergedResults) {
+              if (item) results.push(item)
             }
           }
-          for (const mergedTxId of p.mergedTransactionIds) {
-            if (!mergedTxId) continue
-            const mergedRef = doc(db, 'users', uid, 'transactions', mergedTxId)
-            const mergedSnap = await getDoc(mergedRef)
-            if (mergedSnap.exists()) {
-              batch.update(mergedRef, payTxUpdates)
+
+          return results
+        })
+      )
+
+      for (const paymentResults of resolvedPaymentUpdates) {
+        for (const item of paymentResults) {
+          batch.update(item.ref, item.updates)
+        }
+      }
+    }
+
+    // Synchronize all associated debt entries transactions (excluding initial debt_init_${id})
+    const entries: DebtEntry[] = currentDebt?.entries || []
+    if (entries.length > 0) {
+      const entryTxType: TxType = effectiveType === 'lent' ? 'expense' : 'income'
+      let newEntryCatId: string | undefined
+      if (typeChanged) {
+        newEntryCatId = await getOrCreateDebtCategory(uid, entryTxType)
+      }
+
+      const resolvedEntryUpdates = await Promise.all(
+        entries.map(async (e) => {
+          if (!e.id) return null
+          const candidateIds = [e.transactionId, `debt_entry_${e.id}`].filter(Boolean) as string[]
+          // Skip debt_init_${id} since it was already handled above
+          const filteredCandidateIds = candidateIds.filter((cId) => cId !== `debt_init_${id}`)
+          if (filteredCandidateIds.length === 0) return null
+
+          let entryTxRef: DocumentReference | null = null
+          for (const cId of filteredCandidateIds) {
+            const candidateRef = doc(db, 'users', uid, 'transactions', cId)
+            const snap = await getDoc(candidateRef)
+            if (snap.exists()) {
+              entryTxRef = candidateRef
+              break
             }
           }
+
+          if (entryTxRef) {
+            const entryTxUpdates: Record<string, unknown> = {}
+            if (nameChanged || typeChanged) {
+              entryTxUpdates.title = (
+                effectiveType === 'lent'
+                  ? `سلفة إضافية: ${effectivePersonName}`
+                  : `اقتراض إضافي من: ${effectivePersonName}`
+              ).slice(0, 100)
+            }
+            if (typeChanged) {
+              entryTxUpdates.type = entryTxType
+              if (newEntryCatId) {
+                entryTxUpdates.categoryId = newEntryCatId
+              }
+            }
+            return { ref: entryTxRef, updates: entryTxUpdates }
+          }
+          return null
+        })
+      )
+
+      for (const item of resolvedEntryUpdates) {
+        if (item) {
+          batch.update(item.ref, item.updates)
         }
       }
     }
@@ -696,6 +764,9 @@ export async function addDebtPayment(
   const amount = Math.round(Number(payment.amountFils))
   if (!Number.isInteger(amount) || amount <= 0) {
     throw new Error('مبلغ الدفعة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+  if (amount > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
   }
 
   const remaining = Math.max(0, debt.amountFils - (debt.paidFils || 0))
@@ -952,6 +1023,9 @@ export async function updateDebtPayment(
   const amount = Math.round(Number(updatedData.amountFils))
   if (!Number.isInteger(amount) || amount <= 0) {
     throw new Error('مبلغ الدفعة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+  }
+  if (amount > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
   }
 
   const previousPaymentsSum = payments.reduce((acc, p) => acc + p.amountFils, 0)
@@ -1273,22 +1347,32 @@ export async function addDebtEntry(
   if (!Number.isInteger(entry.amountFils) || entry.amountFils <= 0) {
     throw new Error('مبلغ السلفة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
+  if (entry.amountFils > MAX_AMOUNT_FILS || debt.amountFils + entry.amountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
+  if ((debt.entries || []).length >= 100) {
+    throw new Error('تم الوصول للحد الأقصى لعدد السلف (100 سلفة) لهذا السجل')
+  }
 
   const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-  const existingEntries: DebtEntry[] =
-    Array.isArray(debt.entries) && debt.entries.length > 0
-      ? [...debt.entries]
-      : [
-          {
-            id: `entry_base_${debt.id}`,
-            amountFils: debt.amountFils,
-            date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
-            title: 'أصل الدين الأول',
-            note: debt.note || '',
-            transactionId: `debt_init_${debt.id}`,
-            createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
-          },
-        ]
+  const hasEntries = Array.isArray(debt.entries) && debt.entries.length > 0
+  let existingEntries: DebtEntry[]
+  if (hasEntries) {
+    existingEntries = [...debt.entries!]
+  } else {
+    const hasInitTx = await checkDebtInitialTransactionExists(uid, debt.id, debt)
+    existingEntries = [
+      {
+        id: `entry_base_${debt.id}`,
+        amountFils: debt.amountFils,
+        date: debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate),
+        title: 'أصل الدين الأول',
+        note: debt.note || '',
+        transactionId: hasInitTx ? `debt_init_${debt.id}` : undefined,
+        createdAt: debt.createdAt instanceof Date ? debt.createdAt : new Date(debt.createdAt || debt.startDate),
+      },
+    ]
+  }
 
   let txId: string | undefined
   const batch = writeBatch(db)
@@ -1355,6 +1439,9 @@ export async function updateDebtEntry(
   if (!Number.isInteger(updated.amountFils) || updated.amountFils <= 0) {
     throw new Error('مبلغ السلفة يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
+  if (updated.amountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
 
   const entries = debt.entries || []
   const entryIndex = entries.findIndex((e) => e.id === entryId)
@@ -1366,6 +1453,10 @@ export async function updateDebtEntry(
   const diff = updated.amountFils - oldEntry.amountFils
   const newAmountFils = debt.amountFils + diff
 
+  if (newAmountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
+
   if (newAmountFils < (debt.paidFils || 0)) {
     throw new Error('لا يمكن تقليص مبلغ السلفة لأن إجمالي الدين سيصبح أقل من المبالغ المسددة فعلياً')
   }
@@ -1374,12 +1465,17 @@ export async function updateDebtEntry(
 
   if (oldEntry.transactionId) {
     const txRef = doc(db, 'users', uid, 'transactions', oldEntry.transactionId)
-    batch.update(txRef, {
-      amountFils: updated.amountFils,
-      date: updated.date instanceof Date ? Timestamp.fromDate(updated.date) : updated.date,
-      ...(updated.title ? { title: updated.title.trim().slice(0, 100) } : {}),
-      note: (updated.note?.trim() || '').slice(0, 500),
-    })
+    const txSnap = await getDoc(txRef)
+    const shouldUpdateTx =
+      txSnap && typeof txSnap.exists === 'function' ? txSnap.exists() : txSnap === undefined
+    if (shouldUpdateTx) {
+      batch.update(txRef, {
+        amountFils: updated.amountFils,
+        date: updated.date instanceof Date ? Timestamp.fromDate(updated.date) : updated.date,
+        ...(updated.title ? { title: updated.title.trim().slice(0, 100) } : {}),
+        note: (updated.note?.trim() || '').slice(0, 500),
+      })
+    }
   }
 
   const newEntries = [...entries]
@@ -1507,6 +1603,109 @@ export async function mergePersonDebts(
   const totalPaidFils = sorted.reduce((sum, d) => sum + (d.paidFils || 0), 0)
   const settled = totalPaidFils === totalAmountFils
 
+  const fallbackDueDate = sorted
+    .filter((d) => !d.settled && d.dueDate)
+    .map((d) => (d.dueDate instanceof Date ? d.dueDate : new Date(d.dueDate!)))
+    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null
+  const effectiveDueDate = primaryDebt.dueDate ?? fallbackDueDate
+
+  let finalPayments = consolidatedPayments
+  if (consolidatedPayments.length > 100) {
+    const toKeep = consolidatedPayments.slice(-10)
+    const toMerge = consolidatedPayments.slice(0, -10)
+    const mergedCount = toMerge.length
+    const mergedAmountFils = toMerge.reduce((sum, p) => sum + p.amountFils, 0)
+    const lastMergedPayment = toMerge[toMerge.length - 1]
+    const mergedDate =
+      lastMergedPayment.date instanceof Date
+        ? lastMergedPayment.date
+        : new Date(lastMergedPayment.date)
+
+    const mergedTxIds: string[] = []
+    for (const p of toMerge) {
+      if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
+        if (!mergedTxIds.includes(p.transactionId.trim())) {
+          mergedTxIds.push(p.transactionId.trim())
+        }
+      } else if (!p.isMerged && p.id) {
+        const defaultTxId = `debt_pay_${p.id}`
+        if (!mergedTxIds.includes(defaultTxId)) {
+          mergedTxIds.push(defaultTxId)
+        }
+      }
+      if (Array.isArray(p.mergedTransactionIds)) {
+        for (const mId of p.mergedTransactionIds) {
+          if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
+            mergedTxIds.push(mId.trim())
+          }
+        }
+      }
+    }
+
+    const genericNotes = new Set([
+      'دفعة سداد',
+      'دفعة استرداد دين',
+      'دفعة سداد دين',
+      'استرداد دفعة دين',
+      'سداد دفعة دين',
+    ])
+    const customNotes: string[] = []
+    for (const p of toMerge) {
+      if (p.note && typeof p.note === 'string') {
+        const trimmed = p.note.trim()
+        if (trimmed && !genericNotes.has(trimmed)) {
+          const cleaned = trimmed
+            .replace(/^رصيد دفعات سابقة مدمجة \(\d+\s*دفعة\):?\s*/, '')
+            .trim()
+          if (cleaned && !customNotes.includes(cleaned)) {
+            customNotes.push(cleaned)
+          }
+        }
+      }
+    }
+    const baseMergedNote = `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`
+    const finalMergedNote =
+      customNotes.length > 0
+        ? `${baseMergedNote}: ${customNotes.join(' ، ')}`.slice(0, 500)
+        : baseMergedNote
+
+    const consolidatedPayment: DebtPayment = {
+      id: `compacted_${generatePaymentId()}`,
+      amountFils: mergedAmountFils,
+      date: mergedDate,
+      note: finalMergedNote,
+      createdAt: new Date(),
+      isMerged: true,
+      mergedTransactionIds: mergedTxIds,
+    }
+
+    finalPayments = [consolidatedPayment, ...toKeep]
+  }
+
+  let finalEntries = consolidatedEntries
+  if (consolidatedEntries.length > 100) {
+    const toKeepEntries = consolidatedEntries.slice(-99)
+    const toMergeEntries = consolidatedEntries.slice(0, -99)
+    const mergedEntriesCount = toMergeEntries.length
+    const mergedEntriesAmountFils = toMergeEntries.reduce((sum, e) => sum + e.amountFils, 0)
+    const lastMergedEntry = toMergeEntries[toMergeEntries.length - 1]
+    const mergedEntryDate =
+      lastMergedEntry.date instanceof Date
+        ? lastMergedEntry.date
+        : new Date(lastMergedEntry.date)
+
+    const consolidatedEntry: DebtEntry = {
+      id: `compacted_entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      amountFils: mergedEntriesAmountFils,
+      date: mergedEntryDate,
+      title: `رصيد سلف سابقة مدمجة (${mergedEntriesCount} سلفة)`,
+      note: `رصيد مدمج لـ ${mergedEntriesCount} سلفة سابقة`,
+      createdAt: new Date(),
+    }
+
+    finalEntries = [consolidatedEntry, ...toKeepEntries]
+  }
+
   const batch = writeBatch(db)
 
   const primaryRef = doc(db, 'users', uid, 'debts', primaryDebt.id).withConverter(debtConverter)
@@ -1514,9 +1713,10 @@ export async function mergePersonDebts(
     amountFils: totalAmountFils,
     paidFils: totalPaidFils,
     settled,
+    dueDate: effectiveDueDate ? toTimestamp(effectiveDueDate) : null,
     note: combinedNote,
-    payments: consolidatedPayments.map(serializePayment),
-    entries: consolidatedEntries.slice(0, 100).map(serializeDebtEntry),
+    payments: finalPayments.map(serializePayment),
+    entries: finalEntries.map(serializeDebtEntry),
   })
 
   // Delete secondary debt documents

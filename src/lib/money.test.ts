@@ -8,6 +8,7 @@ import {
   formatCompactNumber,
   getCurrencyConfig,
   PRESET_CURRENCIES,
+  MAX_AMOUNT_FILS,
 } from './money'
 
 describe('money lib', () => {
@@ -64,6 +65,22 @@ describe('money lib', () => {
       expect(toFils('١,٢٥٠.٥')).toBe(1250500)
     })
 
+    it('handles negative numbers with commas correctly', () => {
+      expect(toFils('-1,000')).toBe(-1000000)
+      expect(toFils('-0,500')).toBe(-500)
+    })
+
+    it('handles Arabic decimal comma (٫) and Arabic comma (،)', () => {
+      expect(toFils('12٫5')).toBe(12500)
+      expect(toFils('1،000')).toBe(1000000)
+    })
+
+    it('rejects duplicate decimal dots or invalid numeric format and returns 0', () => {
+      expect(toFils('12..5')).toBe(0)
+      expect(toFils('1.2.3')).toBe(0)
+      expect(toFils('..5')).toBe(0)
+    })
+
     it('returns 0 for empty or invalid input', () => {
       expect(toFils('')).toBe(0)
       expect(toFils('   ')).toBe(0)
@@ -104,6 +121,14 @@ describe('money lib', () => {
     it('hides zero decimals when hideZeroDecimals is true and amount is integer', () => {
       expect(formatMoney(20000, 'JOD', { hideZeroDecimals: true })).toBe('20 د.أ')
       expect(formatMoney(20500, 'JOD', { hideZeroDecimals: true })).toBe('20.500 د.أ')
+    })
+
+    it('hides zero decimals properly for rounded non-exact fils (ghost fils fix)', () => {
+      expect(formatMoney(10004, 'SAR', { hideZeroDecimals: true })).toBe('10 ر.س')
+    })
+
+    it('exports MAX_AMOUNT_FILS constant of 1 trillion fils', () => {
+      expect(MAX_AMOUNT_FILS).toBe(1_000_000_000_000)
     })
   })
 

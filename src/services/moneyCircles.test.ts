@@ -295,6 +295,22 @@ describe('moneyCircles service', () => {
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-10_m2')
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_circle-10_m3')
     })
+
+    it('chunks delete operations into batches of at most 400 operations when deleting many items', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ recurringId: 'rec-1', membersCount: 450 }),
+      })
+      mockGetDocs.mockResolvedValueOnce({ docs: [] }) // query recurring
+      mockGetDocs.mockResolvedValueOnce({ docs: [] }) // query txs for rec-1
+
+      await deleteMoneyCircle('uid-1', 'circle-large', { deleteTransactions: true })
+
+      // Total items: 1 (doc) + 1 (rec-1) + 1 (payout) + 450 (manual txs) = 453 items
+      // Chunks: 400 + 53 -> 2 commits
+      expect(mockBatchCommit).toHaveBeenCalledTimes(2)
+      expect(mockBatchDelete).toHaveBeenCalledTimes(453)
+    })
   })
 
   describe('updateMoneyCircle payout sync', () => {
@@ -540,7 +556,11 @@ describe('moneyCircles service', () => {
     })
 
     it('returns true if recurring installment transactions exist', async () => {
-      // Payout does not exist
+      // Payout 1 does not exist
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      // Payout 2 does not exist
       mockGetDoc.mockResolvedValueOnce({
         exists: () => false,
       })
@@ -554,7 +574,24 @@ describe('moneyCircles service', () => {
       expect(hasTx).toBe(true)
     })
 
+    it('returns true if second turn payout transaction exists', async () => {
+      // Payout 1 does not exist
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      // Payout 2 exists
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+
+      const hasTx = await checkCircleHasTransactions('uid-1', 'circle-1', 'rec-1')
+      expect(hasTx).toBe(true)
+    })
+
     it('returns false if neither payout nor recurring transactions exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
       mockGetDoc.mockResolvedValueOnce({
         exists: () => false,
       })
@@ -886,6 +923,112 @@ describe('moneyCircles service', () => {
       )
       expect(txCall).toBeDefined()
       expect(txCall![1].amountFils).toBe(120000)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('updates associated installment transactions to half amount when circle has shareType half and monthlyAmount changes', async () => {
+      // 1. circle doc exists with shareType: 'half'
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 1,
+          shareType: 'half',
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          recurringId: 'rec-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recurring rule doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-1',
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية الأسرة',
+          amountFils: 50000,
+        }),
+      })
+      // 3. payout doc does not exist
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+      // 4. getDocs for recurring rules linked via circleId
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [],
+      })
+      // 5. getDocs for transactions linked via recurringId == 'rec-1'
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'tx-inst-1',
+            ref: { path: 'users/uid-1/transactions/tx-inst-1' },
+          },
+        ],
+      })
+      // 6. getDoc for verifiedTx
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+      })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        {
+          monthlyAmountFils: 120000,
+        },
+        { monthStartDay: 1 }
+      )
+
+      const txCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('transactions/tx-inst-1')
+      )
+      expect(txCall).toBeDefined()
+      // 120,000 / 2 = 60,000
+      expect(txCall![1].amountFils).toBe(60000)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses deleteField() when expenseCategoryId is passed as empty or whitespace string', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الأسرة',
+          monthlyAmountFils: 100000,
+          membersCount: 10,
+          totalAmountFils: 1000000,
+          myTurnMonth: 1,
+          expenseCategoryId: 'old-cat-1',
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'circle-1',
+        {
+          expenseCategoryId: '   ',
+        },
+        { monthStartDay: 1 }
+      )
+
+      const circleCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/circle-1')
+      )
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].expenseCategoryId).toEqual({ _method: 'deleteField' })
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
@@ -1409,6 +1552,67 @@ describe('moneyCircles service', () => {
           expect.objectContaining({ id: 'm-2', turnMonth: 1 }),
         ])
       )
+    })
+
+    it('cleans paidMonths and paymentsByMonth for swapped members to remove newly assigned turn', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الرواد',
+          monthlyAmountFils: 100000,
+          membersCount: 4,
+          totalAmountFils: 400000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-1', name: 'أنت', turnMonth: 1, paidMonths: [2, 3], paymentsByMonth: { '2': true, '3': true } },
+            { id: 'm-2', name: 'خالد', turnMonth: 3, paidMonths: [1, 2], paymentsByMonth: { '1': true, '2': true } },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'circle-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الرواد',
+          monthlyAmountFils: 100000,
+          membersCount: 4,
+          totalAmountFils: 400000,
+          myTurnMonth: 1,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-1', name: 'أنت', turnMonth: 1, paidMonths: [2, 3], paymentsByMonth: { '2': true, '3': true } },
+            { id: 'm-2', name: 'خالد', turnMonth: 3, paidMonths: [1, 2], paymentsByMonth: { '1': true, '2': true } },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await swapMemberTurns('uid-1', 'circle-1', 'm-1', 'm-2')
+
+      const circleUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/circle-1')
+      )
+      expect(circleUpdateCall).toBeDefined()
+      const members = circleUpdateCall![1].members
+      const updatedM1 = members.find((m: { id: string }) => m.id === 'm-1')
+      const updatedM2 = members.find((m: { id: string }) => m.id === 'm-2')
+
+      // m-1 moved to turn 3: its paidMonths must NOT contain 3
+      expect(updatedM1.turnMonth).toBe(3)
+      expect(updatedM1.paidMonths).not.toContain(3)
+      expect(updatedM1.paidMonths).toEqual([2])
+      expect(updatedM1.paymentsByMonth?.['3']).toBeUndefined()
+
+      // m-2 moved to turn 1: its paidMonths must NOT contain 1
+      expect(updatedM2.turnMonth).toBe(1)
+      expect(updatedM2.paidMonths).not.toContain(1)
+      expect(updatedM2.paidMonths).toEqual([2])
+      expect(updatedM2.paymentsByMonth?.['1']).toBeUndefined()
     })
   })
 })

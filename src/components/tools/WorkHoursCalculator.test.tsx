@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import { SelectedMonthProvider } from '../../hooks/useSelectedMonth'
+import { ToastProvider } from '../../hooks/useToast'
 import { WorkHoursCalculator } from './WorkHoursCalculator'
 import {
   clampWorkHoursPerDay,
@@ -197,5 +200,24 @@ describe('WorkHoursCalculator component', () => {
     expect(screen.getByText('بصيرة القرار الشرائي على ميزانية هذا الشهر')).toBeInTheDocument()
     expect(screen.getByText('الأثر على حد الصرف اليومي')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /قررت شراءها؟ سجّلها كمصروف الآن/i })).toBeInTheDocument()
+  })
+
+  it('opens transaction modal with "حفظ" (and not "حفظ النسخة") when clicking "قررت شراءها؟ سجّلها كمصروف الآن"', () => {
+    render(
+      <ToastProvider>
+        <SelectedMonthProvider>
+          <MemoryRouter>
+            <WorkHoursCalculator />
+          </MemoryRouter>
+        </SelectedMonthProvider>
+      </ToastProvider>
+    )
+
+    const recordBtn = screen.getByRole('button', { name: /قررت شراءها؟ سجّلها كمصروف الآن/i })
+    fireEvent.click(recordBtn)
+
+    expect(screen.getByText('تسجيل مصروف السلعة')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'حفظ' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حفظ النسخة' })).not.toBeInTheDocument()
   })
 })

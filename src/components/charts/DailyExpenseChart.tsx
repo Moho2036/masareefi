@@ -168,7 +168,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
             strokeWidth={2.5}
             fillOpacity={1}
             fill="url(#expenseTrendGradient)"
-            animationDuration={300}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>

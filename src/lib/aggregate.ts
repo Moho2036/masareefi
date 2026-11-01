@@ -35,6 +35,16 @@ export type CategoryResolver =
   | Record<string, { name?: string }>
   | ((categoryId: string) => string | undefined)
 
+const AMOUNT_FMT_3 = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+})
+const AMOUNT_FMT_2 = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+const AMOUNT_FMT_BASIC = new Intl.NumberFormat('en-US')
+
 export function filterTransactions(
   txs: Transaction[],
   filters: FilterTransactionsOptions = {},
@@ -44,14 +54,36 @@ export function filterTransactions(
   const rawQuery = query ? query.trim() : ''
   const normalizedQuery = rawQuery ? normalizeArabic(toWesternDigits(rawQuery)) : ''
 
+  const categorySet =
+    categoryIds && categoryIds.length > 0 && !categoryIds.includes('all')
+      ? new Set(categoryIds)
+      : null
+
+  let fromTime: number | null = null
+  let toTime: number | null = null
+  if (dateRange?.from) {
+    const fromMidnight = new Date(dateRange.from)
+    fromMidnight.setHours(0, 0, 0, 0)
+    fromTime = fromMidnight.getTime()
+  }
+  if (dateRange?.to) {
+    const toEndDay = new Date(dateRange.to)
+    toEndDay.setHours(23, 59, 59, 999)
+    toTime = toEndDay.getTime()
+  }
+
+  const queryHasDigits = normalizedQuery ? /\d/.test(normalizedQuery) : false
+  const cleanQuery = normalizedQuery ? normalizedQuery.replace(/[,،]/g, '') : ''
+  const normalizedCatCache = new Map<string, string>()
+
   return txs.filter((tx) => {
     if (type && type !== 'all' && tx.type !== type) {
       return false
     }
 
     // Category filtering: support multiple categoryIds if provided and non-empty (excluding 'all')
-    if (categoryIds && categoryIds.length > 0 && !categoryIds.includes('all')) {
-      if (!categoryIds.includes(tx.categoryId)) {
+    if (categorySet) {
+      if (!categorySet.has(tx.categoryId)) {
         return false
       }
     } else if (categoryId && categoryId !== 'all' && tx.categoryId !== categoryId) {
@@ -74,61 +106,56 @@ export function filterTransactions(
     }
 
     // Custom Date range filtering
-    if (dateRange && (dateRange.from || dateRange.to)) {
+    if (fromTime !== null || toTime !== null) {
       const txTime = (tx.date instanceof Date ? tx.date : new Date(tx.date)).getTime()
-      if (dateRange.from) {
-        const fromMidnight = new Date(dateRange.from)
-        fromMidnight.setHours(0, 0, 0, 0)
-        if (txTime < fromMidnight.getTime()) return false
-      }
-      if (dateRange.to) {
-        const toEndDay = new Date(dateRange.to)
-        toEndDay.setHours(23, 59, 59, 999)
-        if (txTime > toEndDay.getTime()) return false
-      }
+      if (fromTime !== null && txTime < fromTime) return false
+      if (toTime !== null && txTime > toTime) return false
     }
+
     if (normalizedQuery) {
       const normalizedTitle = tx.title ? normalizeArabic(toWesternDigits(tx.title)) : ''
       const normalizedNote = normalizeArabic(toWesternDigits(tx.note))
       let normalizedCatName = ''
       if (categoryResolver && tx.categoryId) {
-        let catName = ''
-        if (typeof categoryResolver === 'function') {
-          catName = categoryResolver(tx.categoryId) || ''
-        } else if (categoryResolver instanceof Map) {
-          catName = categoryResolver.get(tx.categoryId)?.name || ''
-        } else if (typeof categoryResolver === 'object') {
-          catName = categoryResolver[tx.categoryId]?.name || ''
-        }
-        if (catName) {
-          normalizedCatName = normalizeArabic(toWesternDigits(catName))
+        const cached = normalizedCatCache.get(tx.categoryId)
+        if (cached !== undefined) {
+          normalizedCatName = cached
+        } else {
+          let catName = ''
+          if (typeof categoryResolver === 'function') {
+            catName = categoryResolver(tx.categoryId) || ''
+          } else if (categoryResolver instanceof Map) {
+            catName = categoryResolver.get(tx.categoryId)?.name || ''
+          } else if (typeof categoryResolver === 'object') {
+            catName = categoryResolver[tx.categoryId]?.name || ''
+          }
+          normalizedCatName = catName ? normalizeArabic(toWesternDigits(catName)) : ''
+          normalizedCatCache.set(tx.categoryId, normalizedCatName)
         }
       }
 
       // Check amount matching in standard currency units (e.g. 25, 25.000, 12.500, 1,000)
       let matchesAmount = false
-      if (normalizedQuery) {
+      if (queryHasDigits && cleanQuery) {
         const units = fromFils(tx.amountFils)
         const unitsStr = String(units)
         const fixed3 = units.toFixed(3)
         const fixed2 = units.toFixed(2)
 
-        const cleanQuery = normalizedQuery.replace(/[,،]/g, '')
+        const formatted3 = AMOUNT_FMT_3.format(units)
+        const formatted2 = AMOUNT_FMT_2.format(units)
+        const formattedBasic = AMOUNT_FMT_BASIC.format(units)
 
-        const formatted3 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(units)
-        const formatted2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(units)
-        const formattedBasic = new Intl.NumberFormat('en-US').format(units)
-
-        if (cleanQuery) {
-          matchesAmount =
-            unitsStr.includes(cleanQuery) ||
-            fixed3.includes(cleanQuery) ||
-            fixed2.includes(cleanQuery) ||
-            formatted3.includes(normalizedQuery) ||
-            formatted2.includes(normalizedQuery) ||
-            formattedBasic.includes(normalizedQuery) ||
-            (normalizedQuery.includes(',') && !normalizedQuery.match(/,\d{3}/) && unitsStr.includes(normalizedQuery.replace(',', '.')))
-        }
+        matchesAmount =
+          unitsStr.includes(cleanQuery) ||
+          fixed3.includes(cleanQuery) ||
+          fixed2.includes(cleanQuery) ||
+          formatted3.includes(normalizedQuery) ||
+          formatted2.includes(normalizedQuery) ||
+          formattedBasic.includes(normalizedQuery) ||
+          (normalizedQuery.includes(',') &&
+            !normalizedQuery.match(/,\d{3}/) &&
+            unitsStr.includes(normalizedQuery.replace(',', '.')))
       }
 
       const matches =
@@ -189,7 +216,7 @@ export function groupByDay(txs: Transaction[]): DayGroup[] {
     let group = groupsMap.get(dateKey)
     if (!group) {
       group = {
-        date: new Date(year, d.getMonth(), d.getDate(), 0, 0, 0, 0),
+        date: new Date(year, d.getMonth(), d.getDate(), 12, 0, 0, 0),
         transactions: [],
       }
       groupsMap.set(dateKey, group)

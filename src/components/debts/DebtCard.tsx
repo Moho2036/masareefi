@@ -16,7 +16,7 @@ export interface DebtCardProps {
   onDelete: (debt: Debt) => void
 }
 
-export const DebtCard: React.FC<DebtCardProps> = ({
+export const DebtCard: React.FC<DebtCardProps> = React.memo(({
   debt,
   onOpenPaymentModal,
   onOpenHistoryModal,
@@ -251,4 +251,6 @@ export const DebtCard: React.FC<DebtCardProps> = ({
       </div>
     </div>
   )
-}
+})
+
+DebtCard.displayName = 'DebtCard'

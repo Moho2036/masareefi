@@ -46,7 +46,7 @@ import {
   swapMemberTurns,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
-import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
+import { parseLocalDateInput, toWesternDigits, getFinancialMonthRange } from '../../lib/dates'
 import { getNextCircleDueDate } from '../../lib/recurring'
 import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
@@ -123,11 +123,8 @@ export const MoneyCirclesManager: React.FC = () => {
   }
 
   const getInitialStartDateStr = (startDay: number = monthStartDay) => {
-    const now = new Date()
-    const safeDay = Math.min(28, Math.max(1, Math.round(startDay)))
-    const dayStr = String(safeDay).padStart(2, '0')
-    const monthStr = String(now.getMonth() + 1).padStart(2, '0')
-    return `${now.getFullYear()}-${monthStr}-${dayStr}`
+    const cycleStart = getFinancialMonthRange(new Date(), startDay).start
+    return formatDate(cycleStart, 'yyyy-MM-dd')
   }
 
   // Check which circles have already had their net payout deposited in transactions (only when due and not checked)
@@ -784,7 +781,12 @@ export const MoneyCirclesManager: React.FC = () => {
 
     const targetMember = circle.members.find((m) => m.id === memberId)
     // The receiver for monthNum is exempt and cannot be toggled
-    if (targetMember && targetMember.turnMonth === monthNum) return
+    const isTargetExempt = Boolean(
+      targetMember &&
+        (targetMember.turnMonth === monthNum ||
+          (targetMember.turnMonth === circle.myTurnMonth && circle.secondTurnMonth === monthNum))
+    )
+    if (isTargetExempt) return
 
     setTogglingMemberKey(toggleKey)
     try {
@@ -934,20 +936,37 @@ export const MoneyCirclesManager: React.FC = () => {
             const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
             const isStarted = diffMonths >= 0
             const isCompleted = circle.status === 'completed' || diffMonths >= circle.membersCount
-            const hasUserDeposited = depositedCircleIds.has(circle.id)
+            const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
             const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
+
+            const userExemptMonths = new Set<number>([circle.myTurnMonth])
+            if (circle.shareType === 'double' && circle.secondTurnMonth) {
+              userExemptMonths.add(circle.secondTurnMonth)
+            }
+
+            const hasDepositedTurn1 = depositedCircleIds.has(circle.id)
+            const hasDepositedTurn2 =
+              circle.shareType === 'double' && circle.secondTurnMonth
+                ? depositedCircleIds.has(`${circle.id}_t2`)
+                : true
+            const isSecondTurnActiveNow =
+              circle.shareType === 'double' && circle.secondTurnMonth === currentMonth
+            const hasUserDeposited = isSecondTurnActiveNow
+              ? depositedCircleIds.has(`${circle.id}_t2`)
+              : hasDepositedTurn1
+            const hasAllUserTurnsDeposited = hasDepositedTurn1 && hasDepositedTurn2
+
             const hasUserPaidAll = userMember
               ? Array.from({ length: circle.membersCount }, (_, i) => i + 1)
-                  .filter((m) => m !== circle.myTurnMonth)
+                  .filter((m) => !userExemptMonths.has(m))
                   .every((m) => userMember.paidMonths.includes(m))
               : false
             const isObligationsCompleted =
               circle.status === 'active' &&
-              hasUserDeposited &&
+              hasAllUserTurnsDeposited &&
               (circle.isManager
                 ? isCircleFullyPaid(circle)
                 : diffMonths >= circle.membersCount || hasUserPaidAll)
-            const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
             const isUserTurn = isStarted && !isCompleted && !isObligationsCompleted && isUserTurnMonth(circle, now, monthStartDay)
             const isExpanded = expandedCircleId === circle.id
             const viewingMonth = selectedCircleMonth[circle.id] || currentMonth
@@ -965,8 +984,16 @@ export const MoneyCirclesManager: React.FC = () => {
                 : circle.totalAmountFils
             const netAmountFils = userGrossFils - userMonthlyFils
 
+            // Unpaid user months up to currentMonth
+            const unpaidUserMonths =
+              isStarted && circle.status !== 'completed' && userMember
+                ? Array.from({ length: Math.min(currentMonth, circle.membersCount) }, (_, i) => i + 1).filter(
+                    (m) => !userExemptMonths.has(m) && !userMember.paidMonths.includes(m)
+                  )
+                : []
+
             // Check if user has already received / deposited net turn payout (turn 1 or turn 2)
-            const canDepositTurn1 = isStarted && currentMonth >= circle.myTurnMonth && !hasUserDeposited
+            const canDepositTurn1 = isStarted && currentMonth >= circle.myTurnMonth && !hasDepositedTurn1
             const canDepositTurn2 = Boolean(
               isStarted &&
                 circle.shareType === 'double' &&
@@ -1254,6 +1281,41 @@ export const MoneyCirclesManager: React.FC = () => {
                   )}
                 </div>
 
+                {/* Unpaid User Installment Alert Banner */}
+                {unpaidUserMonths.length > 0 && userMember && (
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div>
+                        <span>
+                          قسطك الشخصي لشهر {unpaidUserMonths[0]} بقيمة {format(userMonthlyFils)} غير مسدد بعد
+                          {userMember.paymentsByMonth?.[String(unpaidUserMonths[0])] === false && (
+                            <span className="font-bold text-amber-800 dark:text-amber-300">
+                              {' '}(تم إلغاء الخصم التلقائي — بانتظار سدادك)
+                            </span>
+                          )}
+                          {unpaidUserMonths.length > 1 && (
+                            <span className="text-[11px] text-amber-700 dark:text-amber-300 font-normal">
+                              {' '}(لديك {unpaidUserMonths.length} أقساط غير مسددة)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={togglingMemberKey === `${circle.id}_${userMember.id}_${unpaidUserMonths[0]}`}
+                      onClick={() => handleToggleMemberPayment(circle, userMember.id, unpaidUserMonths[0])}
+                      className="text-xs shrink-0 self-end sm:self-auto bg-amber-600 hover:bg-amber-700 text-white"
+                      icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                    >
+                      تسجيل سداد قسطي الآن
+                    </Button>
+                  </div>
+                )}
+
                 {/* Progress bar across months */}
                 <div className="mt-4 space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -1390,9 +1452,15 @@ export const MoneyCirclesManager: React.FC = () => {
                                     </span>
                                   )}
                                   {isUserMember && isScheduled && !isReceiverThisMonth && (
-                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-800">
-                                      اقتطاع آلي
-                                    </span>
+                                    !hasPaid && member.paymentsByMonth?.[String(viewingMonth)] === false ? (
+                                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-md border border-amber-300 dark:border-amber-800">
+                                        معلّق يدوياً
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-800">
+                                        اقتطاع آلي
+                                      </span>
+                                    )
                                   )}
                                   {isReceiverThisMonth && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
@@ -1411,8 +1479,10 @@ export const MoneyCirclesManager: React.FC = () => {
                                   {isReceiverThisMonth
                                     ? 'يقبض هذا الشهر'
                                     : isUserMember && isScheduled
-                                      ? `قسط: ${format(circle.monthlyAmountFils)} (يُقتطع تلقائياً)`
-                                      : `قسط: ${format(circle.monthlyAmountFils)}`}
+                                      ? member.paymentsByMonth?.[String(viewingMonth)] === false
+                                        ? `قسط: ${format(userMonthlyFils)} (معلق يدوياً)`
+                                        : `قسط: ${format(userMonthlyFils)} (يُقتطع تلقائياً)`
+                                      : `قسط: ${isUserMember ? format(userMonthlyFils) : format(circle.monthlyAmountFils)}`}
                                 </div>
                               </div>
                             </div>
@@ -1475,6 +1545,138 @@ export const MoneyCirclesManager: React.FC = () => {
                     </div>
                   </div>
                 )}
+                  </>
+                )}
+
+                {/* Non-Manager Mode: My Installments History Panel */}
+                {!circle.isManager && userMember && (
+                  <>
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5 flex-wrap">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <span>
+                          أقساطك المسددة:{' '}
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            {userMember.paidMonths.length} من {circle.membersCount - userExemptMonths.size}
+                          </strong>
+                        </span>
+                        {unpaidUserMonths.length > 0 && (
+                          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                            ({unpaidUserMonths.length} غير مسدد)
+                          </span>
+                        )}
+                      </div>
+
+                      <Button
+                        onClick={() => setExpandedCircleId(isExpanded ? null : circle.id)}
+                        variant="ghost"
+                        size="sm"
+                        icon={isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      >
+                        {isExpanded ? 'إخفاء سجل أقساطي' : 'سجل أقساطي الشهرية (تسجيل / إلغاء الدفع)'}
+                      </Button>
+                    </div>
+
+                    {/* Expanded Installments Grid for Non-Manager */}
+                    {isExpanded && (
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                        <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                          سجل دفعاتك الشهرية لهذه الجمعية:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {Array.from({ length: circle.membersCount }, (_, i) => i + 1).map((mNum) => {
+                            const isExempt = userExemptMonths.has(mNum)
+                            const hasPaid =
+                              userMember.paidMonths.includes(mNum) ||
+                              userMember.paymentsByMonth?.[String(mNum)] === true
+                            const isOverdue = mNum < currentMonth && !hasPaid && !isExempt
+                            const isCurrent = mNum === currentMonth
+
+                            return (
+                              <div
+                                key={mNum}
+                                className={cn(
+                                  'flex items-center justify-between p-2.5 rounded-xl border transition-all',
+                                  isExempt
+                                    ? 'bg-amber-500/10 border-amber-300 dark:border-amber-700/50'
+                                    : hasPaid
+                                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
+                                      : isOverdue
+                                        ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
+                                        : 'bg-slate-50 dark:bg-slate-750/40 border-slate-200/80 dark:border-slate-700/60'
+                                )}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span
+                                    className={cn(
+                                      'w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0',
+                                      isExempt
+                                        ? 'bg-amber-500 text-white'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    )}
+                                  >
+                                    {mNum}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
+                                      <span>شهر {mNum}</span>
+                                      {isCurrent && (
+                                        <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                          (الشهر الحالي)
+                                        </span>
+                                      )}
+                                      {isOverdue && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">
+                                          <AlertCircle className="w-3 h-3 text-red-500 shrink-0" />
+                                          <span>متأخر</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400">
+                                      {isExempt
+                                        ? 'شهر استلام حصتك'
+                                        : `قسط: ${format(userMonthlyFils)}`}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {isExempt ? (
+                                    <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1">
+                                      <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                      <span>دورك في القبض (معفى)</span>
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={togglingMemberKey === `${circle.id}_${userMember.id}_${mNum}`}
+                                      onClick={() => handleToggleMemberPayment(circle, userMember.id, mNum)}
+                                      className={cn(
+                                        'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
+                                        hasPaid
+                                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                          : isOverdue
+                                            ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
+                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                      )}
+                                    >
+                                      {hasPaid ? (
+                                        <>
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          <span>تم الدفع ✓</span>
+                                        </>
+                                      ) : (
+                                        <span>تسجيل الدفع</span>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </Card>

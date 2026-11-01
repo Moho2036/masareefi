@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
+/* eslint-disable react-hooks/refs */
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { subDays, format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
@@ -35,6 +36,7 @@ import { useCategories } from '../hooks/useCategories'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useDebts } from '../hooks/useDebts'
 import { useRecurring } from '../hooks/useRecurring'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useCurrency } from '../hooks/useCurrency'
 import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
@@ -76,6 +78,7 @@ export const ReportsPage: React.FC = () => {
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()
+  const { data: circles } = useMoneyCircles()
   const { format } = useCurrency()
   const monthStartDay = settings?.monthStartDay ?? 1
 
@@ -86,6 +89,16 @@ export const ReportsPage: React.FC = () => {
     getFiscalMonthKey(range.start, monthStartDay) ===
     getFiscalMonthKey(new Date(), monthStartDay)
 
+  const parsedRolloverStartDate = useMemo(() => {
+    if (!settings?.rolloverStartDate) return null
+    const raw = settings.rolloverStartDate
+    return raw instanceof Date
+      ? raw
+      : typeof (raw as { toDate?: () => Date }).toDate === 'function'
+      ? (raw as { toDate: () => Date }).toDate()
+      : new Date(raw as unknown as string)
+  }, [settings?.rolloverStartDate])
+
   useEffect(() => {
     if (!user?.uid || !isRolloverEnabled) {
       return
@@ -94,15 +107,11 @@ export const ReportsPage: React.FC = () => {
     if (isCurrentFiscalMonth) {
       return
     }
+    // If viewing month on or before rolloverStartDate, rollover was zeroed out
+    if (parsedRolloverStartDate && range.start.getTime() <= parsedRolloverStartDate.getTime()) {
+      return
+    }
     const currentKey = range.start.toISOString()
-    const rolloverStartDate = settings?.rolloverStartDate
-      ? settings.rolloverStartDate instanceof Date
-        ? settings.rolloverStartDate
-        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
-          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
-          : new Date(settings.rolloverStartDate as unknown as string)
-      : null
-
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
@@ -112,19 +121,15 @@ export const ReportsPage: React.FC = () => {
       (err) => {
         console.error('Failed to subscribe prior balance in ReportsPage:', err)
       },
-      rolloverStartDate
+      parsedRolloverStartDate
     )
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, settings?.rolloverStartDate])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, parsedRolloverStartDate])
 
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
-
-  const effectiveRollover = isCurrentFiscalMonth
-    ? (appData?.rolloverBalanceFils ?? 0)
-    : (isRolloverEnabled ? effectiveLocalRollover : 0) + (settings?.openingBalanceFils ?? 0)
 
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
@@ -147,6 +152,15 @@ export const ReportsPage: React.FC = () => {
     enabled: isMonthly,
   })
 
+  const hasLoadedMonthOnceRef = useRef(false)
+  const hasLoadedYearOnceRef = useRef(false)
+
+  useEffect(() => {
+    if (!monthLoading) {
+      hasLoadedMonthOnceRef.current = true
+    }
+  }, [monthLoading])
+
   // Extract current month and previous month transactions in-memory
   const monthStartMs = range.start.getTime()
   const monthEndMs = range.end.getTime()
@@ -167,6 +181,46 @@ export const ReportsPage: React.FC = () => {
     })
   }, [twoMonthsTransactions, prevStartMs, prevEndMs])
 
+  const effectiveRollover = useMemo(() => {
+    if (isCurrentFiscalMonth) {
+      return appData?.rolloverBalanceFils ?? 0
+    }
+    if (!isRolloverEnabled) {
+      return 0
+    }
+    if (parsedRolloverStartDate && range.start.getTime() < parsedRolloverStartDate.getTime()) {
+      return 0
+    }
+    if (settings?.createdAt) {
+      const rawCreated = settings.createdAt
+      const createdAtDate =
+        rawCreated instanceof Date
+          ? rawCreated
+          : typeof (rawCreated as { toDate?: () => Date }).toDate === 'function'
+          ? (rawCreated as { toDate: () => Date }).toDate()
+          : new Date(rawCreated as unknown as string)
+      const createdCycleStart = getFinancialMonthRange(createdAtDate, monthStartDay).start
+      if (
+        range.start.getTime() < createdCycleStart.getTime() &&
+        effectiveLocalRollover === 0 &&
+        monthTransactions.length === 0
+      ) {
+        return 0
+      }
+    }
+    return effectiveLocalRollover + (settings?.openingBalanceFils ?? 0)
+  }, [
+    isCurrentFiscalMonth,
+    appData?.rolloverBalanceFils,
+    isRolloverEnabled,
+    parsedRolloverStartDate,
+    range.start,
+    settings,
+    monthStartDay,
+    effectiveLocalRollover,
+    monthTransactions.length,
+  ])
+
   const { data: categories } = useCategories()
 
   const forecast = useMemo(() => {
@@ -174,6 +228,7 @@ export const ReportsPage: React.FC = () => {
       transactions: monthTransactions,
       recurring,
       debts,
+      circles,
       monthStartDay,
       periodRange: range,
       rolloverBalanceFils:
@@ -185,6 +240,7 @@ export const ReportsPage: React.FC = () => {
     monthTransactions,
     recurring,
     debts,
+    circles,
     monthStartDay,
     range,
     effectiveRollover,
@@ -225,6 +281,12 @@ export const ReportsPage: React.FC = () => {
     enabled: isYearly,
   })
 
+  useEffect(() => {
+    if (!yearLoading) {
+      hasLoadedYearOnceRef.current = true
+    }
+  }, [yearLoading])
+
   // Monthly calculations
   const monthSums = useMemo(() => sumByType(monthTransactions), [monthTransactions])
   const prevMonthSums = useMemo(() => sumByType(prevMonthTransactions), [prevMonthTransactions])
@@ -236,6 +298,16 @@ export const ReportsPage: React.FC = () => {
   const monthCategoryDist = useMemo(
     () => calculateCategoryDistribution(monthTransactions, categories, monthCategoryType),
     [monthTransactions, categories, monthCategoryType]
+  )
+
+  const handleSelectMonthPieCategory = useCallback(
+    (categoryId: string) => {
+      const found = monthCategoryDist.find((c) => c.categoryId === categoryId)
+      if (found) {
+        setSelectedCategoryModal(found)
+      }
+    },
+    [monthCategoryDist]
   )
 
   const modalTransactions = useMemo(() => {
@@ -269,7 +341,7 @@ export const ReportsPage: React.FC = () => {
   const monthComparison = useMemo(() => {
     if (prevMonthSums.expense === 0 || monthSums.expense === 0) return null
     const diff = monthSums.expense - prevMonthSums.expense
-    const percent = Math.round((Math.abs(diff) / prevMonthSums.expense) * 100)
+    const percent = Math.round((Math.abs(diff) / prevMonthSums.expense) * 1000) / 10
     return {
       diff,
       percent,
@@ -280,7 +352,7 @@ export const ReportsPage: React.FC = () => {
   const monthIncomeComparison = useMemo(() => {
     if (prevMonthSums.income === 0 || monthSums.income === 0) return null
     const diff = monthSums.income - prevMonthSums.income
-    const percent = Math.round((Math.abs(diff) / prevMonthSums.income) * 100)
+    const percent = Math.round((Math.abs(diff) / prevMonthSums.income) * 1000) / 10
     return {
       diff,
       percent,
@@ -408,7 +480,7 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div className="mt-1">
                 {monthIncomeComparison ? (
-                  monthIncomeComparison.percent === 0 ? (
+                  monthIncomeComparison.diff === 0 ? (
                     <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
@@ -428,7 +500,7 @@ export const ReportsPage: React.FC = () => {
                       )}
                       <span>
                         {monthIncomeComparison.isIncrease ? 'أعلى' : 'أقل'} بـ{' '}
-                        {monthIncomeComparison.percent}% عن الشهر السابق
+                        {monthIncomeComparison.percent === 0 ? '<0.1%' : `${monthIncomeComparison.percent}%`} عن الشهر السابق
                       </span>
                     </span>
                   )
@@ -459,7 +531,7 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div className="mt-1">
                 {monthComparison ? (
-                  monthComparison.percent === 0 ? (
+                  monthComparison.diff === 0 ? (
                     <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
@@ -479,7 +551,7 @@ export const ReportsPage: React.FC = () => {
                       )}
                       <span>
                         {monthComparison.isIncrease ? 'أكثر' : 'أقل'} بـ{' '}
-                        {monthComparison.percent}% عن الشهر السابق
+                        {monthComparison.percent === 0 ? '<0.1%' : `${monthComparison.percent}%`} عن الشهر السابق
                       </span>
                     </span>
                   )
@@ -554,7 +626,9 @@ export const ReportsPage: React.FC = () => {
                 %{monthSavingsRate}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                من إجمالي الدخل المحصل
+                {monthSums.income === 0 && monthSums.expense > 0
+                  ? 'لا يوجد دخل مسجل لحساب النسبة'
+                  : 'من إجمالي الدخل المحصل'}
               </div>
             </Card>
           </div>
@@ -621,7 +695,11 @@ export const ReportsPage: React.FC = () => {
                 </span>
               </div>
               <div className="flex-1 flex items-center justify-center">
-                <CategoryPieChart data={monthCategoryDist} className="w-full" />
+                <CategoryPieChart
+                  data={monthCategoryDist}
+                  className="w-full"
+                  onSelectCategory={handleSelectMonthPieCategory}
+                />
               </div>
             </Card>
 
@@ -636,7 +714,7 @@ export const ReportsPage: React.FC = () => {
                 </span>
               </div>
 
-              {monthLoading ? (
+              {monthLoading && !hasLoadedMonthOnceRef.current ? (
                 <div className="space-y-4 animate-pulse">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <div key={i} className="space-y-1.5">
@@ -668,7 +746,6 @@ export const ReportsPage: React.FC = () => {
                   ).map((item) => (
                     <div
                       key={item.categoryId}
-                      role="button"
                       tabIndex={0}
                       onClick={() => setSelectedCategoryModal(item)}
                       onKeyDown={(e) => {
@@ -711,7 +788,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
 
                   {monthCategoryDist.length > 6 && (
-                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40">
+                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40 print-hide">
                       <button
                         type="button"
                         onClick={() => setShowAllMonthCategories((v) => !v)}
@@ -845,7 +922,11 @@ export const ReportsPage: React.FC = () => {
                 %{yearlySavingsRate}
               </div>
               <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                <div>متوسط الصرف: <FormattedMoney amountFils={monthlyAverage} /> / شهر</div>
+                {yearSums.income === 0 && yearSums.expense > 0 ? (
+                  <div>لا يوجد دخل مسجل لحساب النسبة</div>
+                ) : (
+                  <div>متوسط الصرف: <FormattedMoney amountFils={monthlyAverage} /> / شهر</div>
+                )}
                 {annualSummary.note && (
                   <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
                     ({annualSummary.note})
@@ -908,7 +989,7 @@ export const ReportsPage: React.FC = () => {
                 />
               </div>
 
-              {yearLoading ? (
+              {yearLoading && !hasLoadedYearOnceRef.current ? (
                 <div className="space-y-4 animate-pulse">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <div key={i} className="space-y-1.5">
@@ -940,7 +1021,6 @@ export const ReportsPage: React.FC = () => {
                   ).map((item) => (
                     <div
                       key={item.categoryId}
-                      role="button"
                       tabIndex={0}
                       onClick={() => setSelectedCategoryModal(item)}
                       onKeyDown={(e) => {
@@ -983,7 +1063,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
 
                   {yearCategoryDist.length > 6 && (
-                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40">
+                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40 print-hide">
                       <button
                         type="button"
                         onClick={() => setShowAllYearCategories((v) => !v)}

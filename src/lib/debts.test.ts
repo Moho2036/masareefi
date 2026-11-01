@@ -123,6 +123,26 @@ describe('debts domain logic', () => {
       expect(summary.borrowedActiveCount).toBe(1)
       expect(summary.settledCount).toBe(1)
     })
+
+    it('counts debt due in 7 days at midday (12:00) when referenceDate is in the morning (08:00)', () => {
+      const refDate = new Date(2026, 9, 10, 8, 0, 0, 0) // Oct 10, 08:00 AM
+      const dueDateIn7Days = new Date(2026, 9, 17, 12, 0, 0, 0) // Oct 17, 12:00 PM (noon)
+
+      const debts: Debt[] = [
+        {
+          ...baseDebt,
+          id: 'd-upcoming-7d',
+          amountFils: 50000,
+          paidFils: 0,
+          settled: false,
+          dueDate: dueDateIn7Days,
+        },
+      ]
+
+      const summary = calculateDebtSummary(debts, refDate)
+      expect(summary.upcomingCount).toBe(1)
+      expect(summary.upcomingFils).toBe(50000)
+    })
   })
 
   describe('filterDebts', () => {

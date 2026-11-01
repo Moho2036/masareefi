@@ -1,11 +1,18 @@
 import { getFinancialMonthRange } from './dates'
-import { isOccurrenceSkipped, advanceDateWithTargetDay, getDeterministicTxId } from './recurring'
-import type { Recurring, Debt, Transaction } from '../types'
+import {
+  isOccurrenceSkipped,
+  advanceDateWithTargetDay,
+  getDeterministicTxId,
+  getOccurrenceMonthIndex,
+} from './recurring'
+import { getCircleCycleIndex } from '../services/moneyCircles'
+import type { Recurring, Debt, Transaction, MoneyCircle } from '../types'
 
 export interface ForecastParams {
   transactions: Transaction[]
   recurring?: Recurring[]
   debts?: Debt[]
+  circles?: MoneyCircle[]
   monthStartDay?: number
   referenceDate?: Date
   periodRange?: { start: Date; end: Date }
@@ -50,6 +57,10 @@ export interface ForecastResult {
   surplusAmount: number
   estimatedDeficitDay?: number // Day of month when balance will be depleted
   recommendedDailyReductionFils: number // How much to cut daily to avoid deficit
+
+  // Next cycle soon obligations (within 3 days of new cycle)
+  nextCycleSoonObligationsFils?: number
+  nextCycleSoonCount?: number
 }
 
 /**
@@ -111,6 +122,11 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     for (const d of params.debts) {
       for (const p of d.payments || []) {
         if (p.transactionId) linkedDebtTxIds.add(p.transactionId)
+        if (Array.isArray(p.mergedTransactionIds)) {
+          for (const mId of p.mergedTransactionIds) {
+            if (mId) linkedDebtTxIds.add(mId)
+          }
+        }
       }
       for (const e of d.entries || []) {
         if (e.transactionId) linkedDebtTxIds.add(e.transactionId)
@@ -131,6 +147,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
 
       const isFixedCommitment = Boolean(
         tx.recurringId ||
+          tx.title === 'تسوية رصيد (فرق جرد)' ||
           (typeof tx.id === 'string' &&
             (tx.id.startsWith('debt_init_') ||
               tx.id.startsWith('debt_entry_') ||
@@ -155,13 +172,14 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   let upcomingRecurringExpenses = 0
   let upcomingRecurringIncome = 0
   let intermediateRecurringNet = 0
-  if (params.recurring && (isCurrentMonth || isFutureMonth)) {
-    const existingTxIds = new Set(
-      params.transactions
-        .map((t) => t.id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0)
-    )
+  const existingTxIds = new Set(
+    params.transactions
+      .map((t) => t.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  )
+  const bookedCircleInstallmentIds = new Set<string>()
 
+  if (params.recurring && (isCurrentMonth || isFutureMonth)) {
     for (const rec of params.recurring) {
       if (!rec.active) continue
       let curr = rec.nextDate instanceof Date ? new Date(rec.nextDate.getTime()) : new Date(rec.nextDate)
@@ -177,17 +195,25 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       while (toStartOfDay(curr) < rangeEnd) {
         if (recEnd && toStartOfDay(curr) > toStartOfDay(recEnd)) break
         const occStart = toStartOfDay(curr)
+        const circleManualTxId = rec.circleId
+          ? `circle_${rec.circleId}_m${getOccurrenceMonthIndex(rec.startDate, curr)}`
+          : null
+        const isRecorded =
+          existingTxIds.has(getDeterministicTxId(rec.id, curr)) ||
+          Boolean(circleManualTxId && existingTxIds.has(circleManualTxId))
+
         if (occStart >= rangeStart && occStart < rangeEnd) {
-          const isRecorded = existingTxIds.has(getDeterministicTxId(rec.id, curr))
           if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
             if (rec.type === 'expense') {
               upcomingRecurringExpenses += rec.amountFils || 0
+              if (rec.circleId) {
+                bookedCircleInstallmentIds.add(rec.circleId)
+              }
             } else if (rec.type === 'income') {
               upcomingRecurringIncome += rec.amountFils || 0
             }
           }
         } else if (isFutureMonth && occStart >= now && occStart < rangeStart) {
-          const isRecorded = existingTxIds.has(getDeterministicTxId(rec.id, curr))
           if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
             if (rec.type === 'expense') {
               intermediateRecurringNet -= rec.amountFils || 0
@@ -199,6 +225,39 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
         const next = advanceDateWithTargetDay(curr, rec.frequency, targetDay)
         if (next.getTime() <= curr.getTime()) break
         curr = next
+      }
+    }
+  }
+
+  // 2b. Reserve unpaid circle installment for current month (if not already booked by recurring rule)
+  if (params.circles && isCurrentMonth) {
+    for (const circle of params.circles) {
+      if (circle.status !== 'active') continue
+      const circleMonth = getCircleCycleIndex(circle.startDate, now, monthStartDay) + 1
+      if (circleMonth >= 1 && circleMonth <= circle.membersCount) {
+        const isExempt =
+          circleMonth === circle.myTurnMonth ||
+          (circle.shareType === 'double' && circleMonth === circle.secondTurnMonth)
+        if (isExempt) continue
+
+        const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+        const isPaid =
+          Boolean(userMember?.paidMonths && userMember.paidMonths.includes(circleMonth)) ||
+          existingTxIds.has(`circle_${circle.id}_m${circleMonth}`)
+
+        if (!isPaid) {
+          const userMonthlyFils =
+            circle.shareType === 'half'
+              ? Math.round(circle.monthlyAmountFils / 2)
+              : circle.shareType === 'double'
+                ? circle.monthlyAmountFils * 2
+                : circle.monthlyAmountFils
+
+          if (!bookedCircleInstallmentIds.has(circle.id)) {
+            upcomingRecurringExpenses += userMonthlyFils
+            bookedCircleInstallmentIds.add(circle.id)
+          }
+        }
       }
     }
   }
@@ -229,6 +288,68 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     }
   }
 
+  // 3b. Proactive horizon for obligations due in next cycle within 3 days
+  let nextCycleSoonObligationsFils = 0
+  let nextCycleSoonCount = 0
+
+  if (isCurrentMonth) {
+    const threeDaysHorizon = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 3,
+      23,
+      59,
+      59,
+      999
+    )
+    if (threeDaysHorizon >= rangeEnd) {
+      if (params.recurring) {
+        for (const rec of params.recurring) {
+          if (!rec.active || rec.type !== 'expense') continue
+          let curr = rec.nextDate instanceof Date ? new Date(rec.nextDate.getTime()) : new Date(rec.nextDate)
+          const recStart = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
+          const targetDay = recStart.getDate()
+          const recEnd = rec.endDate
+            ? rec.endDate instanceof Date
+              ? new Date(rec.endDate.getTime())
+              : new Date(rec.endDate)
+            : null
+
+          while (toStartOfDay(curr) < rangeEnd) {
+            const next = advanceDateWithTargetDay(curr, rec.frequency, targetDay)
+            if (next.getTime() <= curr.getTime()) break
+            curr = next
+          }
+
+          if (recEnd && toStartOfDay(curr) > toStartOfDay(recEnd)) continue
+
+          const occStart = toStartOfDay(curr)
+          if (occStart >= rangeEnd && occStart <= threeDaysHorizon) {
+            if (!isOccurrenceSkipped(rec, curr)) {
+              nextCycleSoonObligationsFils += rec.amountFils || 0
+              nextCycleSoonCount++
+            }
+          }
+        }
+      }
+
+      if (params.debts) {
+        for (const debt of params.debts) {
+          if (debt.type !== 'borrowed' || debt.settled || !debt.dueDate) continue
+          const remainingUnpaid = Math.max(0, debt.amountFils - (debt.paidFils || 0))
+          if (remainingUnpaid <= 0) continue
+
+          const dueDate = debt.dueDate instanceof Date ? debt.dueDate : new Date(debt.dueDate)
+          const dueDay = toStartOfDay(dueDate)
+          if (dueDay >= rangeEnd && dueDay <= threeDaysHorizon) {
+            nextCycleSoonObligationsFils += remainingUnpaid
+            nextCycleSoonCount++
+          }
+        }
+      }
+    }
+  }
+
   const baseRollover = params.rolloverBalanceFils ?? 0
   const rolloverBalance =
     isFutureMonth && params.rolloverBalanceFils !== undefined
@@ -249,7 +370,9 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const actualDailySpendFils = elapsedDays > 0 ? Math.round(pastDiscretionaryExpense / elapsedDays) : 0
 
   // 5. Month-End Forecast
-  const projectedDiscretionary = isPastMonth || isFutureMonth ? 0 : actualDailySpendFils * remainingDays
+  const futureUnelapsedDays = Math.max(0, totalDays - elapsedDays)
+  const projectedDiscretionary =
+    isPastMonth || isFutureMonth ? 0 : actualDailySpendFils * futureUnelapsedDays
   const projectedExpense =
     currentExpense +
     projectedDiscretionary +
@@ -370,5 +493,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     surplusAmount,
     estimatedDeficitDay,
     recommendedDailyReductionFils,
+    nextCycleSoonObligationsFils,
+    nextCycleSoonCount,
   }
 }

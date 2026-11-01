@@ -92,11 +92,12 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       return
     }
 
-    if (config.decimals === 2 && amountFils > remainingFils) {
+    const maxTolerance = config.decimals === 0 ? 500 : config.decimals === 2 ? 5 : 0
+    const roundedRemainingStr = fromFils(remainingFils).toFixed(config.decimals)
+    const inputStr = toWesternDigits(amountStr.trim())
+    if (maxTolerance > 0 && amountFils > remainingFils) {
       const diff = amountFils - remainingFils
-      const roundedRemainingStr = fromFils(remainingFils).toFixed(2)
-      const inputStr = toWesternDigits(amountStr.trim())
-      if (diff <= 5 || inputStr === roundedRemainingStr) {
+      if (diff <= maxTolerance || inputStr === roundedRemainingStr) {
         amountFils = remainingFils
       }
     }

@@ -241,6 +241,48 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(result[0].color).toBe('#94A3B8')
       expect(result[0].percentage).toBe(100)
     })
+
+    it('ensures percentage sum is exactly 100% with three equal-amount categories (remainder adjustment)', () => {
+      const txs: Transaction[] = [
+        {
+          id: '1',
+          type: 'expense',
+          amountFils: 10000,
+          categoryId: 'cat-rent',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '2',
+          type: 'expense',
+          amountFils: 10000,
+          categoryId: 'cat-food',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '3',
+          type: 'expense',
+          amountFils: 10000,
+          categoryId: 'cat-bill',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const result = calculateCategoryDistribution(txs, mockCategories)
+
+      expect(result).toHaveLength(3)
+      const sumPercent = Math.round(result.reduce((acc, item) => acc + item.percentage, 0) * 10) / 10
+      expect(sumPercent).toBe(100)
+      // Top category received remainder (33.4%), others are 33.3%
+      expect(result[0].percentage).toBe(33.4)
+      expect(result[1].percentage).toBe(33.3)
+      expect(result[2].percentage).toBe(33.3)
+    })
   })
 
   describe('calculateYearlyBreakdown', () => {

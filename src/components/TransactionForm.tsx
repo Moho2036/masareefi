@@ -39,7 +39,7 @@ import {
 import { addRecurring, processDueRecurring } from '../services/recurring'
 import { updateDebtPayment, removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
-import { toFils, fromFils } from '../lib/money'
+import { toFils, fromFils, MAX_AMOUNT_FILS } from '../lib/money'
 import { parseLocalDateInput, formatDateInput, toWesternDigits } from '../lib/dates'
 import { normalizeArabic } from '../lib/aggregate'
 import { findLinkedDebtPayment } from '../lib/debts'
@@ -49,51 +49,124 @@ import {
   sortCategoriesUnified,
 } from '../lib/categoryUsage'
 import { calculateForecast } from '../lib/forecast'
-import { advanceDate } from '../lib/recurring'
+import { calculateNextDateOnEdit, getOccurrenceMonthIndex } from '../lib/recurring'
 import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
 import type { Transaction, TxType, Frequency } from '../types'
 
+function hasMathOperator(expr: string): boolean {
+  if (!expr) return false
+  const normalized = expr
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/\s+/g, '')
+  const withoutLeadingSign = normalized.replace(/^[+-]/, '')
+  return /[+\-*/]/.test(withoutLeadingSign)
+}
+
+function cleanNumberToken(raw: string): number {
+  if (!raw) return NaN
+  if ((raw.match(/\./g) || []).length > 1) return NaN
+  if (raw.includes(',')) {
+    if (raw.includes('.')) {
+      if (raw.lastIndexOf(',') < raw.lastIndexOf('.')) {
+        raw = raw.replace(/,/g, '')
+      } else {
+        raw = raw.replace(/\./g, '').replace(/,/g, '.')
+      }
+    } else {
+      const parts = raw.split(',')
+      if (parts.length > 2) {
+        raw = raw.replace(/,/g, '')
+      } else if (parts[1].length === 3 && parts[0].length >= 1) {
+        raw = raw.replace(/,/g, '')
+      } else {
+        raw = parts[0] + '.' + parts[1]
+      }
+    }
+  }
+  return Number(raw)
+}
+
 function evaluateMathExpression(expr: string): number | null {
   if (!expr) return null
-  const cleaned = expr.replace(/[^\d.+\-*/]/g, '').replace(/[+\-*/.]+$/, '')
-  if (!cleaned) return null
-  if (!/[+\-*/]/.test(cleaned)) {
-    const num = Number(cleaned)
-    return isNaN(num) ? null : num
-  }
+  let normalized = expr
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/\u066B/g, '.')
+    .replace(/\u060C/g, ',')
+    .replace(/\s+/g, '')
+
+  normalized = normalized.replace(/[^\d.,+\-*/]/g, '')
+  normalized = normalized.replace(/[+\-*/.,]+$/, '')
+  if (!normalized) return null
+
   try {
-    const tokens = cleaned.match(/(\d+(?:\.\d+)?|[+\-*/])/g)
-    if (!tokens || tokens.length === 0) return null
+    const tokens: string[] = []
+    let currentNum = ''
+    let i = 0
+
+    if (normalized[0] === '+' || normalized[0] === '-') {
+      currentNum += normalized[0]
+      i = 1
+    }
+
+    for (; i < normalized.length; i++) {
+      const ch = normalized[i]
+      if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+        if (currentNum) {
+          tokens.push(currentNum)
+          currentNum = ''
+        }
+        tokens.push(ch)
+      } else {
+        currentNum += ch
+      }
+    }
+    if (currentNum) {
+      tokens.push(currentNum)
+    }
+
+    if (tokens.length === 0) return null
 
     const firstPass: (number | string)[] = []
-    let i = 0
-    while (i < tokens.length) {
-      const tok = tokens[i]
+    let idx = 0
+    while (idx < tokens.length) {
+      const tok = tokens[idx]
       if (tok === '*' || tok === '/') {
-        const prev = Number(firstPass.pop())
-        const next = Number(tokens[++i])
+        const prevTok = firstPass.pop()
+        const prev = typeof prevTok === 'number' ? prevTok : cleanNumberToken(String(prevTok))
+        const nextRaw = tokens[++idx]
+        const next = cleanNumberToken(nextRaw)
         if (isNaN(prev) || isNaN(next)) return null
         if (tok === '/' && next === 0) return null
         firstPass.push(tok === '*' ? prev * next : prev / next)
-      } else if (!isNaN(Number(tok))) {
-        firstPass.push(Number(tok))
-      } else {
+      } else if (tok === '+' || tok === '-') {
         firstPass.push(tok)
+      } else {
+        const num = cleanNumberToken(tok)
+        if (isNaN(num)) return null
+        firstPass.push(num)
       }
-      i++
+      idx++
     }
 
-    let result = typeof firstPass[0] === 'number' ? firstPass[0] : 0
+    if (firstPass.length === 0) return null
+    let result = typeof firstPass[0] === 'number' ? firstPass[0] : cleanNumberToken(String(firstPass[0]))
+    if (isNaN(result)) return null
+
     let j = 1
     while (j < firstPass.length) {
       const op = firstPass[j]
-      const next = Number(firstPass[j + 1])
-      if (isNaN(next)) break
-      if (op === '+') result += next
-      else if (op === '-') result -= next
+      const nextTok = firstPass[j + 1]
+      const nextVal = typeof nextTok === 'number' ? nextTok : cleanNumberToken(String(nextTok))
+      if (isNaN(nextVal)) return null
+      if (op === '+') result += nextVal
+      else if (op === '-') result -= nextVal
+      else return null
       j += 2
     }
+
     return isFinite(result) ? result : null
   } catch {
     return null
@@ -142,7 +215,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     initialTransaction?.id && initialTransaction.id.startsWith('debt_init_')
   )
   const debtId = isLinkedToDebtInit && initialTransaction ? initialTransaction.id.replace('debt_init_', '') : null
-  const isDebtExists = Boolean(debtId && debts.some((d) => d.id === debtId))
+  const isDebtExists = Boolean(
+    (debtId && debts.some((d) => d.id === debtId)) ||
+      debts.some((d) => (d.entries || []).some((e) => e.transactionId === initialTransaction?.id))
+  )
 
   const isLinkedToDebtEntry = Boolean(
     initialTransaction?.id && initialTransaction.id.startsWith('debt_entry_')
@@ -171,18 +247,43 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const isLinkedToCircle = Boolean(
     initialTransaction?.id && initialTransaction.id.startsWith('circle_payout_')
   )
-  const circleId = isLinkedToCircle && initialTransaction ? initialTransaction.id.replace('circle_payout_', '') : null
   const isCircleExists = Boolean(
     isLinkedToCircle &&
       initialTransaction &&
-      circles.some((c) => c.id === circleId || initialTransaction.id.startsWith(`circle_payout_${c.id}`))
+      circles.some(
+        (c) =>
+          initialTransaction.id === `circle_payout_${c.id}` ||
+          initialTransaction.id === `circle_payout_${c.id}_t2`
+      )
   )
 
   const circleInstallmentMatch = initialTransaction?.id.match(/^circle_(.+)_m(\d+)$/)
-  const isLinkedToCircleInstallment = Boolean(circleInstallmentMatch)
-  const circleInstallmentId = circleInstallmentMatch ? circleInstallmentMatch[1] : null
-  const circleInstallmentMonth = circleInstallmentMatch ? parseInt(circleInstallmentMatch[2], 10) : null
-  const linkedCircleInstallment = circleInstallmentId ? circles.find((c) => c.id === circleInstallmentId) : null
+  const recurringLinkedCircle =
+    !circleInstallmentMatch && initialTransaction?.recurringId
+      ? circles.find((c) => c.recurringId === initialTransaction.recurringId)
+      : null
+  const recurringCircleMonth =
+    recurringLinkedCircle && initialTransaction
+      ? getOccurrenceMonthIndex(recurringLinkedCircle.startDate, initialTransaction.date)
+      : null
+  const isValidRecurringCircleInstallment = Boolean(
+    recurringLinkedCircle &&
+      recurringCircleMonth !== null &&
+      recurringCircleMonth >= 1 &&
+      recurringCircleMonth <= recurringLinkedCircle.membersCount
+  )
+  const isLinkedToCircleInstallment = Boolean(
+    circleInstallmentMatch || isValidRecurringCircleInstallment
+  )
+  const circleInstallmentId = circleInstallmentMatch
+    ? circleInstallmentMatch[1]
+    : (recurringLinkedCircle?.id ?? null)
+  const circleInstallmentMonth = circleInstallmentMatch
+    ? parseInt(circleInstallmentMatch[2], 10)
+    : recurringCircleMonth
+  const linkedCircleInstallment = circleInstallmentId
+    ? circles.find((c) => c.id === circleInstallmentId)
+    : null
   const isCircleInstallmentExists = Boolean(linkedCircleInstallment)
 
   const isMergedPaymentTx = Boolean(linkedDebtPayment?.payment?.isMerged)
@@ -201,6 +302,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle || isMergedPaymentTx)
   const [duplicateCleared, setDuplicateCleared] = useState(false)
   const activeDuplicateFrom = duplicateCleared ? null : duplicateFrom
+  const isActualDuplicate = Boolean(activeDuplicateFrom?.id)
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -261,16 +363,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  const lastDirtyRef = useRef<boolean | null>(null)
+
   useEffect(() => {
-    onDirtyChange?.(
-      Boolean(
-        initialTransaction ||
-          duplicateFrom ||
-          amountStr.trim() ||
-          title.trim() ||
-          note.trim()
-      )
+    const isDirty = Boolean(
+      initialTransaction ||
+        duplicateFrom ||
+        amountStr.trim() ||
+        title.trim() ||
+        note.trim()
     )
+    if (lastDirtyRef.current !== isDirty) {
+      lastDirtyRef.current = isDirty
+      onDirtyChange?.(isDirty)
+    }
   }, [onDirtyChange, initialTransaction, duplicateFrom, amountStr, title, note])
   const [deleting, setDeleting] = useState(false)
 
@@ -317,15 +423,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   // Guidance metrics for expense in current month
   const forecast = useMemo(() => {
     if (type !== 'expense') return null
+    const isRolloverEnabled = userSettings?.rolloverBalance ?? true
+    const openingFils = userSettings?.openingBalanceFils ?? 0
+    const effectiveRollover =
+      isRolloverEnabled || openingFils > 0
+        ? (appData?.rolloverBalanceFils ?? openingFils)
+        : undefined
+
     return calculateForecast({
       transactions: monthTransactions || [],
       recurring: recurringList || [],
       debts: debts || [],
       monthStartDay: userSettings?.monthStartDay ?? 1,
       periodRange: range,
-      rolloverBalanceFils: userSettings?.rolloverBalance
-        ? appData?.rolloverBalanceFils || 0
-        : 0,
+      rolloverBalanceFils: effectiveRollover,
     })
   }, [
     type,
@@ -334,6 +445,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     debts,
     userSettings?.monthStartDay,
     userSettings?.rolloverBalance,
+    userSettings?.openingBalanceFils,
     range,
     appData?.rolloverBalanceFils,
   ])
@@ -341,7 +453,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   // Auto-suggest for description/title matching current month's transactions
   const titleSuggestions = useMemo(() => {
     if (!monthTransactions || monthTransactions.length === 0) return []
-    const matching = monthTransactions.filter(
+    const sample = monthTransactions.slice(0, 50)
+    const matching = sample.filter(
       (t) =>
         t.type === type &&
         t.title &&
@@ -381,8 +494,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     let parsedAmountStr = amountStr
-    const evaluated = evaluateMathExpression(amountStr)
-    if (evaluated !== null && evaluated > 0) {
+    if (hasMathOperator(amountStr)) {
+      const evaluated = evaluateMathExpression(amountStr)
+      if (evaluated === null || evaluated <= 0) {
+        setError('يرجى إدخال مبلغ أو عملية حسابية صحيحة')
+        return
+      }
       parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
       setAmountStr(parsedAmountStr)
     }
@@ -393,6 +510,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (amountFils > MAX_AMOUNT_FILS) {
+      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
       return
     }
 
@@ -520,9 +642,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         startOfToday.setHours(0, 0, 0, 0)
         let nextDate = parsedDate
         if (scheduleNextIfPast && parsedDate < startOfToday) {
-          while (nextDate <= startOfToday) {
-            nextDate = advanceDate(nextDate, recurringFrequency)
-          }
+          nextDate = calculateNextDateOnEdit(parsedDate, recurringFrequency)
         }
 
         await addRecurring(user.uid, {
@@ -574,7 +694,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         recordCategoryUsage(activeCategoryId)
 
         showToast(
-          activeDuplicateFrom
+          isActualDuplicate
             ? (isOutsideMonth
                 ? 'تم حفظ المعاملة المكررة والانتقال إلى شهر المعاملة'
                 : 'تم حفظ المعاملة المكررة بنجاح')
@@ -614,8 +734,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     let parsedAmountStr = amountStr
-    const evaluated = evaluateMathExpression(amountStr)
-    if (evaluated !== null && evaluated > 0) {
+    if (hasMathOperator(amountStr)) {
+      const evaluated = evaluateMathExpression(amountStr)
+      if (evaluated === null || evaluated <= 0) {
+        setError('يرجى إدخال مبلغ أو عملية حسابية صحيحة')
+        return
+      }
       parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
       setAmountStr(parsedAmountStr)
     }
@@ -623,6 +747,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     const amountFils = toFils(parsedAmountStr, currencyConfig.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (amountFils > MAX_AMOUNT_FILS) {
+      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
       return
     }
 
@@ -649,9 +778,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         startOfToday.setHours(0, 0, 0, 0)
         let nextDate = parsedDate
         if (scheduleNextIfPast && parsedDate < startOfToday) {
-          while (nextDate <= startOfToday) {
-            nextDate = advanceDate(nextDate, recurringFrequency)
-          }
+          nextDate = calculateNextDateOnEdit(parsedDate, recurringFrequency)
         }
 
         await addRecurring(user.uid, {
@@ -757,12 +884,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
       return
     }
-    if (circleInstallmentMatch && user) {
-      const circleId = circleInstallmentMatch[1]
-      const monthNum = parseInt(circleInstallmentMatch[2], 10)
+    if (isLinkedToCircleInstallment && circleInstallmentId && circleInstallmentMonth && user) {
       setDeleting(true)
       try {
-        await removeCircleInstallmentPayment(user.uid, circleId, monthNum)
+        await removeCircleInstallmentPayment(user.uid, circleInstallmentId, circleInstallmentMonth)
         showToast('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
         onSuccess?.()
         onClose()
@@ -997,9 +1122,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const evaluated = evaluateMathExpression(amountStr)
-                  if (evaluated !== null && evaluated >= 0) {
-                    setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                  if (hasMathOperator(amountStr)) {
+                    const evaluated = evaluateMathExpression(amountStr)
+                    if (evaluated !== null && evaluated >= 0) {
+                      setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                    }
                   }
                 }}
                 className="w-6 h-6 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:hover:bg-blue-900 text-xs font-bold text-blue-600 dark:text-blue-400 transition-colors cursor-pointer select-none"
@@ -1035,14 +1162,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             onKeyDown={(e) => {
               if (e.key === '=') {
                 e.preventDefault()
-                const evaluated = evaluateMathExpression(amountStr)
-                if (evaluated !== null && evaluated >= 0) {
-                  setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                if (hasMathOperator(amountStr)) {
+                  const evaluated = evaluateMathExpression(amountStr)
+                  if (evaluated !== null && evaluated >= 0) {
+                    setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
+                  }
                 }
               }
             }}
             onBlur={() => {
-              if (/[+\-*/]/.test(amountStr)) {
+              if (hasMathOperator(amountStr)) {
                 const evaluated = evaluateMathExpression(amountStr)
                 if (evaluated !== null && evaluated >= 0) {
                   setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
@@ -1488,7 +1617,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               ? 'جاري الحفظ...'
               : isEditing
                 ? 'تعديل المعاملة'
-                : activeDuplicateFrom
+                : isActualDuplicate
                   ? 'حفظ النسخة'
                   : 'حفظ'}
           </Button>

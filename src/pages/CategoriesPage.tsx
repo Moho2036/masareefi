@@ -37,8 +37,8 @@ import { useAppData } from '../context/AppDataContext'
 import {
   buildUsageFromTransactions,
   syncCategoryUsageCache,
-  getCategoryUsageDetails,
   sortCategoriesUnified,
+  type CategoryUsageDetails,
 } from '../lib/categoryUsage'
 import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
@@ -95,6 +95,40 @@ export const CategoriesPage: React.FC = () => {
   const usageMap = useMemo(() => {
     return buildUsageFromTransactions(transactions)
   }, [transactions])
+
+  const usageDetailsByCategory = useMemo(() => {
+    const recCounts: Record<string, number> = {}
+    for (const rec of recurring) {
+      if (rec.categoryId) {
+        recCounts[rec.categoryId] = (recCounts[rec.categoryId] || 0) + 1
+      }
+    }
+    const circleCounts: Record<string, number> = {}
+    for (const c of moneyCircles) {
+      const linkedIds = new Set<string>()
+      if (c.expenseCategoryId) linkedIds.add(c.expenseCategoryId)
+      if (c.incomeCategoryId) linkedIds.add(c.incomeCategoryId)
+      if (c.categoryId) linkedIds.add(c.categoryId)
+      for (const cid of linkedIds) {
+        circleCounts[cid] = (circleCounts[cid] || 0) + 1
+      }
+    }
+    const result: Record<string, CategoryUsageDetails> = {}
+    for (const cat of categories) {
+      const txCount = usageMap[cat.id] || 0
+      const recurringCount = recCounts[cat.id] || 0
+      const circlesCount = circleCounts[cat.id] || 0
+      const totalCount = txCount + recurringCount + circlesCount
+      result[cat.id] = {
+        txCount,
+        recurringCount,
+        circlesCount,
+        totalCount,
+        isInUse: totalCount > 0,
+      }
+    }
+    return result
+  }, [categories, usageMap, recurring, moneyCircles])
 
   const handleConfirmDelete = async () => {
     if (!user || !catToDelete) return
@@ -281,7 +315,13 @@ export const CategoriesPage: React.FC = () => {
   }
 
   const formatUsageText = (catId: string) => {
-    const details = getCategoryUsageDetails(catId, transactions, recurring, usageMap, moneyCircles)
+    const details = usageDetailsByCategory[catId] || {
+      txCount: 0,
+      recurringCount: 0,
+      circlesCount: 0,
+      totalCount: 0,
+      isInUse: false,
+    }
     const currentMonthCount = currentMonthTxCounts[catId] || 0
 
     if (!details.isInUse) {
@@ -622,13 +662,13 @@ export const CategoriesPage: React.FC = () => {
       >
         {catToDelete && (
           (() => {
-            const usageDetails = getCategoryUsageDetails(
-              catToDelete.id,
-              transactions,
-              recurring,
-              usageMap,
-              moneyCircles
-            )
+            const usageDetails = usageDetailsByCategory[catToDelete.id] || {
+              txCount: 0,
+              recurringCount: 0,
+              circlesCount: 0,
+              totalCount: 0,
+              isInUse: false,
+            }
             const otherActiveCats = categories.filter(
               (c) => c.type === catToDelete.type && c.id !== catToDelete.id && !c.archived
             )

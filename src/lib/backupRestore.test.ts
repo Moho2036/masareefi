@@ -4,6 +4,7 @@ import {
   restoreBackup,
   restoreBackupData,
   downloadBackupFile,
+  parseDate,
   type MasareefiBackup,
 } from './backupRestore'
 import { formatDateInput } from './dates'
@@ -286,6 +287,28 @@ describe('backupRestore module', () => {
       expect(validatedDebt?.paidFils).toBe(50000)
       expect(validatedDebt?.settled).toBe(true)
     })
+
+    it('truncates avatarColor to 30 characters in validateBackup', () => {
+      const backupWithLongAvatar = {
+        app: 'baseer',
+        version: 1,
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          settings: {
+            displayName: 'أحمد',
+            currency: 'JOD',
+            monthStartDay: 1,
+            theme: 'system',
+            rolloverBalance: true,
+            avatarColor: '123456789012345678901234567890EXTRA',
+          },
+        },
+      }
+      const res = validateBackup(JSON.stringify(backupWithLongAvatar))
+      expect(res.valid).toBe(true)
+      expect(res.data?.data.settings?.avatarColor).toBe('123456789012345678901234567890')
+      expect(res.data?.data.settings?.avatarColor?.length).toBe(30)
+    })
   })
 
   describe('restoreBackup', () => {
@@ -391,6 +414,50 @@ describe('backupRestore module', () => {
         debtReminders: false,
         debtReminderDaysBefore: 3,
       })
+    })
+
+    it('clears openingBalanceFils to 0 and rolloverStartDate/customCurrencyDecimals to null in replace mode when omitted from backup', async () => {
+      mockUpdate.mockClear()
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          openingBalanceFils: 500000,
+          rolloverStartDate: new Date('2026-01-01'),
+          customCurrencyDecimals: 3,
+          createdAt: new Date('2025-01-01'),
+        }),
+      })
+
+      const backupWithoutOptionalSettings: MasareefiBackup = {
+        version: 1,
+        app: 'baseer',
+        exportedAt: '2026-10-15T12:00:00Z',
+        data: {
+          settings: {
+            displayName: 'محمود',
+            currency: 'JOD',
+            monthStartDay: 1,
+            theme: 'system',
+            rolloverBalance: true,
+            avatarColor: '123456789012345678901234567890EXTRA_CHARS',
+          },
+          categories: [],
+          transactions: [],
+          debts: [],
+          recurring: [],
+          circles: [],
+        },
+      }
+
+      await restoreBackup('user-replace-uid', backupWithoutOptionalSettings, 'replace')
+
+      const updateCall = mockUpdate.mock.calls.find((call) => call[0].path === 'users/user-replace-uid')
+      expect(updateCall).toBeDefined()
+      expect(updateCall![1].openingBalanceFils).toBe(0)
+      expect(updateCall![1].rolloverStartDate).toBeNull()
+      expect(updateCall![1].customCurrencyDecimals).toBeNull()
+      expect(updateCall![1].avatarColor).toBe('123456789012345678901234567890')
+      expect(updateCall![1].avatarColor?.length).toBe(30)
     })
 
     it('preserves existing transactions and debts in merge mode (default)', async () => {
@@ -1361,6 +1428,16 @@ describe('backupRestore module', () => {
       expect(circleCall).toBeDefined()
       expect(circleCall![1].shareType).toBe('double')
       expect(circleCall![1].secondTurnMonth).toBe(5)
+    })
+  })
+
+  describe('parseDate helper', () => {
+    it('parses YYYY-MM-DD string into local midday date (12:00) without timezone shift', () => {
+      const parsed = parseDate('2026-10-01')
+      expect(parsed.getFullYear()).toBe(2026)
+      expect(parsed.getMonth()).toBe(9) // October
+      expect(parsed.getDate()).toBe(1)
+      expect(parsed.getHours()).toBe(12)
     })
   })
 })

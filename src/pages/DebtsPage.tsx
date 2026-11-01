@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useDeferredValue, useEffect } from 'react'
+import React, { useState, useMemo, useDeferredValue, useEffect, useCallback } from 'react'
 import {
   HandCoins,
   Plus,
@@ -133,12 +133,15 @@ export const DebtsPage: React.FC = () => {
     setIsFormOpen(true)
   }
 
-  const handleEdit = (debt: Debt) => {
+  const handleOpenPaymentModal = useCallback((d: Debt) => setPaymentDebtId(d.id), [])
+  const handleOpenHistoryModal = useCallback((d: Debt) => setHistoryDebtId(d.id), [])
+
+  const handleEdit = useCallback((debt: Debt) => {
     setEditingDebt(debt)
     setIsFormOpen(true)
-  }
+  }, [])
 
-  const handleDelete = (debt: Debt) => {
+  const handleDelete = useCallback((debt: Debt) => {
     setDebtToDelete(debt)
     setDeleteTransactions(false)
     setHasInitTxOnDelete(false)
@@ -147,7 +150,7 @@ export const DebtsPage: React.FC = () => {
         .then((exists) => setHasInitTxOnDelete(exists))
         .catch(() => {})
     }
-  }
+  }, [user])
 
   const handleConfirmDelete = async () => {
     if (!user || !debtToDelete) return
@@ -555,8 +558,8 @@ export const DebtsPage: React.FC = () => {
                     <DebtCard
                       key={debt.id}
                       debt={debt}
-                      onOpenPaymentModal={(d) => setPaymentDebtId(d.id)}
-                      onOpenHistoryModal={(d) => setHistoryDebtId(d.id)}
+                      onOpenPaymentModal={handleOpenPaymentModal}
+                      onOpenHistoryModal={handleOpenHistoryModal}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                     />
@@ -572,8 +575,8 @@ export const DebtsPage: React.FC = () => {
             <DebtCard
               key={debt.id}
               debt={debt}
-              onOpenPaymentModal={(d) => setPaymentDebtId(d.id)}
-              onOpenHistoryModal={(d) => setHistoryDebtId(d.id)}
+              onOpenPaymentModal={handleOpenPaymentModal}
+              onOpenHistoryModal={handleOpenHistoryModal}
               onEdit={handleEdit}
               onDelete={handleDelete}
             />

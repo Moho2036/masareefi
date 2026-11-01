@@ -24,11 +24,20 @@ import { useTransactionModal } from '../../hooks/useTransactionModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { useNotifications } from '../../hooks/useNotifications'
 import { hasExistingUserData } from '../../services/userProfile'
-import { OnboardingWizard } from '../onboarding/OnboardingWizard'
-import { SpotlightTour } from '../onboarding/SpotlightTour'
-import { NotificationCenterModal } from '../notifications/NotificationCenterModal'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
 import { cn } from '../../lib/cn'
+
+const OnboardingWizard = React.lazy(() =>
+  import('../onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
+)
+const SpotlightTour = React.lazy(() =>
+  import('../onboarding/SpotlightTour').then((m) => ({ default: m.SpotlightTour }))
+)
+const NotificationCenterModal = React.lazy(() =>
+  import('../notifications/NotificationCenterModal').then((m) => ({
+    default: m.NotificationCenterModal,
+  }))
+)
 
 interface NavItem {
   to: string
@@ -350,21 +359,20 @@ export const AppShell: React.FC = () => {
       {/* Mobile Bottom Navigation */}
       <BottomNav onOpenAddModal={() => openAdd('expense')} />
 
-      {/* Onboarding Wizard for brand new users */}
-      {showWizard && uid && (
-        <OnboardingWizard isOpen={showWizard} onComplete={handleOnboardingComplete} />
-      )}
-
-      {/* Spotlight Feature Tour */}
-      {showTour && uid && (
-        <SpotlightTour isOpen={showTour} onFinish={() => setShowTour(false)} />
-      )}
-
-      {/* Internal Notification Center Modal */}
-      <NotificationCenterModal
-        isOpen={showNotificationsModal}
-        onClose={() => setShowNotificationsModal(false)}
-      />
+      <React.Suspense fallback={null}>
+        {showWizard && uid && (
+          <OnboardingWizard isOpen={showWizard} onComplete={handleOnboardingComplete} />
+        )}
+        {showTour && uid && (
+          <SpotlightTour isOpen={showTour} onFinish={() => setShowTour(false)} />
+        )}
+        {showNotificationsModal && (
+          <NotificationCenterModal
+            isOpen={showNotificationsModal}
+            onClose={() => setShowNotificationsModal(false)}
+          />
+        )}
+      </React.Suspense>
     </div>
   )
 }

@@ -49,6 +49,8 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     isCurrentMonth,
     isPastMonth,
     isFutureMonth,
+    nextCycleSoonObligationsFils,
+    nextCycleSoonCount,
   } = forecast
 
   const totalUpcomingObligations = upcomingRecurringExpenses + upcomingDebtObligations
@@ -374,6 +376,13 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     return null
   }
 
+  const isEmptyMonth =
+    currentIncome === 0 &&
+    currentExpense === 0 &&
+    rolloverBalance === 0 &&
+    upcomingRecurringIncome === 0 &&
+    totalUpcomingObligations === 0
+
   return (
     <Card
       className={cn(
@@ -467,7 +476,14 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-xs font-bold text-slate-400 mb-1">معدل صرفك الفعلي</div>
-              <div className="text-lg font-black text-slate-700 dark:text-slate-200">
+              <div
+                className={cn(
+                  'text-lg font-black',
+                  actualDailySpendFils > dailySafeFils && dailySafeFils > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-slate-700 dark:text-slate-200'
+                )}
+              >
                 {format(actualDailySpendFils)}{' '}
                 <span className="text-[10px] text-slate-400 font-normal">/ اليوم</span>
               </div>
@@ -585,6 +601,27 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
           </div>
         </div>
+      ) : isEmptyMonth ? (
+        <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-2.5 text-xs">
+          <Info className="w-5 h-5 text-slate-500 shrink-0" />
+          <div>
+            <span className="font-bold">بانتظار تسجيل المعاملات:</span> ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي.
+          </div>
+        </div>
+      ) : freeBalance <= 0 ? (
+        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <div>
+            <span className="font-bold">استنفاد الرصيد الحر المتاح:</span> لقد استهلكت كامل الرصيد المتاح للصرف اليومي أو تم حجزه بالكامل للالتزامات المتبقية. يرجى التوقف عن الصرف غير الضروري لتجنب العجز.
+          </div>
+        </div>
+      ) : healthStatus === 'warning' && actualDailySpendFils > dailySafeFils ? (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 flex items-center gap-2.5 text-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          <div>
+            <span className="font-bold">تنبيه وتيرة الإنفاق:</span> معدل صرفك اليومي الحالي ({format(actualDailySpendFils)}) يتجاوز حد الأمان ({format(dailySafeFils)}). ننصح بضبط مصاريف الأيام القادمة لحماية ميزانيتك.
+          </div>
+        </div>
       ) : (
         <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200">
           <div className="flex items-center gap-2.5 text-xs">
@@ -596,6 +633,27 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 {format(surplusAmount)}
               </strong>
               .
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Next Cycle Soon Obligations Proactive Alert */}
+      {isCurrentMonth && (nextCycleSoonObligationsFils ?? 0) > 0 && (
+        <div className="mt-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200">
+          <div className="flex items-start gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-bold">تنبيه مطلع الدورة القادمة:</span>{' '}
+              لديك{' '}
+              {nextCycleSoonCount && nextCycleSoonCount > 1
+                ? `${nextCycleSoonCount} التزامات تستحق`
+                : 'التزامات تستحق'}{' '}
+              خلال أقل من 3 أيام (مع بداية الشهر المالي الجديد) بقيمة{' '}
+              <strong className="font-black text-amber-700 dark:text-amber-400">
+                {format(nextCycleSoonObligationsFils!)}
+              </strong>
+              . احرص على إبقاء سيولة نقدية كافية لتغطيتها فور بدء الشهر.
             </div>
           </div>
         </div>

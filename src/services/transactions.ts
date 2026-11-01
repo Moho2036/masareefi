@@ -15,6 +15,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { Transaction } from '../types'
 import { transactionConverter } from './converters'
 
@@ -88,6 +89,9 @@ export async function addTransaction(
   if (!Number.isInteger(tx.amountFils) || tx.amountFils <= 0) {
     throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
   }
+  if (tx.amountFils > MAX_AMOUNT_FILS) {
+    throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+  }
 
   const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
   const docRef = await addDoc(colRef, {
@@ -108,6 +112,9 @@ export async function updateTransaction(
   if (tx.amountFils !== undefined) {
     if (!Number.isInteger(tx.amountFils) || tx.amountFils <= 0) {
       throw new Error('المبلغ يجب أن يكون عدداً صحيحاً موجباً بالفلس')
+    }
+    if (tx.amountFils > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
     }
   }
 

@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SettingsPage } from './SettingsPage'
+import { SelectedMonthContext } from '../hooks/useSelectedMonth'
+import { getFinancialMonthRange } from '../lib/dates'
 
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
 const mockSetTheme = vi.fn()
 const mockShowToast = vi.fn()
 const mockRestoreBackup = vi.fn().mockResolvedValue(undefined)
 const mockProcessDueRecurring = vi.fn().mockResolvedValue(0)
+const mockGetAllTransactions = vi.fn().mockResolvedValue([])
+const mockAddTransaction = vi.fn().mockResolvedValue('new-tx-id')
+const mockDeleteTransaction = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('../services/recurring', () => ({
   processDueRecurring: (...args: unknown[]) => mockProcessDueRecurring(...args),
+}))
+
+vi.mock('../services/transactions', () => ({
+  getAllTransactions: (...args: unknown[]) => mockGetAllTransactions(...args),
+  addTransaction: (...args: unknown[]) => mockAddTransaction(...args),
+  deleteTransaction: (...args: unknown[]) => mockDeleteTransaction(...args),
 }))
 
 vi.mock('../lib/backupRestore', async (importOriginal) => {
@@ -34,22 +45,28 @@ vi.mock('../hooks/useTheme', () => ({
   }),
 }))
 
+let mockSettingsData = {
+  displayName: 'محمد',
+  currency: 'JOD',
+  monthStartDay: 1,
+  theme: 'dark',
+  rolloverBalance: true,
+  rolloverStartDate: null as Date | null,
+  openingBalanceFils: 0,
+}
+
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => ({
-    data: {
-      displayName: 'محمد',
-      currency: 'JOD',
-      monthStartDay: 1,
-      theme: 'dark',
-      rolloverBalance: true,
-    },
+    data: mockSettingsData,
     updateSettings: mockUpdateSettings,
   }),
 }))
 
+let mockCategoriesData: Array<{ id: string; name: string; type: string; archived: boolean }> = []
+
 vi.mock('../hooks/useCategories', () => ({
   useCategories: () => ({
-    data: [],
+    data: mockCategoriesData,
   }),
 }))
 
@@ -84,6 +101,19 @@ vi.mock('../hooks/usePWAInstall', () => ({
 
 describe('SettingsPage Component redundant update prevention', () => {
   beforeEach(() => {
+    mockSettingsData = {
+      displayName: 'محمد',
+      currency: 'JOD',
+      monthStartDay: 1,
+      theme: 'dark',
+      rolloverBalance: true,
+      rolloverStartDate: null,
+      openingBalanceFils: 0,
+    }
+    mockCategoriesData = []
+    mockGetAllTransactions.mockReset().mockResolvedValue([])
+    mockAddTransaction.mockReset().mockResolvedValue('new-tx-id')
+    mockDeleteTransaction.mockReset().mockResolvedValue(undefined)
     vi.clearAllMocks()
   })
 
@@ -194,6 +224,19 @@ describe('SettingsPage Component redundant update prevention', () => {
 
 describe('SettingsPage Backup and Restore modal', () => {
   beforeEach(() => {
+    mockSettingsData = {
+      displayName: 'محمد',
+      currency: 'JOD',
+      monthStartDay: 1,
+      theme: 'dark',
+      rolloverBalance: true,
+      rolloverStartDate: null,
+      openingBalanceFils: 0,
+    }
+    mockCategoriesData = []
+    mockGetAllTransactions.mockReset().mockResolvedValue([])
+    mockAddTransaction.mockReset().mockResolvedValue('new-tx-id')
+    mockDeleteTransaction.mockReset().mockResolvedValue(undefined)
     vi.clearAllMocks()
   })
 
@@ -376,6 +419,19 @@ describe('SettingsPage Backup and Restore modal', () => {
 
 describe('SettingsPage Extended Features', () => {
   beforeEach(() => {
+    mockSettingsData = {
+      displayName: 'محمد',
+      currency: 'JOD',
+      monthStartDay: 1,
+      theme: 'dark',
+      rolloverBalance: true,
+      rolloverStartDate: null,
+      openingBalanceFils: 0,
+    }
+    mockCategoriesData = []
+    mockGetAllTransactions.mockReset().mockResolvedValue([])
+    mockAddTransaction.mockReset().mockResolvedValue('new-tx-id')
+    mockDeleteTransaction.mockReset().mockResolvedValue(undefined)
     vi.clearAllMocks()
     window.localStorage.clear()
   })
@@ -454,5 +510,200 @@ describe('SettingsPage Extended Features', () => {
     fireEvent.click(resetModalBtn)
 
     expect(screen.getByRole('button', { name: 'تنزيل نسخة احتياطية أولاً' })).toBeDefined()
+  })
+
+  it('uses current financial cycle start of today for rolloverStartDate even if SelectedMonthContext points to past month', async () => {
+    const pastMonthRange = {
+      start: new Date(2026, 4, 1),
+      end: new Date(2026, 5, 1),
+    }
+    const mockSelectedMonthValue = {
+      selectedDate: new Date(2026, 4, 15),
+      setSelectedDate: vi.fn(),
+      goToPreviousMonth: vi.fn(),
+      goToNextMonth: vi.fn(),
+      goToCurrentMonth: vi.fn(),
+      refreshData: vi.fn(),
+      refreshKey: 0,
+      monthLabel: 'مايو 2026',
+      range: pastMonthRange,
+      monthStartDay: 1,
+      rangeLabel: '1 مايو - 31 مايو',
+      isCurrentMonth: false,
+    }
+
+    render(
+      <SelectedMonthContext.Provider value={mockSelectedMonthValue}>
+        <SettingsPage />
+      </SelectedMonthContext.Provider>
+    )
+
+    const toggle = screen.getByLabelText(/بدء احتساب الترحيل من هذا الشهر فقط/i)
+    fireEvent.click(toggle)
+
+    const expectedCurrentCycleStart = getFinancialMonthRange(new Date(), 1).start
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rolloverStartDate: expectedCurrentCycleStart,
+        })
+      )
+    })
+  })
+
+  it('synchronizes rolloverStartDate when changing monthStartDay if rolloverStartDate is active', async () => {
+    mockSettingsData.rolloverStartDate = new Date(2026, 9, 1)
+
+    render(<SettingsPage />)
+
+    const startDaySelect = screen.getByLabelText(/يوم بداية الدورة المالية/i)
+    fireEvent.change(startDaySelect, { target: { value: '25' } })
+
+    const expectedNewCycleStart = getFinancialMonthRange(new Date(), 25).start
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          monthStartDay: 25,
+          rolloverStartDate: expectedNewCycleStart,
+        })
+      )
+    })
+  })
+
+  it('resets openingBalanceFils to 0 when enabling rolloverStartDate', async () => {
+    mockSettingsData.rolloverStartDate = null
+    mockSettingsData.openingBalanceFils = 30000
+
+    render(<SettingsPage />)
+
+    const toggle = screen.getByLabelText(/بدء احتساب الترحيل من هذا الشهر فقط/i)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        rolloverStartDate: expect.any(Date),
+        openingBalanceFils: 0,
+      })
+    })
+  })
+
+  it('excludes future-dated transactions and deletes previous automated reconciliation transaction upon re-reconciling', async () => {
+    const currentCycle = getFinancialMonthRange(new Date(), 1)
+    const midCycleDate = new Date(currentCycle.start.getTime() + 5 * 86400000)
+    const futureDate = new Date(currentCycle.end.getTime() + 5 * 86400000)
+
+    const oldReconcileTx = {
+      id: 'tx-old-reconcile',
+      type: 'expense',
+      amountFils: 15000,
+      title: 'تسوية رصيد (فرق جرد)',
+      note: 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي',
+      date: midCycleDate,
+    }
+
+    const futureTx = {
+      id: 'tx-future',
+      type: 'expense',
+      amountFils: 50000,
+      title: 'شراء قادم',
+      note: '',
+      date: futureDate,
+    }
+
+    const currentIncomeTx = {
+      id: 'tx-current-income',
+      type: 'income',
+      amountFils: 100000,
+      title: 'راتب',
+      note: '',
+      date: midCycleDate,
+    }
+
+    mockGetAllTransactions.mockResolvedValue([oldReconcileTx, futureTx, currentIncomeTx])
+
+    render(<SettingsPage />)
+
+    // Open reconciliation modal
+    const openBtn = screen.getByRole('button', { name: 'تسوية وتعديل الرصيد' })
+    fireEvent.click(openBtn)
+
+    // Input target balance: 140.000 JOD (= 140000 fils)
+    const amountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(amountInput, { target: { value: '140' } })
+
+    // Save reconciliation
+    const saveBtn = screen.getByRole('button', { name: 'حفظ وتسوية الرصيد' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      // 1. Previous automated reconciliation transaction must be deleted
+      expect(mockDeleteTransaction).toHaveBeenCalledWith('user-123', 'tx-old-reconcile')
+      // 2. Net transactions: only currentIncomeTx (+100000 fils). Future tx (-50000) & old reconcile (-15000) excluded!
+      // Target (140000) - Net (100000) = Required opening (40000 fils)
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        openingBalanceFils: 40000,
+      })
+    })
+  })
+
+  it('deletes previous automated reconciliation transaction and selects active expense category when required opening is negative', async () => {
+    const currentCycle = getFinancialMonthRange(new Date(), 1)
+    const midCycleDate = new Date(currentCycle.start.getTime() + 5 * 86400000)
+
+    const oldReconcileTx = {
+      id: 'tx-old-reconcile-2',
+      type: 'expense',
+      amountFils: 10000,
+      title: 'تسوية رصيد (فرق جرد)',
+      note: 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي',
+      date: midCycleDate,
+    }
+
+    const currentIncomeTx = {
+      id: 'tx-current-income-2',
+      type: 'income',
+      amountFils: 100000,
+      title: 'راتب',
+      note: '',
+      date: midCycleDate,
+    }
+
+    mockGetAllTransactions.mockResolvedValue([oldReconcileTx, currentIncomeTx])
+    mockCategoriesData = [
+      { id: 'cat-archived', name: 'أخرى', type: 'expense', archived: true },
+      { id: 'cat-active', name: 'عام', type: 'expense', archived: false },
+    ]
+
+    render(<SettingsPage />)
+
+    const openBtn = screen.getByRole('button', { name: 'تسوية وتعديل الرصيد' })
+    fireEvent.click(openBtn)
+
+    // Target balance: 70.000 JOD (= 70000 fils)
+    // Net: 100000 fils. Required opening: 70000 - 100000 = -30000 fils
+    const amountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(amountInput, { target: { value: '70' } })
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ وتسوية الرصيد' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(mockDeleteTransaction).toHaveBeenCalledWith('user-123', 'tx-old-reconcile-2')
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        openingBalanceFils: 0,
+      })
+      expect(mockAddTransaction).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          type: 'expense',
+          amountFils: 30000,
+          categoryId: 'cat-active', // Must choose active category, skipping archived 'أخرى'
+          title: 'تسوية رصيد (فرق جرد)',
+          note: 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي',
+        })
+      )
+    })
   })
 })

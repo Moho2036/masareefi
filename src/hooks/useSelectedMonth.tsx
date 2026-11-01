@@ -14,6 +14,7 @@ import {
   getPreviousFinancialMonth,
   getNextFinancialMonth,
   getFiscalMonthKey,
+  getFiscalMonthInfo,
 } from '../lib/dates'
 import { useUserSettings } from './useUserSettings'
 
@@ -42,6 +43,23 @@ export function SelectedMonthProvider({ children }: { children: ReactNode }) {
   const { data: settings } = useUserSettings()
 
   const monthStartDay = settings?.monthStartDay ?? 1
+  const [prevMonthStartDay, setPrevMonthStartDay] = useState<number>(monthStartDay)
+
+  if (prevMonthStartDay !== monthStartDay) {
+    setPrevMonthStartDay(monthStartDay)
+    const isViewingCurrent =
+      manualNavKey === 0 ||
+      getFiscalMonthKey(selectedDate, prevMonthStartDay) ===
+        getFiscalMonthKey(new Date(), prevMonthStartDay)
+
+    if (isViewingCurrent) {
+      setSelectedDate(new Date())
+    } else {
+      const { year, monthIndex } = getFiscalMonthInfo(selectedDate, prevMonthStartDay)
+      const safeDay = Math.max(1, Math.min(28, Math.floor(monthStartDay) || 1))
+      setSelectedDate(new Date(year, monthIndex, safeDay, 12, 0, 0, 0))
+    }
+  }
 
   const goToPreviousMonth = useCallback(() => {
     setManualNavKey((k) => k + 1)

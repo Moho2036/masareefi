@@ -235,13 +235,15 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
   // Current Month Forecast for Purchasing Decision Insight
   const forecast = useMemo(() => {
-    const hasRollover = settings?.rolloverBalance ?? false
+    const isRolloverEnabled = settings?.rolloverBalance ?? true
+    const openingFils = settings?.openingBalanceFils ?? 0
+    const hasRolloverOrOpening = isRolloverEnabled || openingFils > 0
     return calculateForecast({
       transactions: currentMonthTransactions,
       recurring: recurringItems,
       debts,
       monthStartDay: settings?.monthStartDay ?? 1,
-      rolloverBalanceFils: hasRollover ? (appData?.rolloverBalanceFils ?? 0) : undefined,
+      rolloverBalanceFils: hasRolloverOrOpening ? (appData?.rolloverBalanceFils ?? openingFils) : undefined,
       referenceDate: new Date(),
     })
   }, [
@@ -250,6 +252,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
     debts,
     settings?.monthStartDay,
     settings?.rolloverBalance,
+    settings?.openingBalanceFils,
     appData?.rolloverBalanceFils,
   ])
 
@@ -373,6 +376,15 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
     return 'heavy'
   }, [salary, itemPrice, requiredHours])
 
+  const itemPriceFils = toFils(itemPrice, config.decimals)
+  const newFreeBalance = forecast.freeBalance - itemPriceFils
+  const newDailySafeFils =
+    forecast.remainingDays > 0 && newFreeBalance > 0
+      ? Math.floor(newFreeBalance / forecast.remainingDays)
+      : 0
+  const dailySafeDropFils = Math.max(0, forecast.dailySafeFils - newDailySafeFils)
+  const itemDailyBurdenFils = Math.round(itemPriceFils / Math.max(1, forecast.remainingDays))
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -461,7 +473,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-750/60 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                 <span className="font-medium">صافي أجرك في الساعة الواحدة:</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  <FormattedMoney amountFils={hourlyWageFils} /> / ساعة
+                  <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} /> / ساعة
                 </span>
               </div>
             </div>
@@ -544,7 +556,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               ) : (
                 <div className="py-2 text-center space-y-2">
                   <p className="text-xs font-semibold text-slate-400">
-                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر <FormattedMoney amountFils={toFils(itemPrice, config.decimals)} />، تحتاج إلى:
+                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر <FormattedMoney amountFils={toFils(itemPrice, config.decimals)} maskAmount={false} />، تحتاج إلى:
                   </p>
 
                   <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
@@ -596,7 +608,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                     <div>
                       <div className="text-[11px] font-medium text-slate-400">أجرك في الساعة</div>
                       <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        <FormattedMoney amountFils={hourlyWageFils} />
+                        <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} />
                       </div>
                     </div>
                   </div>
@@ -719,10 +731,18 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   الأثر على حد الصرف اليومي
                 </span>
                 <span className="text-xl font-black text-rose-600 dark:text-rose-400">
-                  - <FormattedMoney amountFils={Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays))} /> / يوم
+                  - <FormattedMoney amountFils={forecast.dailySafeFils > 0 && newFreeBalance >= 0 ? dailySafeDropFils : itemDailyBurdenFils} maskAmount={false} /> / يوم
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  ينخفض من <FormattedMoney amountFils={forecast.dailySafeFils} /> إلى <FormattedMoney amountFils={Math.max(0, forecast.dailySafeFils - Math.round(toFils(itemPrice, config.decimals) / Math.max(1, forecast.remainingDays)))} />
+                  {forecast.dailySafeFils > 0 ? (
+                    <>
+                      ينخفض من <FormattedMoney amountFils={forecast.dailySafeFils} /> إلى <FormattedMoney amountFils={newDailySafeFils} />
+                    </>
+                  ) : (
+                    <>
+                      الحد الآمن الحالي <FormattedMoney amountFils={0} /> — تُضيف عبئاً يومياً بقيمة <FormattedMoney amountFils={itemDailyBurdenFils} maskAmount={false} />
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -770,7 +790,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
             duplicateFrom={{
               id: '',
               type: 'expense',
-              amountFils: toFils(itemPrice, config.decimals),
+              amountFils: itemPriceFils,
               title: itemName || 'مشتريات جديدة',
               note: `شراء ${itemName || 'سلعة'} (محسوبة من حاسبة ساعات العمل)`,
               categoryId: '',

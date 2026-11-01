@@ -3,12 +3,24 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { ReportsPage } from './ReportsPage'
 import type { Transaction } from '../types'
+import { subscribePriorBalance } from '../services/transactions'
 
 let mockIsCurrentMonth = true
 const mockGoToCurrentMonth = vi.fn()
 let mockTransactions: Transaction[] = []
 let mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
 let mockCategories: Array<{ id: string; name: string; icon: string; color: string; isArchived: boolean }> = []
+let mockUserSettings: {
+  monthStartDay: number
+  rolloverBalance: boolean
+  openingBalanceFils?: number
+  rolloverStartDate?: string
+  createdAt?: unknown
+} = {
+  monthStartDay: 1,
+  rolloverBalance: false,
+  openingBalanceFils: 0,
+}
 
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
@@ -40,7 +52,7 @@ vi.mock('../hooks/useSelectedMonth', () => ({
 
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => ({
-    data: { monthStartDay: 1, rolloverBalance: false },
+    data: mockUserSettings,
     loading: false,
   }),
 }))
@@ -54,6 +66,13 @@ vi.mock('../hooks/useDebts', () => ({
 
 vi.mock('../hooks/useRecurring', () => ({
   useRecurring: () => ({
+    data: [],
+    loading: false,
+  }),
+}))
+
+vi.mock('../hooks/useMoneyCircles', () => ({
+  useMoneyCircles: () => ({
     data: [],
     loading: false,
   }),
@@ -92,6 +111,11 @@ describe('ReportsPage month switching and period header', () => {
     mockCategories = []
     mockTransactions = []
     mockRange = { start: new Date('2026-10-01'), end: new Date('2026-11-01') }
+    mockUserSettings = {
+      monthStartDay: 1,
+      rolloverBalance: false,
+      openingBalanceFils: 0,
+    }
   })
 
   it('renders MonthSelector in header when monthly report tab is active', () => {
@@ -420,5 +444,122 @@ describe('ReportsPage month switching and period header', () => {
 
     // Check for "الإجمالي السنوي" in tfoot
     expect(screen.getByText('الإجمالي السنوي')).toBeInTheDocument()
+  })
+
+  it('does not leak openingBalanceFils into an empty historical month preceding createdAt', () => {
+    mockIsCurrentMonth = false
+    mockRange = { start: new Date('2025-01-01'), end: new Date('2025-02-01') }
+    mockUserSettings = {
+      monthStartDay: 1,
+      rolloverBalance: true,
+      openingBalanceFils: 50000,
+      createdAt: new Date('2026-10-01'),
+    }
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // The subline "صافي الشهر المستقل (الرصيد المتاح مع المرحّل: ...)" should not appear
+    expect(screen.queryByText(/الرصيد المتاح مع المرحّل/)).toBeNull()
+    expect(screen.getByText('المبلغ المتبقي من دخل هذا الشهر بعد المصاريف')).toBeInTheDocument()
+  })
+
+  it('does not leak openingBalanceFils into a historical month when rollover is disabled', () => {
+    mockIsCurrentMonth = false
+    mockRange = { start: new Date('2025-01-01'), end: new Date('2025-02-01') }
+    mockUserSettings = {
+      monthStartDay: 1,
+      rolloverBalance: false,
+      openingBalanceFils: 50000,
+    }
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText(/الرصيد المتاح مع المرحّل/)).toBeNull()
+    expect(screen.getByText('المبلغ المتبقي من دخل هذا الشهر بعد المصاريف')).toBeInTheDocument()
+  })
+
+  it('does not leak openingBalanceFils into a historical month preceding rolloverStartDate and skips subscribePriorBalance', () => {
+    mockIsCurrentMonth = false
+    mockRange = { start: new Date('2026-01-01'), end: new Date('2026-02-01') }
+    mockUserSettings = {
+      monthStartDay: 1,
+      rolloverBalance: true,
+      openingBalanceFils: 50000,
+      rolloverStartDate: '2026-06-01',
+    }
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText(/الرصيد المتاح مع المرحّل/)).toBeNull()
+    expect(screen.getByText('المبلغ المتبقي من دخل هذا الشهر بعد المصاريف')).toBeInTheDocument()
+    expect(subscribePriorBalance).not.toHaveBeenCalled()
+  })
+
+  it('displays decimal percentage change for slight expense difference and does not show 0%', () => {
+    mockTransactions = [
+      {
+        id: 'tx-prev',
+        type: 'expense',
+        amountFils: 1000000, // 1000 JOD in September
+        date: new Date('2026-09-15'),
+        categoryId: 'cat-food',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-curr',
+        type: 'expense',
+        amountFils: 1004000, // 1004 JOD in October (+0.4%)
+        date: new Date('2026-10-15'),
+        categoryId: 'cat-food',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // Should display 'أكثر بـ 0.4% عن الشهر السابق'
+    expect(screen.getByText(/أكثر بـ 0\.4% عن الشهر السابق/)).toBeInTheDocument()
+    expect(screen.queryByText('مساوٍ للشهر السابق (0%)')).toBeNull()
+  })
+
+  it('displays "لا يوجد دخل مسجل لحساب النسبة" in savings rate card when income is 0 and expenses > 0', () => {
+    mockTransactions = [
+      {
+        id: 'tx-curr-exp',
+        type: 'expense',
+        amountFils: 50000,
+        date: new Date('2026-10-15'),
+        categoryId: 'cat-food',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('لا يوجد دخل مسجل لحساب النسبة')).toBeInTheDocument()
+    expect(screen.queryByText('من إجمالي الدخل المحصل')).toBeNull()
   })
 })

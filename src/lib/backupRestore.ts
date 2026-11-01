@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   type WriteBatch,
 } from 'firebase/firestore'
-import { formatDateInput } from './dates'
+import { formatDateInput, parseLocalDateInput } from './dates'
 import { db } from './firebase'
 import type { Category, Transaction, Debt, Recurring, MoneyCircle, UserSettings, Frequency } from '../types'
 import {
@@ -148,7 +148,14 @@ export function downloadBackupFile(backup: MasareefiBackup): void {
 
 export function parseDate(val: unknown): Date {
   if (val instanceof Date && !isNaN(val.getTime())) return val
-  if (typeof val === 'string' || typeof val === 'number') {
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return parseLocalDateInput(trimmed)
+    }
+    const d = new Date(val)
+    if (!isNaN(d.getTime())) return d
+  } else if (typeof val === 'number') {
     const d = new Date(val)
     if (!isNaN(d.getTime())) return d
   }
@@ -269,7 +276,15 @@ export function validateBackup(jsonText: string): BackupValidationResult {
     const debts = Array.isArray(data.debts) ? (data.debts as Debt[]) : []
     const recurring = Array.isArray(data.recurring) ? (data.recurring as Recurring[]) : []
     const circles = Array.isArray(data.circles) ? (data.circles as MoneyCircle[]) : []
-    const settings = data.settings && typeof data.settings === 'object' ? (data.settings as UserSettings) : undefined
+    const rawSettings = data.settings && typeof data.settings === 'object' ? (data.settings as UserSettings) : undefined
+    const validSettings = rawSettings
+      ? {
+          ...rawSettings,
+          ...(typeof rawSettings.avatarColor === 'string'
+            ? { avatarColor: rawSettings.avatarColor.slice(0, 30) }
+            : {}),
+        }
+      : undefined
 
     // Filter valid records (matching criteria in restoreBackup)
     const validCategories = categories.filter((c) => Boolean(c && typeof c === 'object' && c.id))
@@ -390,7 +405,7 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       app: parsed.app === 'masareefi' ? 'masareefi' : 'baseer',
       exportedAt,
       data: {
-        settings,
+        settings: validSettings,
         categories: resolvedCategories,
         transactions: validTransactions,
         debts: validDebts,
@@ -409,7 +424,7 @@ export function validateBackup(jsonText: string): BackupValidationResult {
         debtsCount: validDebts.length,
         recurringCount: validRecurring.length,
         circlesCount: validCircles.length,
-        hasSettings: Boolean(settings),
+        hasSettings: Boolean(validSettings),
       },
       data: backup,
     }
@@ -517,6 +532,8 @@ export async function restoreBackup(
       Number(s.openingBalanceFils) >= 0
     ) {
       baseSettings.openingBalanceFils = Math.round(Number(s.openingBalanceFils))
+    } else if (userExists && mode === 'replace') {
+      baseSettings.openingBalanceFils = 0
     }
     if (typeof s.hideBalances === 'boolean') {
       baseSettings.hideBalances = s.hideBalances
@@ -533,19 +550,25 @@ export async function restoreBackup(
       [0, 2, 3].includes(Number(s.customCurrencyDecimals))
     ) {
       baseSettings.customCurrencyDecimals = Number(s.customCurrencyDecimals)
+    } else if (userExists && (mode === 'replace' || s.customCurrencyDecimals === null)) {
+      baseSettings.customCurrencyDecimals = null
     }
     if (s.rolloverStartDate) {
       try {
         baseSettings.rolloverStartDate = Timestamp.fromDate(parseDate(s.rolloverStartDate))
       } catch {
-        // ignore invalid date
+        if (userExists && mode === 'replace') {
+          baseSettings.rolloverStartDate = null
+        }
       }
+    } else if (userExists && (mode === 'replace' || s.rolloverStartDate === null)) {
+      baseSettings.rolloverStartDate = null
     }
     if (typeof s.lastBackupAt === 'string') {
       baseSettings.lastBackupAt = s.lastBackupAt.slice(0, 50)
     }
     if (typeof s.avatarColor === 'string') {
-      baseSettings.avatarColor = s.avatarColor.slice(0, 50)
+      baseSettings.avatarColor = s.avatarColor.slice(0, 30)
     }
     if (s.notificationPrefs && typeof s.notificationPrefs === 'object') {
       const np = s.notificationPrefs as Record<string, unknown>

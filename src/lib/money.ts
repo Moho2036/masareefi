@@ -1,5 +1,7 @@
 import { toWesternDigits } from './dates'
 
+export const MAX_AMOUNT_FILS = 1_000_000_000_000
+
 export interface CurrencyInfo {
   code: string
   name: string
@@ -82,7 +84,7 @@ export type FormatJODOptions = FormatOptions
 
 const formattersCache = new Map<number, Intl.NumberFormat>()
 
-function getFormatter(decimals: number): Intl.NumberFormat {
+export function getFormatter(decimals: number): Intl.NumberFormat {
   let formatter = formattersCache.get(decimals)
   if (!formatter) {
     formatter = new Intl.NumberFormat('en-US', {
@@ -99,12 +101,16 @@ function getFormatter(decimals: number): Intl.NumberFormat {
  * Handles inputs like '12.5', '12.500', '1,250.500', '12,5', '12,500', '1,000', Arabic numerals, etc.
  * Optionally accepts currency code or decimal places to distinguish thousands commas from decimals.
  */
-export function toFils(input: string | number, decimalsOrCurrency?: number | string): number {
+export function toFils(
+  input: string | number,
+  decimalsOrCurrency?: number | string,
+  customDecimals?: number | null
+): number {
   let decimals: number | undefined
   if (typeof decimalsOrCurrency === 'number') {
     decimals = decimalsOrCurrency
   } else if (typeof decimalsOrCurrency === 'string') {
-    decimals = getCurrencyConfig(decimalsOrCurrency).decimals
+    decimals = getCurrencyConfig(decimalsOrCurrency, customDecimals).decimals
   }
 
   if (typeof input === 'number') {
@@ -120,10 +126,12 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
 
   if (typeof input !== 'string') return 0
 
-  // Normalize Eastern Arabic / Persian numerals to Latin
+  // Normalize Eastern Arabic / Persian numerals to Latin and Arabic commas to Western
   const normalized = input
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/\u066B/g, '.')
+    .replace(/\u060C/g, ',')
     .trim()
 
   if (!normalized) return 0
@@ -150,11 +158,11 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
       clean = clean.replace(/,/g, '')
     } else {
       // Single comma
-      const singleCommaMatch = clean.match(/^(\d+),(\d+)$/)
+      const singleCommaMatch = clean.match(/^([+-]?\d+),(\d+)$/)
       if (singleCommaMatch) {
         const [, before, after] = singleCommaMatch
         // If before is '0' (e.g. 0,500), it is always a decimal comma
-        if (before === '0') {
+        if (before === '0' || before === '-0' || before === '+0') {
           clean = clean.replace(',', '.')
         } else if (after.length === 3) {
           // Exactly 3 digits after comma
@@ -174,6 +182,10 @@ export function toFils(input: string | number, decimalsOrCurrency?: number | str
         clean = clean.replace(',', '.')
       }
     }
+  }
+
+  if ((clean.match(/\./g) || []).length > 1 || !/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(clean)) {
+    return 0
   }
 
   const num = parseFloat(clean)
@@ -214,12 +226,14 @@ export function formatMoney(
   }
 
   const amount = fromFils(fils)
-  const isExactThousand = Math.abs(fils) % 1000 === 0
+  const factor = Math.pow(10, config.decimals)
+  const roundedAmount = Math.round(amount * factor) / factor
+  const isExactInteger = Math.abs(roundedAmount) % 1 === 0
   const decimalsToUse =
-    opts.hideZeroDecimals && isExactThousand ? 0 : config.decimals
+    opts.hideZeroDecimals && isExactInteger ? 0 : config.decimals
 
   const formatter = getFormatter(decimalsToUse)
-  const formattedNumber = formatter.format(amount)
+  const formattedNumber = formatter.format(Object.is(roundedAmount, -0) ? 0 : roundedAmount)
 
   if (opts.showCurrency === false) {
     return formattedNumber

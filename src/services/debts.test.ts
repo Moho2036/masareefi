@@ -13,7 +13,7 @@ import {
   deleteDebtEntry,
   mergePersonDebts,
 } from './debts'
-import type { Debt } from '../types'
+import type { Debt, DebtPayment, DebtEntry } from '../types'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -1312,6 +1312,65 @@ describe('debts service with accounting link', () => {
       // Custom note must be preserved, not overwritten with generic prefix
       expect(payTxUpdateCall![1].note).toBe('دفعة نقدية مميزة من عمر')
     })
+
+    it('synchronizes debt_entry_ transactions on personName and type change in updateDebt', async () => {
+      mockGetDocs.mockResolvedValue({
+        docs: [
+          { data: () => ({ id: 'cat-borrowed-inc', name: 'أخرى', type: 'income', archived: false }) },
+        ],
+      })
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              personName: 'خالد',
+              type: 'lent',
+              paidFils: 0,
+              amountFils: 70000,
+              entries: [
+                {
+                  id: 'entry_base_debt-entries-test',
+                  amountFils: 50000,
+                  transactionId: 'debt_init_debt-entries-test',
+                },
+                {
+                  id: 'e2',
+                  amountFils: 20000,
+                  transactionId: 'debt_entry_e2',
+                },
+              ],
+            }),
+          }
+        }
+        if (ref.path.includes('debt_entry_e2')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              title: 'سلفة إضافية: خالد',
+              type: 'expense',
+            }),
+          }
+        }
+        return {
+          exists: () => true,
+          data: () => ({}),
+        }
+      })
+
+      await updateDebt('user-1', 'debt-entries-test', {
+        personName: 'خالد الجديد',
+        type: 'borrowed',
+      })
+
+      // Check debt_entry_e2 update call
+      const entryTxUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/debt_entry_e2'
+      )
+      expect(entryTxUpdateCall).toBeDefined()
+      expect(entryTxUpdateCall![1].title).toBe('اقتراض إضافي من: خالد الجديد')
+      expect(entryTxUpdateCall![1].type).toBe('income')
+    })
   })
 
   describe('debt entries & merging', () => {
@@ -1537,6 +1596,241 @@ describe('debts service with accounting link', () => {
         c[0].path.includes('debts/debt-father-2')
       )
       expect(secondaryDeleteCall).toBeDefined()
+    })
+
+    it('does not fail updateDebtEntry if oldEntry.transactionId does not exist in Firestore', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+      })
+
+      const debt: Debt = {
+        id: 'debt-unlinked-tx',
+        personName: 'خالد',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 0,
+        startDate: new Date('2026-05-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-05-01'),
+        entries: [
+          {
+            id: 'e1',
+            amountFils: 50000,
+            date: new Date('2026-05-01'),
+            title: 'أصل الدين',
+            note: '',
+            transactionId: 'debt_init_debt-unlinked-tx',
+            createdAt: new Date('2026-05-01'),
+          },
+        ],
+      }
+
+      await updateDebtEntry('user-1', debt, 'e1', {
+        amountFils: 60000,
+        date: new Date('2026-05-01'),
+        title: 'أصل الدين المعدل',
+      })
+
+      const debtUpdateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('debts/debt-unlinked-tx')
+      )
+      expect(debtUpdateCall).toBeDefined()
+      expect(debtUpdateCall![1].amountFils).toBe(60000)
+
+      const txUpdateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('transactions/debt_init_debt-unlinked-tx')
+      )
+      expect(txUpdateCall).toBeUndefined()
+    })
+
+    it('inherits dueDate from secondary debt when primary debt lacks dueDate, and compacts payments when total payments exceed 100', async () => {
+      const payments1: DebtPayment[] = Array.from({ length: 60 }, (_, i) => ({
+        id: `p1_${i}`,
+        amountFils: 1000,
+        date: new Date(`2026-01-${String((i % 28) + 1).padStart(2, '0')}`),
+        note: `دفعة ${i + 1}`,
+        createdAt: new Date('2026-01-01'),
+      }))
+
+      const debt1: Debt = {
+        id: 'debt-p-1',
+        personName: 'مازن',
+        type: 'borrowed',
+        amountFils: 200000,
+        paidFils: 60000,
+        startDate: new Date('2026-01-01'),
+        dueDate: undefined,
+        note: '',
+        settled: false,
+        payments: payments1,
+        createdAt: new Date('2026-01-01'),
+      }
+
+      const payments2: DebtPayment[] = Array.from({ length: 50 }, (_, i) => ({
+        id: `p2_${i}`,
+        amountFils: 1000,
+        date: new Date(`2026-02-${String((i % 28) + 1).padStart(2, '0')}`),
+        note: `دفعة ثانية ${i + 1}`,
+        createdAt: new Date('2026-02-01'),
+      }))
+
+      const expectedDueDate = new Date('2026-08-15')
+      const debt2: Debt = {
+        id: 'debt-p-2',
+        personName: 'مازن',
+        type: 'borrowed',
+        amountFils: 100000,
+        paidFils: 50000,
+        startDate: new Date('2026-02-01'),
+        dueDate: expectedDueDate,
+        note: '',
+        settled: false,
+        payments: payments2,
+        createdAt: new Date('2026-02-01'),
+      }
+
+      const mergedId = await mergePersonDebts('user-1', [debt1, debt2])
+      expect(mergedId).toBe('debt-p-1')
+
+      const primaryUpdateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('debts/debt-p-1')
+      )
+      expect(primaryUpdateCall).toBeDefined()
+      expect(primaryUpdateCall![1].dueDate).toBeDefined()
+      expect(primaryUpdateCall![1].dueDate.seconds).toBe(
+        Math.floor(expectedDueDate.getTime() / 1000)
+      )
+
+      expect(primaryUpdateCall![1].payments).toHaveLength(11)
+      const firstPayment = primaryUpdateCall![1].payments[0]
+      expect(firstPayment.isMerged).toBe(true)
+      expect(firstPayment.amountFils).toBe(100000)
+      expect(primaryUpdateCall![1].paidFils).toBe(110000)
+    })
+
+    it('compacts entries when merged debts have more than 100 entries, preserving total amount', async () => {
+      const entries1: DebtEntry[] = Array.from({ length: 60 }, (_, i) => ({
+        id: `e1_${i}`,
+        amountFils: 1000,
+        date: new Date(`2026-01-${String((i % 28) + 1).padStart(2, '0')}`),
+        title: `سلفة ${i + 1}`,
+        note: '',
+        createdAt: new Date('2026-01-01'),
+      }))
+
+      const debt1: Debt = {
+        id: 'debt-many-entries-1',
+        personName: 'طارق',
+        type: 'lent',
+        amountFils: 60000,
+        paidFils: 0,
+        startDate: new Date('2026-01-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        entries: entries1,
+        createdAt: new Date('2026-01-01'),
+      }
+
+      const entries2: DebtEntry[] = Array.from({ length: 50 }, (_, i) => ({
+        id: `e2_${i}`,
+        amountFils: 2000,
+        date: new Date(`2026-02-${String((i % 28) + 1).padStart(2, '0')}`),
+        title: `سلفة ثانية ${i + 1}`,
+        note: '',
+        createdAt: new Date('2026-02-01'),
+      }))
+
+      const debt2: Debt = {
+        id: 'debt-many-entries-2',
+        personName: 'طارق',
+        type: 'lent',
+        amountFils: 100000,
+        paidFils: 0,
+        startDate: new Date('2026-02-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        entries: entries2,
+        createdAt: new Date('2026-02-01'),
+      }
+
+      await mergePersonDebts('user-1', [debt1, debt2])
+
+      const primaryUpdateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('debts/debt-many-entries-1')
+      )
+      expect(primaryUpdateCall).toBeDefined()
+      expect(primaryUpdateCall![1].amountFils).toBe(160000)
+
+      expect(primaryUpdateCall![1].entries).toHaveLength(100)
+      const sumCompactedEntries = primaryUpdateCall![1].entries.reduce(
+        (sum: number, e: { amountFils: number }) => sum + e.amountFils,
+        0
+      )
+      expect(sumCompactedEntries).toBe(160000)
+    })
+
+    it('does not assign transactionId to entry_base if initial transaction does not exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      mockGetDocs.mockResolvedValueOnce({ docs: [] })
+
+      const debt: Debt = {
+        id: 'debt-no-tx-sync',
+        personName: 'عمر',
+        type: 'lent',
+        amountFils: 30000,
+        paidFils: 0,
+        startDate: new Date('2026-05-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-05-01'),
+      }
+
+      await addDebtEntry('user-1', debt, {
+        amountFils: 10000,
+        date: new Date('2026-06-01'),
+        title: 'دفعة إضافية',
+      })
+
+      const updateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('debts/debt-no-tx-sync')
+      )
+      expect(updateCall).toBeDefined()
+      const baseEntry = updateCall![1].entries[0]
+      expect(baseEntry.transactionId).toBeUndefined()
+    })
+
+    it('rejects adding entry when maximum of 100 entries is reached in addDebtEntry', async () => {
+      const debtWith100Entries: Debt = {
+        id: 'debt-100',
+        personName: 'طارق',
+        type: 'lent',
+        amountFils: 100000,
+        paidFils: 0,
+        settled: false,
+        note: '',
+        entries: Array.from({ length: 100 }, (_, i) => ({
+          id: `entry_${i}`,
+          amountFils: 1000,
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        })),
+        createdAt: new Date(),
+        startDate: new Date(),
+        payments: [],
+      }
+
+      await expect(
+        addDebtEntry('user-1', debtWith100Entries, {
+          amountFils: 1000,
+          date: new Date(),
+        })
+      ).rejects.toThrow('تم الوصول للحد الأقصى لعدد السلف (100 سلفة) لهذا السجل')
     })
   })
 })

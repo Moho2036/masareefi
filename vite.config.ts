@@ -49,6 +49,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        navigateFallback: '/index.html',
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
@@ -90,15 +93,28 @@ export default defineConfig({
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/react-router/')
+            id.includes('node_modules/react-router/') ||
+            id.includes('node_modules/scheduler/')
           ) {
             return 'react-vendor'
           }
-          if (id.includes('node_modules/recharts')) {
+          if (
+            id.includes('node_modules/recharts') ||
+            id.includes('node_modules/d3-')
+          ) {
             return 'recharts-vendor'
           }
-          if (id.includes('node_modules/firebase')) {
+          if (
+            id.includes('node_modules/firebase') ||
+            id.includes('node_modules/@firebase')
+          ) {
             return 'firebase-vendor'
+          }
+          if (
+            id.includes('node_modules/lucide-react') ||
+            id.includes('node_modules/date-fns')
+          ) {
+            return 'ui-vendor'
           }
         },
       },

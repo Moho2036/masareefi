@@ -208,6 +208,14 @@ export function calculateCategoryDistribution(
   // Sort descending by amount
   items.sort((a, b) => b.amountFils - a.amountFils)
 
+  if (items.length > 1) {
+    const totalPercentage = items.reduce((sum, item) => sum + item.percentage, 0)
+    const remainder = Math.round((100 - totalPercentage) * 10) / 10
+    if (remainder !== 0 && items[0].percentage + remainder > 0) {
+      items[0].percentage = Math.round((items[0].percentage + remainder) * 10) / 10
+    }
+  }
+
   return items
 }
 

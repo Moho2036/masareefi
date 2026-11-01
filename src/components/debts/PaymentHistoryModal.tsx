@@ -176,11 +176,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       .reduce((sum, item) => sum + item.amountFils, 0)
     const maxAllowed = Math.max(0, debt.amountFils - (otherPaymentsTotal + untrackedPaidFils))
 
-    if (config.decimals === 2 && amountFils > maxAllowed) {
+    const maxTolerance = config.decimals === 0 ? 500 : config.decimals === 2 ? 5 : 0
+    const roundedMaxStr = fromFils(maxAllowed).toFixed(config.decimals)
+    const inputStr = toWesternDigits(editAmountStr.trim())
+    if (maxTolerance > 0 && amountFils > maxAllowed) {
       const diff = amountFils - maxAllowed
-      const roundedMaxStr = fromFils(maxAllowed).toFixed(2)
-      const inputStr = toWesternDigits(editAmountStr.trim())
-      if (diff <= 5 || inputStr === roundedMaxStr) {
+      if (diff <= maxTolerance || inputStr === roundedMaxStr) {
         amountFils = maxAllowed
       }
     }

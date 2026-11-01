@@ -1,9 +1,10 @@
 import { isBefore, startOfDay, format, differenceInDays } from 'date-fns'
 import type { Debt, MoneyCircle, Recurring, UserSettings, Transaction } from '../types'
 import { formatMoney } from './money'
+import { getCircleCycleIndex } from '../services/moneyCircles'
 
 export type NotificationCategory = 'urgent' | 'recurring' | 'debt' | 'circle' | 'budget' | 'system'
-export type NotificationFilter = 'all' | 'urgent' | 'recurring' | 'debt_circle' | 'unread'
+export type NotificationFilter = 'all' | 'urgent' | 'recurring' | 'debt_circle' | 'unread' | 'archived'
 
 export interface NotificationItem {
   id: string
@@ -109,15 +110,15 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       if (circle.status === 'completed') continue
 
       // Calculate the circle's current active cycle month (1-based index)
-      const circleStart = startOfDay(circle.startDate)
-      const diffMonths =
-        (todayMidnight.getFullYear() - circleStart.getFullYear()) * 12 +
-        (todayMidnight.getMonth() - circleStart.getMonth()) +
-        1
+      const diffMonths = getCircleCycleIndex(circle.startDate, todayMidnight, settings?.monthStartDay) + 1
 
       if (diffMonths >= 1 && diffMonths <= circle.membersCount) {
         // Active month in range
-        if (circle.myTurnMonth === diffMonths) {
+        const isMyTurn =
+          circle.myTurnMonth === diffMonths ||
+          (circle.shareType === 'double' && circle.secondTurnMonth === diffMonths)
+
+        if (isMyTurn) {
           const totalFormatted = fmtAmount(circle.totalAmountFils)
           items.push({
             id: `circle_turn_${circle.id}_m${diffMonths}`,
@@ -144,16 +145,63 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           }
         }
 
+        const userMonthlyFils =
+          circle.shareType === 'half'
+            ? Math.round(circle.monthlyAmountFils / 2)
+            : circle.shareType === 'double'
+              ? circle.monthlyAmountFils * 2
+              : circle.monthlyAmountFils
+
+        let hasPersonalUnpaidAlert = false
+
+        if (!isMyTurn) {
+          const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+          if (userMember) {
+            const isUnpaid =
+              !userMember.paidMonths?.includes(diffMonths) &&
+              userMember.paymentsByMonth?.[String(diffMonths)] !== true
+
+            if (isUnpaid) {
+              hasPersonalUnpaidAlert = true
+              const isManualUnchecked = userMember.paymentsByMonth?.[String(diffMonths)] === false
+              const message = isManualUnchecked
+                ? `قمت بإلغاء الخصم التلقائي لقسط الشهر ${diffMonths} (${fmtAmount(userMonthlyFils)}) في جمعية ${circle.name}؛ القسط معلق حالياً وبانتظار سدادك.`
+                : `لم يتم تسجيل سداد قسطك الشخصي لشهر ${diffMonths} بقيمة ${fmtAmount(userMonthlyFils)} في جمعية ${circle.name} حتى الآن.`
+
+              items.push({
+                id: `circle_my_unpaid_${circle.id}_m${diffMonths}`,
+                title: `قسط جمعية مستحق عليك: ${circle.name}`,
+                message,
+                category: 'circle',
+                isUrgent: true,
+                createdAt: todayMidnight,
+                actionPath: '/tools?tool=circles',
+                actionLabel: 'سداد القسط الآن',
+              })
+            }
+          }
+        }
+
         // If user is manager, notify if members haven't paid this month
         if (circle.isManager && circle.members && circle.members.length > 0) {
           const unpaidMembers = circle.members.filter((m) => {
             if (m.turnMonth === diffMonths) return false // recipient of the month is exempt
+            if (
+              circle.shareType === 'double' &&
+              circle.secondTurnMonth === diffMonths &&
+              m.turnMonth === circle.myTurnMonth
+            ) {
+              return false
+            }
+            if (hasPersonalUnpaidAlert && m.turnMonth === circle.myTurnMonth) {
+              return false
+            }
             if (m.paidMonths && m.paidMonths.includes(diffMonths)) return false
             if (m.paymentsByMonth && m.paymentsByMonth[String(diffMonths)]) return false
             return true
           })
 
-          if (unpaidMembers.length > 0 && todayMidnight.getDate() >= (settings?.monthStartDay || 1)) {
+          if (unpaidMembers.length > 0) {
             items.push({
               id: `circle_unpaid_${circle.id}_m${diffMonths}`,
               title: `أقساط معلقة: جمعية ${circle.name}`,
@@ -205,7 +253,18 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           actionPath: '/recurring',
           actionLabel: 'المعاملات الدورية',
         })
-      } else if (diffDays > 0 && diffDays <= 2) {
+      } else if (diffDays < 0) {
+        items.push({
+          id: `recurring_due_overdue_${rec.id}_${nextDateStr}`,
+          title: `دفعة دورية متأخرة: ${rec.title || 'معاملة دورية'}`,
+          message: `دفعة ${rec.type === 'expense' ? 'مصروف' : 'دخل'} بقيمة ${amountFormatted} استحقت بتاريخ ${nextDateStr} ولم تُسجل بعد.`,
+          category: 'recurring',
+          isUrgent: rec.type === 'expense',
+          createdAt: nextMidnight,
+          actionPath: '/recurring',
+          actionLabel: 'المعاملات الدورية',
+        })
+      } else if (diffDays > 0 && diffDays <= 7) {
         items.push({
           id: `recurring_approaching_${rec.id}_${nextDateStr}`,
           title: `دفعة دورية قادمة: ${rec.title || 'معاملة دورية'}`,
@@ -219,13 +278,13 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       }
     }
 
-    // Auto-recorded recurring transactions alert for recently recorded items (within last 3 days)
+    // Auto-recorded recurring transactions alert for recently recorded items (within last 30 days)
     if (params.transactions && params.transactions.length > 0) {
       for (const tx of params.transactions) {
         if (!tx.recurringId) continue
         const txMidnight = startOfDay(tx.date instanceof Date ? tx.date : new Date(tx.date))
         const txDiff = differenceInDays(todayMidnight, txMidnight)
-        if (txDiff >= 0 && txDiff <= 3) {
+        if (txDiff >= 0 && txDiff <= 30) {
           items.push({
             id: `recurring_auto_recorded_${tx.id}`,
             title: `تم تسجيل معاملة دورية تلقائياً: ${tx.title || 'معاملة دورية'}`,

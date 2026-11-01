@@ -198,7 +198,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               fill="#10B981"
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
-              animationDuration={300}
+              isAnimationActive={false}
             />
             <Bar
               dataKey="expenseJod"
@@ -206,7 +206,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               fill="#EF4444"
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
-              animationDuration={300}
+              isAnimationActive={false}
             />
           </BarChart>
         </ResponsiveContainer>

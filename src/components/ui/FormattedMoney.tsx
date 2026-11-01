@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { useUserSettings } from '../../hooks/useUserSettings'
-import { getCurrencyConfig, fromFils } from '../../lib/money'
+import { getCurrencyConfig, fromFils, getFormatter } from '../../lib/money'
 import { cn } from '../../lib/cn'
 
 export interface FormattedMoneyProps {
@@ -65,14 +65,13 @@ export const FormattedMoney: React.FC<FormattedMoneyProps> = ({
   }
 
   const absFils = Math.abs(amountFils)
-  const isExactThousand = absFils % 1000 === 0
-  const decimalsToUse = shouldHideZeroDecimals && isExactThousand ? 0 : config.decimals
+  const factor = Math.pow(10, config.decimals)
+  const rawAbsAmount = fromFils(absFils)
+  const absAmount = Math.round(rawAbsAmount * factor) / factor
+  const isExactInteger = absAmount % 1 === 0
+  const decimalsToUse = shouldHideZeroDecimals && isExactInteger ? 0 : config.decimals
 
-  const absAmount = fromFils(absFils)
-  const formattedNumber = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: decimalsToUse,
-    maximumFractionDigits: decimalsToUse,
-  }).format(absAmount)
+  const formattedNumber = getFormatter(decimalsToUse).format(absAmount)
 
   const [integerPart, decimalPart] = formattedNumber.split('.')
 

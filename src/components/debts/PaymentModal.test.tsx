@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PaymentModal } from './PaymentModal'
 import * as debtServices from '../../services/debts'
@@ -17,14 +17,19 @@ vi.mock('../../hooks/useToast', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }))
 
+let mockCurrencyConfig = { symbol: 'د.أ', code: 'JOD', decimals: 3 }
 vi.mock('../../hooks/useCurrency', () => ({
   useCurrency: () => ({
     format: (fils: number) => `${fils / 1000} د.أ`,
-    config: { symbol: 'د.أ', code: 'JOD', decimals: 3 },
+    config: mockCurrencyConfig,
   }),
 }))
 
 describe('PaymentModal Component', () => {
+  beforeEach(() => {
+    mockCurrencyConfig = { symbol: 'د.أ', code: 'JOD', decimals: 3 }
+    vi.clearAllMocks()
+  })
   const sampleDebt: Debt = {
     id: 'debt-1',
     personName: 'خالد',
@@ -121,5 +126,50 @@ describe('PaymentModal Component', () => {
 
     const input = screen.getByPlaceholderText('0.000') as HTMLInputElement
     expect(input.value).toBe('80')
+  })
+
+  it('successfully settles full remaining debt for zero-decimal currencies when remaining fils has sub-unit fractions', async () => {
+    mockCurrencyConfig = { symbol: 'JPY', code: 'JPY', decimals: 0 }
+
+    const handleClose = vi.fn()
+    const handleSuccess = vi.fn()
+
+    const fractionalDebt: Debt = {
+      ...sampleDebt,
+      amountFils: 10600,
+      paidFils: 0,
+      payments: [],
+    }
+
+    render(
+      <PaymentModal
+        isOpen={true}
+        onClose={handleClose}
+        debt={fractionalDebt}
+        onSuccess={handleSuccess}
+      />
+    )
+
+    const fillBtn = screen.getByRole('button', { name: /سداد كامل المبلغ المتبقي/i })
+    fireEvent.click(fillBtn)
+
+    const input = screen.getByPlaceholderText('0.00') as HTMLInputElement
+    expect(input.value).toBe('11')
+
+    const submitBtn = screen.getByRole('button', { name: 'تأكيد تسجيل الدفعة' })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(debtServices.addDebtPayment).toHaveBeenCalledWith(
+        'user-1',
+        fractionalDebt,
+        expect.objectContaining({
+          amountFils: 10600,
+        }),
+        expect.anything()
+      )
+      expect(handleClose).toHaveBeenCalled()
+      expect(handleSuccess).toHaveBeenCalled()
+    })
   })
 })

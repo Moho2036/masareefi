@@ -8,51 +8,43 @@ export const HeroCardSkeleton: React.FC<{ className?: string }> = ({ className }
       role="status"
       aria-label="جاري تحميل بيانات الرصيد"
       className={cn(
-        'rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4 animate-pulse relative overflow-hidden min-h-[260px] sm:min-h-[275px] flex flex-col justify-between',
+        'bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-5 animate-pulse relative overflow-hidden flex flex-col justify-between',
         className
       )}
     >
       {/* Top accent bar shimmer */}
-      <div className="h-1.5 w-full absolute top-0 inset-x-0 bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-1 w-full absolute top-0 inset-x-0 bg-zinc-200 dark:bg-zinc-800" />
 
       {/* Top Header Row */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
-          <div className="w-28 sm:w-36 h-4 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-        </div>
-        <div className="w-20 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <div className="w-28 sm:w-36 h-4 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
       </div>
 
       {/* Main Balance Shimmer */}
-      <div className="w-48 sm:w-64 h-10 sm:h-12 rounded-xl bg-zinc-200 dark:bg-zinc-800 my-1" />
+      <div className="space-y-1.5">
+        <div className="w-48 sm:w-64 h-10 sm:h-12 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+        <div className="w-36 sm:w-48 h-3.5 rounded bg-zinc-100 dark:bg-zinc-800" />
+      </div>
 
-      {/* Income & Expense Sub-Boxes */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-          <div className="w-8 h-8 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
-            <div className="w-20 sm:w-24 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
-          </div>
+      {/* Income & Expense Swiss Split Row (Zero nested boxes) */}
+      <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-3.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
+        <div className="flex flex-col gap-1.5 pe-3">
+          <div className="w-20 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="w-24 sm:w-28 h-5 rounded bg-zinc-300 dark:bg-zinc-700" />
         </div>
-
-        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60">
-          <div className="w-8 h-8 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
-            <div className="w-20 sm:w-24 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
-          </div>
+        <div className="flex flex-col gap-1.5 ps-4">
+          <div className="w-20 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="w-24 sm:w-28 h-5 rounded bg-zinc-300 dark:bg-zinc-700" />
         </div>
       </div>
 
-      {/* Daily Safe Budget Strip */}
-      <div className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/60 flex items-center justify-between px-3">
+      {/* Daily Safe Budget Clean Footer Row */}
+      <div className="flex items-center justify-between pt-3 border-t border-[#E4E4E7] dark:border-[#27272A]">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700" />
-          <div className="w-28 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700" />
+          <div className="w-5 h-5 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="w-24 sm:w-32 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
         </div>
-        <div className="w-20 h-4 rounded bg-zinc-300 dark:bg-zinc-600" />
+        <div className="w-16 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
       </div>
     </div>
   )
@@ -74,19 +66,22 @@ export const DashboardSkeleton: React.FC = () => {
       <HeroCardSkeleton />
 
       {/* 3. Quick Feature Hub Skeleton (Mobile only) */}
-      <div className="lg:hidden grid grid-cols-2 gap-2.5 sm:gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-750 flex items-center gap-3 animate-pulse"
-          >
-            <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0" />
-            <div className="space-y-1.5 flex-1 min-w-0">
-              <div className="w-16 h-3.5 rounded bg-slate-200 dark:bg-slate-700" />
-              <div className="w-20 h-2.5 rounded bg-slate-100 dark:bg-slate-750" />
+      <div className="lg:hidden space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="w-20 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="w-16 h-3 rounded bg-zinc-100 dark:bg-zinc-800" />
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs animate-pulse"
+            >
+              <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+              <div className="w-12 h-3 rounded bg-zinc-200 dark:bg-zinc-800 mt-1.5" />
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* 4. Core Activity Grid (Recent Txs + Debts & Recurring) */}

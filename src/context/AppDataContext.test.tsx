@@ -76,11 +76,13 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     const { result } = renderHook(() => useAppData(), { wrapper })
 
     expect(result.current?.rolloverBalanceFils).toBe(0)
+    expect(result.current?.rolloverLoading).toBe(false)
     // Attempting to manually set a non-zero value should be ignored when disabled
     act(() => {
       result.current?.setRolloverBalanceFils(50000)
     })
     expect(result.current?.rolloverBalanceFils).toBe(0)
+    expect(result.current?.rolloverLoading).toBe(false)
     expect(transactionsService.subscribePriorBalance).not.toHaveBeenCalled()
   })
 
@@ -93,6 +95,7 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     })
 
     expect(transactionsService.subscribePriorBalance).toHaveBeenCalledTimes(1)
+    expect(result.current?.rolloverLoading).toBe(true)
 
     // Simulate prior balance arriving
     act(() => {
@@ -100,6 +103,7 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     })
 
     expect(result.current?.rolloverBalanceFils).toBe(75000)
+    expect(result.current?.rolloverLoading).toBe(false)
 
     // Simulate user toggling rolloverBalance back off
     act(() => {
@@ -108,6 +112,7 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
 
     expect(mockUnsubPrior).toHaveBeenCalled()
     expect(result.current?.rolloverBalanceFils).toBe(0)
+    expect(result.current?.rolloverLoading).toBe(false)
   })
 
   it('incorporates openingBalanceFils in effective rollover balance whether rolloverBalance is true or false', () => {
@@ -119,17 +124,20 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     })
 
     expect(result.current?.rolloverBalanceFils).toBe(30000)
+    expect(result.current?.rolloverLoading).toBe(false)
 
     // When rolloverBalance is enabled with prior transactions of 45000
     act(() => {
       mockSettingsCb?.({ uid: 'user-456', rolloverBalance: true, openingBalanceFils: 30000, monthStartDay: 1 })
     })
+    expect(result.current?.rolloverLoading).toBe(true)
     act(() => {
       mockPriorBalanceCb?.(45000)
     })
 
     // 45000 + 30000 = 75000
     expect(result.current?.rolloverBalanceFils).toBe(75000)
+    expect(result.current?.rolloverLoading).toBe(false)
   })
 
   it('resets all data state and loading flags when user signs out (!userId)', () => {
@@ -142,10 +150,37 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     expect(result.current?.recurring).toEqual([])
     expect(result.current?.moneyCircles).toEqual([])
     expect(result.current?.rolloverBalanceFils).toBe(0)
+    expect(result.current?.rolloverLoading).toBe(false)
     expect(result.current?.settingsLoading).toBe(false)
     expect(result.current?.categoriesLoading).toBe(false)
     expect(result.current?.debtsLoading).toBe(false)
     expect(result.current?.recurringLoading).toBe(false)
     expect(result.current?.moneyCirclesLoading).toBe(false)
+  })
+
+  it('verifies rolloverLoading becomes false when subscribePriorBalance resolves or when rolloverBalance is false', () => {
+    const { result } = renderHook(() => useAppData(), { wrapper })
+
+    // 1. When rolloverBalance is false: rolloverLoading is false
+    expect(result.current?.rolloverLoading).toBe(false)
+
+    // 2. When rollover is turned on: rolloverLoading becomes true
+    act(() => {
+      mockSettingsCb?.({ uid: 'user-456', rolloverBalance: true, monthStartDay: 1 })
+    })
+    expect(result.current?.rolloverLoading).toBe(true)
+
+    // 3. When prior balance response arrives: rolloverLoading becomes false
+    act(() => {
+      mockPriorBalanceCb?.(99000)
+    })
+    expect(result.current?.rolloverBalanceFils).toBe(99000)
+    expect(result.current?.rolloverLoading).toBe(false)
+
+    // 4. When rollover is toggled back to false: rolloverLoading is false
+    act(() => {
+      mockSettingsCb?.({ uid: 'user-456', rolloverBalance: false, monthStartDay: 1 })
+    })
+    expect(result.current?.rolloverLoading).toBe(false)
   })
 })

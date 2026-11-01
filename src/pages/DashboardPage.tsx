@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react'
+/* eslint-disable react-hooks/refs */
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router'
 import {
   Plus,
@@ -12,6 +13,7 @@ import {
   ShieldCheck,
   Copy,
   AlertCircle,
+  AlertTriangle,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -35,6 +37,7 @@ import { useTransactions } from '../hooks/useTransactions'
 import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
 import { useDebts } from '../hooks/useDebts'
+import { useMoneyCircles } from '../hooks/useMoneyCircles'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useTransactionModal } from '../hooks/useTransactionModal'
 import { subscribePriorBalance } from '../services/transactions'
@@ -64,10 +67,20 @@ export const DashboardPage: React.FC = () => {
   const { data: categories } = useCategories()
   const { data: recurringList } = useRecurring()
   const { data: debts } = useDebts()
-  const { data: settings } = useUserSettings()
+  const { data: circles } = useMoneyCircles()
+  const { data: settings, loading: settingsLoading } = useUserSettings()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
 
+  const hasLoadedOnceRef = useRef(false)
+
+  useEffect(() => {
+    if (!txLoading) {
+      hasLoadedOnceRef.current = true
+    }
+  }, [txLoading])
+
   const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
+  const [localRolloverLoading, setLocalRolloverLoading] = useState<boolean>(false)
   const [pieChartType, setPieChartType] = useState<'expense' | 'income'>('expense')
   const isRolloverEnabled = settings?.rolloverBalance ?? true
   const monthStartDay = settings?.monthStartDay ?? 1
@@ -77,44 +90,95 @@ export const DashboardPage: React.FC = () => {
     getFiscalMonthKey(range.start, monthStartDay) ===
     getFiscalMonthKey(new Date(), monthStartDay)
 
+  const parsedRolloverStartDate = useMemo(() => {
+    if (!settings?.rolloverStartDate) return null
+    const raw = settings.rolloverStartDate
+    return raw instanceof Date
+      ? raw
+      : typeof (raw as { toDate?: () => Date }).toDate === 'function'
+      ? (raw as { toDate: () => Date }).toDate()
+      : new Date(raw as unknown as string)
+  }, [settings?.rolloverStartDate])
+
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!user?.uid || !isRolloverEnabled) {
+      setLocalRolloverLoading(false)
       return
     }
     // If viewing the current fiscal month, AppDataContext is already subscribed to prior balance
     if (isCurrentFiscalMonth) {
+      setLocalRolloverLoading(false)
+      return
+    }
+    // If viewing month on or before rolloverStartDate, rollover was zeroed out
+    if (parsedRolloverStartDate && range.start.getTime() <= parsedRolloverStartDate.getTime()) {
+      setLocalRolloverLoading(false)
       return
     }
     const currentKey = range.start.toISOString()
-    const rolloverStartDate = settings?.rolloverStartDate
-      ? settings.rolloverStartDate instanceof Date
-        ? settings.rolloverStartDate
-        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
-          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
-          : new Date(settings.rolloverStartDate as unknown as string)
-      : null
+    setLocalRolloverLoading(true)
     const unsub = subscribePriorBalance(
       user.uid,
       range.start,
       (bal) => {
         setLocalRollover({ key: currentKey, amount: bal })
+        setLocalRolloverLoading(false)
       },
       (err) => {
         console.error('Failed to subscribe prior balance in DashboardPage:', err)
+        setLocalRolloverLoading(false)
       },
-      rolloverStartDate
+      parsedRolloverStartDate
     )
     return () => {
       unsub()
     }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, settings?.rolloverStartDate])
+  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, parsedRolloverStartDate])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const effectiveLocalRollover =
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
-  const effectiveRollover = isCurrentFiscalMonth
-    ? (appData?.rolloverBalanceFils ?? 0)
-    : (isRolloverEnabled ? effectiveLocalRollover : 0) + (settings?.openingBalanceFils ?? 0)
+  const effectiveRollover = useMemo(() => {
+    if (isCurrentFiscalMonth) {
+      return appData?.rolloverBalanceFils ?? 0
+    }
+    if (!isRolloverEnabled) {
+      return 0
+    }
+    if (parsedRolloverStartDate && range.start.getTime() < parsedRolloverStartDate.getTime()) {
+      return 0
+    }
+    if (settings?.createdAt) {
+      const rawCreated = settings.createdAt
+      const createdAtDate =
+        rawCreated instanceof Date
+          ? rawCreated
+          : typeof (rawCreated as { toDate?: () => Date }).toDate === 'function'
+          ? (rawCreated as { toDate: () => Date }).toDate()
+          : new Date(rawCreated as unknown as string)
+      const createdCycleStart = getFinancialMonthRange(createdAtDate, monthStartDay).start
+      if (
+        range.start.getTime() < createdCycleStart.getTime() &&
+        effectiveLocalRollover === 0 &&
+        rawTransactions.length === 0
+      ) {
+        return 0
+      }
+    }
+    return effectiveLocalRollover + (settings?.openingBalanceFils ?? 0)
+  }, [
+    isCurrentFiscalMonth,
+    appData?.rolloverBalanceFils,
+    isRolloverEnabled,
+    parsedRolloverStartDate,
+    range.start,
+    settings,
+    monthStartDay,
+    effectiveLocalRollover,
+    rawTransactions.length,
+  ])
 
   const prevMonthLabel = useMemo(() => {
     const prevFinancialMonth = getPreviousFinancialMonth(range.start, monthStartDay)
@@ -124,7 +188,6 @@ export const DashboardPage: React.FC = () => {
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
-  const displayBalance = sums.balance + effectiveRollover
 
   // Calculate forecast & daily safe budget
   const forecast = useMemo(() => {
@@ -132,6 +195,7 @@ export const DashboardPage: React.FC = () => {
       transactions: rawTransactions,
       recurring: recurringList,
       debts,
+      circles,
       monthStartDay,
       periodRange: range,
       rolloverBalanceFils:
@@ -143,12 +207,16 @@ export const DashboardPage: React.FC = () => {
     rawTransactions,
     recurringList,
     debts,
+    circles,
     monthStartDay,
     range,
     effectiveRollover,
     isRolloverEnabled,
     settings?.openingBalanceFils,
   ])
+
+  const displayedRollover = forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover
+  const displayBalance = sums.balance + displayedRollover
 
   // Calculate active debts summary
   const debtSummary = useMemo(() => calculateDebtSummary(debts), [debts])
@@ -255,10 +323,23 @@ export const DashboardPage: React.FC = () => {
 
   // Guard against initial loading state where rawTransactions is [] and txLoading is true,
   // preventing calculation of deficit (danger/red flash) for fractions of a second before data arrives
-  const isInitialOrLoading = txLoading && rawTransactions.length === 0
+  const isRolloverResolving = isCurrentFiscalMonth
+    ? Boolean(appData?.rolloverLoading)
+    : Boolean(isRolloverEnabled && localRolloverLoading)
+  const isInitialOrLoading =
+    (!hasLoadedOnceRef.current && txLoading && rawTransactions.length === 0) ||
+    (settingsLoading && !hasLoadedOnceRef.current) ||
+    (isRolloverResolving && !hasLoadedOnceRef.current && rawTransactions.length === 0)
+
+  const handleSelectPieCategory = useCallback(
+    (categoryId: string) => {
+      navigate(`/transactions?categoryId=${categoryId}&type=${pieChartType}`)
+    },
+    [navigate, pieChartType]
+  )
 
   const hasRolloverEffect = isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
-  const effectiveAvailableIncome = sums.income + (hasRolloverEffect ? effectiveRollover : 0)
+  const effectiveAvailableIncome = sums.income + (hasRolloverEffect ? displayedRollover : 0)
   const isTemporaryLiquidityDeficit =
     displayBalance < 0 && forecast.freeBalance > 0 && forecast.upcomingRecurringIncome > 0
   const isSpendingWithoutIncome =
@@ -316,26 +397,6 @@ export const DashboardPage: React.FC = () => {
         }
       />
 
-      {/* Warning banner when browsing a different month */}
-      {!isCurrentFiscalMonth && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in shadow-xs">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-            <span>
-              أنت تستعرض حالياً بيانات شهر {formatFinancialMonthLabel(range, monthStartDay)}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToCurrentMonth}
-            className="shrink-0 text-xs font-bold border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-          >
-            العودة إلى الشهر الحالي
-          </Button>
-        </div>
-      )}
-
       {/* 1. Hero Card: Clean Swiss Surface */}
       {isInitialOrLoading ? (
         <HeroCardSkeleton />
@@ -343,6 +404,26 @@ export const DashboardPage: React.FC = () => {
         <div className="bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] shadow-xs relative overflow-hidden rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-5 flex flex-col justify-between transition-all">
           {/* Top highlight bar */}
           <div className={cn('h-1 w-full absolute top-0 inset-x-0', heroTopBar)} />
+
+          {/* Warning banner when browsing a different month (integrated to prevent layout shift) */}
+          {!isCurrentFiscalMonth && (
+            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in shadow-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
+                <span className="truncate">
+                  أنت تستعرض حالياً بيانات شهر {formatFinancialMonthLabel(range, monthStartDay)}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToCurrentMonth}
+                className="shrink-0 text-xs font-bold border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+              >
+                العودة إلى الشهر الحالي
+              </Button>
+            </div>
+          )}
 
           {/* Header Row */}
           <div className="flex items-center justify-between gap-2 pt-0.5">
@@ -366,7 +447,7 @@ export const DashboardPage: React.FC = () => {
               </span>
 
               {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) &&
-                effectiveRollover !== 0 && (
+                displayedRollover !== 0 && (
                   <>
                     <span>•</span>
                     <span>
@@ -374,7 +455,7 @@ export const DashboardPage: React.FC = () => {
                         ? 'الرصيد التراكمي / الافتتاحي:'
                         : `الرصيد المرحّل (من شهر ${prevMonthLabel}):`}{' '}
                       <strong className="font-bold text-zinc-800 dark:text-zinc-200">
-                        <FormattedMoney amountFils={effectiveRollover} withSign="auto" />
+                        <FormattedMoney amountFils={displayedRollover} withSign="auto" />
                       </strong>
                     </span>
                   </>
@@ -472,6 +553,27 @@ export const DashboardPage: React.FC = () => {
               <ChevronLeft className="w-3.5 h-3.5 text-zinc-400 group-hover:-translate-x-0.5 transition-transform" />
             </div>
           </Link>
+
+          {/* Proactive alert for next cycle soon obligations (within 3 days of new cycle) */}
+          {forecast.isCurrentMonth && (forecast.nextCycleSoonObligationsFils ?? 0) > 0 && (
+            <Link
+              to="/recurring"
+              className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2 text-xs hover:bg-amber-500/15 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="font-bold">
+                  تنبيه مطلع الدورة القادمة: لديك{' '}
+                  {forecast.nextCycleSoonCount && forecast.nextCycleSoonCount > 1
+                    ? `${forecast.nextCycleSoonCount} التزامات تستحق`
+                    : 'التزامات تستحق'}{' '}
+                  خلال أقل من 3 أيام بقيمة{' '}
+                  <FormattedMoney amountFils={forecast.nextCycleSoonObligationsFils!} />.
+                </span>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            </Link>
+          )}
         </div>
       )}
 
@@ -866,9 +968,7 @@ export const DashboardPage: React.FC = () => {
               <CategoryPieChart
                 data={categoryDistribution}
                 className="w-full"
-                onSelectCategory={(categoryId) => {
-                  navigate(`/transactions?categoryId=${categoryId}&type=${pieChartType}`)
-                }}
+                onSelectCategory={handleSelectPieCategory}
               />
             </React.Suspense>
           </div>

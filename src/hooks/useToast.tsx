@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react'
 
 export type ToastType = 'success' | 'error' | 'info'
 
@@ -38,8 +38,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [dismissToast]
   )
 
+  const value = useMemo(
+    () => ({ showToast, toasts, dismissToast }),
+    [showToast, toasts, dismissToast]
+  )
+
   return (
-    <ToastContext.Provider value={{ showToast, toasts, dismissToast }}>
+    <ToastContext.Provider value={value}>
       {children}
     </ToastContext.Provider>
   )

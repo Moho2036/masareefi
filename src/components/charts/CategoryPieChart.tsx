@@ -127,7 +127,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
               innerRadius={55}
               outerRadius={80}
               paddingAngle={3}
-              animationDuration={300}
+              isAnimationActive={false}
             >
               {data.map((entry) => (
                 <Cell

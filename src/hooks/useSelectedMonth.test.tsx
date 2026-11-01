@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { SelectedMonthProvider, useSelectedMonth } from './useSelectedMonth'
+import { getFiscalMonthInfo } from '../lib/dates'
 
 let mockMonthStartDay = 1
 
@@ -142,5 +143,49 @@ describe('useSelectedMonth hook', () => {
       result.current.setSelectedDate(new Date(2026, 5, 1))
     })
     expect(result.current.manualNavKey).toBe(3)
+  })
+
+  it('automatically resets selectedDate to remain in the current financial month when monthStartDay changes while viewing current month', () => {
+    mockMonthStartDay = 1
+
+    const { result, rerender } = renderHook(() => useSelectedMonth(), {
+      wrapper: SelectedMonthProvider,
+    })
+
+    expect(result.current.isCurrentMonth).toBe(true)
+    expect(result.current.monthStartDay).toBe(1)
+
+    // User is viewing current month (manualNavKey === 0)
+    // When monthStartDay changes from 1 to 25
+    mockMonthStartDay = 25
+    rerender()
+
+    expect(result.current.monthStartDay).toBe(25)
+    expect(result.current.isCurrentMonth).toBe(true)
+  })
+
+  it('preserves fiscal month year and monthIndex when monthStartDay changes while viewing a historical month', () => {
+    mockMonthStartDay = 1
+
+    const { result, rerender } = renderHook(() => useSelectedMonth(), {
+      wrapper: SelectedMonthProvider,
+    })
+
+    // User navigates manually to previous month
+    act(() => {
+      result.current.goToPreviousMonth()
+    })
+    expect(result.current.isCurrentMonth).toBe(false)
+    const prevFiscalInfo = getFiscalMonthInfo(result.current.selectedDate, 1)
+
+    // Now monthStartDay changes from 1 to 25
+    mockMonthStartDay = 25
+    rerender()
+
+    expect(result.current.monthStartDay).toBe(25)
+    expect(result.current.isCurrentMonth).toBe(false)
+    const newFiscalInfo = getFiscalMonthInfo(result.current.selectedDate, 25)
+    expect(newFiscalInfo.year).toBe(prevFiscalInfo.year)
+    expect(newFiscalInfo.monthIndex).toBe(prevFiscalInfo.monthIndex)
   })
 })

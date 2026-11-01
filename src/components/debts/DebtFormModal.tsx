@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { format } from 'date-fns'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, Info } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -9,7 +9,7 @@ import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { addDebt, updateDebt, checkDebtInitialTransactionExists } from '../../services/debts'
-import { toFils, fromFils } from '../../lib/money'
+import { toFils, fromFils, MAX_AMOUNT_FILS } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
 import { triggerHaptic } from '../../lib/haptics'
@@ -41,6 +41,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   const { format: formatCurrency, config } = useCurrency()
 
   const isEditing = Boolean(initialDebt)
+  const hasMultipleEntries = Boolean(isEditing && initialDebt?.entries && initialDebt.entries.length > 1)
 
   const [type, setType] = useState<DebtType>(() => initialDebt?.type ?? 'lent')
   const [personName, setPersonName] = useState(() => initialDebt?.personName ?? '')
@@ -134,6 +135,11 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
     const amountFils = toFils(amountStr, config.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (amountFils > MAX_AMOUNT_FILS) {
+      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
       return
     }
 
@@ -314,22 +320,41 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
           المبلغ الكلي
         </label>
-        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
+        <div
+          className={cn(
+            'flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700',
+            hasMultipleEntries
+              ? 'opacity-60 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
+              : 'focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
+          )}
+        >
           <input
             type="text"
             inputMode="decimal"
             placeholder={config.decimals === 3 ? '0.000' : '0.00'}
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
-            className="w-full bg-transparent text-2xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
+            disabled={hasMultipleEntries}
+            readOnly={hasMultipleEntries}
+            className={cn(
+              'w-full bg-transparent text-2xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
+              hasMultipleEntries && 'cursor-not-allowed'
+            )}
             required
           />
           <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
             {config.symbol}
           </span>
         </div>
+        {hasMultipleEntries && (
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+            <span>يتكون هذا الدين من عدة سلف مجمعة؛ لتعديل المبالغ يرجى إدارة السلف من نافذة سجل الحركات وكشف الحساب.</span>
+          </p>
+        )}
         {isEditing &&
           initialDebt &&
+          !hasMultipleEntries &&
           (initialDebt.paidFils || 0) > 0 &&
           toFils(amountStr, config.decimals) > 0 &&
           toFils(amountStr, config.decimals) < (initialDebt.paidFils || 0) && (

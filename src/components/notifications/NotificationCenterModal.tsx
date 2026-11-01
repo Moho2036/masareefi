@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Settings as SettingsIcon,
   Sparkles,
+  Archive,
+  RotateCcw,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -31,10 +33,15 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   const {
     notifications,
     unreadCount,
+    archivedCount,
     filterNotifications,
     markAsRead,
     markAllAsRead,
     clearRead,
+    archiveNotification,
+    restoreFromArchive,
+    deleteFromArchive,
+    clearArchive,
     isRead,
   } = useNotifications()
 
@@ -108,7 +115,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
           </div>
 
           <div className="flex items-center gap-1.5">
-            {unreadCount > 0 && (
+            {activeFilter !== 'archived' && unreadCount > 0 && (
               <button
                 type="button"
                 onClick={markAllAsRead}
@@ -119,15 +126,26 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                 <span className="hidden sm:inline">تحديد الكل</span>
               </button>
             )}
-            {notifications.some((n) => isRead(n.id)) && (
+            {activeFilter !== 'archived' && notifications.some((n) => isRead(n.id)) && (
               <button
                 type="button"
                 onClick={clearRead}
-                title="مسح المقروءة"
+                title="أرشفة المقروءة"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-500 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <Archive className="w-4 h-4" />
+                <span className="hidden sm:inline">أرشفة المقروءة</span>
+              </button>
+            )}
+            {activeFilter === 'archived' && archivedCount > 0 && (
+              <button
+                type="button"
+                onClick={clearArchive}
+                title="تفريغ الأرشيف"
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
-                <span className="hidden sm:inline">مسح المقروءة</span>
+                <span className="hidden sm:inline">تفريغ الأرشيف</span>
               </button>
             )}
             <button
@@ -165,6 +183,11 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               label: 'الديون والجمعيات',
               count: notifications.filter((n) => n.category === 'debt' || n.category === 'circle').length,
             },
+            {
+              id: 'archived' as NotificationFilter,
+              label: 'الأرشيف',
+              count: archivedCount,
+            },
           ].map((tab) => {
             const isActive = activeFilter === tab.id
             return (
@@ -199,8 +222,17 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
         <div className="space-y-2.5 max-h-[380px] overflow-y-auto p-0.5">
           {filteredItems.length === 0 ? (
             <div className="py-12 text-center text-zinc-400 dark:text-zinc-500">
-              <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm font-semibold">لا توجد تنبيهات حالياً في هذا القسم</p>
+              {activeFilter === 'archived' ? (
+                <>
+                  <Archive className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-semibold">الأرشيف فارغ حالياً</p>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-semibold">لا توجد تنبيهات حالياً في هذا القسم</p>
+                </>
+              )}
             </div>
           ) : (
             filteredItems.map((item) => {
@@ -210,7 +242,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                   key={item.id}
                   onClick={() => markAsRead(item.id)}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative flex items-start gap-3 ${
-                    !read
+                    !read && activeFilter !== 'archived'
                       ? item.isUrgent
                         ? 'border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20'
                         : 'border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20'
@@ -230,20 +262,70 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
 
                   {/* Body */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4
-                        className={`text-xs font-bold truncate ${
-                          item.isUrgent
-                            ? 'text-rose-700 dark:text-rose-300'
-                            : 'text-zinc-900 dark:text-zinc-100'
-                        }`}
-                      >
-                        {item.title}
-                      </h4>
-                      {!read && (
-                        <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                      )}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h4
+                          className={`text-xs font-bold truncate ${
+                            item.isUrgent
+                              ? 'text-rose-700 dark:text-rose-300'
+                              : 'text-zinc-900 dark:text-zinc-100'
+                          }`}
+                        >
+                          {item.title}
+                        </h4>
+                        {!read && activeFilter !== 'archived' && (
+                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                        )}
+                        {activeFilter === 'archived' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 shrink-0">
+                            مؤرشف
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action buttons in header of card */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {activeFilter !== 'archived' ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              archiveNotification(item.id)
+                            }}
+                            title="نقل إلى الأرشيف"
+                            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          >
+                            <Archive className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                restoreFromArchive(item.id)
+                              }}
+                              title="استعادة من الأرشيف"
+                              className="p-1 rounded-lg text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteFromArchive(item.id)
+                              }}
+                              title="حذف نهائي من الأرشيف"
+                              className="p-1 rounded-lg text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
+
                     <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">
                       {item.message}
                     </p>

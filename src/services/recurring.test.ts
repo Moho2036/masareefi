@@ -381,4 +381,60 @@ describe('recurring service - processDueRecurring', () => {
     expect(mockUpdateDoc).toHaveBeenCalledTimes(1)
     expect(mockBatchSet).not.toHaveBeenCalled()
   })
+
+  it('automatically jumps over an immediate skipMonth to the following month on confirm or skip', async () => {
+    // startDate is Jan 10, 2026. Occurrence being confirmed is Jan 10 (Month 1).
+    // skipMonth is 2 (Feb 2026).
+    // When confirmed/skipped, nextDate should jump directly to March 10, 2026 (Month 3).
+    mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+
+    const rec = {
+      id: 'rec-circle-jump',
+      type: 'expense' as const,
+      amountFils: 50000,
+      categoryId: 'cat-circle',
+      title: 'قسط جمعية',
+      note: '',
+      frequency: 'monthly' as const,
+      startDate: new Date(2026, 0, 10),
+      nextDate: new Date(2026, 0, 10),
+      active: true,
+      skipMonth: 2,
+    }
+
+    await confirmRecurringOccurrence('uid-1', rec)
+
+    const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+      call[0].path?.includes('recurring/rec-circle-jump')
+    )
+    expect(recUpdateCall).toBeDefined()
+    const updatedNextDate = new Date(recUpdateCall![1].nextDate.seconds * 1000)
+    expect(updatedNextDate.getFullYear()).toBe(2026)
+    expect(updatedNextDate.getMonth()).toBe(2) // Month index 2 = March!
+    expect(updatedNextDate.getDate()).toBe(10)
+
+    const recSkip = {
+      id: 'rec-circle-skip',
+      type: 'expense' as const,
+      amountFils: 50000,
+      categoryId: 'cat-circle',
+      title: 'قسط جمعية',
+      note: '',
+      frequency: 'monthly' as const,
+      startDate: new Date(2026, 0, 10),
+      nextDate: new Date(2026, 0, 10),
+      active: true,
+      skipMonth: 2,
+    }
+
+    await skipRecurringOccurrence('uid-1', recSkip)
+    const updateDocCall = mockUpdateDoc.mock.calls.find((call) =>
+      call[0].path?.includes('recurring/rec-circle-skip')
+    )
+    expect(updateDocCall).toBeDefined()
+    const skippedNextDate = new Date(updateDocCall![1].nextDate.seconds * 1000)
+    expect(skippedNextDate.getFullYear()).toBe(2026)
+    expect(skippedNextDate.getMonth()).toBe(2) // Month index 2 = March!
+    expect(skippedNextDate.getDate()).toBe(10)
+  })
 })

@@ -345,11 +345,15 @@ export function calculateMonthlyEquivalent(
       const nextDate = item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)
       const cycleEnd = addMonths(refDate, 1)
       if (nextDate >= refDate && nextDate < cycleEnd) {
-        if (
-          (nextDate.getFullYear() === refDate.getFullYear() && nextDate.getMonth() === refDate.getMonth()) ||
-          (refDate.getDate() > 1 && item.id !== 'r_circle') ||
-          refDate.getDate() >= 20
-        ) {
+        const isSameCalendarMonth =
+          nextDate.getFullYear() === refDate.getFullYear() &&
+          nextDate.getMonth() === refDate.getMonth()
+        const isCustomCycleStartAnchor =
+          refDate.getDate() >= 20 &&
+          nextDate.getDate() <= 10 &&
+          refDate.getHours() === 0 &&
+          refDate.getMinutes() === 0
+        if (isSameCalendarMonth || isCustomCycleStartAnchor) {
           isSkipped = isOccurrenceSkipped(item, nextDate)
         }
       }

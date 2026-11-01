@@ -91,7 +91,7 @@ export const RecurringPage: React.FC = () => {
   const [deleting, setDeleting] = useState(false)
 
   const { data: allTransactions } = useTransactions()
-  const { config: currencyConfig } = useCurrency()
+  const { config: currencyConfig, format } = useCurrency()
 
   const [confirmingItem, setConfirmingItem] = useState<Recurring | null>(null)
   const [confirmAmountStr, setConfirmAmountStr] = useState('')
@@ -203,19 +203,34 @@ export const RecurringPage: React.FC = () => {
     }
     try {
       const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+      const userMonthlyFils =
+        circle.shareType === 'half'
+          ? Math.round(circle.monthlyAmountFils / 2)
+          : circle.shareType === 'double'
+            ? circle.monthlyAmountFils * 2
+            : circle.monthlyAmountFils
+      const exemptMonths =
+        circle.shareType === 'double' && circle.secondTurnMonth
+          ? [circle.myTurnMonth, circle.secondTurnMonth]
+          : [circle.myTurnMonth]
       const nextDate = getNextCircleDueDate(
         circle.startDate,
         circle.membersCount,
         circle.myTurnMonth,
         userMember?.paidMonths || [],
-        userMember?.paymentsByMonth
+        userMember?.paymentsByMonth,
+        exemptMonths
       )
+      const exemptNote =
+        circle.shareType === 'double' && circle.secondTurnMonth
+          ? `قسط شهري للجمعية - معفى من الخصم في شهري الاستلام (${circle.myTurnMonth} و ${circle.secondTurnMonth})`
+          : `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`
       const recId = await addRecurring(user.uid, {
         type: 'expense',
-        amountFils: circle.monthlyAmountFils,
+        amountFils: userMonthlyFils,
         categoryId: defaultExpenseCategory.id,
         title: `قسط ${circle.name}`,
-        note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`,
+        note: exemptNote,
         frequency: 'monthly',
         startDate: circle.startDate,
         nextDate,
@@ -223,6 +238,7 @@ export const RecurringPage: React.FC = () => {
         active: true,
         circleId: circle.id,
         skipMonth: circle.myTurnMonth,
+        skipMonths: exemptMonths,
       })
       await updateMoneyCircle(user.uid, circle.id, { recurringId: recId }, { monthStartDay })
       await processDueRecurring(user.uid)
@@ -386,6 +402,25 @@ export const RecurringPage: React.FC = () => {
               const isStarted = diffMonths >= 0
               const isUserTurn = isStarted && isUserTurnMonth(circle, now, monthStartDay)
               const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
+              const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+              const userMonthlyFils =
+                circle.shareType === 'half'
+                  ? Math.round(circle.monthlyAmountFils / 2)
+                  : circle.shareType === 'double'
+                    ? circle.monthlyAmountFils * 2
+                    : circle.monthlyAmountFils
+              const userGrossFils =
+                circle.shareType === 'half'
+                  ? Math.round(circle.totalAmountFils / 2)
+                  : circle.totalAmountFils
+              const isCurrentMonthPaid = Boolean(
+                userMember &&
+                  (userMember.paidMonths?.includes(currentMonth) ||
+                    userMember.paymentsByMonth?.[String(currentMonth)] === true)
+              )
+              const isUnpaidCurrentMonth =
+                isStarted && !isUserTurn && currentMonth <= circle.membersCount && !isCurrentMonthPaid
+
               const linkedRec = recurringItems.find(
                 (r) => r.id === circle.recurringId || r.circleId === circle.id
               )
@@ -401,23 +436,31 @@ export const RecurringPage: React.FC = () => {
                       : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700'
                   )}
                 >
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-100">
                       {circle.name}
                     </span>
                     {isUserTurn ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white shrink-0">
                         <Crown className="w-3 h-3" />
                         <span>دورك في الاستلام!</span>
                       </span>
                     ) : !isStarted ? (
-                      <span className="text-[11px] font-semibold text-slate-400">
+                      <span className="text-[11px] font-semibold text-slate-400 shrink-0">
                         تبدأ في {formatDate(start, 'yyyy/MM/dd')}
                       </span>
                     ) : (
-                      <span className="text-[11px] font-semibold text-slate-400">
-                        الشهر {currentMonth} من {circle.membersCount}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          الشهر {currentMonth} من {circle.membersCount}
+                        </span>
+                        {isUnpaidCurrentMonth && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                            <AlertCircle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>قسط الشهر غير مسدد</span>
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -434,9 +477,9 @@ export const RecurringPage: React.FC = () => {
                       )}
                     >
                       {isUserTurn ? (
-                        <FormattedMoney amountFils={circle.totalAmountFils} withSign="income" />
+                        <FormattedMoney amountFils={userGrossFils} withSign="income" />
                       ) : (
-                        <FormattedMoney amountFils={circle.monthlyAmountFils} withSign="expense" />
+                        <FormattedMoney amountFils={userMonthlyFils} withSign="expense" />
                       )}
                     </span>
                   </div>
@@ -444,6 +487,12 @@ export const RecurringPage: React.FC = () => {
                   {isUserTurn && (
                     <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-2 font-medium">
                       ✓ لن يتم خصم قسط منك هذا الشهر لأنك مستلم الجمعية!
+                    </p>
+                  )}
+                  {isUnpaidCurrentMonth && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-2 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
+                      <span>قسط هذا الشهر ({format(userMonthlyFils)}) لم يتم سداده بعد.</span>
                     </p>
                   )}
 

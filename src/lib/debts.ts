@@ -72,8 +72,12 @@ export function calculateDebtSummary(debts: Debt[], referenceDate = new Date()):
   let upcomingCount = 0
   let upcomingFils = 0
 
-  const now = referenceDate.getTime()
-  const sevenDaysFromNow = now + 7 * 24 * 60 * 60 * 1000
+  const sevenDaysEnd = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate() + 7,
+    23, 59, 59, 999
+  ).getTime()
 
   for (const debt of debts) {
     if (debt.settled) {
@@ -96,7 +100,7 @@ export function calculateDebtSummary(debts: Debt[], referenceDate = new Date()):
       overdueFils += remaining
     } else if (debt.dueDate) {
       const dueTime = new Date(debt.dueDate).getTime()
-      if (dueTime <= sevenDaysFromNow) {
+      if (dueTime <= sevenDaysEnd) {
         upcomingCount++
         upcomingFils += remaining
       }
@@ -132,11 +136,17 @@ export interface DebtFilterOptions {
  */
 export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Debt[] {
   const { type = 'all', status = 'all', search = '' } = options
-  const normalizedQuery = normalizeArabic(search)
+  const normalizedQuery = normalizeArabic(toWesternDigits(search))
   const now = new Date()
+  const overdueDebtIds = new Set<string>()
 
   return debts
     .filter((debt) => {
+      const isOverdue = isDebtOverdue(debt, now)
+      if (isOverdue) {
+        overdueDebtIds.add(debt.id)
+      }
+
       // 1. Filter by type
       if (type !== 'all' && debt.type !== type) {
         return false
@@ -149,16 +159,16 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
       if (status === 'settled' && !debt.settled) {
         return false
       }
-      if (status === 'overdue' && !isDebtOverdue(debt, now)) {
+      if (status === 'overdue' && !isOverdue) {
         return false
       }
 
       // 3. Search query
       if (normalizedQuery) {
-        const nameNorm = normalizeArabic(debt.personName)
-        const noteNorm = normalizeArabic(debt.note || '')
+        const nameNorm = normalizeArabic(toWesternDigits(debt.personName))
+        const noteNorm = normalizeArabic(toWesternDigits(debt.note || ''))
         const entriesNorm = (debt.entries || [])
-          .map((e) => normalizeArabic(`${e.title || ''} ${e.note || ''}`))
+          .map((e) => normalizeArabic(toWesternDigits(`${e.title || ''} ${e.note || ''}`)))
           .join(' ')
 
         const rawSearch = search.trim()
@@ -202,14 +212,16 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
       }
 
       // Overdue debts top of active list
-      const aOverdue = isDebtOverdue(a, now)
-      const bOverdue = isDebtOverdue(b, now)
+      const aOverdue = overdueDebtIds.has(a.id)
+      const bOverdue = overdueDebtIds.has(b.id)
       if (aOverdue !== bOverdue) {
         return aOverdue ? -1 : 1
       }
 
       // Latest startDate first
-      return b.startDate.getTime() - a.startDate.getTime()
+      const timeA = a.startDate instanceof Date ? a.startDate.getTime() : new Date(a.startDate).getTime()
+      const timeB = b.startDate instanceof Date ? b.startDate.getTime() : new Date(b.startDate).getTime()
+      return timeB - timeA
     })
 }
 

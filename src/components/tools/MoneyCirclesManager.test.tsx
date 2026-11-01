@@ -1121,4 +1121,63 @@ describe('MoneyCirclesManager Component', () => {
     const youInputs = screen.getAllByDisplayValue('أنت')
     expect(youInputs).toHaveLength(1)
   })
+
+  it('displays pay installment button and installments history panel for non-manager', async () => {
+    vi.spyOn(circleServices, 'toggleCircleMemberPayment').mockResolvedValue({
+      isUser: true,
+      paid: true,
+    })
+
+    const now = new Date()
+    const currentStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: false,
+        startDate: currentStartDate,
+        membersCount: 4,
+        myTurnMonth: 3,
+        members: [
+          { id: 'mem_1', name: 'عضو 1', turnMonth: 1, paidMonths: [] },
+          { id: 'mem_2', name: 'عضو 2', turnMonth: 2, paidMonths: [] },
+          { id: 'mem_user', name: 'أنت', turnMonth: 3, paidMonths: [] },
+          { id: 'mem_4', name: 'عضو 4', turnMonth: 4, paidMonths: [] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // 1. Direct pay button appears on the card
+    const directPayBtn = screen.getByRole('button', { name: /تسجيل سداد قسطي الآن/i })
+    expect(directPayBtn).toBeInTheDocument()
+
+    // 2. Installments history toggle button appears for non-manager
+    const historyToggleBtn = screen.getByRole('button', { name: /سجل أقساطي الشهرية/i })
+    expect(historyToggleBtn).toBeInTheDocument()
+
+    // 3. Click history toggle button to expand grid
+    fireEvent.click(historyToggleBtn)
+
+    // Month 3 is exempt (turnMonth)
+    expect(screen.getByText(/دورك في القبض \(معفى\)/i)).toBeInTheDocument()
+
+    // Month 1 payment button
+    const payBtns = screen.getAllByRole('button', { name: /تسجيل الدفع/i })
+    expect(payBtns.length).toBeGreaterThanOrEqual(1)
+
+    // Click to pay
+    fireEvent.click(payBtns[0])
+
+    await waitFor(() => {
+      expect(circleServices.toggleCircleMemberPayment).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        'mem_user',
+        expect.any(Number),
+        expect.anything()
+      )
+    })
+  })
 })

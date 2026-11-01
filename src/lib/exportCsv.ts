@@ -12,7 +12,7 @@ export function escapeCsvCell(value: unknown): string {
     return ''
   }
   let str = String(value)
-  if (typeof value === 'string' && /^[=+\-@]/.test(str)) {
+  if (typeof value === 'string' && /^[\s]*[=+\-@]/.test(str)) {
     str = `'${str}`
   }
   if (/[",\r\n]/.test(str)) {
@@ -23,14 +23,14 @@ export function escapeCsvCell(value: unknown): string {
 
 /**
  * Builds a valid CSV string with UTF-8 BOM (\uFEFF) at the start
- * and sep=, directive so Microsoft Excel renders Arabic characters and columns accurately.
+ * so Microsoft Excel and other spreadsheet viewers render Arabic characters accurately.
  */
 export function buildCsv(
   headers: string[],
   rows: (string | number)[][],
   options: { includeSepDirective?: boolean } = {}
 ): string {
-  const includeSepDirective = options.includeSepDirective ?? true
+  const includeSepDirective = options.includeSepDirective ?? false
   const headerLine = headers.map(escapeCsvCell).join(',')
   const rowLines = rows.map((row) => row.map(escapeCsvCell).join(','))
   const prefix = includeSepDirective ? '\uFEFFsep=,\r\n' : '\uFEFF'
@@ -240,9 +240,20 @@ export function exportCirclesToCsv(
 
   const rows = circles.map((c) => {
     const nameStr = c.name
-    const monthlyStr = fromFils(c.monthlyAmountFils).toFixed(decimals)
+    const userMonthlyFils =
+      c.shareType === 'half'
+        ? Math.round(c.monthlyAmountFils / 2)
+        : c.shareType === 'double'
+          ? c.monthlyAmountFils * 2
+          : c.monthlyAmountFils
+    const userTotalPayoutFils =
+      c.shareType === 'half'
+        ? Math.round(c.totalAmountFils / 2)
+        : c.totalAmountFils
+
+    const monthlyStr = fromFils(userMonthlyFils).toFixed(decimals)
     const membersCountStr = String(c.membersCount)
-    const totalStr = fromFils(c.totalAmountFils).toFixed(decimals)
+    const totalStr = fromFils(userTotalPayoutFils).toFixed(decimals)
     const myTurnStr = String(c.myTurnMonth)
     const statusStr = c.status === 'active' ? 'نشطة' : 'مكتملة'
     const startDateStr = format(c.startDate, 'yyyy-MM-dd')

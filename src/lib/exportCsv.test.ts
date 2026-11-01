@@ -29,16 +29,20 @@ describe('exportCsv module', () => {
 
     it('prepends single quote to string values starting with =, +, -, or @ to prevent formula injection', () => {
       expect(escapeCsvCell('=SUM(A1:B1)')).toBe("'=SUM(A1:B1)")
+      expect(escapeCsvCell(' =SUM(A1:B1)')).toBe("' =SUM(A1:B1)")
       expect(escapeCsvCell('+12345')).toBe("'+12345")
+      expect(escapeCsvCell('  +12345')).toBe("'  +12345")
       expect(escapeCsvCell('-cmd')).toBe("'-cmd")
+      expect(escapeCsvCell(' -cmd')).toBe("' -cmd")
       expect(escapeCsvCell('@calc')).toBe("'@calc")
+      expect(escapeCsvCell(' @calc')).toBe("' @calc")
       // Numbers starting with minus should NOT have quote prepended
       expect(escapeCsvCell(-12.5)).toBe('-12.5')
     })
   })
 
   describe('buildCsv', () => {
-    it('prepends UTF-8 BOM character, sep=, directive, and formats rows with CRLF', () => {
+    it('prepends UTF-8 BOM character directly without sep=, directive by default and formats rows with CRLF', () => {
       const headers = ['الاسم', 'المبلغ']
       const rows = [
         ['أحمد', 15.5],
@@ -46,15 +50,15 @@ describe('exportCsv module', () => {
       ]
       const result = buildCsv(headers, rows)
 
-      expect(result.startsWith('\uFEFFsep=,\r\n')).toBe(true)
-      expect(result).toBe('\uFEFFsep=,\r\nالاسم,المبلغ\r\nأحمد,15.5\r\nسارة,20')
+      expect(result.startsWith('\uFEFFالاسم,المبلغ\r\n')).toBe(true)
+      expect(result).toBe('\uFEFFالاسم,المبلغ\r\nأحمد,15.5\r\nسارة,20')
     })
 
-    it('can omit sep=, directive if includeSepDirective is false', () => {
+    it('includes sep=, directive if includeSepDirective is true', () => {
       const headers = ['الاسم', 'المبلغ']
       const rows = [['أحمد', 15.5]]
-      const result = buildCsv(headers, rows, { includeSepDirective: false })
-      expect(result).toBe('\uFEFFالاسم,المبلغ\r\nأحمد,15.5')
+      const result = buildCsv(headers, rows, { includeSepDirective: true })
+      expect(result).toBe('\uFEFFsep=,\r\nالاسم,المبلغ\r\nأحمد,15.5')
     })
   })
 

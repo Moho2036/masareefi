@@ -17,7 +17,7 @@ import { useToast } from '../hooks/useToast'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { addRecurring, updateRecurring, processDueRecurring } from '../services/recurring'
 import { updateMoneyCircle } from '../services/moneyCircles'
-import { toFils, fromFils } from '../lib/money'
+import { toFils, fromFils, MAX_AMOUNT_FILS } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
 import { parseLocalDateInput } from '../lib/dates'
 import { calculateNextDateOnEdit, advanceDateWithTargetDay, getNextCircleDueDate } from '../lib/recurring'
@@ -38,6 +38,7 @@ export interface RecurringSubmitPayload {
   endDate?: Date | null
   circleId?: string
   skipMonth?: number
+  skipMonths?: number[]
   requireConfirmation?: boolean
 }
 
@@ -156,6 +157,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
   const [circleId, setCircleId] = useState<string>(initialRecurring?.circleId ?? '')
   const [skipMonth, setSkipMonth] = useState<number | undefined>(initialRecurring?.skipMonth)
+  const [skipMonths, setSkipMonths] = useState<number[] | undefined>(initialRecurring?.skipMonths)
   const [requireConfirmation, setRequireConfirmation] = useState<boolean>(
     Boolean(initialRecurring?.requireConfirmation)
   )
@@ -216,6 +218,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
     const amountFils = toFils(amountStr, currencyConfig.decimals)
     if (amountFils <= 0) {
       setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
+      return
+    }
+
+    if (amountFils > MAX_AMOUNT_FILS) {
+      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
       return
     }
 
@@ -297,6 +304,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           endDate: parsedEndDate,
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+          skipMonths: skipMonths && skipMonths.length > 0 ? skipMonths : undefined,
           requireConfirmation,
         }
 
@@ -315,6 +323,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             endDate: parsedEndDate,
             circleId: circleId || undefined,
             skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+            skipMonths: skipMonths && skipMonths.length > 0 ? skipMonths : undefined,
             requireConfirmation,
           })
         }
@@ -351,7 +360,9 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
               linkedCircle.membersCount,
               linkedCircle.myTurnMonth,
               userMember?.paidMonths || [],
-              userMember?.paymentsByMonth
+              userMember?.paymentsByMonth,
+              new Date(),
+              skipMonths
             )
           : parsedStartDate
 
@@ -377,6 +388,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           active: true,
           circleId: circleId || undefined,
           skipMonth: skipMonth !== undefined ? skipMonth : undefined,
+          skipMonths: skipMonths && skipMonths.length > 0 ? skipMonths : undefined,
           requireConfirmation,
         })
 
@@ -719,6 +731,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 const c = availableCircles.find((circ) => circ.id === selectedId)
                 if (c) {
                   setSkipMonth(c.myTurnMonth)
+                  if (c.shareType === 'double' && c.secondTurnMonth) {
+                    setSkipMonths([c.myTurnMonth, c.secondTurnMonth])
+                  } else {
+                    setSkipMonths([c.myTurnMonth])
+                  }
                   setFrequency('monthly')
                   if (!title) setTitle(`قسط ${c.name}`)
                   setAmountStr(String(fromFils(c.monthlyAmountFils)))
@@ -730,6 +747,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 }
               } else {
                 setSkipMonth(undefined)
+                setSkipMonths(undefined)
                 setHasEndDate(false)
                 setEndDateStr('')
                 setStartDateStr(format(new Date(), 'yyyy-MM-dd'))
@@ -748,9 +766,11 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
               </option>
             ))}
           </select>
-          {circleId && skipMonth && (
+          {circleId && (skipMonths?.length || skipMonth) && (
             <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1">
-              <span>✓ لن يتم خصم قسط منك في الشهر {skipMonth} لأن هذا الشهر هو دور استلامك للجمعية!</span>
+              <span>
+                ✓ لن يتم خصم قسط منك في الشهر {skipMonths && skipMonths.length > 0 ? skipMonths.join(' و ') : skipMonth} لأن هذا الشهر هو دور استلامك للجمعية!
+              </span>
             </p>
           )}
         </div>

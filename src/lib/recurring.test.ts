@@ -489,6 +489,30 @@ describe('recurring pure logic', () => {
       expect(aprilResult.monthlyExpense).toBe(0)
     })
 
+    it('does not waive monthly expense for rec_custom_id on March 20 when exempt month is April', () => {
+      const customRec: Recurring = {
+        id: 'rec_custom_id',
+        type: 'expense',
+        amountFils: 100000,
+        categoryId: 'c1',
+        note: 'جمعية مخصصة',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1),
+        nextDate: new Date(2026, 3, 1),
+        active: true,
+        circleId: 'c1',
+        skipMonth: 4,
+      }
+
+      // On March 20 (mid-month daytime): expense is counted (100,000 fils) and not waived
+      const marchResult = calculateMonthlyEquivalent([customRec], new Date(2026, 2, 20, 12, 0, 0))
+      expect(marchResult.monthlyExpense).toBe(100000)
+
+      // In April (Month 4 - User's turn): expense is 0 (waived)
+      const aprilResult = calculateMonthlyEquivalent([customRec], new Date(2026, 3, 15))
+      expect(aprilResult.monthlyExpense).toBe(0)
+    })
+
     it('waives monthly expense in calculateMonthlyEquivalent when referenceDate is start of custom cycle (e.g. Sep 25)', () => {
       // Circle started Jan 1, 2026. Month 10 is October.
       const circleRec: Recurring = {

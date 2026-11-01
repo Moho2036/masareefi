@@ -32,6 +32,7 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Toggle } from '../components/ui/Toggle'
 import { Modal } from '../components/ui/Modal'
+import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { useTheme } from '../hooks/useTheme'
 import { useAuth } from '../hooks/useAuth'
 import { useUserSettings } from '../hooks/useUserSettings'
@@ -54,7 +55,7 @@ import {
   reauthenticateCurrentGoogle,
   deleteUserAccount,
 } from '../services/auth'
-import { getAllTransactions, addTransaction } from '../services/transactions'
+import { getAllTransactions, addTransaction, deleteTransaction } from '../services/transactions'
 import { getAllDebts } from '../services/debts'
 import { processDueRecurring } from '../services/recurring'
 import { resetUserData, deleteUserFirestoreData } from '../services/userProfile'
@@ -385,7 +386,11 @@ export const SettingsPage: React.FC = () => {
     }
     setSelectedDay(val)
     try {
-      await updateSettings({ monthStartDay: parsed })
+      const updatePayload: { monthStartDay: number; rolloverStartDate?: Date } = { monthStartDay: parsed }
+      if (settings?.rolloverStartDate) {
+        updatePayload.rolloverStartDate = getFinancialMonthRange(new Date(), parsed).start
+      }
+      await updateSettings(updatePayload)
       showToast(`تم تعيين بداية الشهر المالي إلى يوم ${parsed} من كل شهر`, 'success')
     } catch (err) {
       console.error('Failed to persist month start day:', err)
@@ -409,11 +414,12 @@ export const SettingsPage: React.FC = () => {
 
   const handleToggleRolloverStartDate = async (checked: boolean) => {
     try {
-      const currentCycleStart =
-        selectedMonth?.range?.start ??
-        getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1).start
+      const currentCycleStart = getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1).start
       const nextDate = checked ? currentCycleStart : null
-      await updateSettings({ rolloverStartDate: nextDate })
+      await updateSettings({
+        rolloverStartDate: nextDate,
+        ...(checked ? { openingBalanceFils: 0 } : {}),
+      })
       showToast(
         checked
           ? 'تم تصفير العجز/الفائض السابق، وسيبدأ احتساب الترحيل من دورة هذا الشهر فصاعداً'
@@ -440,15 +446,31 @@ export const SettingsPage: React.FC = () => {
     }
     setSavingReconcile(true)
     try {
-      const currentCycle =
-        selectedMonth?.range ??
-        getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
+      const currentCycle = getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
 
       const allTxs = await getAllTransactions(uid)
-      const relevantTxs = allTxs.filter((tx) => {
+
+      const oldReconcileTxs = allTxs.filter((tx) => {
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+        return (
+          txDate >= currentCycle.start &&
+          txDate < currentCycle.end &&
+          tx.title === 'تسوية رصيد (فرق جرد)' &&
+          tx.note === 'معاملة تسوية مسجلة آلياً لمطابقة الرصيد الفعلي'
+        )
+      })
+      const oldReconcileIds = new Set(oldReconcileTxs.map((t) => t.id))
+
+      const relevantTxs = allTxs.filter((tx) => {
+        if (oldReconcileIds.has(tx.id)) {
+          return false
+        }
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+        if (txDate >= currentCycle.end) {
+          return false
+        }
         if (settings?.rolloverBalance === false) {
-          return txDate >= currentCycle.start && txDate < currentCycle.end
+          return txDate >= currentCycle.start
         }
         if (settings?.rolloverStartDate) {
           const rawStart = settings.rolloverStartDate
@@ -469,13 +491,18 @@ export const SettingsPage: React.FC = () => {
 
       const requiredOpening = targetFils - netTxFils
 
+      if (oldReconcileTxs.length > 0) {
+        await Promise.all(oldReconcileTxs.map((t) => deleteTransaction(uid, t.id)))
+      }
+
       if (requiredOpening >= 0) {
         await updateSettings({ openingBalanceFils: requiredOpening })
       } else {
         await updateSettings({ openingBalanceFils: 0 })
         const diffExpenseFils = -requiredOpening
         const expenseCategory =
-          categories.find((c) => c.type === 'expense' && (c.name === 'أخرى' || c.name.includes('أخرى'))) ||
+          categories.find((c) => c.type === 'expense' && !c.archived && (c.name === 'أخرى' || c.name.includes('أخرى'))) ||
+          categories.find((c) => c.type === 'expense' && !c.archived) ||
           categories.find((c) => c.type === 'expense')
 
         if (expenseCategory) {
@@ -1196,7 +1223,7 @@ export const SettingsPage: React.FC = () => {
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
                 الرصيد الافتتاحي المسجل حالياً:{' '}
                 <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  {settings?.openingBalanceFils ? fromFils(settings.openingBalanceFils) : 0} {activeConfig.symbol}
+                  <FormattedMoney amountFils={settings?.openingBalanceFils ?? 0} />
                 </span>
               </div>
             </div>
