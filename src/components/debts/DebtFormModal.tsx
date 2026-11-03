@@ -8,7 +8,9 @@ import { DatePickerInput } from '../ui/DatePickerInput'
 import { Toggle } from '../ui/Toggle'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
+import { useDebts } from '../../hooks/useDebts'
 import { addDebt, updateDebt, checkDebtInitialTransactionExists } from '../../services/debts'
+import { AppDataContext, type AppDataContextValue } from '../../context/AppDataContext'
 import { toFils, fromFils, MAX_AMOUNT_FILS } from '../../lib/money'
 import { parseLocalDateInput } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
@@ -39,6 +41,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   const { user } = useAuth()
   const { showToast } = useToast()
   const { format: formatCurrency, config } = useCurrency()
+  const { data: debts } = useDebts()
 
   const isEditing = Boolean(initialDebt)
   const hasMultipleEntries = Boolean(isEditing && initialDebt?.entries && initialDebt.entries.length > 1)
@@ -260,6 +263,21 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
     }
   }
 
+  const personSuggestions = React.useMemo(() => {
+    if (isEditing) return []
+    const query = personName.trim().toLowerCase()
+    if (!query) return []
+    const uniqueNames = Array.from(
+      new Set((debts || []).map((d) => d.personName?.trim()).filter(Boolean))
+    )
+    return uniqueNames
+      .filter((name) => {
+        const lower = name.toLowerCase()
+        return lower.includes(query) && lower !== query
+      })
+      .slice(0, 5)
+  }, [debts, personName, isEditing])
+
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {error && (
@@ -270,34 +288,32 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
       {/* 1. Type Selector (Segmented control) */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           نوع الدين
         </label>
-        <div className="inline-flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-700/60 gap-1 w-full">
+        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-zinc-850 border border-[#E4E4E7] dark:border-[#27272A] gap-1 w-full">
           <button
             type="button"
             onClick={() => setType('lent')}
             className={cn(
-              'flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
               type === 'lent'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
             <span>لي (أنا داينت فلان)</span>
           </button>
           <button
             type="button"
             onClick={() => setType('borrowed')}
             className={cn(
-              'flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
               type === 'borrowed'
-                ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
-            <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
             <span>عليّ (أنا استدنت)</span>
           </button>
         </div>
@@ -313,18 +329,33 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           required
           maxLength={100}
         />
+        {!isEditing && personSuggestions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            <span className="text-[11px] text-zinc-400 select-none">اقتراحات:</span>
+            {personSuggestions.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setPersonName(name)}
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer font-medium"
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 3. Amount Input in JOD */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           المبلغ الكلي
         </label>
         <div
           className={cn(
-            'flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700',
+            'flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A]',
             hasMultipleEntries
-              ? 'opacity-60 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
+              ? 'opacity-60 bg-zinc-100 dark:bg-zinc-850 cursor-not-allowed'
               : 'focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
           )}
         >
@@ -337,17 +368,17 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             disabled={hasMultipleEntries}
             readOnly={hasMultipleEntries}
             className={cn(
-              'w-full bg-transparent text-2xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
+              'w-full bg-transparent text-2xl font-black text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums',
               hasMultipleEntries && 'cursor-not-allowed'
             )}
             required
           />
-          <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+          <span className="text-base font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
             {config.symbol}
           </span>
         </div>
         {hasMultipleEntries && (
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 flex items-center gap-1.5">
             <Info className="w-3.5 h-3.5 shrink-0 text-blue-500" />
             <span>يتكون هذا الدين من عدة سلف مجمعة؛ لتعديل المبالغ يرجى إدارة السلف من نافذة سجل الحركات وكشف الحساب.</span>
           </p>
@@ -370,10 +401,10 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       {/* 3b. Pre-paid Amount (for new debts) */}
       {!isEditing && (
         <div>
-          <label htmlFor="pre-paid-input" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+          <label htmlFor="pre-paid-input" className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
             المبلغ المسدد مسبقاً من هذا الدين (اختياري)
           </label>
-          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
+          <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
             <input
               id="pre-paid-input"
               type="text"
@@ -381,13 +412,13 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
               placeholder={config.decimals === 3 ? '0.000' : '0.00'}
               value={initialPaidStr}
               onChange={(e) => setInitialPaidStr(e.target.value)}
-              className="w-full bg-transparent text-base font-bold font-mono text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
+              className="w-full bg-transparent text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
             />
-            <span className="text-sm font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+            <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
               {config.symbol}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
             سجل المبلغ المسدد مسبقاً إذا كان الدين قديماً لتوثيق تاريخه وسداده دون التأثير على سيولة اليوم.
           </p>
         </div>
@@ -404,13 +435,13 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       </div>
 
       {/* 5. Due Date Toggle */}
-      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 space-y-2">
+      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">
               تحديد موعد استحقاق
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
               تنبيه عند حلول موعد السداد المتفق عليه
             </span>
           </div>
@@ -423,7 +454,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
                 setDueDateStr(format(new Date(), 'yyyy-MM-dd'))
               }
             }}
-            className="w-4 h-4 accent-emerald-500 cursor-pointer"
+            className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
           />
         </div>
 
@@ -451,7 +482,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       </div>
 
       {/* 7. Accounting Sync Toggle */}
-      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 space-y-2">
+      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
         <Toggle
           checked={syncTransaction}
           onChange={(val) => {
@@ -497,6 +528,27 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
   )
 }
 
+const fallbackAppData: AppDataContextValue = {
+  settings: null,
+  settingsLoading: false,
+  settingsError: null,
+  updateSettings: async () => {},
+  categories: [],
+  categoriesLoading: false,
+  categoriesError: null,
+  debts: [],
+  debtsLoading: false,
+  debtsError: null,
+  recurring: [],
+  recurringLoading: false,
+  recurringError: null,
+  moneyCircles: [],
+  moneyCirclesLoading: false,
+  moneyCirclesError: null,
+  rolloverBalanceFils: 0,
+  setRolloverBalanceFils: () => {},
+}
+
 export const DebtFormModal: React.FC<DebtFormModalProps> = ({
   isOpen,
   onClose,
@@ -504,6 +556,7 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
   onSuccess,
 }) => {
   const [isDirty, setIsDirty] = useState(false)
+  const existingAppData = React.useContext(AppDataContext)
 
   return (
     <Modal
@@ -513,13 +566,15 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
       closeOnBackdropClick={!isDirty && !initialDebt}
     >
       {isOpen && (
-        <DebtFormContent
-          key={initialDebt?.id ?? 'new'}
-          initialDebt={initialDebt}
-          onClose={onClose}
-          onSuccess={onSuccess}
-          onDirtyChange={setIsDirty}
-        />
+        <AppDataContext.Provider value={existingAppData ?? fallbackAppData}>
+          <DebtFormContent
+            key={initialDebt?.id ?? 'new'}
+            initialDebt={initialDebt}
+            onClose={onClose}
+            onSuccess={onSuccess}
+            onDirtyChange={setIsDirty}
+          />
+        </AppDataContext.Provider>
       )}
     </Modal>
   )

@@ -58,7 +58,7 @@ textarea,
 /* Explicit fallback for desktop sidebar in dark mode */
 html.dark aside[aria-label="القائمة الجانبية"],
 .dark aside[aria-label="القائمة الجانبية"] {
-  background-color: #09090b;
+  background-color: #121215;
   border-color: #27272a;
 }
 
@@ -148,6 +148,45 @@ html.dark aside[aria-label="القائمة الجانبية"],
   touch-action: pan-y;
 }
 
+/* Custom Swiss Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+
+html.dark *,
+.dark * {
+  scrollbar-color: #27272a transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #d4d4d8;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #a1a1aa;
+}
+
+html.dark ::-webkit-scrollbar-thumb,
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #27272a;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover,
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #3f3f46;
+}
+
 /* Print optimization */
 @media print {
   header,
@@ -193,18 +232,18 @@ html.dark aside[aria-label="القائمة الجانبية"],
     max-height: none !important;
   }
 
-  .grid {
-    display: block !important;
-  }
-
-  .grid > * {
-    margin-bottom: 0.75rem !important;
+  .recharts-wrapper,
+  .recharts-responsive-container,
+  .card,
+  tr,
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .card,
   tr,
   .print-avoid-break {
-    break-inside: avoid;
     box-shadow: none !important;
     border: 1px solid #d4d4d8 !important;
     background: #ffffff !important;

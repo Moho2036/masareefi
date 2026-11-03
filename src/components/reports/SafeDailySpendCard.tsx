@@ -61,23 +61,21 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     return (
       <Card
         className={cn(
-          'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
-          isSurplus ? 'border-emerald-500/30' : 'border-red-500/40',
+          'relative overflow-hidden border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none transition-all print-avoid-break',
           className
         )}
       >
+        <div className={cn('h-1 w-full absolute top-0 inset-x-0', isSurplus ? 'bg-emerald-500' : 'bg-red-500')} />
+
         {/* Header bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <div className="flex items-center gap-2.5">
-            <div
-              className={cn(
-                'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
-                isSurplus
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-red-500/10 text-red-600 dark:text-red-400'
+            <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+              {isSurplus ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
               )}
-            >
-              {isSurplus ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
@@ -87,16 +85,16 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
 
           {/* Month ended badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 self-start sm:self-auto">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800/90 text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A] self-start sm:self-auto">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
             <span>هذا الشهر قد انتهى ({totalDays} يوماً)</span>
           </div>
         </div>
 
         {/* Main highlight numbers */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] py-4">
           {/* Net Result (Saved or Deficit) */}
-          <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
             <div>
               <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                 {rolloverBalance !== 0
@@ -130,7 +128,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
 
           {/* Actual Daily Pace & Totals */}
-          <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-xs font-bold text-slate-400 mb-1">متوسط صرفك اليومي</div>
@@ -147,7 +145,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               </div>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
               <span>إجمالي المداخيل المحصلة:</span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 {format(currentIncome)}
@@ -215,27 +213,28 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
     return (
       <Card
         className={cn(
-          'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
-          healthStatus === 'safe' && 'border-emerald-500/30',
-          healthStatus === 'warning' && 'border-amber-500/40',
-          healthStatus === 'danger' && 'border-red-500/40',
+          'relative overflow-hidden border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none transition-all print-avoid-break',
           className
         )}
       >
+        <div
+          className={cn(
+            'h-1 w-full absolute top-0 inset-x-0',
+            healthStatus === 'safe'
+              ? 'bg-emerald-500'
+              : healthStatus === 'warning'
+                ? 'bg-amber-500'
+                : 'bg-red-500'
+          )}
+        />
+
         {/* Header bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <div className="flex items-center gap-2.5">
-            <div
-              className={cn(
-                'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
-                healthStatus === 'safe' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-                healthStatus === 'warning' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-                healthStatus === 'danger' && 'bg-red-500/10 text-red-600 dark:text-red-400'
-              )}
-            >
-              {healthStatus === 'safe' && <ShieldCheck className="w-5 h-5" />}
-              {healthStatus === 'warning' && <AlertTriangle className="w-5 h-5" />}
-              {healthStatus === 'danger' && <AlertCircle className="w-5 h-5" />}
+            <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+              {healthStatus === 'safe' && <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+              {healthStatus === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
+              {healthStatus === 'danger' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
             </div>
             <div>
               <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
@@ -249,14 +248,14 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             <button
               type="button"
               onClick={() => setShowInfo((prev) => !prev)}
-              className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+              className="p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 transition-colors cursor-pointer"
               aria-label="شرح معادلة الحساب"
               title="كيف يُحسب حد الصرف اليومي؟"
             >
               <Info className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800/90 text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
               <span>شهر مستقبلي (متبقي كامل الدورة {totalDays} يوماً)</span>
             </div>
           </div>
@@ -264,15 +263,15 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
         {/* Mathematical Explanation Box */}
         {showInfo && (
-          <div className="mt-3 p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-200 space-y-1.5">
-            <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
-              <Info className="w-4 h-4 shrink-0" />
+          <div className="mt-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] text-xs text-zinc-700 dark:text-zinc-300 space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100">
+              <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>كيف يُحسب حد الصرف اليومي المقترح؟</span>
             </div>
             <p className="leading-relaxed font-semibold">
               المعادلة: حد الصرف اليومي = (الرصيد الحر المتوقع) ÷ (إجمالي أيام الدورة الشهرية: {totalDays} يوماً).
             </p>
-            <div className="text-[11px] text-blue-800/90 dark:text-blue-300/90 space-y-0.5 pt-1">
+            <div className="text-[11px] text-zinc-600 dark:text-zinc-400 space-y-0.5 pt-1">
               <div>• الرصيد الحر المتوقع = إجمالي الدخل المتوقع + الرصيد المرحّل - الفواتير والديون المحجوزة.</div>
               <div>• التخطيط الاستباقي يمنحك رؤية واضحة لكيفية توزيع مصروفاتك قبل أن يبدأ الشهر.</div>
             </div>
@@ -280,9 +279,9 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
         )}
 
         {/* Main highlight numbers */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] py-4">
           {/* Daily Safe Spend */}
-          <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
             <div>
               <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                 حد الصرف اليومي المقترح
@@ -300,7 +299,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
 
           {/* Projected Free Balance vs Reserved */}
-          <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-xs font-bold text-slate-400 mb-1">الرصيد الحر المتوقع</div>
@@ -337,7 +336,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
 
             {totalUpcomingObligations > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                 <span>التزامات محجوزة (فواتير + ديون):</span>
                 <span className="font-bold text-amber-600 dark:text-amber-400">
                   {format(totalUpcomingObligations)}
@@ -386,27 +385,28 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
   return (
     <Card
       className={cn(
-        'relative overflow-hidden border-2 bg-white dark:bg-[#121215] transition-all',
-        healthStatus === 'safe' && 'border-emerald-500/30',
-        healthStatus === 'warning' && 'border-amber-500/40',
-        healthStatus === 'danger' && 'border-red-500/40',
+        'relative overflow-hidden border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none transition-all print-avoid-break',
         className
       )}
     >
+      <div
+        className={cn(
+          'h-1 w-full absolute top-0 inset-x-0',
+          healthStatus === 'safe'
+            ? 'bg-emerald-500'
+            : healthStatus === 'warning'
+              ? 'bg-amber-500'
+              : 'bg-red-500'
+        )}
+      />
+
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-[#E4E4E7] dark:border-[#27272A]">
         <div className="flex items-center gap-2.5">
-          <div
-            className={cn(
-              'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
-              healthStatus === 'safe' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-              healthStatus === 'warning' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-              healthStatus === 'danger' && 'bg-red-500/10 text-red-600 dark:text-red-400'
-            )}
-          >
-            {healthStatus === 'safe' && <ShieldCheck className="w-5 h-5" />}
-            {healthStatus === 'warning' && <AlertTriangle className="w-5 h-5" />}
-            {healthStatus === 'danger' && <AlertCircle className="w-5 h-5" />}
+          <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+            {healthStatus === 'safe' && <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+            {healthStatus === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
+            {healthStatus === 'danger' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
           </div>
           <div>
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
@@ -420,14 +420,14 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <button
             type="button"
             onClick={() => setShowInfo((prev) => !prev)}
-            className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+            className="p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 transition-colors cursor-pointer"
             aria-label="شرح معادلة الحساب"
             title="كيف يُحسب حد الصرف اليومي الآمن؟"
           >
             <Info className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800/90 text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
             <span>متبقي {remainingDays} يوماً في الدورة</span>
           </div>
         </div>
@@ -435,15 +435,15 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
       {/* Mathematical Explanation Box */}
       {showInfo && (
-        <div className="mt-3 p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-200 space-y-1.5 animate-fade-in">
-          <div className="font-bold flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
-            <Info className="w-4 h-4 shrink-0" />
+        <div className="mt-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] text-xs text-zinc-700 dark:text-zinc-300 space-y-1.5 animate-fade-in">
+          <div className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100">
+            <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
             <span>كيف يُحسب حد الصرف اليومي الآمن؟</span>
           </div>
           <p className="leading-relaxed font-semibold">
             المعادلة المحاسبية: حد الصرف اليومي الآمن = (الرصيد الحر المتبقي) ÷ (الأيام المتبقية: {remainingDays} يوماً).
           </p>
-          <div className="text-[11px] text-blue-800/90 dark:text-blue-300/90 space-y-0.5 pt-1">
+          <div className="text-[11px] text-zinc-600 dark:text-zinc-400 space-y-0.5 pt-1">
             <div>• الرصيد الحر المتبقي = (السيولة المتاحة حالياً) - (الالتزامات المحجوزة من فواتير دورية قادمة + ديون مستحقة السداد).</div>
             <div>• الأيام المتبقية = {remainingDays} يوماً حتى نهاية الشهر المالي الحالي.</div>
             <div>• الهدف: حماية مدخراتك والتزاماتك من النفاذ المبكر بتوزيع المتاح بذكاء على الأيام المتبقية.</div>
@@ -452,9 +452,9 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
       )}
 
       {/* Main highlight numbers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] py-4">
         {/* Daily Safe Spend */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
           <div>
             <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
               حد الصرف اليومي الآمن
@@ -472,7 +472,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
         </div>
 
         {/* Actual Spend Pace vs Free Balance */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-xs font-bold text-slate-400 mb-1">معدل صرفك الفعلي</div>
@@ -505,7 +505,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
           {/* Rollover & Available Liquidity Pool if rollover exists */}
           {rolloverBalance !== 0 && (
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+            <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px]">
               <span className="text-slate-500 dark:text-slate-400">
                 {rolloverBalance > 0 ? 'فائض مرحّل متاح:' : 'عجز مرحّل من الشهر السابق:'}
               </span>
@@ -525,7 +525,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           )}
 
           {totalUpcomingObligations > 0 && (
-            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 pt-2 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
               <span>التزامات محجوزة (فواتير + ديون):</span>
               <span className="font-bold text-amber-600 dark:text-amber-400">
                 {format(totalUpcomingObligations)}
@@ -602,8 +602,8 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
         </div>
       ) : isEmptyMonth ? (
-        <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-2.5 text-xs">
-          <Info className="w-5 h-5 text-slate-500 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
+          <Info className="w-5 h-5 text-zinc-500 shrink-0" />
           <div>
             <span className="font-bold">بانتظار تسجيل المعاملات:</span> ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي.
           </div>

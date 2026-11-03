@@ -37,7 +37,7 @@ const CustomDailyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
     )
 
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl shadow-xl text-xs space-y-1 z-50 text-start min-w-[150px]">
+      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3 rounded-xl shadow-lg text-xs space-y-1 z-50 text-start min-w-[150px]">
         <div className="font-semibold text-slate-500 dark:text-slate-400">
           {dateFormatted}
         </div>
@@ -107,12 +107,12 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[220px]',
+          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[190px]',
           className
         )}
       >
-        <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
-          <TrendingDown className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
+        <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center mb-2.5">
+          <TrendingDown className="w-6 h-6 text-zinc-400 dark:text-zinc-500" strokeWidth={1.8} />
         </div>
         <p className="text-xs font-semibold">لا توجد مصاريف مسجلة لهذه الفترة</p>
       </div>
@@ -140,7 +140,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="currentColor"
-            className="text-slate-200 dark:text-slate-700/60"
+            className="text-zinc-200/70 dark:text-zinc-800/80"
             vertical={false}
           />
           <XAxis

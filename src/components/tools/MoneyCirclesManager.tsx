@@ -4,6 +4,7 @@ import {
   Users,
   Plus,
   CheckCircle2,
+  Check,
   Clock,
   Crown,
   Trash2,
@@ -21,6 +22,8 @@ import { DatePickerInput } from '../ui/DatePickerInput'
 import { Modal } from '../ui/Modal'
 import { Toggle } from '../ui/Toggle'
 import { EmptyState } from '../ui/EmptyState'
+import { Select } from '../ui/Select'
+import { CategoryIcon } from '../ui/CategoryIcon'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrency } from '../../hooks/useCurrency'
 import { useUserSettings } from '../../hooks/useUserSettings'
@@ -390,9 +393,14 @@ export const MoneyCirclesManager: React.FC = () => {
     setIsManager(Boolean(circle.isManager))
 
     const initialNames: string[] = []
+    const secondTurnNum = circle.secondTurnMonth || (circle.myTurnMonth === 1 ? 2 : 1)
     for (let i = 1; i <= circle.membersCount; i++) {
       const existing = circle.members?.find((m) => m.turnMonth === i)
-      initialNames.push(existing?.name ?? (i === circle.myTurnMonth ? 'أنت' : `عضو ${i}`))
+      const defaultForSecond =
+        circle.shareType === 'double' && i === secondTurnNum ? 'أنت (سهم 2)' : `عضو ${i}`
+      initialNames.push(
+        existing?.name ?? (i === circle.myTurnMonth ? 'أنت' : defaultForSecond)
+      )
     }
     setCustomMembers(initialNames)
 
@@ -450,8 +458,10 @@ export const MoneyCirclesManager: React.FC = () => {
         )
 
         const members: CircleMember[] = []
+        const secondTurnNum = shareType === 'double' ? parseInt(secondTurnMonthStr, 10) : undefined
         for (let i = 1; i <= membersCount; i++) {
-          const defaultName = i === newTurnMonth ? 'أنت' : `عضو ${i}`
+          const isSecond = shareType === 'double' && i === secondTurnNum
+          const defaultName = i === newTurnMonth ? 'أنت' : isSecond ? 'أنت (سهم 2)' : `عضو ${i}`
 
           let existingMember: CircleMember | undefined
 
@@ -489,9 +499,13 @@ export const MoneyCirclesManager: React.FC = () => {
             memberName =
               i === newTurnMonth
                 ? 'أنت'
-                : existingMember?.name && existingMember.name !== 'أنت'
-                  ? existingMember.name
-                  : defaultName
+                : isSecond
+                  ? (existingMember?.name && existingMember.name !== 'أنت' && !existingMember.name.startsWith('عضو ')
+                      ? existingMember.name
+                      : 'أنت (سهم 2)')
+                  : existingMember?.name && existingMember.name !== 'أنت'
+                    ? existingMember.name
+                    : defaultName
           }
 
           const rawPaid = existingMember?.paidMonths || []
@@ -609,8 +623,10 @@ export const MoneyCirclesManager: React.FC = () => {
         showToast('تم تعديل الجمعية بنجاح', 'success')
       } else {
         const members: CircleMember[] = []
+        const secondTurnNum = shareType === 'double' ? parseInt(secondTurnMonthStr, 10) : undefined
         for (let i = 1; i <= membersCount; i++) {
-          const defaultName = i === myTurnMonth ? 'أنت' : `عضو ${i}`
+          const isSecond = shareType === 'double' && i === secondTurnNum
+          const defaultName = i === myTurnMonth ? 'أنت' : isSecond ? 'أنت (سهم 2)' : `عضو ${i}`
           const enteredName = isManager ? (customMembers[i - 1] || '').trim() : ''
           const memberName = enteredName || defaultName
           members.push({
@@ -870,11 +886,11 @@ export const MoneyCirclesManager: React.FC = () => {
       {/* Top action bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Users className="w-5 h-5 text-emerald-500" />
+          <h3 className="text-lg font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <span>نظام الجمعيات والصناديق المشتركة</span>
           </h3>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
             تتبع أدوار الاستلام، الأقساط الشهرية، ومعرفة مين دفع ومين ما دفع بكل شفافية
           </p>
         </div>
@@ -918,7 +934,7 @@ export const MoneyCirclesManager: React.FC = () => {
       ) : circles.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<Users className="w-8 h-8 text-emerald-500" />}
+            icon={<Users className="w-8 h-8 text-blue-600 dark:text-blue-400" />}
             title="لا توجد جمعيات مالية نشطة حالياً"
             description="أنشئ جمعيتك الأولى لمتابعة الأدوار، الأقساط الشهرية، ودفعات الأعضاء بسهولة تامة."
             action={
@@ -1016,22 +1032,17 @@ export const MoneyCirclesManager: React.FC = () => {
             return (
               <Card
                 key={circle.id}
-                className={cn(
-                  'relative border-2 transition-all p-4 sm:p-5',
-                  isUserTurn
-                    ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent'
-                    : 'border-slate-200/80 dark:border-slate-700/80'
-                )}
+                className="relative border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none transition-all p-4 sm:p-5"
               >
                 {/* Circle Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                   <div className="flex items-center gap-3">
                     <div
                       className={cn(
                         'w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-lg shrink-0',
                         isUserTurn
-                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                          : 'bg-slate-100 dark:bg-slate-750 text-slate-700 dark:text-slate-300'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
                       )}
                     >
                       {isUserTurn ? (
@@ -1041,30 +1052,30 @@ export const MoneyCirclesManager: React.FC = () => {
                       )}
                     </div>
                     <div>
-                      <h4 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                      <h4 className="text-base font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
                         <span>{circle.name}</span>
                         {circle.shareType === 'half' && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                             نصف سهم
                           </span>
                         )}
                         {circle.shareType === 'double' && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                             سهمان: شهر {circle.myTurnMonth} و {circle.secondTurnMonth}
                           </span>
                         )}
                         {circle.isManager && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                             أنت المدير
                           </span>
                         )}
                         {(circle.status === 'completed' || isCompleted) && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                             مكتملة
                           </span>
                         )}
                       </h4>
-                      <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                      <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
                         <span>قسط: {format(userMonthlyFils)} / شهر</span>
                         <span>•</span>
                         <span>{circle.membersCount} أشهر ({circle.membersCount} أعضاء)</span>
@@ -1079,16 +1090,16 @@ export const MoneyCirclesManager: React.FC = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleCompleteCircle(circle)}
-                        className="text-xs text-slate-600 dark:text-slate-300"
-                        icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                        className="text-xs text-zinc-600 dark:text-zinc-300"
+                        icon={<CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
                       >
                         إنهاء الجمعية
                       </Button>
                     )}
 
                     <div className="text-end me-2">
-                      <div className="text-[11px] text-slate-400">إجمالي المقبوض</div>
-                      <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
+                      <div className="text-[11px] text-zinc-400">إجمالي المقبوض</div>
+                      <div className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400">
                         {format(userGrossFils)}
                       </div>
                     </div>
@@ -1096,7 +1107,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleOpenEditModal(circle)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                      className="p-2 rounded-xl text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
                       title="تعديل الجمعية"
                     >
                       <Pencil className="w-4 h-4" />
@@ -1104,7 +1115,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setDeleteCircleId(circle.id)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                      className="p-2 rounded-xl text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
                       title="حذف الجمعية"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1114,19 +1125,19 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Turn Announcement Banner */}
                 {circle.status === 'completed' ? (
-                  <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       <span>اكتملت جميع دورات هذه الجمعية ({circle.membersCount} أشهر).</span>
                     </div>
-                    <span className="text-[11px] font-bold text-slate-400">
+                    <span className="text-[11px] font-bold text-zinc-400">
                       مكتملة ✓
                     </span>
                   </div>
                 ) : (isObligationsCompleted || (isCompleted && hasUserDeposited)) && circle.status === 'active' ? (
-                  <div className="mt-3.5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-900 dark:text-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs dark:shadow-none">
                     <div className="flex items-center gap-2.5 text-xs font-bold">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
                       <span>اكتملت جميع التزامات وأدوار هذه الجمعية! يمكنك الآن نقلها إلى الأرشيف (مكتملة).</span>
                     </div>
                     <Button
@@ -1141,29 +1152,63 @@ export const MoneyCirclesManager: React.FC = () => {
                     </Button>
                   </div>
                 ) : !isStarted ? (
-                  <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-emerald-500" />
+                      <Clock className="w-4 h-4 text-zinc-500" />
                       <span>
                         الجمعية تبدأ في:{' '}
-                        <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                        <strong className="text-zinc-800 dark:text-zinc-100 font-bold">
                           {formatDate(start, 'yyyy/MM/dd')}
                         </strong>{' '}
                         (دورك: الشهر رقم {circle.myTurnMonth})
                       </span>
                     </div>
-                    <span className="text-[11px] font-semibold text-slate-400">
+                    <span className="text-[11px] font-semibold text-zinc-400">
                       لم تبدأ بعد
                     </span>
                   </div>
+                ) : isUserTurn && canDepositNet ? (
+                  /* Unified Swiss Banner for User Turn + Net Deposit */
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(userGrossFils)}.</span>
+                      </div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                        حان موعد استلام حصتك من الجمعية! الصافي بعد حسم قسطك لهذا الشهر ({format(userMonthlyFils)}):{' '}
+                        <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
+                          {format(netAmountFils)}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
+                        لا يُخصم منك قسط
+                      </span>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        disabled={depositingCircleId === circle.id}
+                        onClick={() => handleDepositCircleNet(circle)}
+                        className="font-bold shrink-0"
+                        icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                      >
+                        {depositingCircleId === circle.id
+                          ? 'جارٍ الإيداع...'
+                          : 'إيداع صافي الجمعية في الرصيد'}
+                      </Button>
+                    </div>
+                  </div>
                 ) : isUserTurn ? (
-                  <div className="mt-3.5 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 text-xs font-bold">
-                      <Crown className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-800 dark:text-zinc-200 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
+                      <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                       <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(userGrossFils)}.</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-emerald-500 text-white shrink-0">
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
                         {hasUserDeposited ? 'تم إيداع الصافي في الرصيد ✓' : 'لا يُخصم منك قسط'}
                       </span>
                       {hasUserDeposited && (
@@ -1179,18 +1224,18 @@ export const MoneyCirclesManager: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-amber-500" />
                       <span>
                         دورك في الاستلام:{' '}
-                        <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                        <strong className="text-zinc-800 dark:text-zinc-100 font-bold">
                           الشهر رقم {circle.myTurnMonth}
                         </strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] font-semibold text-slate-400">
+                      <span className="text-[11px] font-semibold text-zinc-400">
                         {circle.myTurnMonth > currentMonth
                           ? `باقي ${circle.myTurnMonth - currentMonth} أشهر على دورك`
                           : hasUserDeposited
@@ -1211,17 +1256,17 @@ export const MoneyCirclesManager: React.FC = () => {
                   </div>
                 )}
 
-                {/* Prominent Deposit Net Payout Action */}
-                {canDepositNet && (
-                  <div className="mt-3.5 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-2 border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                {/* Prominent Deposit Net Payout Action (Only if canDepositNet and !isUserTurn) */}
+                {canDepositNet && !isUserTurn && (
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs dark:shadow-none">
                     <div className="text-xs">
-                      <div className="font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5 text-sm">
-                        <Crown className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5 text-sm">
+                        <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                         <span>حان موعد استلام حصتك من الجمعية!</span>
                       </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
                         الصافي بعد حسم قسطك لهذا الشهر ({format(userMonthlyFils)}):{' '}
-                        <strong className="text-emerald-700 dark:text-emerald-400 font-black text-sm">
+                        <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
                           {format(netAmountFils)}
                         </strong>
                       </div>
@@ -1232,7 +1277,7 @@ export const MoneyCirclesManager: React.FC = () => {
                       size="sm"
                       disabled={depositingCircleId === circle.id}
                       onClick={() => handleDepositCircleNet(circle)}
-                      className="font-bold shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                      className="font-bold shrink-0"
                       icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                     >
                       {depositingCircleId === circle.id
@@ -1243,10 +1288,10 @@ export const MoneyCirclesManager: React.FC = () => {
                 )}
 
                 {/* Recurring Schedule Status */}
-                <div className="mt-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-750/40 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs">
+                <div className="mt-3.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs">
                   {isScheduledActive ? (
-                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
-                      <Zap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300 font-bold">
+                      <Zap className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                       <span>مجدولة في المعاملات المتكررة (معفاة من الخصم في الشهر {circle.myTurnMonth})</span>
                     </div>
                   ) : isScheduledPaused && linkedRec ? (
@@ -1267,7 +1312,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     </div>
                   ) : (
                     <div className="flex items-center justify-between w-full gap-2">
-                      <span className="text-slate-400">القسط غير مجدول كمعاملة متكررة</span>
+                      <span className="text-zinc-400">القسط غير مجدول كمعاملة متكررة</span>
                       <Button
                         type="button"
                         variant="outline"
@@ -1318,7 +1363,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Progress bar across months */}
                 <div className="mt-4 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                     <span>
                       {isCompleted || isObligationsCompleted
                         ? 'اكتملت جميع دورات الجمعية'
@@ -1334,11 +1379,11 @@ export const MoneyCirclesManager: React.FC = () => {
                           : `${Math.round((currentMonth / circle.membersCount) * 100)}%`}
                     </span>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                  <div className="w-full h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
                     <div
                       className={cn(
                         'h-full rounded-full transition-all duration-500',
-                        circle.status === 'completed' ? 'bg-slate-400 dark:bg-slate-500' : 'bg-emerald-500'
+                        circle.status === 'completed' ? 'bg-zinc-400 dark:bg-zinc-500' : 'bg-blue-600 dark:bg-blue-500'
                       )}
                       style={{
                         width: isCompleted || isObligationsCompleted
@@ -1355,12 +1400,12 @@ export const MoneyCirclesManager: React.FC = () => {
                 {Boolean(circle.isManager) && (
                   <>
                     {/* Toggle Details button: Who paid and who didn't */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5 flex-wrap">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium flex items-center gap-1.5 flex-wrap">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>
                       دفعات الشهر {viewingMonth}:{' '}
-                      <strong className="text-slate-800 dark:text-slate-200">
+                      <strong className="text-zinc-800 dark:text-zinc-200">
                         {paidMembersCount} من {circle.membersCount} دفعوا
                       </strong>
                     </span>
@@ -1383,10 +1428,10 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Expanded Member Payments Table */}
                 {isExpanded && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
                     {/* Month selector for viewing past/current/future payments */}
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                      <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
                         عرض دفعات الشهر:
                       </span>
                       <div className="flex items-center gap-1 overflow-x-auto py-1 max-w-full">
@@ -1400,8 +1445,8 @@ export const MoneyCirclesManager: React.FC = () => {
                             className={cn(
                               'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0',
                               viewingMonth === mNum
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                             )}
                           >
                             شهر {mNum}
@@ -1415,7 +1460,16 @@ export const MoneyCirclesManager: React.FC = () => {
                       {circle.members.map((member) => {
                         const hasPaid = member.paidMonths.includes(viewingMonth)
                         const isReceiverThisMonth = member.turnMonth === viewingMonth
-                        const isUserMember = member.turnMonth === circle.myTurnMonth
+                        const isUserFirstTurn = member.turnMonth === circle.myTurnMonth
+                        const isUserSecondTurn =
+                          circle.shareType === 'double' &&
+                          circle.secondTurnMonth !== undefined &&
+                          member.turnMonth === circle.secondTurnMonth
+                        const isUserMember = isUserFirstTurn || isUserSecondTurn
+                        const displayName =
+                          isUserSecondTurn && member.name.startsWith('عضو ')
+                            ? 'أنت (سهم 2)'
+                            : member.name
                         const isOverdue = viewingMonth < currentMonth && !hasPaid && !isReceiverThisMonth
 
                         return (
@@ -1426,10 +1480,10 @@ export const MoneyCirclesManager: React.FC = () => {
                               isReceiverThisMonth
                                 ? 'bg-amber-500/10 border-amber-300 dark:border-amber-700/50'
                                 : hasPaid
-                                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
+                                  ? 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
                                   : isOverdue
                                     ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
-                                    : 'bg-slate-50 dark:bg-slate-750/40 border-slate-200/80 dark:border-slate-700/60'
+                                    : 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0">
@@ -1438,17 +1492,22 @@ export const MoneyCirclesManager: React.FC = () => {
                                   'w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0',
                                   isReceiverThisMonth
                                     ? 'bg-amber-500 text-white'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
                                 )}
                               >
                                 {member.turnMonth}
                               </span>
                               <div className="min-w-0">
-                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
-                                  <span>{member.name}</span>
-                                  {isUserMember && (
-                                    <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate flex items-center gap-1">
+                                  <span>{displayName}</span>
+                                  {isUserFirstTurn && (
+                                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
                                       (أنت)
+                                    </span>
+                                  )}
+                                  {isUserSecondTurn && (
+                                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                      (سهمك الثاني)
                                     </span>
                                   )}
                                   {isUserMember && isScheduled && !isReceiverThisMonth && (
@@ -1457,7 +1516,7 @@ export const MoneyCirclesManager: React.FC = () => {
                                         معلّق يدوياً
                                       </span>
                                     ) : (
-                                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-800">
+                                      <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.5 rounded-md border border-blue-300 dark:border-blue-800">
                                         اقتطاع آلي
                                       </span>
                                     )
@@ -1475,7 +1534,7 @@ export const MoneyCirclesManager: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-slate-400">
+                                <div className="text-[10px] text-zinc-400">
                                   {isReceiverThisMonth
                                     ? 'يقبض هذا الشهر'
                                     : isUserMember && isScheduled
@@ -1499,9 +1558,9 @@ export const MoneyCirclesManager: React.FC = () => {
                                       setSwapWithMemberId(others[0].id)
                                     }
                                   }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                  className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                                   title="تبديل الدور ⇄"
-                                  aria-label={`تبديل دور ${member.name}`}
+                                  aria-label={`تبديل دور ${displayName}`}
                                 >
                                   <ArrowLeftRight className="w-3.5 h-3.5" />
                                 </button>
@@ -1520,10 +1579,10 @@ export const MoneyCirclesManager: React.FC = () => {
                                   className={cn(
                                     'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
                                     hasPaid
-                                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
                                       : isOverdue
                                         ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400'
                                   )}
                                 >
                                   {hasPaid ? (
@@ -1551,12 +1610,12 @@ export const MoneyCirclesManager: React.FC = () => {
                 {/* Non-Manager Mode: My Installments History Panel */}
                 {!circle.isManager && userMember && (
                   <>
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5 flex-wrap">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium flex items-center gap-1.5 flex-wrap">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         <span>
                           أقساطك المسددة:{' '}
-                          <strong className="text-slate-800 dark:text-slate-200">
+                          <strong className="text-zinc-800 dark:text-zinc-200">
                             {userMember.paidMonths.length} من {circle.membersCount - userExemptMonths.size}
                           </strong>
                         </span>
@@ -1579,8 +1638,8 @@ export const MoneyCirclesManager: React.FC = () => {
 
                     {/* Expanded Installments Grid for Non-Manager */}
                     {isExpanded && (
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                        <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                        <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
                           سجل دفعاتك الشهرية لهذه الجمعية:
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
@@ -1600,10 +1659,10 @@ export const MoneyCirclesManager: React.FC = () => {
                                   isExempt
                                     ? 'bg-amber-500/10 border-amber-300 dark:border-amber-700/50'
                                     : hasPaid
-                                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
+                                      ? 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
                                       : isOverdue
                                         ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
-                                        : 'bg-slate-50 dark:bg-slate-750/40 border-slate-200/80 dark:border-slate-700/60'
+                                        : 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
                                 )}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
@@ -1612,13 +1671,13 @@ export const MoneyCirclesManager: React.FC = () => {
                                       'w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0',
                                       isExempt
                                         ? 'bg-amber-500 text-white'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                        : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
                                     )}
                                   >
                                     {mNum}
                                   </span>
                                   <div className="min-w-0">
-                                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
+                                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate flex items-center gap-1">
                                       <span>شهر {mNum}</span>
                                       {isCurrent && (
                                         <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
@@ -1632,7 +1691,7 @@ export const MoneyCirclesManager: React.FC = () => {
                                         </span>
                                       )}
                                     </div>
-                                    <div className="text-[10px] text-slate-400">
+                                    <div className="text-[10px] text-zinc-400">
                                       {isExempt
                                         ? 'شهر استلام حصتك'
                                         : `قسط: ${format(userMonthlyFils)}`}
@@ -1654,10 +1713,10 @@ export const MoneyCirclesManager: React.FC = () => {
                                       className={cn(
                                         'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
                                         hasPaid
-                                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                          ? 'bg-blue-600 text-white hover:bg-blue-700'
                                           : isOverdue
                                             ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
-                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400'
                                       )}
                                     >
                                       {hasPaid ? (
@@ -1792,7 +1851,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
           {/* Share Size Selector */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
               حجم السهم في الجمعية
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -1803,7 +1862,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'full'
                     ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400'
                 )}
               >
                 سهم كامل (100%)
@@ -1815,19 +1874,32 @@ export const MoneyCirclesManager: React.FC = () => {
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'half'
                     ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400'
                 )}
               >
                 نصف سهم (50%)
               </button>
               <button
                 type="button"
-                onClick={() => setShareType('double')}
+                onClick={() => {
+                  setShareType('double')
+                  setCustomMembers((prev) => {
+                    const next = [...prev]
+                    const sec = parseInt(secondTurnMonthStr, 10)
+                    if (!isNaN(sec) && sec >= 1 && sec <= membersCount) {
+                      const idx = sec - 1
+                      if (!next[idx] || next[idx].startsWith('عضو ')) {
+                        next[idx] = 'أنت (سهم 2)'
+                      }
+                    }
+                    return next
+                  })
+                }}
                 className={cn(
                   'p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center',
                   shareType === 'double'
                     ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-600 text-blue-700 dark:text-blue-300'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400'
                 )}
               >
                 سهمان (دورين)
@@ -1837,73 +1909,123 @@ export const MoneyCirclesManager: React.FC = () => {
 
           {/* Second Turn Month Selector for Double Share */}
           {shareType === 'double' && (
-            <div className="space-y-1">
-              <label htmlFor="circle-second-turn" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                الدور الثاني للاستلام (للسهم الثاني)
-              </label>
-              <select
-                id="circle-second-turn"
-                value={secondTurnMonthStr}
-                onChange={(e) => setSecondTurnMonthStr(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-              >
-                {Array.from({ length: membersCount }, (_, i) => i + 1)
-                  .filter((m) => m !== myTurnMonth)
-                  .map((m) => (
-                    <option key={m} value={m}>
-                      الشهر {m}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            <Select
+              id="circle-second-turn"
+              label="الدور الثاني للاستلام (للسهم الثاني)"
+              value={secondTurnMonthStr}
+              onChange={(e) => {
+                const oldSec = parseInt(secondTurnMonthStr, 10)
+                const newSecVal = e.target.value
+                const newSec = parseInt(newSecVal, 10)
+                setSecondTurnMonthStr(newSecVal)
+                setCustomMembers((prev) => {
+                  const next = [...prev]
+                  if (!isNaN(oldSec) && oldSec >= 1 && oldSec <= membersCount) {
+                    const oldIdx = oldSec - 1
+                    if (next[oldIdx] === 'أنت (سهم 2)') {
+                      next[oldIdx] = `عضو ${oldSec}`
+                    }
+                  }
+                  if (!isNaN(newSec) && newSec >= 1 && newSec <= membersCount) {
+                    const newIdx = newSec - 1
+                    if (!next[newIdx] || next[newIdx].startsWith('عضو ')) {
+                      next[newIdx] = 'أنت (سهم 2)'
+                    }
+                  }
+                  return next
+                })
+              }}
+              options={Array.from({ length: membersCount }, (_, i) => i + 1)
+                .filter((m) => m !== myTurnMonth)
+                .map((m) => ({
+                  value: m,
+                  label: `الشهر ${m}`,
+                }))}
+            />
           )}
 
           {/* Category Selectors for Expenses & Income */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="circle-expense-cat" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                 تصنيف أقساط المصاريف
               </label>
-              <select
-                id="circle-expense-cat"
-                value={expenseCategoryId || defaultExpenseCategory?.id || ''}
-                onChange={(e) => setExpenseCategoryId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-              >
+              <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
                 {categories
                   .filter((c) => c.type === 'expense' && !c.archived)
-                  .map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-              </select>
+                  .map((cat) => {
+                    const activeExpId = expenseCategoryId || defaultExpenseCategory?.id || ''
+                    const isSelected = activeExpId === cat.id
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setExpenseCategoryId(cat.id)}
+                        className={cn(
+                          'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20'
+                            : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                        )}
+                      >
+                        <span
+                          className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: `${cat.color}25` }}
+                        >
+                          <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
+                        </span>
+                        <span className="truncate flex-1">{cat.name}</span>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label htmlFor="circle-income-cat" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                 تصنيف إيداع الصافي (دخل)
               </label>
-              <select
-                id="circle-income-cat"
-                value={incomeCategoryId || defaultIncomeCategory?.id || ''}
-                onChange={(e) => setIncomeCategoryId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-              >
+              <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
                 {categories
                   .filter((c) => c.type === 'income' && !c.archived)
-                  .map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-              </select>
+                  .map((cat) => {
+                    const activeIncId = incomeCategoryId || defaultIncomeCategory?.id || ''
+                    const isSelected = activeIncId === cat.id
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setIncomeCategoryId(cat.id)}
+                        className={cn(
+                          'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20'
+                            : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                        )}
+                      >
+                        <span
+                          className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: `${cat.color}25` }}
+                        >
+                          <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
+                        </span>
+                        <span className="truncate flex-1">{cat.name}</span>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
+              </div>
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between font-bold text-emerald-800 dark:text-emerald-200">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-xs flex items-center justify-between font-bold text-zinc-800 dark:text-zinc-200">
             <span>المبلغ الإجمالي المقبوض:</span>
-            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-sm font-black text-blue-600 dark:text-blue-400">
               {format(
                 toFils(
                   ((parseFloat(monthlyAmountStr) || 0) * membersCount) *
@@ -1916,7 +2038,7 @@ export const MoneyCirclesManager: React.FC = () => {
           </div>
 
           {/* Auto Schedule Toggle */}
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-750/50 border border-slate-200/80 dark:border-slate-700/60">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A]">
             <Toggle
               checked={autoSchedule}
               onChange={(val) => {
@@ -1929,7 +2051,7 @@ export const MoneyCirclesManager: React.FC = () => {
           </div>
 
           {/* Manager Mode Toggle */}
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-750/50 border border-slate-200/80 dark:border-slate-700/60">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A]">
             <Toggle
               checked={isManager}
               onChange={(val) => {
@@ -1937,14 +2059,25 @@ export const MoneyCirclesManager: React.FC = () => {
                 if (val) {
                   setCustomMembers((prev) => {
                     const next = [...prev]
+                    const secondTurnNum = parseInt(secondTurnMonthStr, 10)
                     while (next.length < membersCount) {
                       const idx = next.length + 1
-                      next.push(idx === myTurnMonth ? 'أنت' : `عضو ${idx}`)
+                      const defaultForSecondTurn =
+                        shareType === 'double' && idx === secondTurnNum ? 'أنت (سهم 2)' : `عضو ${idx}`
+                      next.push(idx === myTurnMonth ? 'أنت' : defaultForSecondTurn)
                     }
                     const turnIdx = myTurnMonth - 1
                     if (turnIdx >= 0 && turnIdx < next.length) {
                       if (!next[turnIdx] || next[turnIdx].startsWith('عضو ')) {
                         next[turnIdx] = 'أنت'
+                      }
+                    }
+                    if (shareType === 'double' && !isNaN(secondTurnNum)) {
+                      const secondIdx = secondTurnNum - 1
+                      if (secondIdx >= 0 && secondIdx < next.length) {
+                        if (!next[secondIdx] || next[secondIdx].startsWith('عضو ')) {
+                          next[secondIdx] = 'أنت (سهم 2)'
+                        }
                       }
                     }
                     for (let idx = 0; idx < next.length; idx++) {
@@ -1964,22 +2097,25 @@ export const MoneyCirclesManager: React.FC = () => {
           {/* Members names list - only visible in manager mode */}
           {isManager && (
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                 ترتيب وأسماء الأعضاء:
               </label>
-              <div className="max-h-48 overflow-y-auto space-y-1.5 p-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
                 {Array.from({ length: membersCount }, (_, i) => {
                   const turn = i + 1
                   const isUser = turn === myTurnMonth
+                  const isSecondTurn =
+                    shareType === 'double' && turn === parseInt(secondTurnMonthStr, 10)
+                  const defaultVal = isUser ? 'أنت' : isSecondTurn ? 'أنت (سهم 2)' : `عضو ${turn}`
                   return (
                     <div key={turn} className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-black flex items-center justify-center shrink-0">
+                      <span className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-black flex items-center justify-center shrink-0">
                         {turn}
                       </span>
                       <input
                         type="text"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-                        value={customMembers[i] ?? (isUser ? 'أنت' : `عضو ${turn}`)}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-xs text-zinc-800 dark:text-zinc-200 focus:outline-hidden focus:ring-1 focus:ring-blue-600"
+                        value={customMembers[i] ?? defaultVal}
                         onChange={(e) => {
                           const val = e.target.value
                           setCustomMembers((prev) => {
@@ -2031,15 +2167,15 @@ export const MoneyCirclesManager: React.FC = () => {
         title="تأكيد حذف الجمعية"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
             هل أنت متأكد من رغبتك في حذف هذه الجمعية؟ لن تتمكن من استرجاع بيانات الأقساط والأعضاء المسجلة فيها.
           </p>
 
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
+          <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
             <div className="flex items-center justify-between gap-3">
               <label
                 htmlFor="delete-circle-txs"
-                className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 cursor-pointer select-none"
+                className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer select-none"
               >
                 حذف الأقساط والإيداعات المسجلة في المحفظة لهذه الجمعية
               </label>
@@ -2048,10 +2184,10 @@ export const MoneyCirclesManager: React.FC = () => {
                 type="checkbox"
                 checked={deleteTransactions}
                 onChange={(e) => setDeleteTransactions(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer shrink-0"
+                className="w-4 h-4 text-blue-600 rounded-sm border-zinc-300 focus:ring-blue-600 cursor-pointer shrink-0"
               />
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
               تنبيه: إذا قمت بتحديد هذا الخيار، ستُحذف المعاملات وتتغير أرصدة محفظتك السابقة. الإبقاء عليها دون تحديد يضمن دقة تقاريرك المالية وسجل مصروفاتك التاريخي.
             </p>
           </div>
@@ -2083,29 +2219,22 @@ export const MoneyCirclesManager: React.FC = () => {
         title="تبديل الدور بين الأعضاء"
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600 dark:text-slate-300">
+          <p className="text-xs text-zinc-600 dark:text-zinc-300">
             اختر العضو الذي ترغب في تبديل دور الاستلام معه لـ &quot;{swapTarget?.member.name}&quot; (الدور الحالي: شهر {swapTarget?.member.turnMonth}):
           </p>
 
-          <div className="space-y-1">
-            <label htmlFor="swap-target-member-select" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              تبديل مع العضو:
-            </label>
-            <select
-              id="swap-target-member-select"
-              value={swapWithMemberId}
-              onChange={(e) => setSwapWithMemberId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-            >
-              {swapTarget?.circle.members
-                .filter((m) => m.id !== swapTarget.member.id)
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} (شهر {m.turnMonth})
-                  </option>
-                ))}
-            </select>
-          </div>
+          <Select
+            id="swap-target-member-select"
+            label="تبديل مع العضو:"
+            value={swapWithMemberId}
+            onChange={(e) => setSwapWithMemberId(e.target.value)}
+            options={(swapTarget?.circle.members || [])
+              .filter((m) => m.id !== swapTarget?.member.id)
+              .map((m) => ({
+                value: m.id,
+                label: `${m.name} (شهر ${m.turnMonth})`,
+              }))}
+          />
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button

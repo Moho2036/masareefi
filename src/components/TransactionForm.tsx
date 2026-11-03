@@ -302,7 +302,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle || isMergedPaymentTx)
   const [duplicateCleared, setDuplicateCleared] = useState(false)
   const activeDuplicateFrom = duplicateCleared ? null : duplicateFrom
-  const isActualDuplicate = Boolean(activeDuplicateFrom?.id)
+  const isActualDuplicate = Boolean(
+    activeDuplicateFrom &&
+    typeof activeDuplicateFrom.id === 'string' &&
+    activeDuplicateFrom.id.trim().length > 0
+  )
   const amountInputRef = useRef<HTMLInputElement>(null)
 
   const [type, setType] = useState<TxType>(() => {
@@ -964,7 +968,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
       {/* Linked Debt Init or Entry Warning Banner */}
       {((isLinkedToDebtInit && isDebtExists) || (isLinkedToDebtEntry && isDebtEntryExists)) &&
         !isSourceDeleted && (
@@ -1067,8 +1071,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Orphaned Unlocked Banner */}
       {isSourceMissing &&
         (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle) && (
-          <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+          <div className="p-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-200 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-zinc-500 shrink-0" />
             <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
           </div>
         )}
@@ -1090,65 +1094,19 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Big Amount Input */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label
-            htmlFor="tx-amount"
-            className="block text-xs font-bold text-slate-500 dark:text-slate-400"
-          >
-            المبلغ
-          </label>
-          {!isLockedTransaction && (
-            <div className="flex items-center gap-1">
-              {['+', '-', '*', '/'].map((op) => (
-                <button
-                  key={op}
-                  type="button"
-                  onClick={() => {
-                    setAmountStr((prev) => {
-                      const trimmed = prev.trim()
-                      if (!trimmed) return ''
-                      if (/[+\-*/]$/.test(trimmed)) {
-                        return trimmed.slice(0, -1) + op
-                      }
-                      return trimmed + op
-                    })
-                  }}
-                  className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer select-none"
-                  title={`إضافة عملية ${op}`}
-                >
-                  {op === '*' ? '×' : op === '/' ? '÷' : op}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  if (hasMathOperator(amountStr)) {
-                    const evaluated = evaluateMathExpression(amountStr)
-                    if (evaluated !== null && evaluated >= 0) {
-                      setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
-                    }
-                  }
-                }}
-                className="w-6 h-6 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:hover:bg-blue-900 text-xs font-bold text-blue-600 dark:text-blue-400 transition-colors cursor-pointer select-none"
-                title="حساب النتيجة"
-              >
-                =
-              </button>
-            </div>
-          )}
-        </div>
         <div
           className={cn(
-            'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
+            'flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-zinc-900/70 rounded-2xl border transition-all',
             error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20',
-            isLockedTransaction && 'opacity-70 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed'
+              : 'border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20',
+            isLockedTransaction && 'opacity-70 bg-zinc-100 dark:bg-zinc-800/80 cursor-not-allowed'
           )}
         >
           <input
             ref={amountInputRef}
             id="tx-amount"
+            aria-label="المبلغ"
             type="text"
             inputMode="decimal"
             readOnly={isLockedTransaction}
@@ -1180,26 +1138,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             }}
             placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
             className={cn(
-              'w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none',
+              'w-full bg-transparent text-2xl lg:text-3xl font-black text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none',
               isLockedTransaction && 'cursor-not-allowed'
             )}
             autoFocus={!isEditing && !isLockedTransaction && !isTouchDevice}
           />
-          <span className="text-base lg:text-lg font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+          <span className="text-base lg:text-lg font-bold text-zinc-400 dark:text-zinc-500 select-none pe-1">
             {currencyConfig.symbol}
           </span>
         </div>
 
         {/* Guidance Subline for Expense in Current Month */}
         {type === 'expense' && forecast && forecast.isCurrentMonth && (
-          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 font-medium">
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 mt-1.5 px-1 font-medium">
             <span>
               الرصيد المتاح الحر:{' '}
               <strong
                 className={cn(
                   forecast.freeBalance < 0
                     ? 'text-red-500 dark:text-red-400 font-bold'
-                    : 'text-slate-700 dark:text-slate-200'
+                    : 'text-zinc-700 dark:text-zinc-200'
                 )}
               >
                 <FormattedMoney amountFils={forecast.freeBalance} />
@@ -1218,15 +1176,81 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Category Chips Grid */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+          <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
             التصنيف
           </label>
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCreateCatOpen(true)}
+            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>تصنيف جديد</span>
+          </button>
+        </div>
+        {categoriesLoading ? (
+          <div className="grid grid-cols-3 gap-1.5 p-0.5 animate-pulse">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 flex items-center gap-1.5 p-2"
+              >
+                <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                <div className="w-12 h-2.5 rounded bg-zinc-200 dark:bg-zinc-700" />
+              </div>
+            ))}
+          </div>
+        ) : availableCategories.length === 0 ? (
+          <div className="py-3 text-center text-xs text-zinc-400 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
+            لا توجد تصنيفات متاحة لهذا النوع
+          </div>
+        ) : (
+          <div>
+            <div
+              className={cn(
+                'grid grid-cols-3 gap-1.5 p-0.5',
+                isCategoriesExpanded && 'max-h-48 overflow-y-auto'
+              )}
+            >
+              {displayedCategories.map((cat) => {
+                const isSelected = activeCategoryId === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setCategoryId(cat.id)
+                      setError(null)
+                    }}
+                    className={cn(
+                      'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20 shadow-xs'
+                        : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+                    )}
+                  >
+                    <span
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${cat.color}25` }}
+                    >
+                      <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
+                    </span>
+                    <span className="truncate flex-1 text-xs font-semibold">
+                      {cat.name}
+                      {cat.archived ? ' (مؤرشف)' : ''}
+                    </span>
+                    {isSelected && (
+                      <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
             {availableCategories.length > 6 && (
               <button
                 type="button"
                 onClick={() => setIsCategoriesExpanded((prev) => !prev)}
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                className="mt-1.5 w-full py-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1 transition-colors cursor-pointer"
               >
                 {isCategoriesExpanded ? (
                   <>
@@ -1241,67 +1265,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 )}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setIsCreateCatOpen(true)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>تصنيف جديد</span>
-            </button>
-          </div>
-        </div>
-        {categoriesLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-750 flex items-center gap-2 p-2.5"
-              >
-                <div className="w-7 h-7 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
-                <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
-              </div>
-            ))}
-          </div>
-        ) : availableCategories.length === 0 ? (
-          <div className="py-3 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
-            لا توجد تصنيفات متاحة لهذا النوع
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5">
-            {displayedCategories.map((cat) => {
-              const isSelected = activeCategoryId === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setCategoryId(cat.id)
-                    setError(null)
-                  }}
-                  className={cn(
-                    'flex items-center gap-2 p-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all text-start cursor-pointer select-none min-w-0',
-                    isSelected
-                      ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20 shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                  )}
-                >
-                  <span
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${cat.color}25` }}
-                  >
-                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
-                  </span>
-                  <span className="truncate flex-1 text-xs sm:text-sm font-semibold">
-                    {cat.name}
-                    {cat.archived ? ' (مؤرشف)' : ''}
-                  </span>
-                  {isSelected && (
-                    <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  )}
-                </button>
-              )
-            })}
           </div>
         )}
       </div>
@@ -1348,7 +1311,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         />
         {titleSuggestions.length > 0 && !isLockedTransaction && (
           <div className="flex items-center gap-1.5 flex-wrap pt-1.5 px-0.5">
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium select-none">
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium select-none">
               اقتراحات سريعة:
             </span>
             {titleSuggestions.map((s) => (
@@ -1361,7 +1324,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     setCategoryId(s.categoryId)
                   }
                 }}
-                className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="text-[11px] px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-[#E4E4E7] dark:border-[#27272A] transition-colors cursor-pointer"
               >
                 {s.title}
               </button>
@@ -1370,194 +1333,213 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
       </div>
 
-      {/* Note Input (Collapsible) */}
-      {showNoteField || isLockedTransaction ? (
-        <div>
-          <Input
-            type="text"
-            label="ملاحظة تفصيلية (اختياري)"
-            placeholder="مثال: غداء مع الأصدقاء"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={500}
-          />
-        </div>
+      {/* Note and Recurring Section */}
+      {!showNoteField && !isLockedTransaction ? (
+        !isEditing ? (
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setShowNoteField(true)}
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>+ إضافة ملاحظة تفصيلية</span>
+            </button>
+            <Toggle
+              checked={isRecurring}
+              onChange={setIsRecurring}
+              label="جعلها معاملة متكررة"
+              className="gap-2.5"
+            />
+          </div>
+        ) : (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowNoteField(true)}
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>+ إضافة ملاحظة تفصيلية</span>
+            </button>
+          </div>
+        )
       ) : (
-        <div className="-mt-2">
-          <button
-            type="button"
-            onClick={() => setShowNoteField(true)}
-            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-          >
-            <span>+ إضافة ملاحظة تفصيلية</span>
-          </button>
+        <div className="space-y-3">
+          <div>
+            <Input
+              type="text"
+              label="ملاحظة تفصيلية (اختياري)"
+              placeholder="مثال: غداء مع الأصدقاء"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+            />
+          </div>
+          {!isEditing && (
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Toggle
+                checked={isRecurring}
+                onChange={setIsRecurring}
+                label="جعلها معاملة متكررة"
+                className="gap-2.5"
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Recurring Option (only for new transactions) */}
-      {!isEditing && (
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-          <Toggle
-            checked={isRecurring}
-            onChange={setIsRecurring}
-            label="جعلها معاملة متكررة"
-            description="تكرار هذه المعاملة تلقائياً وفق دورية زمنية محددة"
-          />
-
-          {isRecurring && (
-            <div className="space-y-3 pe-1">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
-                  دورية التكرار
-                </label>
-                <div
-                  role="radiogroup"
-                  className="grid grid-cols-4 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={recurringFrequency === 'weekly'}
-                    onClick={() => {
-                      setRecurringFrequency('weekly')
-                      setShowExtraFrequencyDropdown(false)
-                    }}
-                    className={cn(
-                      'py-1.5 text-xs font-bold rounded-lg transition-all',
-                      recurringFrequency === 'weekly'
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                    )}
-                  >
-                    أسبوعي
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={recurringFrequency === 'monthly'}
-                    onClick={() => {
-                      setRecurringFrequency('monthly')
-                      setShowExtraFrequencyDropdown(false)
-                    }}
-                    className={cn(
-                      'py-1.5 text-xs font-bold rounded-lg transition-all',
-                      recurringFrequency === 'monthly'
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                    )}
-                  >
-                    شهري
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={recurringFrequency === 'yearly'}
-                    onClick={() => {
-                      setRecurringFrequency('yearly')
-                      setShowExtraFrequencyDropdown(false)
-                    }}
-                    className={cn(
-                      'py-1.5 text-xs font-bold rounded-lg transition-all',
-                      recurringFrequency === 'yearly'
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                    )}
-                  >
-                    سنوي
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={['daily', 'biweekly', 'quarterly', 'semiannual'].includes(
-                      recurringFrequency
-                    )}
-                    onClick={() => setShowExtraFrequencyDropdown((prev) => !prev)}
-                    className={cn(
-                      'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
-                      ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(recurringFrequency)
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                    )}
-                  >
-                    <span className="truncate">
-                      {recurringFrequency === 'daily'
-                        ? 'يومي'
-                        : recurringFrequency === 'biweekly'
-                          ? 'أسبوعين'
-                          : recurringFrequency === 'quarterly'
-                            ? 'ربع سنوي'
-                            : recurringFrequency === 'semiannual'
-                              ? 'نصف سنوي'
-                              : 'أخرى'}
-                    </span>
-                    <ChevronDown className="w-3 h-3 shrink-0" />
-                  </button>
-                </div>
-
-                {/* Dropdown menu for extra frequencies */}
-                {showExtraFrequencyDropdown && (
-                  <div className="mt-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg grid grid-cols-2 gap-1.5">
-                    {[
-                      { value: 'daily' as Frequency, label: 'يومي' },
-                      { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
-                      { value: 'quarterly' as Frequency, label: 'ربع سنوي (3 أشهر)' },
-                      { value: 'semiannual' as Frequency, label: 'نصف سنوي (6 أشهر)' },
-                    ].map((f) => (
-                      <button
-                        key={f.value}
-                        type="button"
-                        onClick={() => {
-                          setRecurringFrequency(f.value)
-                          setShowExtraFrequencyDropdown(false)
-                        }}
-                        className={cn(
-                          'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
-                          recurringFrequency === f.value
-                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                        )}
-                      >
-                        <span>{f.label}</span>
-                        {recurringFrequency === f.value && (
-                          <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
+      {/* Recurring Options (only for new transactions when isRecurring is true) */}
+      {!isEditing && isRecurring && (
+        <div className="space-y-3 pe-1">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
+              دورية التكرار
+            </label>
+            <div
+              role="radiogroup"
+              className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={recurringFrequency === 'weekly'}
+                onClick={() => {
+                  setRecurringFrequency('weekly')
+                  setShowExtraFrequencyDropdown(false)
+                }}
+                className={cn(
+                  'py-1.5 text-xs font-bold rounded-lg transition-all',
+                  recurringFrequency === 'weekly'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
                 )}
-              </div>
-
-              {/* End date toggle + picker */}
-              <div className="pt-1 space-y-2">
-                <Toggle
-                  checked={hasEndDate}
-                  onChange={setHasEndDate}
-                  label="تحديد تاريخ انتهاء للتكرار"
-                  description="يتوقف التكرار التلقائي بعد هذا التاريخ"
-                />
-                {hasEndDate && (
-                  <DatePickerInput
-                    id="rec-end-date"
-                    label="تاريخ الانتهاء"
-                    value={endDateStr}
-                    onChange={setEndDateStr}
-                    required
-                  />
+              >
+                أسبوعي
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={recurringFrequency === 'monthly'}
+                onClick={() => {
+                  setRecurringFrequency('monthly')
+                  setShowExtraFrequencyDropdown(false)
+                }}
+                className={cn(
+                  'py-1.5 text-xs font-bold rounded-lg transition-all',
+                  recurringFrequency === 'monthly'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
                 )}
-              </div>
+              >
+                شهري
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={recurringFrequency === 'yearly'}
+                onClick={() => {
+                  setRecurringFrequency('yearly')
+                  setShowExtraFrequencyDropdown(false)
+                }}
+                className={cn(
+                  'py-1.5 text-xs font-bold rounded-lg transition-all',
+                  recurringFrequency === 'yearly'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
+                )}
+              >
+                سنوي
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={['daily', 'biweekly', 'quarterly', 'semiannual'].includes(
+                  recurringFrequency
+                )}
+                onClick={() => setShowExtraFrequencyDropdown((prev) => !prev)}
+                className={cn(
+                  'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
+                  ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(recurringFrequency)
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
+                )}
+              >
+                <span className="truncate">
+                  {recurringFrequency === 'daily'
+                    ? 'يومي'
+                    : recurringFrequency === 'biweekly'
+                      ? 'أسبوعين'
+                      : recurringFrequency === 'quarterly'
+                        ? 'ربع سنوي'
+                        : recurringFrequency === 'semiannual'
+                          ? 'نصف سنوي'
+                          : 'أخرى'}
+                </span>
+                <ChevronDown className="w-3 h-3 shrink-0" />
+              </button>
+            </div>
 
-              {/* Past date schedule notice */}
-              {parseLocalDateInput(dateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between gap-2">
-                  <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من تاريخ اليوم.</span>
-                  <input
-                    type="checkbox"
-                    checked={scheduleNextIfPast}
-                    onChange={(e) => setScheduleNextIfPast(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
-                  />
-                </div>
-              )}
+            {/* Dropdown menu for extra frequencies */}
+            {showExtraFrequencyDropdown && (
+              <div className="mt-2 p-1.5 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-lg grid grid-cols-2 gap-1.5">
+                {[
+                  { value: 'daily' as Frequency, label: 'يومي' },
+                  { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
+                  { value: 'quarterly' as Frequency, label: 'ربع سنوي (3 أشهر)' },
+                  { value: 'semiannual' as Frequency, label: 'نصف سنوي (6 أشهر)' },
+                ].map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => {
+                      setRecurringFrequency(f.value)
+                      setShowExtraFrequencyDropdown(false)
+                    }}
+                    className={cn(
+                      'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
+                      recurringFrequency === f.value
+                        ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                        : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                    )}
+                  >
+                    <span>{f.label}</span>
+                    {recurringFrequency === f.value && (
+                      <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* End date toggle + picker */}
+          <div className="pt-1 space-y-2">
+            <Toggle
+              checked={hasEndDate}
+              onChange={setHasEndDate}
+              label="تحديد تاريخ انتهاء للتكرار"
+              description="يتوقف التكرار التلقائي بعد هذا التاريخ"
+            />
+            {hasEndDate && (
+              <DatePickerInput
+                id="rec-end-date"
+                label="تاريخ الانتهاء"
+                value={endDateStr}
+                onChange={setEndDateStr}
+                required
+              />
+            )}
+          </div>
+
+          {/* Past date schedule notice */}
+          {parseLocalDateInput(dateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-[11px] text-zinc-600 dark:text-zinc-300 flex items-center justify-between gap-2">
+              <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من تاريخ اليوم.</span>
+              <input
+                type="checkbox"
+                checked={scheduleNextIfPast}
+                onChange={(e) => setScheduleNextIfPast(e.target.checked)}
+                className="rounded border-zinc-300 text-blue-600 focus:ring-blue-600"
+              />
             </div>
           )}
         </div>

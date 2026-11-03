@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { Zap, AlertCircle } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -181,42 +181,21 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       )}
 
       {/* Debt Info Card */}
-      <div
-        className={cn(
-          'p-3.5 rounded-2xl border flex items-center justify-between',
-          isLent
-            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-900/40'
-            : 'bg-red-50 dark:bg-red-950/40 border-red-200/60 dark:border-red-900/40'
-        )}
-      >
+      <div className="p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 flex items-center justify-between">
         <div>
-          <span
-            className={cn(
-              'text-xs font-bold block',
-              isLent
-                ? 'text-emerald-800 dark:text-emerald-300'
-                : 'text-red-800 dark:text-red-300'
-            )}
-          >
+          <span className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 block">
             {debt.personName}
           </span>
-          <span
-            className={cn(
-              'text-[11px] font-medium',
-              isLent
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-600 dark:text-red-400'
-            )}
-          >
+          <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             المبلغ المتبقي الحالي
           </span>
         </div>
         <span
           className={cn(
-            'text-lg font-black',
+            'text-lg font-black tabular-nums',
             isLent
-              ? 'text-emerald-700 dark:text-emerald-300'
-              : 'text-red-700 dark:text-red-300'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-red-600 dark:text-red-400'
           )}
         >
           {formatCurrency(remainingFils)}
@@ -225,20 +204,20 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
 
       {/* Amount Input */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           مبلغ الدفعة
         </label>
-        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20">
+        <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
           <input
             type="text"
             inputMode="decimal"
             placeholder={config.decimals === 3 ? '0.000' : '0.00'}
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
-            className="w-full bg-transparent text-2xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
+            className="w-full bg-transparent text-2xl font-black text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
             required
           />
-          <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+          <span className="text-base font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
             {config.symbol}
           </span>
         </div>
@@ -249,10 +228,9 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         <button
           type="button"
           onClick={handleFillFullRemaining}
-          className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+          className="w-full py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors flex items-center justify-center cursor-pointer"
         >
-          <Zap className="w-3.5 h-3.5 text-amber-500" />
-          <span>سداد كامل المبلغ المتبقي ({formatCurrency(remainingFils)}) بنقرة واحدة</span>
+          <span>سداد كامل المبلغ المتبقي ({formatCurrency(remainingFils)})</span>
         </button>
       )}
 
@@ -279,7 +257,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       </div>
 
       {/* Accounting Sync Toggle */}
-      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
         <Toggle
           checked={syncTransaction}
           onChange={setSyncTransaction}

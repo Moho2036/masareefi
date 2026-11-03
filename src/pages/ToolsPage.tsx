@@ -30,17 +30,17 @@ export const ToolsPage: React.FC = () => {
   if (activeTool === 'circles') {
     return (
       <div className="space-y-6 max-w-5xl mx-auto animate-slide-up">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <button
             type="button"
             onClick={handleBackToDirectory}
-            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-xs cursor-pointer transition-all"
+            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] text-xs sm:text-sm font-black text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-2xs dark:shadow-none cursor-pointer transition-all"
           >
             <ArrowRight className="w-4 h-4 rtl:rotate-0" />
             <span>العودة إلى قائمة الأدوات</span>
           </button>
 
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full border border-[#E4E4E7] dark:border-[#27272A]">
             <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>أداة الجمعيات والصناديق المشتركة</span>
           </div>
@@ -55,17 +55,17 @@ export const ToolsPage: React.FC = () => {
   if (activeTool === 'work_hours') {
     return (
       <div className="space-y-6 max-w-5xl mx-auto animate-slide-up">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <button
             type="button"
             onClick={handleBackToDirectory}
-            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-xs cursor-pointer transition-all"
+            className="press-scale inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] text-xs sm:text-sm font-black text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/50 shadow-2xs dark:shadow-none cursor-pointer transition-all"
           >
             <ArrowRight className="w-4 h-4 rtl:rotate-0" />
             <span>العودة إلى قائمة الأدوات</span>
           </button>
 
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full border border-[#E4E4E7] dark:border-[#27272A]">
             <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>حاسبة الشراء بساعات العمل</span>
           </div>
@@ -105,7 +105,7 @@ export const ToolsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => handleOpenTool('circles')}
-              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-xs cursor-pointer transition-colors"
+              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-2xs dark:shadow-none cursor-pointer transition-colors"
             >
               <span>فتح أداة الجمعيات</span>
               <ChevronLeft className="w-4 h-4" />
@@ -133,7 +133,7 @@ export const ToolsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => handleOpenTool('work_hours')}
-              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-xs cursor-pointer transition-colors"
+              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-2xs dark:shadow-none cursor-pointer transition-colors"
             >
               <span>فتح حاسبة ساعات العمل</span>
               <ChevronLeft className="w-4 h-4" />

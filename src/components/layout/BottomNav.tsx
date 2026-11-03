@@ -48,7 +48,7 @@ const smartTools: FeatureItem[] = [
 const managementItems: FeatureItem[] = [
   {
     to: '/reports',
-    title: 'التقارير المالية والتحليلات',
+    title: 'التقارير المالية',
     subtitle: 'مخططات بيانية، مؤشر الأمان، وتوقع نهاية الشهر',
     icon: BarChart3,
   },
@@ -181,7 +181,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
           onClick={() => setIsMoreOpen(false)}
         >
           <div
-            className="fixed inset-x-0 bottom-0 bg-white dark:bg-[#121215] rounded-t-[2rem] p-5 shadow-2xl border-t border-[#E4E4E7] dark:border-[#27272A] max-w-lg mx-auto max-h-[88dvh] overflow-y-auto"
+            className="fixed inset-x-0 bottom-0 bg-white dark:bg-[#121215] rounded-t-2xl p-5 shadow-2xl border-t border-[#E4E4E7] dark:border-[#27272A] max-w-lg mx-auto max-h-[88dvh] overflow-y-auto"
             style={{
               transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
               transition: dragOffsetY === 0 ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
@@ -215,17 +215,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
 
             {/* Section 1: Smart Tools */}
             <div className="space-y-2 mb-5">
-              <div className="flex items-center justify-between px-1">
+              <div className="px-1">
                 <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500">
                   الأدوات المالية
                 </span>
-                <Link
-                  to="/tools"
-                  onClick={() => setIsMoreOpen(false)}
-                  className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  مركز الأدوات
-                </Link>
               </div>
               <div className="space-y-2">
                 {smartTools.map((item) => {
@@ -247,7 +240,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                           : 'bg-zinc-50/80 dark:bg-zinc-900/80 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       )}
                     >
-                      <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
+                      <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
                         <Icon className="w-4.5 h-4.5 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -283,7 +276,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                           : 'bg-zinc-50/80 dark:bg-zinc-900/80 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       )}
                     >
-                      <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
+                      <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center justify-center shrink-0 transition-colors">
                         <Icon className="w-4 h-4 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -331,6 +324,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
           {/* 2. المعاملات */}
           <Link
             to="/transactions"
+            data-tour="transactions-nav"
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/transactions'
@@ -354,6 +348,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
                 onOpenAddModal()
               }}
               aria-label="إضافة معاملة جديدة"
+              data-tour="add-transaction-btn"
               className="press-scale w-13 h-13 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md border-4 border-[#F4F4F5] dark:border-[#09090B] active:scale-90 transition-all duration-200 cursor-pointer"
             >
               <Plus className="w-6 h-6 stroke-[2.8]" />
@@ -363,6 +358,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
           {/* 4. الديون */}
           <Link
             to="/debts"
+            data-tour="debts-nav"
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all',
               pathname === '/debts'
@@ -381,6 +377,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
           <button
             type="button"
             onClick={() => setIsMoreOpen((prev) => !prev)}
+            data-tour="more-and-tools"
             className={cn(
               'press-scale flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all cursor-pointer',
               isMoreActive || isMoreOpen

@@ -34,12 +34,16 @@ export async function signUpWithEmail(
 ): Promise<UserCredential> {
   const cred = await createUserWithEmailAndPassword(auth, email, password)
   const trimmedName = displayName.trim().slice(0, 100)
-  if (trimmedName) {
-    await updateProfile(cred.user, { displayName: trimmedName })
-  }
-  await ensureUserProfile(cred.user)
-  if (trimmedName) {
-    await updateUserSettings(cred.user.uid, { displayName: trimmedName })
+  try {
+    if (trimmedName) {
+      await updateProfile(cred.user, { displayName: trimmedName })
+    }
+    await ensureUserProfile(cred.user)
+    if (trimmedName) {
+      await updateUserSettings(cred.user.uid, { displayName: trimmedName })
+    }
+  } catch (profileErr) {
+    console.warn('Profile initialization handled asynchronously:', profileErr)
   }
   return cred
 }

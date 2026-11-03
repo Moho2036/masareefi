@@ -200,7 +200,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
             الأيقونة واللون
           </label>
           {/* Visual preview pill */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-bold">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold">
             <span
               className="w-5 h-5 rounded-md flex items-center justify-center text-xs"
               style={{ backgroundColor: `${color}1F` }}
@@ -212,7 +212,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         </div>
 
         {/* Quick-pick Emojis Grid */}
-        <div className="grid grid-cols-10 gap-1.5 p-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-700 max-h-32 overflow-y-auto mb-2">
+        <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] max-h-36 overflow-y-auto mb-2">
           {COMMON_EMOJIS.map((em) => (
             <button
               key={em}
@@ -278,7 +278,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               }}
               placeholder="أو اكتب/الصق إيموجي مخصص..."
               className={cn(
-                'w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 placeholder:text-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all',
+                'w-full px-3 py-1.5 text-xs rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-800 placeholder:text-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all',
                 isMappedIcon
                   ? 'text-transparent caret-zinc-900 dark:caret-zinc-100'
                   : 'text-zinc-800 dark:text-zinc-100'
@@ -292,7 +292,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         </div>
 
         {/* Color Palette */}
-        <div className="flex items-center justify-between gap-1 p-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-x-auto">
+        <div className="flex items-center justify-between gap-1 p-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] overflow-x-auto">
           {PALETTE_COLORS.map((c) => (
             <button
               key={c}

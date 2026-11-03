@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import {
-  Sparkles,
   ArrowRight,
   ArrowLeft,
   Check,
@@ -300,24 +299,20 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
       isOpen={isOpen}
       onClose={handleSkip}
       enableHistoryBack={false}
+      hideCloseButton
       title=""
       className="max-w-xl p-0 overflow-hidden rounded-3xl"
     >
-      <div className="p-6 sm:p-8 space-y-6 text-start">
+      <div className="p-2 sm:p-3 space-y-5 text-start">
         {/* Header with step progress and Skip button */}
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-              <Sparkles className="w-5 h-5 stroke-[2.2]" />
+          <div>
+            <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
+              الخطوة {step} من 4: {stepsTitles[step - 1]}
             </div>
-            <div>
-              <div className="text-xs font-semibold text-zinc-400">
-                الخطوة {step} من 4: {stepsTitles[step - 1]}
-              </div>
-              <h2 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50">
-                تجهيز حسابك في بَصير
-              </h2>
-            </div>
+            <h2 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 mt-0.5">
+              تجهيز حسابك في بَصير
+            </h2>
           </div>
 
           <button
@@ -352,6 +347,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
               <input
                 id="onboarding-name"
                 type="text"
+                autoComplete="off"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="كيف تفضل أن نناديك؟"
@@ -380,10 +376,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                           : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300'
                       }`}
                     >
-                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 mb-1">{curr.flag}</span>
-                      <span className="text-xs font-black">{curr.symbol}</span>
-                      <span className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-full">
+                      <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate max-w-full">
                         {curr.name}
+                      </span>
+                      <span className="text-[11px] font-mono font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                        {curr.symbol} • {curr.flag}
                       </span>
                     </button>
                   )
@@ -425,6 +422,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                     <input
                       id="onboarding-custom-currency"
                       type="text"
+                      autoComplete="off"
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value.slice(0, 20))}
                       placeholder="مثال: TRY أو د.ع أو GBP"
@@ -483,15 +481,15 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                 max="28"
                 value={monthStartDay}
                 onChange={(e) => setMonthStartDay(Number(e.target.value))}
-                className="w-full accent-blue-600 cursor-pointer"
+                className="w-full h-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2.5">
                 {[1, 15, 25, 26, 27, 28].map((d) => (
                   <button
                     key={d}
                     type="button"
                     onClick={() => setMonthStartDay(d)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer text-center ${
                       monthStartDay === d
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -542,6 +540,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                   id="onboarding-opening-balance"
                   type="text"
                   inputMode="decimal"
+                  autoComplete="off"
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
                   placeholder="0.00"
@@ -581,6 +580,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                     id="onboarding-salary-amount"
                     type="text"
                     inputMode="decimal"
+                    autoComplete="off"
                     value={salaryAmount}
                     onChange={(e) => setSalaryAmount(e.target.value)}
                     placeholder="مثال: 750"
@@ -777,7 +777,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                 size="sm"
                 onClick={handleFinish}
                 disabled={submitting}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-md shadow-emerald-500/20"
+                className="font-bold"
                 icon={<CheckCircle2 className="w-4 h-4" />}
               >
                 {submitting ? 'جاري الحفظ...' : 'إتمام وبدء الاستخدام'}

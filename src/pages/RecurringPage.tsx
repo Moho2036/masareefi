@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Link, useSearchParams, useInRouterContext } from 'react-router'
-import { format as formatDate, addMonths } from 'date-fns'
+import { format as formatDate, differenceInDays, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
   RefreshCw,
@@ -9,8 +9,6 @@ import {
   Trash2,
   Calendar,
   AlertCircle,
-  Users,
-  Zap,
   TrendingUp,
   TrendingDown,
   Crown,
@@ -36,15 +34,14 @@ import { useCurrency } from '../hooks/useCurrency'
 import { useToast } from '../hooks/useToast'
 import { useUserSettings } from '../hooks/useUserSettings'
 import {
-  addRecurring,
   updateRecurring,
   deleteRecurring,
   processDueRecurring,
   confirmRecurringOccurrence,
   skipRecurringOccurrence,
 } from '../services/recurring'
-import { getCurrentCircleMonth, isUserTurnMonth, updateMoneyCircle, getCircleCycleIndex } from '../services/moneyCircles'
-import { calculateMonthlyEquivalent, isOccurrenceSkipped, getNextCircleDueDate } from '../lib/recurring'
+import { isUserTurnMonth, updateMoneyCircle } from '../services/moneyCircles'
+import { calculateMonthlyEquivalent, isOccurrenceSkipped } from '../lib/recurring'
 import { toFils, fromFils } from '../lib/money'
 import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
@@ -91,7 +88,7 @@ export const RecurringPage: React.FC = () => {
   const [deleting, setDeleting] = useState(false)
 
   const { data: allTransactions } = useTransactions()
-  const { config: currencyConfig, format } = useCurrency()
+  const { config: currencyConfig } = useCurrency()
 
   const [confirmingItem, setConfirmingItem] = useState<Recurring | null>(null)
   const [confirmAmountStr, setConfirmAmountStr] = useState('')
@@ -145,15 +142,6 @@ export const RecurringPage: React.FC = () => {
     }
   }
 
-  const activeCircles = useMemo(() => {
-    const now = new Date()
-    return circles.filter((c) => {
-      if (c.status === 'completed') return false
-      const diffMonths = getCircleCycleIndex(c.startDate, now, monthStartDay)
-      return diffMonths < c.membersCount
-    })
-  }, [circles, monthStartDay])
-
   // Map categoryId to Category
   const categoryMap = useMemo(() => {
     const map = new Map<string, (typeof categories)[0]>()
@@ -166,6 +154,23 @@ export const RecurringPage: React.FC = () => {
   // Monthly equivalents (waives turn month for circle recurring items)
   const monthlyStats = useMemo(() => {
     return calculateMonthlyEquivalent(recurringItems, new Date())
+  }, [recurringItems])
+
+  // Active expense commitments due within 7 days
+  const dueWithin7DaysStats = useMemo(() => {
+    const todayStart = startOfDay(new Date())
+    let totalFils = 0
+    let count = 0
+    for (const item of recurringItems) {
+      if (!item.active || item.type !== 'expense') continue
+      const nextD = startOfDay(item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate))
+      const diff = differenceInDays(nextD, todayStart)
+      if (diff <= 7) {
+        totalFils += item.amountFils
+        count += 1
+      }
+    }
+    return { totalFils, count }
   }, [recurringItems])
 
   // Sorted recurring items: active (active !== false) first, paused (active === false) last.
@@ -182,84 +187,6 @@ export const RecurringPage: React.FC = () => {
       return aTime - bTime
     })
   }, [recurringItems])
-
-  const handleScheduleCircle = async (circle: (typeof circles)[0]) => {
-    if (!user) return
-    const isAlreadyScheduled = Boolean(
-      recurringItems.some(
-        (r) =>
-          (r.id === circle.recurringId || r.circleId === circle.id) &&
-          r.active !== false
-      )
-    )
-    if (isAlreadyScheduled) {
-      showToast('القسط مجدول بالفعل كمعاملة متكررة', 'info')
-      return
-    }
-    const defaultExpenseCategory = categories.find((c) => c.type === 'expense' && !c.archived)
-    if (!defaultExpenseCategory) {
-      showToast('يرجى إنشاء تصنيف مصاريف أولاً', 'error')
-      return
-    }
-    try {
-      const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
-      const userMonthlyFils =
-        circle.shareType === 'half'
-          ? Math.round(circle.monthlyAmountFils / 2)
-          : circle.shareType === 'double'
-            ? circle.monthlyAmountFils * 2
-            : circle.monthlyAmountFils
-      const exemptMonths =
-        circle.shareType === 'double' && circle.secondTurnMonth
-          ? [circle.myTurnMonth, circle.secondTurnMonth]
-          : [circle.myTurnMonth]
-      const nextDate = getNextCircleDueDate(
-        circle.startDate,
-        circle.membersCount,
-        circle.myTurnMonth,
-        userMember?.paidMonths || [],
-        userMember?.paymentsByMonth,
-        exemptMonths
-      )
-      const exemptNote =
-        circle.shareType === 'double' && circle.secondTurnMonth
-          ? `قسط شهري للجمعية - معفى من الخصم في شهري الاستلام (${circle.myTurnMonth} و ${circle.secondTurnMonth})`
-          : `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${circle.myTurnMonth})`
-      const recId = await addRecurring(user.uid, {
-        type: 'expense',
-        amountFils: userMonthlyFils,
-        categoryId: defaultExpenseCategory.id,
-        title: `قسط ${circle.name}`,
-        note: exemptNote,
-        frequency: 'monthly',
-        startDate: circle.startDate,
-        nextDate,
-        endDate: addMonths(circle.startDate, circle.membersCount - 1),
-        active: true,
-        circleId: circle.id,
-        skipMonth: circle.myTurnMonth,
-        skipMonths: exemptMonths,
-      })
-      await updateMoneyCircle(user.uid, circle.id, { recurringId: recId }, { monthStartDay })
-      await processDueRecurring(user.uid)
-      showToast('تمت جدولة القسط في المعاملات المتكررة بنجاح مع تخطي شهر استلامك!', 'success')
-    } catch (err) {
-      console.error('Failed to schedule circle:', err)
-      showToast('تعذر جدولة القسط', 'error')
-    }
-  }
-
-  const handleResumeRecurring = async (recId: string) => {
-    if (!user) return
-    try {
-      await updateRecurring(user.uid, recId, { active: true })
-      await processDueRecurring(user.uid)
-      showToast('تمت إعادة تفعيل الجدولة التلقائية للقسط', 'success')
-    } catch (err) {
-      console.error('Failed to resume recurring:', err)
-      showToast('تعذر إعادة تفعيل الجدولة', 'error')
-    }
-  }
 
   const handleToggleActive = async (item: Recurring) => {
     if (!user) return
@@ -327,212 +254,74 @@ export const RecurringPage: React.FC = () => {
         />
       )}
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <PageHeader
-          title="المعاملات المتكررة"
-          subtitle="جدولة المصاريف والمداخيل الدورية كالراتب والإيجار والاشتراكات"
-        />
-        <Button
-          variant="primary"
-          icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-          onClick={() => {
-            setEditingItem(null)
-            setIsFormOpen(true)
-          }}
-          className="self-start sm:self-auto font-semibold"
-        >
-          إضافة متكررة
-        </Button>
-      </div>
+      <PageHeader
+        title="المعاملات المتكررة"
+        subtitle="جدولة المصاريف والمداخيل الدورية كالراتب والإيجار والاشتراكات"
+        actions={
+          <Button
+            variant="primary"
+            icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+            onClick={() => {
+              setEditingItem(null)
+              setIsFormOpen(true)
+            }}
+            className="font-semibold"
+          >
+            إضافة متكررة
+          </Button>
+        }
+      />
 
-      {/* KPI Cards: Monthly Income & Expense */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* KPI Cards: Monthly Income, Expense, Due in 7 Days */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Income Card */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
               مداخيل ثابتة شهرياً
             </span>
-            <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
               <FormattedMoney amountFils={monthlyStats.monthlyIncome} />
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5" />
           </div>
         </div>
 
         {/* Expense Card */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
               مصاريف ثابتة شهرياً
             </span>
-            <span className="text-2xl sm:text-3xl font-black text-red-500 dark:text-red-400">
+            <span className="text-xl sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
               <FormattedMoney amountFils={monthlyStats.monthlyExpense} />
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
-            <TrendingDown className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+            <TrendingDown className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Due in 7 Days Card */}
+        <div className="col-span-2 lg:col-span-1 bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
+              مستحق خلال 7 أيام
+            </span>
+            <div className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 select-none">
+              <FormattedMoney amountFils={dueWithin7DaysStats.totalFils} />
+            </div>
+            <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 block mt-0.5">
+              {dueWithin7DaysStats.count === 0 ? 'لا توجد دفعات قريبة' : `${dueWithin7DaysStats.count} دفعات قادمة`}
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+            <Calendar className="w-5 h-5" />
           </div>
         </div>
       </div>
-
-      {/* Active Money Circles Section */}
-      {activeCircles.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
-              <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>أقساط الجمعيات والصناديق المشتركة</span>
-            </h3>
-            <Link
-              to="/tools?tool=circles"
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              إدارة الجمعيات ←
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {activeCircles.map((circle) => {
-              const now = new Date()
-              const start = new Date(circle.startDate)
-              const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
-              const isStarted = diffMonths >= 0
-              const isUserTurn = isStarted && isUserTurnMonth(circle, now, monthStartDay)
-              const currentMonth = getCurrentCircleMonth(circle, now, monthStartDay)
-              const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
-              const userMonthlyFils =
-                circle.shareType === 'half'
-                  ? Math.round(circle.monthlyAmountFils / 2)
-                  : circle.shareType === 'double'
-                    ? circle.monthlyAmountFils * 2
-                    : circle.monthlyAmountFils
-              const userGrossFils =
-                circle.shareType === 'half'
-                  ? Math.round(circle.totalAmountFils / 2)
-                  : circle.totalAmountFils
-              const isCurrentMonthPaid = Boolean(
-                userMember &&
-                  (userMember.paidMonths?.includes(currentMonth) ||
-                    userMember.paymentsByMonth?.[String(currentMonth)] === true)
-              )
-              const isUnpaidCurrentMonth =
-                isStarted && !isUserTurn && currentMonth <= circle.membersCount && !isCurrentMonthPaid
-
-              const linkedRec = recurringItems.find(
-                (r) => r.id === circle.recurringId || r.circleId === circle.id
-              )
-              const isScheduledActive = Boolean(linkedRec && linkedRec.active !== false)
-              const isScheduledPaused = Boolean(linkedRec && linkedRec.active === false)
-              return (
-                <div
-                  key={circle.id}
-                  className={cn(
-                    'p-4 rounded-2xl border transition-all flex flex-col justify-between',
-                    isUserTurn
-                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
-                      : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700'
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                      {circle.name}
-                    </span>
-                    {isUserTurn ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white shrink-0">
-                        <Crown className="w-3 h-3" />
-                        <span>دورك في الاستلام!</span>
-                      </span>
-                    ) : !isStarted ? (
-                      <span className="text-[11px] font-semibold text-slate-400 shrink-0">
-                        تبدأ في {formatDate(start, 'yyyy/MM/dd')}
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          الشهر {currentMonth} من {circle.membersCount}
-                        </span>
-                        {isUnpaidCurrentMonth && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                            <AlertCircle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                            <span>قسط الشهر غير مسدد</span>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 dark:text-slate-400">
-                      {isUserTurn ? 'مبلغ الاستلام الإجمالي:' : 'القسط الشهري المطلوب:'}
-                    </span>
-                    <span
-                      className={cn(
-                        'font-black text-sm',
-                        isUserTurn
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-500 dark:text-red-400'
-                      )}
-                    >
-                      {isUserTurn ? (
-                        <FormattedMoney amountFils={userGrossFils} withSign="income" />
-                      ) : (
-                        <FormattedMoney amountFils={userMonthlyFils} withSign="expense" />
-                      )}
-                    </span>
-                  </div>
-
-                  {isUserTurn && (
-                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-2 font-medium">
-                      ✓ لن يتم خصم قسط منك هذا الشهر لأنك مستلم الجمعية!
-                    </p>
-                  )}
-                  {isUnpaidCurrentMonth && (
-                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-2 font-medium flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
-                      <span>قسط هذا الشهر ({format(userMonthlyFils)}) لم يتم سداده بعد.</span>
-                    </p>
-                  )}
-
-                  {/* Recurring Schedule Link / Status */}
-                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                    {isScheduledActive ? (
-                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span>مجدولة بالمعاملات ✓</span>
-                      </span>
-                    ) : isScheduledPaused && linkedRec ? (
-                      <button
-                        type="button"
-                        onClick={() => handleResumeRecurring(linkedRec.id)}
-                        className="text-xs text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                        title="الجدولة التلقائية متوقفة مؤقتاً"
-                      >
-                        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
-                        <span>تفعيل الجدولة</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleScheduleCircle(circle)}
-                        className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
-                        <span>جدولة القسط شهرياً</span>
-                      </button>
-                    )}
-                    {isUserTurn && (
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">معفى من الخصم</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Recurring Items Grid */}
       {recurringLoading ? (
@@ -540,7 +329,7 @@ export const RecurringPage: React.FC = () => {
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-44 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+              className="h-44 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none animate-pulse"
             />
           ))}
         </div>
@@ -581,26 +370,37 @@ export const RecurringPage: React.FC = () => {
                 ? isUserTurnMonth(linkedCircle, new Date(), monthStartDay)
                 : isOccurrenceSkipped(item, new Date()))
 
+            const nextDateObj = item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)
+            const diffDays = differenceInDays(startOfDay(nextDateObj), startOfDay(new Date()))
+            const relativeDueText =
+              diffDays < 0
+                ? 'مستحقة'
+                : diffDays === 0
+                  ? 'اليوم'
+                  : diffDays === 1
+                    ? 'غداً'
+                    : diffDays === 2
+                      ? 'بعد يومين'
+                      : diffDays <= 10
+                        ? `بعد ${diffDays} أيام`
+                        : `بعد ${diffDays} يوماً`
+
             const nextDateFormatted = toWesternDigits(
-              formatDate(
-                item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate),
-                'd LLLL yyyy',
-                { locale: ar }
-              )
+              formatDate(nextDateObj, 'd LLLL yyyy', { locale: ar })
             )
 
             return (
               <div
                 key={item.id}
                 className={cn(
-                  'group rounded-2xl p-5 border transition-all flex flex-col justify-between',
+                  'group rounded-2xl p-4 sm:p-5 border border-[#E4E4E7] dark:border-[#27272A] transition-all flex flex-col justify-between shadow-2xs dark:shadow-none',
                   item.active
-                    ? 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md'
-                    : 'bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-75'
+                    ? 'bg-white dark:bg-[#121215]'
+                    : 'bg-zinc-50/80 dark:bg-zinc-900/40 opacity-70'
                 )}
               >
                 {/* Top Row: Category + Frequency Badge */}
-                <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
@@ -609,13 +409,13 @@ export const RecurringPage: React.FC = () => {
                       <CategoryIcon icon={icon} color={color} size="md" />
                     </div>
                     <div className="min-w-0">
-                      <span className="font-bold text-sm text-slate-800 dark:text-slate-100 block truncate">
+                      <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 block truncate">
                         {item.title || name}
                       </span>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                         {item.title ? (
                           <>
-                            <span className="font-medium text-slate-500 dark:text-slate-400">{name}</span>
+                            <span className="font-medium text-zinc-600 dark:text-zinc-300">{name}</span>
                             {item.note ? <span>•</span> : null}
                           </>
                         ) : null}
@@ -626,7 +426,7 @@ export const RecurringPage: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!item.active && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-750 text-zinc-700 dark:text-zinc-300 font-semibold">
                         متوقفة مؤقتاً
                       </span>
                     )}
@@ -638,7 +438,7 @@ export const RecurringPage: React.FC = () => {
                             (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
                               new Date()
                             ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
                         )}
                       >
                         {item.active &&
@@ -648,36 +448,14 @@ export const RecurringPage: React.FC = () => {
                           : 'تأكيد يدوي'}
                       </span>
                     )}
-                    <span className="text-xs px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200/60 dark:border-amber-900/40">
+                    <span className="text-xs px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold border border-[#E4E4E7] dark:border-[#27272A]">
                       {frequencyLabels[item.frequency]}
                     </span>
                   </div>
                 </div>
 
-                {/* Circle Skip Month Indicator */}
-                {isCircleItem && (
-                  <div className="my-1.5">
-                    {isCurrentMonthTurn ? (
-                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Crown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                          <span>دورك في الاستلام هذا الشهر!</span>
-                        </span>
-                        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">
-                          معفى من الخصم تلقائياً
-                        </span>
-                      </div>
-                    ) : item.skipMonth ? (
-                      <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span>قسط جمعية (معفى من الخصم في الشهر رقم {item.skipMonth})</span>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                {/* Middle: Amount in large bold text */}
-                <div className="my-2">
+                {/* Middle: Amount & Relative Due */}
+                <div className="my-3 flex items-baseline justify-between gap-2">
                   <div
                     className={cn(
                       'text-xl sm:text-2xl font-black select-none',
@@ -688,7 +466,38 @@ export const RecurringPage: React.FC = () => {
                   >
                     <FormattedMoney amountFils={item.amountFils} withSign={item.type} />
                   </div>
+                  <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0">
+                    {relativeDueText}
+                  </span>
                 </div>
+
+                {/* Circle Skip Month Indicator */}
+                {isCircleItem && (
+                  <div className="my-1.5">
+                    {isCurrentMonthTurn ? (
+                      <Link
+                        to="/tools?tool=circles"
+                        className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center justify-between hover:bg-zinc-200/60 dark:hover:bg-zinc-750 transition-colors"
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span>دورك في الاستلام هذا الشهر!</span>
+                        </span>
+                        <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded-full font-bold">
+                          معفى من الخصم
+                        </span>
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/tools?tool=circles"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      >
+                        <span>قسط جمعية{item.skipMonth ? ` (معفى في الشهر ${item.skipMonth})` : ''}</span>
+                        <span className="text-[10px]">←</span>
+                      </Link>
+                    )}
+                  </div>
+                )}
 
                 {/* Due Confirmation Banner for manual confirmation items */}
                 {item.requireConfirmation &&
@@ -713,7 +522,7 @@ export const RecurringPage: React.FC = () => {
                           type="button"
                           disabled={skippingId === item.id}
                           onClick={() => handleSkipOccurrence(item)}
-                          className="py-1.5 px-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                          className="py-1.5 px-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                           title="تخطي دورة الاستحقاق الحالية دون خصم"
                         >
                           <SkipForward className="w-3.5 h-3.5" />
@@ -724,13 +533,13 @@ export const RecurringPage: React.FC = () => {
                   )}
 
                 {/* Bottom Row: Next date, Active toggle, Actions */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-1 text-slate-400 dark:text-slate-400 truncate">
+                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 truncate">
                     <Calendar className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">الموعد القادم: {nextDateFormatted}</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     {item.active &&
                       !isCircleItem &&
                       !(
@@ -742,7 +551,7 @@ export const RecurringPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenConfirm(item)}
-                            className="p-2 rounded-xl text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-zinc-100 dark:hover:text-emerald-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                             aria-label="تسجيل دفعة هذه الدورة الآن"
                             title="تسجيل دفعة هذه الدورة الآن"
                           >
@@ -752,7 +561,7 @@ export const RecurringPage: React.FC = () => {
                             type="button"
                             disabled={skippingId === item.id}
                             onClick={() => handleSkipOccurrence(item)}
-                            className="p-2 rounded-xl text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:text-amber-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
                             aria-label="تخطي الدورة القادمة"
                             title="تخطي هذه الدورة والانتقال للموعد التالي"
                           >
@@ -765,20 +574,12 @@ export const RecurringPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setHistoryItem(item)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-100 dark:hover:text-blue-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="سجل الدفعات"
                       title="عرض سجل دفعات هذه المعاملة"
                     >
                       <History className="w-4 h-4" />
                     </button>
-
-                    {/* Toggle button */}
-                    <Toggle
-                      checked={item.active}
-                      onChange={() => handleToggleActive(item)}
-                      aria-label={item.active ? 'إيقاف مؤقت' : 'تفعيل'}
-                      className="shrink-0"
-                    />
 
                     {/* Edit button */}
                     <button
@@ -787,7 +588,7 @@ export const RecurringPage: React.FC = () => {
                         setEditingItem(item)
                         setIsFormOpen(true)
                       }}
-                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="تعديل المعاملة المتكررة"
                       title="تعديل المعاملة المتكررة"
                     >
@@ -798,12 +599,20 @@ export const RecurringPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setItemToDelete(item)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-zinc-100 dark:hover:text-red-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="حذف المعاملة المتكررة"
                       title="حذف المعاملة المتكررة"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
+
+                    {/* Toggle button */}
+                    <Toggle
+                      checked={item.active}
+                      onChange={() => handleToggleActive(item)}
+                      aria-label={item.active ? 'إيقاف مؤقت' : 'تفعيل'}
+                      className="shrink-0 ms-1"
+                    />
                   </div>
                 </div>
               </div>

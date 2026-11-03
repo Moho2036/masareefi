@@ -87,6 +87,19 @@ export const AppShell: React.FC = () => {
 
   const isMonthPage = pathname === '/' || pathname === '/transactions'
 
+  const getPageTitle = (path: string): string => {
+    if (path === '/') return 'لوحة التحكم'
+    if (path.startsWith('/transactions')) return 'المعاملات'
+    if (path.startsWith('/debts')) return 'الديون والالتزامات'
+    if (path.startsWith('/recurring')) return 'المعاملات المتكررة'
+    if (path.startsWith('/tools')) return 'الأدوات المالية'
+    if (path.startsWith('/reports')) return 'التقارير المالية'
+    if (path.startsWith('/categories')) return 'التصنيفات'
+    if (path.startsWith('/settings')) return 'الإعدادات'
+    return 'لوحة التحكم'
+  }
+  const currentPageTitle = getPageTitle(pathname)
+
   const uid = user?.uid
   const { data: settings, updateSettings, loading: settingsLoading } = useUserSettings()
   const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || 'مستخدم بَصير'
@@ -162,12 +175,18 @@ export const AppShell: React.FC = () => {
     }
   }
 
+  useEffect(() => {
+    const handleStartTour = () => setShowTour(true)
+    window.addEventListener('baseer-start-tour', handleStartTour)
+    return () => window.removeEventListener('baseer-start-tour', handleStartTour)
+  }, [])
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 antialiased font-sans">
       {/* Desktop Sidebar (start side / right side in RTL) */}
       <aside
         aria-label="القائمة الجانبية"
-        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-[#09090B] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-y-auto"
+        className="hidden lg:flex flex-col w-[280px] shrink-0 bg-white dark:bg-[#121215] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-y-auto"
       >
         {/* App Logo */}
         <Link
@@ -207,6 +226,15 @@ export const AppShell: React.FC = () => {
                   <Link
                     key={item.to}
                     to={item.to}
+                    data-tour={
+                      item.to === '/transactions'
+                        ? 'transactions-nav'
+                        : item.to === '/debts'
+                        ? 'debts-nav'
+                        : item.to === '/reports'
+                        ? 'more-and-tools'
+                        : undefined
+                    }
                     onClick={() => {
                       if (item.to === '/' && !isCurrentMonth) {
                         goToCurrentMonth()
@@ -215,7 +243,7 @@ export const AppShell: React.FC = () => {
                     className={cn(
                       'flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all text-sm select-none',
                       isActive
-                        ? 'bg-zinc-900 text-white dark:bg-blue-600 dark:text-white shadow-xs font-semibold'
+                        ? 'bg-blue-600 text-white dark:bg-blue-600 dark:text-white shadow-2xs font-semibold'
                         : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80'
                     )}
                   >
@@ -278,8 +306,8 @@ export const AppShell: React.FC = () => {
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#09090B]/90 backdrop-blur-md border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all">
           {/* Mobile brand logo & User avatar shortcut */}
-          <div className="flex items-center gap-2.5 lg:hidden shrink-0">
-            <Link to="/settings" className="press-scale flex items-center gap-2" title="الإعدادات">
+          <div className="flex items-center gap-2.5 lg:hidden shrink-0 min-w-0">
+            <Link to="/settings" className="press-scale flex items-center gap-2 shrink-0" title="الإعدادات">
               {user?.photoURL ? (
                 <img
                   src={user.photoURL}
@@ -293,12 +321,24 @@ export const AppShell: React.FC = () => {
                 </div>
               )}
             </Link>
-            <span className="text-lg font-black text-zinc-900 dark:text-white">
+            <span className="text-lg font-black text-zinc-900 dark:text-white shrink-0">
               بَصير
             </span>
+            {pathname !== '/' && (
+              <>
+                <span className="text-zinc-300 dark:text-zinc-700 font-light">/</span>
+                <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 truncate">
+                  {currentPageTitle}
+                </span>
+              </>
+            )}
           </div>
 
-          <div className="hidden lg:block shrink-0" />
+          <div className="hidden lg:flex items-center gap-2">
+            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+              {currentPageTitle}
+            </span>
+          </div>
 
           {/* Top Header Actions / Month Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -307,6 +347,7 @@ export const AppShell: React.FC = () => {
               type="button"
               onClick={() => setShowNotificationsModal(true)}
               aria-label="مركز التنبيهات"
+              data-tour="notifications-bell"
               title="مركز التنبيهات"
               className="relative p-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             >

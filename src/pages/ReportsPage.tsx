@@ -422,7 +422,7 @@ export const ReportsPage: React.FC = () => {
               size="sm"
               onClick={() => window.print()}
               icon={<Printer className="w-3.5 h-3.5" />}
-              className="print-hide hidden sm:inline-flex"
+              className="print-hide inline-flex"
             >
               طباعة / حفظ PDF
             </Button>
@@ -466,28 +466,30 @@ export const ReportsPage: React.FC = () => {
           {/* 4 Monthly KPI Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Income */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  إجمالي المداخيل
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    إجمالي المداخيل
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
+                  <FormattedMoney amountFils={monthSums.income} />
                 </div>
               </div>
-              <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                <FormattedMoney amountFils={monthSums.income} />
-              </div>
-              <div className="mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] leading-relaxed">
                 {monthIncomeComparison ? (
                   monthIncomeComparison.diff === 0 ? (
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
                   ) : (
                     <span
                       className={cn(
-                        'text-[11px] font-bold inline-flex items-center gap-0.5',
+                        'font-bold inline-flex items-center gap-0.5',
                         monthIncomeComparison.isIncrease
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-red-500 dark:text-red-400'
@@ -505,7 +507,7 @@ export const ReportsPage: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <span className="text-slate-400 dark:text-slate-500">
                     {monthSums.income === 0
                       ? 'لا توجد مداخيل مسجلة في هذا الشهر'
                       : prevMonthSums.income === 0
@@ -517,28 +519,30 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Expenses */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  إجمالي المصاريف
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-500 dark:text-red-400 flex items-center justify-center">
-                  <TrendingDown className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    إجمالي المصاريف
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
+                  <FormattedMoney amountFils={monthSums.expense} />
                 </div>
               </div>
-              <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                <FormattedMoney amountFils={monthSums.expense} />
-              </div>
-              <div className="mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] leading-relaxed">
                 {monthComparison ? (
                   monthComparison.diff === 0 ? (
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
                   ) : (
                     <span
                       className={cn(
-                        'text-[11px] font-bold inline-flex items-center gap-0.5',
+                        'font-bold inline-flex items-center gap-0.5',
                         monthComparison.isIncrease
                           ? 'text-red-500 dark:text-red-400'
                           : 'text-emerald-600 dark:text-emerald-400'
@@ -556,7 +560,7 @@ export const ReportsPage: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <span className="text-slate-400 dark:text-slate-500">
                     {monthSums.expense === 0
                       ? 'لا توجد مصاريف مسجلة في هذا الشهر'
                       : prevMonthSums.expense === 0
@@ -568,26 +572,28 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Net Savings */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  صافي الادخار
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center">
-                  <PiggyBank className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    صافي الادخار
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <PiggyBank className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    'text-lg sm:text-2xl font-black select-none',
+                    monthSums.balance >= 0
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-red-500 dark:text-red-400'
+                  )}
+                >
+                  <FormattedMoney amountFils={monthSums.balance} />
                 </div>
               </div>
-              <div
-                className={cn(
-                  'text-lg sm:text-2xl font-black select-none',
-                  monthSums.balance >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
-                )}
-              >
-                <FormattedMoney amountFils={monthSums.balance} />
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0
                   ? `صافي الشهر المستقل (الرصيد المتاح مع المرحّل: ${format(monthSums.balance + effectiveRollover)})`
                   : 'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'}
@@ -595,37 +601,30 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Savings Rate */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  نسبة الادخار
-                </span>
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    نسبة الادخار
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <Percent className="w-3.5 h-3.5" />
+                  </div>
+                </div>
                 <div
                   className={cn(
-                    'w-7 h-7 rounded-lg flex items-center justify-center',
+                    'text-lg sm:text-2xl font-black select-none',
                     monthSums.balance < 0
-                      ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                      ? 'text-red-500 dark:text-red-400'
                       : monthSums.income === 0 && monthSums.expense === 0
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                        : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                        ? 'text-slate-400 dark:text-slate-500'
+                        : 'text-emerald-600 dark:text-emerald-400'
                   )}
                 >
-                  <Percent className="w-3.5 h-3.5" />
+                  %{monthSavingsRate}
                 </div>
               </div>
-              <div
-                className={cn(
-                  'text-lg sm:text-2xl font-black select-none',
-                  monthSums.balance < 0
-                    ? 'text-red-500 dark:text-red-400'
-                    : monthSums.income === 0 && monthSums.expense === 0
-                      ? 'text-slate-400 dark:text-slate-500'
-                      : 'text-emerald-600 dark:text-emerald-400'
-                )}
-              >
-                %{monthSavingsRate}
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 {monthSums.income === 0 && monthSums.expense > 0
                   ? 'لا يوجد دخل مسجل لحساب النسبة'
                   : 'من إجمالي الدخل المحصل'}
@@ -634,7 +633,7 @@ export const ReportsPage: React.FC = () => {
           </div>
 
           {/* Daily Expense Chart Card */}
-          <Card className="p-5">
+          <Card className="p-5 print-avoid-break">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
@@ -648,7 +647,7 @@ export const ReportsPage: React.FC = () => {
               {/* Stats badges */}
               <div className="flex items-center gap-2 flex-wrap">
                 {dailyStats.highestDay && dailyStats.highestDay.amountFils > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200/60 dark:border-red-800/40">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                     <span>أعلى صرف:</span>
                     <span>
                       {toWesternDigits(formatDate(dailyStats.highestDay.date, 'd MMMM', { locale: ar }))}
@@ -656,8 +655,8 @@ export const ReportsPage: React.FC = () => {
                     <span>({format(dailyStats.highestDay.amountFils)})</span>
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
                   <span>أيام بدون مصاريف:</span>
                   <span>{toWesternDigits(String(dailyStats.zeroSpendDaysCount))} يوم</span>
                 </span>
@@ -685,7 +684,7 @@ export const ReportsPage: React.FC = () => {
           {/* Monthly Charts & Top Categories Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Donut Chart */}
-            <Card className="p-5 flex flex-col justify-between">
+            <Card className="p-5 flex flex-col justify-between print-avoid-break">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   {monthCategoryType === 'expense' ? 'توزيع المصاريف حسب التصنيف' : 'توزيع المداخيل حسب التصنيف'}
@@ -704,7 +703,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
 
             {/* Top Categories Progress Bars */}
-            <Card className="p-5">
+            <Card className="p-5 print-avoid-break">
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
                   {monthCategoryType === 'expense' ? 'أعلى التصنيفات إنفاقاً' : 'أعلى التصنيفات دخلاً'}
@@ -830,98 +829,97 @@ export const ReportsPage: React.FC = () => {
           {/* 4 Yearly KPI Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Total Annual Income */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  إجمالي المداخيل السنوية
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    إجمالي المداخيل السنوية
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
+                  <FormattedMoney amountFils={yearSums.income} />
                 </div>
               </div>
-              <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
-                <FormattedMoney amountFils={yearSums.income} />
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 إجمالي الدخل خلال سنة {selectedYear}
               </div>
             </Card>
 
             {/* Total Annual Expense */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  إجمالي المصاريف السنوية
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-500 dark:text-red-400 flex items-center justify-center">
-                  <TrendingDown className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    إجمالي المصاريف السنوية
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
+                  <FormattedMoney amountFils={yearSums.expense} />
                 </div>
               </div>
-              <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
-                <FormattedMoney amountFils={yearSums.expense} />
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 إجمالي المصاريف خلال سنة {selectedYear}
               </div>
             </Card>
 
             {/* Annual Net Savings */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  صافي الادخار السنوي
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center">
-                  <PiggyBank className="w-3.5 h-3.5" />
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    صافي الادخار السنوي
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <PiggyBank className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    'text-lg sm:text-2xl font-black select-none',
+                    yearSums.balance >= 0
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-red-500 dark:text-red-400'
+                  )}
+                >
+                  <FormattedMoney amountFils={yearSums.balance} />
                 </div>
               </div>
-              <div
-                className={cn(
-                  'text-lg sm:text-2xl font-black select-none',
-                  yearSums.balance >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
-                )}
-              >
-                <FormattedMoney amountFils={yearSums.balance} />
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 الفائض المالي السنوي
               </div>
             </Card>
 
             {/* Annual Savings Rate */}
-            <Card className="p-3.5 sm:p-5 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  نسبة الادخار السنوية
-                </span>
+            <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    نسبة الادخار السنوية
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                    <Percent className="w-3.5 h-3.5" />
+                  </div>
+                </div>
                 <div
                   className={cn(
-                    'w-7 h-7 rounded-lg flex items-center justify-center',
+                    'text-lg sm:text-2xl font-black select-none',
                     yearSums.balance < 0
-                      ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                      ? 'text-red-500 dark:text-red-400'
                       : yearSums.income === 0 && yearSums.expense === 0
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                        : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                        ? 'text-slate-400 dark:text-slate-500'
+                        : 'text-emerald-600 dark:text-emerald-400'
                   )}
                 >
-                  <Percent className="w-3.5 h-3.5" />
+                  %{yearlySavingsRate}
                 </div>
               </div>
-              <div
-                className={cn(
-                  'text-lg sm:text-2xl font-black select-none',
-                  yearSums.balance < 0
-                    ? 'text-red-500 dark:text-red-400'
-                    : yearSums.income === 0 && yearSums.expense === 0
-                      ? 'text-slate-400 dark:text-slate-500'
-                      : 'text-emerald-600 dark:text-emerald-400'
-                )}
-              >
-                %{yearlySavingsRate}
-              </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
                 {yearSums.income === 0 && yearSums.expense > 0 ? (
                   <div>لا يوجد دخل مسجل لحساب النسبة</div>
                 ) : (
@@ -937,7 +935,7 @@ export const ReportsPage: React.FC = () => {
           </div>
 
           {/* Large Grouped Bar Chart */}
-          <Card className="p-5">
+          <Card className="p-5 print-avoid-break">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -1125,6 +1123,8 @@ export const ReportsPage: React.FC = () => {
                           row.monthIndex > currentFiscalInfo.monthIndex)
                       const isUnstartedFuture =
                         isFutureMonth && row.income === 0 && row.expense === 0
+                      const isEmptyPastMonth =
+                        !isCurrentRowMonth && !isFutureMonth && row.income === 0 && row.expense === 0
 
                       return (
                         <tr
@@ -1150,6 +1150,8 @@ export const ReportsPage: React.FC = () => {
                               <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
                                 لم يبدأ بعد
                               </span>
+                            ) : isEmptyPastMonth ? (
+                              <span className="text-zinc-400 dark:text-zinc-600 font-normal">—</span>
                             ) : (
                               <FormattedMoney amountFils={row.income} />
                             )}
@@ -1159,6 +1161,8 @@ export const ReportsPage: React.FC = () => {
                               <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
                                 لم يبدأ بعد
                               </span>
+                            ) : isEmptyPastMonth ? (
+                              <span className="text-zinc-400 dark:text-zinc-600 font-normal">—</span>
                             ) : (
                               <FormattedMoney amountFils={row.expense} />
                             )}
@@ -1171,9 +1175,9 @@ export const ReportsPage: React.FC = () => {
                                 : 'text-red-500 dark:text-red-400'
                             )}
                           >
-                            {isUnstartedFuture ? (
-                              <span className="text-slate-400 dark:text-slate-500 text-[11px] font-normal">
-                                -
+                            {isUnstartedFuture || isEmptyPastMonth ? (
+                              <span className="text-zinc-400 dark:text-zinc-600 font-normal">
+                                —
                               </span>
                             ) : (
                               <FormattedMoney amountFils={row.balance} />

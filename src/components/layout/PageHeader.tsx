@@ -17,23 +17,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   return (
     <div
       className={cn(
-        'flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4',
+        'flex flex-wrap items-center justify-between gap-3 mb-4',
         className,
       )}
     >
-      <div>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-lg sm:text-2xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="hidden sm:block text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+          <p className="hidden sm:block text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
             {subtitle}
           </p>
         )}
       </div>
 
       {actions && (
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {actions}
         </div>
       )}

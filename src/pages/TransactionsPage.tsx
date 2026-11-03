@@ -12,8 +12,6 @@ import {
   Copy,
   X,
   ExternalLink,
-  TrendingUp,
-  TrendingDown,
   Users,
   Download,
   AlertCircle,
@@ -27,6 +25,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { CategoryIcon } from '../components/ui/CategoryIcon'
 import { DatePickerInput } from '../components/ui/DatePickerInput'
+import { Select } from '../components/ui/Select'
 import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
@@ -158,6 +157,9 @@ export const TransactionsPage: React.FC = () => {
   })
   const [selectedSource, setSelectedSource] = useState<'all' | 'manual' | 'recurring' | 'debt' | 'circle'>('all')
   const [sortBy, setSortBy] = useState<TransactionSortOption>('newest')
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -192,6 +194,12 @@ export const TransactionsPage: React.FC = () => {
     setCurrentPage(1)
   }
 
+  const activeAdvancedFiltersCount =
+    (allMonths ? 1 : 0) +
+    (isCustomDateRange ? 1 : 0) +
+    (selectedSource !== 'all' ? 1 : 0) +
+    (selectedCategories.length > 0 && !selectedCategories.includes('all') ? selectedCategories.length : 0)
+
   const isFilterActive = Boolean(
     query.trim() ||
     filterType !== 'all' ||
@@ -212,6 +220,8 @@ export const TransactionsPage: React.FC = () => {
     setCustomDateTo('')
     setAllMonths(false)
     setSortBy('newest')
+    setIsMobileSearchOpen(false)
+    setIsMobileFiltersOpen(false)
   }
 
   const toggleCategory = (catId: string) => {
@@ -513,12 +523,12 @@ export const TransactionsPage: React.FC = () => {
                 {primaryLabel}
               </span>
               {showDateBadge && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   {formatDateInput(tx.date)}
                 </span>
               )}
               {tx.id.startsWith('debt_') && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 font-bold shrink-0">
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   <HandCoins className="w-2.5 h-2.5" />
                   <span>دين</span>
                 </span>
@@ -526,14 +536,14 @@ export const TransactionsPage: React.FC = () => {
               {(tx.id.startsWith('circle_payout_') ||
                 /^circle_(.+)_m(\d+)$/.test(tx.id) ||
                 Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))) && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800 font-bold shrink-0">
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   <Users className="w-2.5 h-2.5" />
                   <span>جمعية</span>
                 </span>
               )}
               {tx.recurringId && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-semibold shrink-0">
-                  متكررة
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                  <span>متكررة</span>
                 </span>
               )}
             </div>
@@ -556,14 +566,14 @@ export const TransactionsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Left side: Amount Pill & Actions */}
+        {/* Left side: Amount & Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div
             className={cn(
-              'font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-xl select-none',
+              'font-extrabold text-xs sm:text-sm tabular-nums select-none ps-1',
               isExpense
-                ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
-                : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-emerald-600 dark:text-emerald-400'
             )}
           >
             {formatWithSign(tx.amountFils, tx.type)}
@@ -605,7 +615,7 @@ export const TransactionsPage: React.FC = () => {
                         e.stopPropagation()
                         openDuplicate(tx)
                       }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                       aria-label="تكرار المعاملة"
                       title="تكرار المعاملة"
                     >
@@ -618,7 +628,7 @@ export const TransactionsPage: React.FC = () => {
                       e.stopPropagation()
                       openEdit(tx)
                     }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                     aria-label="تعديل المعاملة"
                     title="تعديل المعاملة"
                   >
@@ -655,7 +665,7 @@ export const TransactionsPage: React.FC = () => {
                         e.stopPropagation()
                         setTxToDelete(tx)
                       }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                       aria-label="حذف المعاملة"
                       title="حذف المعاملة"
                     >
@@ -672,7 +682,7 @@ export const TransactionsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-slide-up">
+    <div className="max-w-5xl mx-auto space-y-6 animate-slide-up">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
@@ -717,234 +727,298 @@ export const TransactionsPage: React.FC = () => {
         {/* Sidebar Column: Filter Bar & Monthly Totals */}
         <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20 print-hide">
           {/* Filter Bar */}
-          <div className="bg-white dark:bg-slate-800 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs space-y-3 print-hide">
-            {/* Search Input */}
-            <div className="relative">
-              <div className="absolute inset-y-0 start-0 ps-3.5 flex items-center pointer-events-none text-slate-400">
+          <div className="bg-white dark:bg-[#121215] p-3 sm:p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none space-y-3 print-hide">
+            {/* Top Permanent Row: Type Segmented Control + Mobile Search & Filter Action Buttons */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <SegmentedControl<TxType | 'all'>
+                  value={filterType}
+                  onChange={(val) => {
+                    setFilterType(val)
+                    setSelectedCategories([])
+                  }}
+                  options={[
+                    { value: 'all', label: 'الكل' },
+                    { value: 'expense', label: 'مصاريف' },
+                    { value: 'income', label: 'مداخيل' },
+                  ]}
+                  className="w-full"
+                  size="sm"
+                />
+              </div>
+
+              {/* Mobile Only: Search & Filter Buttons */}
+              <div className="lg:hidden flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileSearchOpen((prev) => {
+                      const next = !prev
+                      if (next) setTimeout(() => searchInputRef.current?.focus(), 50)
+                      return next
+                    })
+                  }}
+                  aria-label="فتح البحث"
+                  className={cn(
+                    'w-9 h-9 rounded-xl border flex items-center justify-center transition-colors cursor-pointer',
+                    isMobileSearchOpen || query.trim()
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A]'
+                  )}
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
+                  aria-label="الفلاتر المتقدمة"
+                  className={cn(
+                    'relative w-9 h-9 rounded-xl border flex items-center justify-center transition-colors cursor-pointer',
+                    isMobileFiltersOpen || activeAdvancedFiltersCount > 0
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A]'
+                  )}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  {activeAdvancedFiltersCount > 0 && (
+                    <span className="absolute -top-1 -end-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-black flex items-center justify-center">
+                      {activeAdvancedFiltersCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Search Input (Hidden on mobile unless opened or has query, always visible on desktop) */}
+            <div className={cn('relative', !isMobileSearchOpen && !query.trim() && 'hidden lg:block')}>
+              <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none text-zinc-400">
                 <Search className="w-4 h-4" />
               </div>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="ابحث في العنوان، الملاحظات، الفئة، أو المبلغ..."
-                className="w-full ps-10 pe-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
+                className="w-full ps-9 pe-8 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-hidden focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
               />
-            </div>
-
-            {/* Type Toggle: الكل / مصاريف / مداخيل */}
-            <div>
-              <SegmentedControl<TxType | 'all'>
-                value={filterType}
-                onChange={(val) => {
-                  setFilterType(val)
-                  setSelectedCategories([])
-                }}
-                options={[
-                  { value: 'all', label: 'الكل' },
-                  { value: 'expense', label: 'مصاريف' },
-                  { value: 'income', label: 'مداخيل' },
-                ]}
-              />
-            </div>
-
-            {/* Date Range Options: All Months or Custom Range */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 flex-wrap">
+              {query.trim() && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setAllMonths((prev) => {
-                      const next = !prev
-                      if (next) setIsCustomDateRange(false)
-                      return next
-                    })
-                    setCurrentPage(1)
-                  }}
-                  className={cn(
-                    'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
-                    allMonths
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                  )}
-                  title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
-                  aria-pressed={allMonths}
+                  onClick={() => setQuery('')}
+                  aria-label="مسح نص البحث"
+                  className="absolute inset-y-0 end-0 pe-2.5 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                 >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>كل الأشهر</span>
+                  <X className="w-4 h-4" />
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCustomDateRange((prev) => {
-                      const next = !prev
-                      if (next) setAllMonths(false)
-                      return next
-                    })
-                    setCurrentPage(1)
-                  }}
-                  className={cn(
-                    'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
-                    isCustomDateRange
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                  )}
-                  title="فلترة المعاملات ضمن نطاق زمني مخصص"
-                  aria-pressed={isCustomDateRange}
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>فترة مخصصة</span>
-                </button>
-              </div>
-
-              {isCustomDateRange && (
-                <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <DatePickerInput
-                    id="tx-custom-from"
-                    label="من تاريخ"
-                    value={customDateFrom}
-                    onChange={(val) => {
-                      setCustomDateFrom(val)
-                      setCurrentPage(1)
-                    }}
-                  />
-                  <DatePickerInput
-                    id="tx-custom-to"
-                    label="إلى تاريخ"
-                    value={customDateTo}
-                    onChange={(val) => {
-                      setCustomDateTo(val)
-                      setCurrentPage(1)
-                    }}
-                  />
-                </div>
               )}
             </div>
 
-            {/* Source Filter Chips */}
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-slate-400">
-                المصدر
-              </label>
-              <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-0.5 select-none text-xs scrollbar-none">
-                {[
-                  { value: 'all', label: 'كافة المصادر' },
-                  { value: 'manual', label: 'يدوية' },
-                  { value: 'recurring', label: 'متكررة' },
-                  { value: 'debt', label: 'ديون' },
-                  { value: 'circle', label: 'جمعيات' },
-                ].map((s) => {
-                  const isSelected = selectedSource === s.value
-                  return (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSource(s.value as typeof selectedSource)
-                        setCurrentPage(1)
-                      }}
-                      className={cn(
-                        'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
-                        isSelected
-                          ? 'bg-blue-600 text-white shadow-xs font-bold'
-                          : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
-                      )}
-                    >
-                      {s.label}
-                    </button>
-                  )
-                })}
+            {/* Sort Selector — Stays outside the collapsed advanced filters, always visible */}
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px]">ترتيب حسب:</span>
+              <div className="w-40">
+                <Select
+                  aria-label="ترتيب حسب"
+                  value={sortBy}
+                  onChange={(e) => {
+                    setSortBy(e.target.value as TransactionSortOption)
+                    setCurrentPage(1)
+                  }}
+                  options={[
+                    { value: 'newest', label: 'الأحدث أولاً' },
+                    { value: 'oldest', label: 'الأقدم أولاً' },
+                    { value: 'highest', label: 'الأعلى قيمة' },
+                    { value: 'lowest', label: 'الأقل قيمة' },
+                  ]}
+                  className="h-9 py-1 text-xs font-bold"
+                />
               </div>
             </div>
 
-            {/* Category Chips with Multi-Select */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-slate-400">
-                  التصنيفات
-                </label>
-                {selectedCategories.length > 0 && !selectedCategories.includes('all') && (
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">
-                    ({selectedCategories.length} محدد)
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <div className="flex items-center gap-1.5 overflow-x-auto lg:overflow-visible flex-nowrap lg:flex-wrap pb-1 pt-0.5 select-none text-xs scrollbar-none">
+            {/* Advanced Filters Panel (Collapsible on mobile, always visible on desktop) */}
+            <div className={cn('space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800', !isMobileFiltersOpen && 'hidden lg:block')}>
+              {/* Date Range Options: All Months or Custom Range */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedCategories([])
+                      setAllMonths((prev) => {
+                        const next = !prev
+                        if (next) setIsCustomDateRange(false)
+                        return next
+                      })
                       setCurrentPage(1)
                     }}
                     className={cn(
-                      'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
-                      selectedCategories.length === 0 || selectedCategories.includes('all')
-                        ? 'bg-blue-600 text-white shadow-xs font-bold'
-                        : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                      'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
+                      allMonths
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                     )}
+                    title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
+                    aria-pressed={allMonths}
                   >
-                    كل التصنيفات
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>كل الأشهر</span>
                   </button>
 
-                  {(showAllFilterCats ? relevantCategories : relevantCategories.slice(0, 8)).map((cat) => {
-                    const isSelected = selectedCategories.includes(cat.id)
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomDateRange((prev) => {
+                        const next = !prev
+                        if (next) setAllMonths(false)
+                        return next
+                      })
+                      setCurrentPage(1)
+                    }}
+                    className={cn(
+                      'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
+                      isCustomDateRange
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
+                    )}
+                    title="فلترة المعاملات ضمن نطاق زمني مخصص"
+                    aria-pressed={isCustomDateRange}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>فترة مخصصة</span>
+                  </button>
+                </div>
+
+                {isCustomDateRange && (
+                  <div className="grid grid-cols-2 gap-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
+                    <DatePickerInput
+                      id="tx-custom-from"
+                      label="من تاريخ"
+                      value={customDateFrom}
+                      onChange={(val) => {
+                        setCustomDateFrom(val)
+                        setCurrentPage(1)
+                      }}
+                    />
+                    <DatePickerInput
+                      id="tx-custom-to"
+                      label="إلى تاريخ"
+                      value={customDateTo}
+                      onChange={(val) => {
+                        setCustomDateTo(val)
+                        setCurrentPage(1)
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Source Filter Chips */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+                  المصدر
+                </label>
+                <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-0.5 select-none text-xs scrollbar-none">
+                  {[
+                    { value: 'all', label: 'كافة المصادر' },
+                    { value: 'manual', label: 'يدوية' },
+                    { value: 'recurring', label: 'متكررة' },
+                    { value: 'debt', label: 'ديون' },
+                    { value: 'circle', label: 'جمعيات' },
+                  ].map((s) => {
+                    const isSelected = selectedSource === s.value
                     return (
                       <button
-                        key={cat.id}
+                        key={s.value}
                         type="button"
                         onClick={() => {
-                          toggleCategory(cat.id)
+                          setSelectedSource(s.value as typeof selectedSource)
                           setCurrentPage(1)
                         }}
                         className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                          'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
                           isSelected
-                            ? 'bg-blue-600 text-white shadow-xs font-bold'
+                            ? 'bg-blue-600 text-white shadow-2xs font-bold'
                             : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                         )}
                       >
-                        <CategoryIcon icon={cat.icon} size="sm" />
-                        <span className="font-semibold">{cat.name}</span>
+                        {s.label}
                       </button>
                     )
                   })}
-                  {relevantCategories.length > 8 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllFilterCats((prev) => !prev)}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors shrink-0 cursor-pointer"
-                    >
-                      {showAllFilterCats ? 'عرض أقل' : `+${relevantCategories.length - 8} أخرى`}
-                    </button>
-                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Sort Selector */}
-            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
-              <span className="font-bold text-slate-400 text-[11px]">ترتيب حسب:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => {
-                  setSortBy(e.target.value as TransactionSortOption)
-                  setCurrentPage(1)
-                }}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-600 cursor-pointer"
-              >
-                <option value="newest">الأحدث أولاً</option>
-                <option value="oldest">الأقدم أولاً</option>
-                <option value="highest">الأعلى قيمة</option>
-                <option value="lowest">الأقل قيمة</option>
-              </select>
+              {/* Category Chips with Multi-Select */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+                    التصنيفات
+                  </label>
+                  {selectedCategories.length > 0 && !selectedCategories.includes('all') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">
+                      ({selectedCategories.length} محدد)
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="flex items-center gap-1.5 overflow-x-auto lg:overflow-visible flex-nowrap lg:flex-wrap pb-1 pt-0.5 select-none text-xs scrollbar-none">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategories([])
+                        setCurrentPage(1)
+                      }}
+                      className={cn(
+                        'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                        selectedCategories.length === 0 || selectedCategories.includes('all')
+                          ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
+                      )}
+                    >
+                      كل التصنيفات
+                    </button>
+
+                    {(showAllFilterCats ? relevantCategories : relevantCategories.slice(0, 8)).map((cat) => {
+                      const isSelected = selectedCategories.includes(cat.id)
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            toggleCategory(cat.id)
+                            setCurrentPage(1)
+                          }}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
+                            isSelected
+                              ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
+                          )}
+                        >
+                          <CategoryIcon icon={cat.icon} size="sm" />
+                          <span className="font-semibold">{cat.name}</span>
+                        </button>
+                      )
+                    })}
+                    {relevantCategories.length > 8 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllFilterCats((prev) => !prev)}
+                        className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors shrink-0 cursor-pointer"
+                      >
+                        {showAllFilterCats ? 'عرض أقل' : `+${relevantCategories.length - 8} أخرى`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* All Months Indicator Banner */}
           {allMonths && (
-            <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-xs print-hide">
+            <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-2xs dark:shadow-none print-hide">
               <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-0" />
               <div className="flex-1">
                 وضع <strong>البحث في كامل السجل (كل الأشهر)</strong> مفعّل حالياً. النتائج المعروضة وتصدير CSV يشملان كافة الأشهر. (التنقل بين الأشهر من الشريط العلوي سيعيدك تلقائياً لتصفح ذلك الشهر).
@@ -961,7 +1035,7 @@ export const TransactionsPage: React.FC = () => {
 
           {/* Active Filter & Search Summary Strip */}
           {isFilterActive && (
-            <div className="flex items-center justify-between gap-2 px-3.5 py-2 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs shadow-xs print-hide">
+            <div className="flex items-center justify-between gap-2 px-3.5 py-2 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs shadow-2xs dark:shadow-none print-hide">
               <span className="inline-flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-200">
                 <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 <span>النتائج المطابقة:</span>
@@ -982,32 +1056,22 @@ export const TransactionsPage: React.FC = () => {
           )}
 
           {/* Totals Strip Card */}
-          <div className="grid grid-cols-2 gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4" />
+          <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] bg-white dark:bg-[#121215] p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none">
+            <div className="px-2">
+              <div className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 truncate mb-1">
+                {allMonths ? 'إجمالي المداخيل (كافة الأشهر)' : 'إجمالي المداخيل'}
               </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 truncate">
-                  {allMonths ? 'إجمالي المداخيل (كافة الأشهر)' : 'إجمالي المداخيل'}
-                </div>
-                <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 truncate">
-                  <FormattedMoney amountFils={totals.income} className="text-emerald-600 dark:text-emerald-400" />
-                </div>
+              <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 truncate">
+                <FormattedMoney amountFils={totals.income} className="text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 border-s border-slate-100 dark:border-slate-700 ps-3">
-              <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
-                <TrendingDown className="w-4 h-4" />
+            <div className="px-2 ps-3.5">
+              <div className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 truncate mb-1">
+                {allMonths ? 'إجمالي المصاريف (كافة الأشهر)' : 'إجمالي المصاريف'}
               </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 truncate">
-                  {allMonths ? 'إجمالي المصاريف (كافة الأشهر)' : 'إجمالي المصاريف'}
-                </div>
-                <div className="text-sm sm:text-base font-black text-red-500 dark:text-red-400 truncate">
-                  <FormattedMoney amountFils={totals.expense} className="text-red-500 dark:text-red-400" />
-                </div>
+              <div className="text-sm sm:text-base font-black text-red-600 dark:text-red-400 truncate">
+                <FormattedMoney amountFils={totals.expense} className="text-red-600 dark:text-red-400" />
               </div>
             </div>
           </div>
@@ -1020,7 +1084,7 @@ export const TransactionsPage: React.FC = () => {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="h-28 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 animate-pulse"
+                  className="h-28 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] animate-pulse"
                 />
               ))}
             </div>
@@ -1052,7 +1116,7 @@ export const TransactionsPage: React.FC = () => {
             <div className="space-y-5">
               {/* Flat list for amount-based sorting */}
               {sortBy === 'highest' || sortBy === 'lowest' ? (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs divide-y divide-slate-100 dark:divide-slate-700/50 overflow-hidden">
+                <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
                   {paginatedTransactions.map((tx) => renderTransactionRow(tx, true))}
                 </div>
               ) : (
@@ -1063,21 +1127,21 @@ export const TransactionsPage: React.FC = () => {
                   return (
                     <div key={group.dateKey} className="space-y-2">
                       {/* Day Header with clearly displayed net spend */}
-                      <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center justify-between px-1 text-xs font-bold text-zinc-500 dark:text-zinc-400">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5" />
                           <span>{formatDayHeader(group.date, today)}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-slate-400 font-medium">صافي اليوم:</span>
+                          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">صافي اليوم:</span>
                           <span
                             className={cn(
                               'font-extrabold text-xs select-none',
                               dayNetFils > 0
                                 ? 'text-emerald-600 dark:text-emerald-400'
                                 : dayNetFils < 0
-                                  ? 'text-red-500 dark:text-red-400'
-                                  : 'text-slate-400'
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : 'text-zinc-400'
                             )}
                           >
                             <FormattedMoney amountFils={dayNetFils} withSign="auto" />
@@ -1086,7 +1150,7 @@ export const TransactionsPage: React.FC = () => {
                       </div>
 
                       {/* Transactions in this day */}
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs divide-y divide-slate-100 dark:divide-slate-700/50 overflow-hidden">
+                      <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
                         {group.transactions.map((tx) => renderTransactionRow(tx, false))}
                       </div>
                     </div>
@@ -1096,11 +1160,11 @@ export const TransactionsPage: React.FC = () => {
 
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-xs text-xs font-semibold print-hide">
-                  <div className="text-slate-500 dark:text-slate-400">
-                    صفحة <span className="font-bold text-slate-800 dark:text-slate-200">{safeCurrentPage}</span> من{' '}
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{totalPages}</span>
-                    <span className="ms-1.5 text-[11px] text-slate-400">
+                <div className="flex items-center justify-between gap-3 p-3.5 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none text-xs font-semibold print-hide">
+                  <div className="text-zinc-500 dark:text-zinc-400">
+                    صفحة <span className="font-bold text-zinc-800 dark:text-zinc-200">{safeCurrentPage}</span> من{' '}
+                    <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalPages}</span>
+                    <span className="ms-1.5 text-[11px] text-zinc-400">
                       ({filteredTransactions.length} معاملة)
                     </span>
                   </div>
@@ -1149,7 +1213,7 @@ export const TransactionsPage: React.FC = () => {
               </p>
             </div>
           )}
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
             هل أنت متأكد من رغبتك في حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء.
           </p>
           <div className="flex items-center justify-end gap-2 pt-2">

@@ -29,7 +29,7 @@ const CustomPieTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl shadow-xl text-xs space-y-1 z-50 text-start min-w-[140px]">
+      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3 rounded-xl shadow-lg text-xs space-y-1 z-50 text-start min-w-[140px]">
         <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
           <span className="truncate">{item.name}</span>
@@ -95,12 +95,12 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[220px]',
+          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[190px]',
           className
         )}
       >
-        <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
-          <PieChartIcon className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
+        <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center mb-2.5">
+          <PieChartIcon className="w-6 h-6 text-zinc-400 dark:text-zinc-500" strokeWidth={1.8} />
         </div>
         <p className="text-xs font-semibold">لا توجد مصاريف مسجلة لهذه الفترة</p>
       </div>
@@ -211,7 +211,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
             <button
               type="button"
               onClick={() => setShowAll((prev) => !prev)}
-              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline py-1 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer inline-flex items-center gap-1"
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline py-1 px-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer inline-flex items-center gap-1"
             >
               <span>
                 {showAll ? 'عرض أقل' : `عرض الكل (+${data.length - 5})`}

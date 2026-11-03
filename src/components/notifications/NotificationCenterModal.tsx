@@ -9,9 +9,9 @@ import {
   Trash2,
   ExternalLink,
   Settings as SettingsIcon,
-  Sparkles,
   Archive,
   RotateCcw,
+  X,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -81,7 +81,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
         return <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
       case 'system':
       default:
-        return <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        return <Bell className="w-4 h-4 text-blue-600 dark:text-blue-400" />
     }
   }
 
@@ -90,7 +90,8 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
       isOpen={isOpen}
       onClose={onClose}
       title=""
-      className="max-w-xl p-0 overflow-hidden rounded-3xl"
+      hideCloseButton={true}
+      className="max-w-xl lg:max-w-2xl p-0 overflow-hidden rounded-3xl"
     >
       <div className="p-6 space-y-5 text-start">
         {/* Modal Top Header */}
@@ -108,9 +109,6 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               <h2 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50">
                 مركز التنبيهات
               </h2>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                إشعارات الاستحقاق، الجمعيات، والتنبيهات المالية الذكية
-              </p>
             </div>
           </div>
 
@@ -156,26 +154,34 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             >
               <SettingsIcon className="w-4 h-4" />
             </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="إغلاق"
+              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
         {/* Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs">
           {[
             { id: 'all' as NotificationFilter, label: 'الكل', count: notifications.length },
             {
               id: 'urgent' as NotificationFilter,
-              label: 'عاجل ومهم',
+              label: 'عاجل',
               count: notifications.filter((n) => n.isUrgent).length,
             },
             {
               id: 'unread' as NotificationFilter,
-              label: 'غير مقروءة',
+              label: 'غير مقروء',
               count: unreadCount,
             },
             {
               id: 'recurring' as NotificationFilter,
-              label: 'التسديد التلقائي',
+              label: 'المتكررة',
               count: notifications.filter((n) => n.category === 'recurring').length,
             },
             {
@@ -219,7 +225,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
         </div>
 
         {/* Notification Items List */}
-        <div className="space-y-2.5 max-h-[380px] overflow-y-auto p-0.5">
+        <div className="space-y-2.5 max-h-[60vh] overflow-y-auto p-0.5">
           {filteredItems.length === 0 ? (
             <div className="py-12 text-center text-zinc-400 dark:text-zinc-500">
               {activeFilter === 'archived' ? (
@@ -243,20 +249,12 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                   onClick={() => markAsRead(item.id)}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative flex items-start gap-3 ${
                     !read && activeFilter !== 'archived'
-                      ? item.isUrgent
-                        ? 'border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20'
-                        : 'border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20'
-                      : 'border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 opacity-75'
+                      ? 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-900 shadow-2xs'
+                      : 'border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/30 opacity-75'
                   }`}
                 >
                   {/* Category / Urgency Icon */}
-                  <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      item.isUrgent
-                        ? 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
-                        : 'bg-zinc-100 dark:bg-zinc-800'
-                    }`}
-                  >
+                  <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
                     {getCategoryIcon(item)}
                   </div>
 
@@ -264,13 +262,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <h4
-                          className={`text-xs font-bold truncate ${
-                            item.isUrgent
-                              ? 'text-rose-700 dark:text-rose-300'
-                              : 'text-zinc-900 dark:text-zinc-100'
-                          }`}
-                        >
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
                           {item.title}
                         </h4>
                         {!read && activeFilter !== 'archived' && (

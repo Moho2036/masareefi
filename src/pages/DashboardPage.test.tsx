@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { DashboardPage } from './DashboardPage'
 import { subscribePriorBalance } from '../services/transactions'
+import type { Transaction, Category } from '../types'
 
 let mockMonthStartDay = 1
 let mockRangeStart = new Date(2026, 9, 1) // Oct 1, 2026
@@ -11,6 +12,9 @@ let mockRolloverBalanceFils = 50000
 const mockGoToCurrentMonth = vi.fn()
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined)
 const mockShowToast = vi.fn()
+
+let mockTransactionsData: Transaction[] = []
+let mockCategoriesData: Category[] = []
 
 vi.mock('../hooks/useToast', () => ({
   useToast: () => ({
@@ -39,7 +43,7 @@ vi.mock('../hooks/useAuth', () => ({
 vi.mock('../context/AppDataContext', () => ({
   useAppData: () => ({
     rolloverBalanceFils: mockRolloverBalanceFils,
-    categories: [],
+    categories: mockCategoriesData,
     categoriesLoading: false,
     settings: { rolloverBalance: true, monthStartDay: mockMonthStartDay },
   }),
@@ -105,14 +109,14 @@ vi.mock('../hooks/useTransactionModal', () => ({
 
 vi.mock('../hooks/useTransactions', () => ({
   useTransactions: () => ({
-    data: [],
+    data: mockTransactionsData,
     loading: false,
   }),
 }))
 
 vi.mock('../hooks/useCategories', () => ({
   useCategories: () => ({
-    data: [],
+    data: mockCategoriesData,
     loading: false,
   }),
 }))
@@ -136,9 +140,11 @@ describe('DashboardPage Component', () => {
       rolloverBalance: true,
       openingBalanceFils: 0,
     }
+    mockTransactionsData = []
+    mockCategoriesData = []
   })
 
-  it('renders dashboard with single month prevMonthLabel when monthStartDay is 1', () => {
+  it('renders dashboard with single month displayBalance when monthStartDay is 1', () => {
     render(
       <MemoryRouter>
         <DashboardPage />
@@ -146,11 +152,16 @@ describe('DashboardPage Component', () => {
     )
 
     expect(screen.getByText('لوحة التحكم')).toBeInTheDocument()
-    // For October 2026 with monthStartDay = 1, previous month is September 2026
-    expect(screen.getByText(/الرصيد المرحّل \(من شهر سبتمبر 2026\):/)).toBeInTheDocument()
+    expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
+    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getAllByText('50').length).toBeGreaterThanOrEqual(1)
+    const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
+    expect(heroCard).toHaveTextContent('50')
+    expect(screen.queryByText(/الرصيد المرحّل/)).toBeNull()
+    expect(screen.queryByText(/الرصيد التراكمي \/ الافتتاحي:/)).toBeNull()
   })
 
-  it('formats dual-month prevMonthLabel correctly when monthStartDay is 25', () => {
+  it('formats dual-month displayBalance correctly when monthStartDay is 25', () => {
     mockMonthStartDay = 25
     // Cycle is September 25 to October 25
     mockRangeStart = new Date(2026, 8, 25)
@@ -164,12 +175,17 @@ describe('DashboardPage Component', () => {
       </MemoryRouter>
     )
 
-    // For Sep 25 - Oct 25 cycle, the previous cycle started Aug 25 and ended Sep 25
-    // formatFinancialMonthLabel produces "أغسطس / سبتمبر 2026"
-    expect(screen.getByText(/الرصيد المرحّل \(من شهر أغسطس \/ سبتمبر 2026\):/)).toBeInTheDocument()
+    expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
+    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getAllByText('75').length).toBeGreaterThanOrEqual(1)
+    const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
+    expect(heroCard).toHaveTextContent('75')
+    expect(screen.queryByText(/الرصيد المرحّل/)).toBeNull()
+    expect(screen.queryByText(/الرصيد التراكمي \/ الافتتاحي:/)).toBeNull()
   })
 
-  it('displays "الرصيد التراكمي / الافتتاحي:" badge when openingBalanceFils is present', () => {
+  it('calculates displayBalance correctly when openingBalanceFils is present without showing badge', () => {
+    mockRolloverBalanceFils = 0
     mockUserSettingsData.openingBalanceFils = 20000
     render(
       <MemoryRouter>
@@ -177,7 +193,13 @@ describe('DashboardPage Component', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByText(/الرصيد التراكمي \/ الافتتاحي:/)).toBeInTheDocument()
+    expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
+    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getAllByText('20').length).toBeGreaterThanOrEqual(1)
+    const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
+    expect(heroCard).toHaveTextContent('20')
+    expect(screen.queryByText(/الرصيد المرحّل/)).toBeNull()
+    expect(screen.queryByText(/الرصيد التراكمي \/ الافتتاحي:/)).toBeNull()
   })
 
   it('greets user personally by name in header', () => {
@@ -222,19 +244,55 @@ describe('DashboardPage Component', () => {
     expect(expenseLink).toHaveAttribute('href', '/transactions?type=expense')
   })
 
-  it('toggles pie chart type between expenses and income', () => {
-    render(
+  it('conditionally renders top expense categories card only when expense transactions exist', () => {
+    // 1) When no expense transactions exist
+    mockTransactionsData = []
+    mockCategoriesData = []
+
+    const { rerender } = render(
       <MemoryRouter>
         <DashboardPage />
       </MemoryRouter>
     )
 
-    expect(screen.getByText('المصاريف حسب التصنيف')).toBeInTheDocument()
+    expect(screen.queryByText('أعلى مصاريف الشهر')).toBeNull()
 
-    const incomeToggleBtn = screen.getByRole('button', { name: 'المداخيل' })
-    fireEvent.click(incomeToggleBtn)
+    // 2) When expense transactions exist
+    mockCategoriesData = [
+      {
+        id: 'cat-food',
+        name: 'طعام ومشروبات',
+        type: 'expense',
+        icon: 'utensils',
+        color: '#EF4444',
+        archived: false,
+        order: 1,
+      },
+    ]
 
-    expect(screen.getByText('المداخيل حسب التصنيف')).toBeInTheDocument()
+    mockTransactionsData = [
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 30000,
+        categoryId: 'cat-food',
+        date: new Date(2026, 9, 5),
+        note: 'مطعم',
+        createdAt: new Date(2026, 9, 5),
+      },
+    ]
+
+    rerender(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('أعلى مصاريف الشهر')).toBeInTheDocument()
+    const topCard = screen.getByText('أعلى مصاريف الشهر').closest('div[class*="rounded"]')!
+    expect(topCard).toHaveTextContent('طعام ومشروبات')
+    expect(topCard).toHaveTextContent('30')
+    expect(topCard).toHaveTextContent('100%')
   })
 
   it('does not leak openingBalanceFils into an empty historical month preceding createdAt', () => {

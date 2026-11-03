@@ -1,16 +1,8 @@
-import React, { useState } from 'react'
-import {
-  Plus,
-  ShieldCheck,
-  Calculator,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Sparkles,
-} from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
+import { cn } from '../../lib/cn'
 
 export interface SpotlightTourProps {
   isOpen: boolean
@@ -18,45 +10,82 @@ export interface SpotlightTourProps {
 }
 
 interface TourStep {
+  target: string
   title: string
   description: string
-  icon: React.ComponentType<{ className?: string }>
-  badge: string
-  color: string
 }
 
 const TOUR_STEPS: TourStep[] = [
   {
+    target: 'hero-balance',
     title: 'الرصيد المتاح وحد الصرف اليومي',
-    description: 'يعكس صافي سيولتك المالية المتبقية ومعدل إنفاقك اليومي الموصى به.',
-    icon: ShieldCheck,
-    badge: 'الخطوة 1 من 3',
-    color: 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400',
+    description:
+      'تعرض سيولتك الفعلية ومجموع دخلك ومصروفك، وفي أسفلها يظهر الحد اليومي الآمن للصرف لحمايتك من العجز قبل نهاية الشهر.',
   },
   {
+    target: 'add-transaction-btn',
     title: 'إضافة معاملة سريعة (+)',
-    description: 'زر تسجيل المصاريف أو المداخيل بضغطة زر واحدة أينما كنت في التطبيق.',
-    icon: Plus,
-    badge: 'الخطوة 2 من 3',
-    color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400',
+    description:
+      'سجّل أي مصروف أو دخل في ثوانٍ من أي شاشة، مع إمكانية إجراء عمليات حسابية مباشرة داخل حقل المبلغ أو جعلها معاملة دورية.',
   },
   {
+    target: 'transactions-nav',
+    title: 'سجل المعاملات',
+    description:
+      'استعرض حركاتك المالية مجمعةً بالأيام، وابحث فيها أو صفِّها حسب التصنيف والفترة، مع إمكانية تصديرها لملف Excel أو طباعتها كـ PDF.',
+  },
+  {
+    target: 'debts-nav',
     title: 'دفتر الديون والالتزامات',
-    description: 'تتبع ما لك وما عليك من التزامات وديون وجدولتها وسدادها بدقة.',
-    icon: Calculator,
-    badge: 'الخطوة 3 من 3',
-    color: 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400',
+    description:
+      'وثّق ما لك وما عليك من ديون وسلف، وسجّل الدفعات الجزئية، وشارك كشف حساب مفصل مع الطرف الآخر عبر واتساب.',
+  },
+  {
+    target: 'more-and-tools',
+    title: 'التقارير والأدوات المالية',
+    description:
+      'من هنا تصل إلى التقارير التحليلية والرسوم البيانية، وأداة إدارة الجمعيات المشتركة، وجدولة الفواتير المتكررة، وحاسبة ساعات العمل.',
+  },
+  {
+    target: 'notifications-bell',
+    title: 'مركز التنبيهات',
+    description:
+      'يذكّرك تلقائياً بمواعيد الفواتير المتكررة التي تنتظر تأكيدك، وأقساط الجمعيات، ومواعيد استحقاق الديون.',
   },
 ]
+
+interface Rect {
+  top: number
+  left: number
+  width: number
+  height: number
+  bottom: number
+  right: number
+}
+
+function findVisibleTarget(targetKey: string): HTMLElement | null {
+  if (typeof document === 'undefined') return null
+  const elements = document.querySelectorAll(`[data-tour="${targetKey}"]`)
+  for (const el of Array.from(elements)) {
+    if (!(el instanceof HTMLElement)) continue
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) continue
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      const style = window.getComputedStyle(el)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+    }
+    return el
+  }
+  return null
+}
 
 export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }) => {
   const { user } = useAuth()
   const uid = user?.uid
   const [currentStep, setCurrentStep] = useState<number>(0)
+  const [targetRect, setTargetRect] = useState<Rect | null>(null)
 
-  if (!isOpen) return null
-
-  const handleFinishTour = () => {
+  const handleFinishTour = useCallback(() => {
     if (uid && typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(`baseer_tour_shown_${uid}`, 'true')
@@ -66,111 +95,223 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
       }
     }
     onFinish()
-  }
+  }, [uid, onFinish])
+
+  const updateRect = useCallback(() => {
+    const el = findVisibleTarget(TOUR_STEPS[currentStep].target)
+    if (!el) {
+      setTargetRect(null)
+      return
+    }
+    const r = el.getBoundingClientRect()
+    setTargetRect({
+      top: r.top,
+      left: r.left,
+      width: r.width,
+      height: r.height,
+      bottom: r.bottom,
+      right: r.right,
+    })
+  }, [currentStep])
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!isOpen) return
+
+    const el = findVisibleTarget(TOUR_STEPS[currentStep].target)
+    if (el) {
+      const r = el.getBoundingClientRect()
+      if (
+        (r.top < 16 || r.bottom > window.innerHeight - 16) &&
+        typeof el.scrollIntoView === 'function'
+      ) {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    updateRect()
+    const timer = setTimeout(updateRect, 250)
+
+    window.addEventListener('resize', updateRect)
+    window.addEventListener('scroll', updateRect, true)
+
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', updateRect)
+      window.removeEventListener('scroll', updateRect, true)
+    }
+  }, [isOpen, currentStep, updateRect])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleFinishTour()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, handleFinishTour])
+
+  if (!isOpen) return null
+  if (typeof document === 'undefined') return null
 
   const stepData = TOUR_STEPS[currentStep]
-  const Icon = stepData.icon
+  const cardWidth = typeof window !== 'undefined' ? Math.min(340, window.innerWidth - 32) : 340
+  const isTop =
+    targetRect && typeof window !== 'undefined'
+      ? targetRect.bottom + 210 < window.innerHeight || targetRect.top < 180
+      : true
 
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleFinishTour}
-      enableHistoryBack={false}
-      title=""
-      className="max-w-md p-0 overflow-hidden rounded-3xl"
-    >
-      <div className="p-6 sm:p-7 space-y-6 text-start">
-        {/* Top Header */}
-        <div className="flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>جولة بَصير السريعة</span>
-          </span>
+  const cardLeft =
+    targetRect && typeof window !== 'undefined'
+      ? Math.max(
+          16,
+          Math.min(window.innerWidth - cardWidth - 16, targetRect.left + targetRect.width / 2 - cardWidth / 2)
+        )
+      : 16
 
-          <button
-            type="button"
-            onClick={handleFinishTour}
-            className="px-2 py-1 rounded-lg text-xs font-semibold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            aria-label="إغلاق الجولة"
-          >
-            تخطي
-          </button>
-        </div>
+  const arrowLeft = targetRect
+    ? Math.max(16, Math.min(cardWidth - 28, targetRect.left + targetRect.width / 2 - cardLeft - 6))
+    : 16
 
-        {/* Visual Feature Showcase */}
-        <div className="flex items-start gap-4">
-          <div
-            className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${stepData.color}`}
-          >
-            <Icon className="w-7 h-7 stroke-[2.2]" />
-          </div>
-          <div className="space-y-1.5 min-w-0">
-            <div className="text-[11px] font-bold text-zinc-400">
-              {stepData.badge}
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 leading-tight">
-              {stepData.title}
-            </h3>
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              {stepData.description}
-            </p>
-          </div>
-        </div>
+  const renderCardContent = () => (
+    <>
+      {/* Top Header: Step counter on right, Skip button on left */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-bold text-zinc-400 tabular-nums">
+          {currentStep + 1} / {TOUR_STEPS.length}
+        </span>
+        <button
+          type="button"
+          onClick={handleFinishTour}
+          className="text-xs font-semibold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+          aria-label="إغلاق الجولة"
+        >
+          تخطي
+        </button>
+      </div>
 
-        {/* Step Dots */}
-        <div className="flex items-center justify-center gap-1.5 pt-2">
+      {/* Step title & description */}
+      <div>
+        <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 dark:text-zinc-100">
+          {stepData.title}
+        </h3>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mt-1">
+          {stepData.description}
+        </p>
+      </div>
+
+      {/* Bottom: Progress dots on right, Previous & Next / Finish on left */}
+      <div className="pt-3 mt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-1">
           {TOUR_STEPS.map((_, idx) => (
             <div
               key={idx}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-200',
                 idx === currentStep
-                  ? 'w-6 bg-blue-600 dark:bg-blue-500'
+                  ? 'w-4 bg-blue-600 dark:bg-blue-500'
                   : 'w-1.5 bg-zinc-200 dark:bg-zinc-700'
-              }`}
+              )}
             />
           ))}
         </div>
 
-        {/* Bottom Actions */}
-        <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 pt-4">
-          <div>
-            {currentStep > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCurrentStep((s) => s - 1)}
-                icon={<ArrowRight className="w-4 h-4" />}
-              >
-                السابق
-              </Button>
-            )}
-          </div>
-
-          <div>
-            {currentStep < TOUR_STEPS.length - 1 ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setCurrentStep((s) => s + 1)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
-              >
-                <span>التالي</span>
-                <ArrowLeft className="w-4 h-4 ms-1.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleFinishTour}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-md shadow-emerald-500/20"
-                icon={<CheckCircle2 className="w-4 h-4" />}
-              >
-                فهمت، ابدأ الآن
-              </Button>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          {currentStep > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentStep((s) => s - 1)}
+            >
+              السابق
+            </Button>
+          )}
+          {currentStep < TOUR_STEPS.length - 1 ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setCurrentStep((s) => s + 1)}
+            >
+              التالي
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleFinishTour}
+            >
+              فهمت، ابدأ الآن
+            </Button>
+          )}
         </div>
       </div>
-    </Modal>
+    </>
+  )
+
+  const hasTarget = Boolean(targetRect && targetRect.width > 0 && targetRect.height > 0)
+
+  return createPortal(
+    hasTarget && targetRect ? (
+      <div className="fixed inset-0 z-[110]">
+        {/* Spotlight cutout */}
+        <div
+          className="pointer-events-none fixed z-[111] transition-all duration-200 rounded-2xl border border-blue-500/80 dark:border-blue-400/80"
+          style={{
+            top: `${targetRect.top - 6}px`,
+            left: `${targetRect.left - 6}px`,
+            width: `${targetRect.width + 12}px`,
+            height: `${targetRect.height + 12}px`,
+            boxShadow: '0 0 0 9999px rgba(9, 9, 11, 0.72)',
+          }}
+        />
+
+        {/* Floating Card */}
+        <div
+          role="dialog"
+          aria-label="جولة بَصير السريعة"
+          className="fixed z-[112] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-xl p-4 sm:p-5 select-none animate-fade-in"
+          style={{
+            width: `${cardWidth}px`,
+            left: `${cardLeft}px`,
+            ...(isTop
+              ? { top: `${targetRect.bottom + 14}px` }
+              : { bottom: `${window.innerHeight - targetRect.top + 14}px` }),
+          }}
+        >
+          {/* Pointer Arrow */}
+          {isTop ? (
+            <div
+              className="absolute -top-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-t border-s border-[#E4E4E7] dark:border-[#27272A]"
+              style={{ left: `${arrowLeft}px` }}
+            />
+          ) : (
+            <div
+              className="absolute -bottom-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-b border-e border-[#E4E4E7] dark:border-[#27272A]"
+              style={{ left: `${arrowLeft}px` }}
+            />
+          )}
+
+          {renderCardContent()}
+        </div>
+      </div>
+    ) : (
+      <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-label="جولة بَصير السريعة"
+          className="w-full max-w-[340px] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-xl p-4 sm:p-5 select-none animate-fade-in"
+        >
+          {renderCardContent()}
+        </div>
+      </div>
+    ),
+    document.body
   )
 }

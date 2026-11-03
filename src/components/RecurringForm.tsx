@@ -5,6 +5,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { DatePickerInput } from './ui/DatePickerInput'
+import { Select } from './ui/Select'
 import { SegmentedControl } from './ui/SegmentedControl'
 import { Toggle } from './ui/Toggle'
 import { CategoryIcon } from './ui/CategoryIcon'
@@ -497,38 +498,17 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
             التصنيف
           </label>
-          <div className="flex items-center gap-2">
-            {availableCategories.length > 6 && (
-              <button
-                type="button"
-                onClick={() => setIsCategoriesExpanded((prev) => !prev)}
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                {isCategoriesExpanded ? (
-                  <>
-                    <span>طي التصنيفات</span>
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  </>
-                ) : (
-                  <>
-                    <span>عرض كل التصنيفات ({availableCategories.length})</span>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsCreateCatOpen(true)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>تصنيف جديد</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreateCatOpen(true)}
+            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>تصنيف جديد</span>
+          </button>
         </div>
         {categoriesLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
+          <div className="grid grid-cols-3 gap-1.5 p-0.5 animate-pulse">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
@@ -544,40 +524,66 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             لا توجد تصنيفات متاحة لهذا النوع
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
-            {displayedCategories.map((cat) => {
-              const isSelected = activeCategoryId === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setCategoryId(cat.id)
-                    setError(null)
-                  }}
-                  className={cn(
-                    'flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none',
-                    isSelected
-                      ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20'
-                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                  )}
-                >
-                  <span
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${cat.color}25` }}
+          <div>
+            <div
+              className={cn(
+                'grid grid-cols-3 gap-1.5 p-0.5',
+                isCategoriesExpanded ? 'max-h-48 overflow-y-auto' : ''
+              )}
+            >
+              {displayedCategories.map((cat) => {
+                const isSelected = activeCategoryId === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setCategoryId(cat.id)
+                      setError(null)
+                    }}
+                    className={cn(
+                      'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20'
+                        : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                    )}
                   >
-                    <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
-                  </span>
-                  <span className="truncate flex-1">
-                    {cat.name}
-                    {cat.archived ? ' (مؤرشف)' : ''}
-                  </span>
-                  {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                  )}
-                </button>
-              )
-            })}
+                    <span
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${cat.color}25` }}
+                    >
+                      <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
+                    </span>
+                    <span className="truncate flex-1">
+                      {cat.name}
+                      {cat.archived ? ' (مؤرشف)' : ''}
+                    </span>
+                    {isSelected && (
+                      <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {availableCategories.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setIsCategoriesExpanded((prev) => !prev)}
+                className="mt-1.5 w-full py-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              >
+                {isCategoriesExpanded ? (
+                  <>
+                    <span>طي التصنيفات</span>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </>
+                ) : (
+                  <>
+                    <span>عرض كل التصنيفات ({availableCategories.length})</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -701,7 +707,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 className={cn(
                   'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
                   frequency === f.value
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
                     : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
                 )}
               >
@@ -715,12 +721,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
       {/* Money Circle Link / Skip Month */}
       {type === 'expense' && availableCircles.length > 0 && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
-          <label htmlFor="recurring-circle-select" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-            ربط مع جمعية نشطة (تخطي الخصم في شهر الاستلام):
-          </label>
-          <select
+        <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
+          <Select
             id="recurring-circle-select"
+            label="ربط مع جمعية نشطة (تخطي الخصم في شهر الاستلام):"
             value={circleId}
             disabled={isCircleLinked}
             onChange={(e) => {
@@ -757,7 +761,6 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 }
               }
             }}
-            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="">-- ليست مرتبطة بجمعية --</option>
             {availableCircles.map((c) => (
@@ -765,9 +768,9 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                 {c.name} (قسط: {formatCurrency(c.monthlyAmountFils)} - شهر استلامك: {c.myTurnMonth})
               </option>
             ))}
-          </select>
+          </Select>
           {circleId && (skipMonths?.length || skipMonth) && (
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1">
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-300 font-bold flex items-center gap-1">
               <span>
                 ✓ لن يتم خصم قسط منك في الشهر {skipMonths && skipMonths.length > 0 ? skipMonths.join(' و ') : skipMonth} لأن هذا الشهر هو دور استلامك للجمعية!
               </span>
@@ -833,7 +836,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           checked={requireConfirmation}
           onChange={setRequireConfirmation}
           label="طلب تأكيد الدفعة يدوياً قبل التسجيل"
-          description="تنبيهك قبل التسجيل لإتاحة مراجعة أو تعديل المبلغ الفعلي (مناسب لفواتير الكهرباء والماء المتغيرة)"
+          description="تنبيهك لمراجعة أو تعديل المبلغ قبل تسجيله"
         />
       </div>
 

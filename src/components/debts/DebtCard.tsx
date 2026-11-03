@@ -40,36 +40,22 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
   return (
     <div
       className={cn(
-        'group rounded-2xl p-4 sm:p-5 border transition-all flex flex-col justify-between shadow-xs hover:shadow-sm space-y-3.5 relative overflow-hidden',
-        'bg-white dark:bg-[#121215]',
-        debt.settled
-          ? 'border-slate-200/60 dark:border-slate-700/40 opacity-75'
-          : overdue
-            ? 'border-amber-300 dark:border-amber-700/80'
-            : isLent
-              ? 'border-slate-200/80 dark:border-slate-700/60 hover:border-emerald-300 dark:hover:border-emerald-700/60'
-              : 'border-slate-200/80 dark:border-slate-700/60 hover:border-red-300 dark:hover:border-red-700/60'
+        'group rounded-2xl p-4 sm:p-5 border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] transition-all flex flex-col justify-between shadow-2xs dark:shadow-none space-y-3.5 relative overflow-hidden',
+        debt.settled && 'opacity-70'
       )}
     >
       {/* Top Row: Avatar, Person info & Badges */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={cn(
-              'w-10 h-10 rounded-xl flex items-center justify-center text-base shrink-0 font-black shadow-xs',
-              isLent
-                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                : 'bg-red-500/15 text-red-700 dark:text-red-300'
-            )}
-          >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-base shrink-0 font-black bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A]">
             {firstLetter}
           </div>
           <div className="min-w-0">
-            <span className="font-extrabold text-base text-slate-800 dark:text-slate-100 block truncate">
+            <span className="font-extrabold text-base text-zinc-900 dark:text-zinc-100 block truncate">
               {debt.personName}
             </span>
             {debt.note && (
-              <p className="text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5" title={debt.note}>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5" title={debt.note}>
                 {debt.note}
               </p>
             )}
@@ -79,82 +65,68 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
         {/* Badges */}
         <div className="flex items-center gap-1.5 shrink-0">
           {debt.settled ? (
-            <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200/60 dark:border-emerald-800/40 shadow-xs">
+            <span className="inline-flex items-center gap-1 shadow-none rounded-lg px-2 py-1 text-[11px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>مسدد</span>
             </span>
           ) : overdue ? (
-            <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200/60 dark:border-amber-800/40 shadow-xs">
+            <span className="inline-flex items-center gap-1 shadow-none rounded-lg px-2 py-1 text-[11px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
               <AlertCircle className="w-3.5 h-3.5" />
               <span>متأخر</span>
             </span>
           ) : null}
 
-          <span
-            className={cn(
-              'text-xs px-3 py-1 rounded-xl font-black shrink-0 border shadow-xs',
-              isLent
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-900/40'
-                : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200/60 dark:border-red-900/40'
-            )}
-          >
+          <span className="text-xs px-2.5 py-1 rounded-lg font-bold shrink-0 bg-zinc-100 dark:bg-zinc-800/90 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
             {isLent ? 'لي (مستحق)' : 'عليّ (التزام)'}
           </span>
         </div>
       </div>
 
       {/* Middle: Remaining Amount & Breakdown */}
-      <div className="p-3 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/50 space-y-2">
+      <div className="space-y-2 pt-1">
         <div className="flex items-end justify-between gap-2">
           <div>
-            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-400 block mb-0.5">
+            <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 block mb-0.5">
               {debt.settled ? 'تم السداد بالكامل' : isLent ? 'المبلغ المتبقي لك' : 'المبلغ المتبقي عليك'}
             </span>
             <div
               className={cn(
-                'text-2xl sm:text-3xl font-black select-none tracking-tight',
+                'text-2xl sm:text-3xl font-black select-none tracking-tight tabular-nums',
                 debt.settled
-                  ? 'text-slate-400 dark:text-slate-500 line-through'
+                  ? 'text-zinc-400 dark:text-zinc-500 line-through'
                   : isLent
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
+                    : 'text-red-600 dark:text-red-400'
               )}
             >
               {formatCurrency(remainingFils)}
             </div>
           </div>
           <div className="text-end">
-            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 tabular-nums">
               {progress}% مسدد
             </span>
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-400 pt-1">
-          <span>المبلغ الأصلي: <strong className="text-slate-600 dark:text-slate-300">{formatCurrency(debt.amountFils)}</strong></span>
-          <span>المسدد: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(debt.paidFils || 0)}</strong></span>
+        <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
+          <span>المبلغ الأصلي: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums">{formatCurrency(debt.amountFils)}</strong></span>
+          <span>المسدد: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums">{formatCurrency(debt.paidFils || 0)}</strong></span>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full bg-slate-200/70 dark:bg-slate-700/60 rounded-full h-2 overflow-hidden mt-2">
+        <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden mt-2">
           <div
-            className={cn(
-              'h-full transition-all duration-300 rounded-full',
-              debt.settled
-                ? 'bg-emerald-500'
-                : isLent
-                  ? 'bg-emerald-500'
-                  : 'bg-red-500'
-            )}
+            className="h-full transition-all duration-300 rounded-full bg-zinc-900 dark:bg-blue-500"
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
       {/* Dates Row */}
-      <div className="text-[11px] text-slate-400 dark:text-slate-400 flex flex-wrap items-center gap-3 px-1">
+      <div className="text-[11px] text-zinc-400 dark:text-zinc-500 flex flex-wrap items-center gap-3 px-1">
         <span className="flex items-center gap-1 font-medium">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <Calendar className="w-3.5 h-3.5 text-zinc-400" />
           <span>منذ: {formattedStartDate}</span>
         </span>
         {formattedDueDate && (
@@ -163,7 +135,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
               'flex items-center gap-1 font-medium',
               overdue && !debt.settled
                 ? 'text-amber-600 dark:text-amber-400 font-bold'
-                : 'text-slate-400'
+                : 'text-zinc-400 dark:text-zinc-500'
             )}
           >
             <AlertCircle className="w-3.5 h-3.5" />
@@ -171,20 +143,25 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           </span>
         )}
         {debt.entries && debt.entries.length > 1 && (
-          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-bold border border-slate-200/50 dark:border-slate-600/50">
-            {debt.entries.length} سلف مجمعة
-          </span>
+          <button
+            type="button"
+            onClick={() => onOpenHistoryModal(debt)}
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-bold border border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            title="عرض تفاصيل السلف المجمعة"
+          >
+            <span>{debt.entries.length} سلف مجمعة</span>
+          </button>
         )}
       </div>
 
       {/* Bottom Row: Actions */}
-      <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs">
+      <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
         {!debt.settled ? (
           (debt.payments?.length ?? 0) >= 100 ? (
             <button
               type="button"
               onClick={() => onOpenPaymentModal(debt)}
-              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60"
+              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/40"
               title="وصل إلى الحد الأقصى للدفعات (100 دفعة) — اضغط للدمج"
             >
               <AlertCircle className="w-4 h-4 stroke-[2.5] text-amber-600 dark:text-amber-400" />
@@ -194,20 +171,15 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
             <button
               type="button"
               onClick={() => onOpenPaymentModal(debt)}
-              className={cn(
-                'px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95',
-                isLent
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-red-600 hover:bg-red-700 text-white'
-              )}
+              className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-100 active:scale-95 shadow-2xs"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>تسجيل {isLent ? 'دفعة استرداد' : 'دفعة سداد'}</span>
             </button>
           )
         ) : (
-          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 py-1.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
-            <CheckCircle2 className="w-4 h-4" />
+          <span className="text-xs text-zinc-600 dark:text-zinc-300 font-bold flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A]">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>تم السداد بالكامل</span>
           </span>
         )}
@@ -216,17 +188,12 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           <button
             type="button"
             onClick={() => onOpenHistoryModal(debt)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer relative"
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer relative"
             title="سجل الدفعات"
           >
             <History className="w-4 h-4" />
             {(debt.payments?.length ?? 0) > 0 && (
-              <span
-                className={cn(
-                  'absolute -top-1 -end-1 px-1 min-w-[14px] h-[14px] rounded-full text-white text-[9px] font-black flex items-center justify-center',
-                  (debt.payments?.length ?? 0) >= 90 ? 'bg-amber-500' : 'bg-emerald-500'
-                )}
-              >
+              <span className="absolute -top-1 -end-1 px-1 min-w-[14px] h-[14px] rounded-full bg-zinc-700 dark:bg-zinc-600 text-white text-[9px] font-black flex items-center justify-center">
                 {debt.payments.length}
               </span>
             )}
@@ -234,7 +201,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           <button
             type="button"
             onClick={() => onEdit(debt)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             title="تعديل"
           >
             <Pencil className="w-4 h-4" />
@@ -242,7 +209,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           <button
             type="button"
             onClick={() => onDelete(debt)}
-            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+            className="p-2 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
             title="حذف"
           >
             <Trash2 className="w-4 h-4" />

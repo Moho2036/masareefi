@@ -47,7 +47,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             disabled={disabled}
             className={cn(
-              'w-full rounded-xl border bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3.5 py-2.5 text-sm transition-colors outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500',
+              'w-full h-11 rounded-xl border bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3.5 py-2 text-base sm:text-sm transition-colors outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500',
               'border-[#E4E4E7] dark:border-[#27272A] focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20',
               startIcon && 'ps-10',
               endIcon && 'pe-10',

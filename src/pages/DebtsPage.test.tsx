@@ -16,7 +16,7 @@ const mockDebts: Debt[] = [
     amountFils: 100000,
     paidFils: 40000,
     startDate: new Date('2026-09-01'),
-    dueDate: new Date('2026-11-01'),
+    dueDate: new Date('2026-12-01'),
     note: 'قرض مؤقت للمكتب',
     settled: false,
     payments: [],
@@ -207,15 +207,8 @@ describe('DebtsPage Component', () => {
     })
   })
 
-  it('renders updated informational banner and overdue count pill', () => {
+  it('renders overdue count pill', () => {
     render(<DebtsPage />)
-    expect(
-      screen.getByText(
-        'دفتر الديون يتيح لك تتبع الحقوق والالتزامات، مع إمكانية اختيار ربط الدين أو دفعاته برصيد المعاملات الشهرية تلقائياً عند الإضافة أو السداد.'
-      )
-    ).toBeInTheDocument()
-
-    // overdueCount: mockDebts has debt-1 (dueDate: 2026-11-01) which is not overdue in 2026-10, so 0 overdue
     expect(screen.getByRole('button', { name: /المتأخرة عن الموعد \(0\)/i })).toBeInTheDocument()
   })
 
@@ -234,21 +227,7 @@ describe('DebtsPage Component', () => {
     expect(screen.queryByText('أحمد محمود')).not.toBeInTheDocument()
   })
 
-  it('switches between individual cards and grouped by person view', () => {
-    render(<DebtsPage />)
-    const groupedBtn = screen.getByRole('button', { name: /تجميع حسب الأشخاص/i })
-    fireEvent.click(groupedBtn)
-
-    expect(screen.getAllByText(/صافي الذمة:/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('أحمد محمود').length).toBeGreaterThanOrEqual(1)
-
-    // Switch back to individual cards
-    const cardsBtn = screen.getByRole('button', { name: /البطاقات الفردية/i })
-    fireEvent.click(cardsBtn)
-    expect(screen.queryByText(/صافي الذمة:/i)).not.toBeInTheDocument()
-  })
-
-  it('allows merging multiple debts of the same person from grouped view', async () => {
+  it('allows merging multiple debts of the same person automatically', async () => {
     currentDebts = [
       ...mockDebts,
       {
@@ -267,7 +246,6 @@ describe('DebtsPage Component', () => {
     ]
 
     render(<DebtsPage />)
-    fireEvent.click(screen.getByRole('button', { name: /تجميع حسب الأشخاص/i }))
 
     const mergeBtn = screen.getByRole('button', { name: /دمج ديون أحمد محمود في سجل موحد/i })
     expect(mergeBtn).toBeInTheDocument()

@@ -30,8 +30,8 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl shadow-xl text-xs space-y-2 z-50 text-start min-w-[170px]">
-        <div className="font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-700 pb-1.5">
+      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3.5 rounded-xl shadow-lg text-xs space-y-2 z-50 text-start min-w-[170px]">
+        <div className="font-bold text-slate-800 dark:text-slate-100 border-b border-[#E4E4E7] dark:border-[#27272A] pb-1.5">
           {item.monthName}
         </div>
         <div className="space-y-1">
@@ -53,7 +53,7 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
               {format(item.expense)}
             </span>
           </div>
-          <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-700/60">
+          <div className="flex items-center justify-between gap-3 pt-1 border-t border-[#E4E4E7] dark:border-[#27272A]">
             <span className="text-slate-500 dark:text-slate-400 font-semibold">
               الصافي:
             </span>
@@ -130,12 +130,12 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[260px]',
+          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[220px]',
           className
         )}
       >
-        <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
-          <BarChart3 className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.8} />
+        <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center mb-2.5">
+          <BarChart3 className="w-6 h-6 text-zinc-400 dark:text-zinc-500" strokeWidth={1.8} />
         </div>
         <p className="text-xs font-semibold">لا توجد معاملات مسجلة في هذه السنة</p>
       </div>
@@ -172,7 +172,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="currentColor"
-              className="text-slate-200 dark:text-slate-700/60"
+              className="text-zinc-200/70 dark:text-zinc-800/80"
               vertical={false}
             />
             <XAxis

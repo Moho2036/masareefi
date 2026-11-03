@@ -9,8 +9,6 @@ import {
   Share2,
   Copy,
   Printer,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -83,9 +81,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null)
   const [isDeletingEntry, setIsDeletingEntry] = useState(false)
 
-  // Share statement menu state
-  const [showShareMenu, setShowShareMenu] = useState(true)
-
   const handleClose = () => {
     setConfirmDeleteId(null)
     setDeletePaymentTx(true)
@@ -97,7 +92,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setEditingEntryId(null)
     setConfirmDeleteEntryId(null)
     setEntryError(null)
-    setShowShareMenu(false)
     onClose()
   }
 
@@ -354,7 +348,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       const text = formatDebtAccountStatement(debt, config.symbol)
       await navigator.clipboard.writeText(text)
       showToast('تم نسخ كشف الحساب بنجاح', 'success')
-      setShowShareMenu(false)
     } catch (err) {
       console.error('Clipboard copy failed:', err)
       showToast('فشل نسخ كشف الحساب', 'error')
@@ -365,12 +358,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     const text = formatDebtAccountStatement(debt, config.symbol)
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
-    setShowShareMenu(false)
   }
 
   const handlePrint = () => {
     window.print()
-    setShowShareMenu(false)
   }
 
   return (
@@ -381,18 +372,18 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     >
       <div className="space-y-4">
         {/* Summary Card */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/60 grid grid-cols-3 gap-2 text-center">
+        <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] grid grid-cols-3 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] text-center">
           <div>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المبلغ الكلي</span>
-            <span className="text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200">
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المبلغ الكلي</span>
+            <span className="text-xs sm:text-sm font-black text-zinc-800 dark:text-zinc-200 tabular-nums">
               {formatCurrency(debt.amountFils)}
             </span>
           </div>
           <div>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المسدد حتى الآن</span>
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المسدد حتى الآن</span>
             <span
               className={cn(
-                'text-xs sm:text-sm font-black',
+                'text-xs sm:text-sm font-black tabular-nums',
                 isLent
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-amber-600 dark:text-amber-400'
@@ -402,64 +393,45 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             </span>
           </div>
           <div>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">المتبقي</span>
-            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المتبقي</span>
+            <span className="text-xs sm:text-sm font-black text-zinc-800 dark:text-zinc-100 tabular-nums">
               {formatCurrency(remainingFils)}
             </span>
           </div>
         </div>
 
         {/* Share Account Statement Strip */}
-        <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] rounded-xl space-y-2 print-hide">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
-              <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>مشاركة كشف الحساب (نسخ / واتساب / طباعة)</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowShareMenu((prev) => !prev)}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-            >
-              <span>{showShareMenu ? 'إغلاق الخيارات' : 'خيارات المشاركة'}</span>
-              {showShareMenu ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-
-          {showShareMenu && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={handleCopyStatement}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-xs transition-colors"
-              >
-                <Copy className="w-3.5 h-3.5 text-zinc-500" />
-                <span>نسخ للحافظة</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleWhatsAppShare}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-colors"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>إرسال عبر واتساب</span>
-              </button>
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-xs transition-colors"
-              >
-                <Printer className="w-3.5 h-3.5 text-zinc-500" />
-                <span>طباعة الكشف</span>
-              </button>
-            </div>
-          )}
+        <div className="grid grid-cols-3 gap-2 print-hide">
+          <button
+            type="button"
+            onClick={handleCopyStatement}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+            <span>نسخ للحافظة</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleWhatsAppShare}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+          >
+            <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+            <span>إرسال عبر واتساب</span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+            <span>طباعة الكشف</span>
+          </button>
         </div>
 
         {/* SECTION 1: Entries (أصل الديون والسلف) */}
-        <div className="space-y-2.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+        <div className="space-y-2.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black text-slate-700 dark:text-slate-300">
+            <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200">
               تفاصيل السلف وأصل الديون المسجلة ({rawEntries.length})
             </h3>
             <button
@@ -481,23 +453,23 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           {/* Inline Add Entry Form */}
           {isAddingEntry && (
             <form onSubmit={handleAddEntry} noValidate className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5 print-hide">
-              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
+              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">
                 تسجيل سلفة إضافية جديدة لنفس الشخص
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ المطلوب إضافته</label>
-                  <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800">
+                  <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">المبلغ المطلوب إضافته</label>
+                  <div className="flex items-center gap-1 border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800">
                     <input
                       type="text"
                       inputMode="decimal"
                       value={newEntryAmountStr}
                       placeholder="0.000"
                       onChange={(e) => setNewEntryAmountStr(toWesternDigits(e.target.value))}
-                      className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
+                      className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                       required
                     />
-                    <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
+                    <span className="text-[10px] text-zinc-400 font-bold">{config.symbol}</span>
                   </div>
                 </div>
                 <div>
@@ -511,32 +483,32 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">العنوان أو السبب (اختياري)</label>
+                  <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">العنوان أو السبب (اختياري)</label>
                   <input
                     type="text"
                     value={newEntryTitle}
                     onChange={(e) => setNewEntryTitle(e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                    className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                     placeholder="مثال: سلفة تكاليف السفر..."
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">ملاحظات إضافية (اختياري)</label>
+                  <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">ملاحظات إضافية (اختياري)</label>
                   <input
                     type="text"
                     value={newEntryNote}
                     onChange={(e) => setNewEntryNote(e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                    className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                     placeholder="تفاصيل إضافية..."
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+              <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
                 <input
                   type="checkbox"
                   checked={newEntrySync}
                   onChange={(e) => setNewEntrySync(e.target.checked)}
-                  className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                  className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer"
                 />
                 <span>خصم/إيداع مبلغ السلفة من الرصيد كمعاملة مالية</span>
               </label>
@@ -545,14 +517,14 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                   type="button"
                   onClick={() => setIsAddingEntry(false)}
                   disabled={isSavingEntry}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer"
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingEntry}
-                  className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white cursor-pointer disabled:opacity-50"
                 >
                   {isSavingEntry ? 'جاري الحفظ...' : 'حفظ السلفة'}
                 </button>
@@ -561,7 +533,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           )}
 
           {/* Entries list */}
-          <div className="space-y-2 max-h-48 overflow-y-auto pe-1">
+          <div className="space-y-2">
             {rawEntries.map((e, idx) => {
               const formattedDate = toWesternDigits(format(new Date(e.date), 'd MMMM yyyy', { locale: ar }))
               const isEditingThis = editingEntryId === e.id
@@ -569,20 +541,20 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
               if (isEditingThis) {
                 return (
-                  <div key={e.id} className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 space-y-2">
+                  <div key={e.id} className="p-3 rounded-xl bg-white dark:bg-zinc-800 border border-blue-500/40 dark:border-blue-500/50 space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ</label>
-                        <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900">
+                        <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">المبلغ</label>
+                        <div className="flex items-center gap-1 border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900">
                           <input
                             type="text"
                             inputMode="decimal"
                             value={editEntryAmountStr}
                             onChange={(ev) => setEditEntryAmountStr(toWesternDigits(ev.target.value))}
-                            className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
+                            className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                             required
                           />
-                          <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
+                          <span className="text-[10px] text-zinc-400 font-bold">{config.symbol}</span>
                         </div>
                       </div>
                       <div>
@@ -600,22 +572,22 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         value={editEntryTitle}
                         onChange={(ev) => setEditEntryTitle(ev.target.value)}
                         placeholder="العنوان أو سبب السلفة..."
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                        className="text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
                       />
                       <input
                         type="text"
                         value={editEntryNote}
                         onChange={(ev) => setEditEntryNote(ev.target.value)}
                         placeholder="ملاحظة السلفة..."
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                        className="text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
                       />
                     </div>
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                       <button
                         type="button"
                         onClick={() => setEditingEntryId(null)}
                         disabled={isSavingEditEntry}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 cursor-pointer"
                       >
                         إلغاء
                       </button>
@@ -623,7 +595,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         type="button"
                         onClick={() => handleSaveEditEntry(e.id)}
                         disabled={isSavingEditEntry}
-                        className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50"
+                        className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white cursor-pointer disabled:opacity-50"
                       >
                         {isSavingEditEntry ? 'جاري الحفظ...' : 'حفظ التعديل'}
                       </button>
@@ -643,7 +615,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         type="button"
                         onClick={() => setConfirmDeleteEntryId(null)}
                         disabled={isDeletingEntry}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 cursor-pointer"
                       >
                         إلغاء
                       </button>
@@ -661,22 +633,22 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               }
 
               return (
-                <div key={e.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                <div key={e.id} className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100">
                         {e.title || `سلفة #${idx + 1}`}
                       </span>
-                      <span className="text-xs font-black text-slate-900 dark:text-slate-100">
+                      <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 tabular-nums">
                         ({formatCurrency(e.amountFils)})
                       </span>
                       {e.transactionId && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] font-semibold">
                           مرتبط بالرصيد
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                    <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">
                       {formattedDate} {e.note ? `• ${e.note}` : ''}
                     </div>
                   </div>
@@ -685,7 +657,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleStartEditEntry(e)}
-                        className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg cursor-pointer"
+                        className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
                         title="تعديل السلفة"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -693,7 +665,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteEntryId(e.id)}
-                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg cursor-pointer"
+                        className="p-1 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg cursor-pointer"
                         title="حذف السلفة"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -707,9 +679,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         </div>
 
         {/* SECTION 2: Payments (سجل دفعات السداد) */}
-        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black text-slate-700 dark:text-slate-300">
+            <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200">
               سجل دفعات السداد ({payments.length})
             </h3>
           </div>
@@ -741,12 +713,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
         {/* Payments List */}
         {payments.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 dark:text-slate-500">
+          <div className="text-center py-8 text-zinc-400 dark:text-zinc-500">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-xs font-semibold">لا توجد أي دفعات مسجلة بعد لهذا الدين</p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-60 overflow-y-auto pe-1">
+          <div className="space-y-2">
             {payments
               .slice()
               .reverse()
@@ -760,7 +732,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                 return (
                   <div
                     key={p.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-700/60 flex flex-col gap-2.5"
+                    className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col gap-2.5"
                   >
                     {editingPaymentId === p.id ? (
                       <div className="w-full space-y-2.5">
@@ -771,17 +743,17 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">المبلغ</label>
-                            <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800">
+                            <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">المبلغ</label>
+                            <div className="flex items-center gap-1 border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800">
                               <input
                                 type="text"
                                 inputMode="decimal"
                                 value={editAmountStr}
                                 onChange={(e) => setEditAmountStr(toWesternDigits(e.target.value))}
-                                className="w-full text-xs font-bold bg-transparent outline-none text-slate-800 dark:text-slate-100"
+                                className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                                 required
                               />
-                              <span className="text-[10px] text-slate-400 font-bold">{config.symbol}</span>
+                              <span className="text-[10px] text-zinc-400 font-bold">{config.symbol}</span>
                             </div>
                           </div>
                           <div className="w-full">
@@ -795,33 +767,33 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           </div>
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-500 mb-1">الملاحظة</label>
+                          <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">الملاحظة</label>
                           <input
                             type="text"
                             value={editNote}
                             onChange={(e) => setEditNote(e.target.value)}
-                            className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                            className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                             placeholder="ملاحظة للدفعة..."
                           />
                         </div>
                         <div>
-                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
                             <input
                               type="checkbox"
                               disabled={checkingEditSync || isSavingEdit}
                               checked={editSyncTx}
                               onChange={(e) => setEditSyncTx(e.target.checked)}
-                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                             <span>ربط الدفعة بالرصيد (تأثير مالي في سجل المعاملات)</span>
                           </label>
                         </div>
-                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                           <button
                             type="button"
                             onClick={handleCancelEdit}
                             disabled={isSavingEdit}
-                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
                           >
                             إلغاء
                           </button>
@@ -829,7 +801,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             type="button"
                             onClick={() => handleSaveEdit(p)}
                             disabled={isSavingEdit || checkingEditSync}
-                            className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {isSavingEdit ? 'جارٍ الحفظ...' : checkingEditSync ? 'جارٍ التحقق...' : 'حفظ التعديل'}
                           </button>
@@ -842,7 +814,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             <div className="flex items-center gap-2">
                               <div
                                 className={cn(
-                                  'text-sm font-black',
+                                  'text-sm font-black tabular-nums',
                                   isLent
                                     ? 'text-emerald-600 dark:text-emerald-400'
                                     : 'text-amber-600 dark:text-amber-400'
@@ -856,7 +828,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                            <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">
                               {formattedDate}
                               {p.note ? ` • ${p.note}` : ''}
                             </div>
@@ -869,12 +841,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             <span>تأكيد حذف الدفعة؟</span>
                           </div>
 
-                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200 select-none">
+                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
                             <input
                               type="checkbox"
                               checked={deletePaymentTx}
                               onChange={(e) => setDeletePaymentTx(e.target.checked)}
-                              className="w-4 h-4 rounded-sm text-emerald-600 accent-emerald-600 cursor-pointer"
+                              className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer"
                             />
                             <span>
                               {isMerged
@@ -891,7 +863,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                 setConfirmDeleteId(null)
                                 setDeletePaymentTx(true)
                               }}
-                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
                             >
                               إلغاء
                             </button>
@@ -912,7 +884,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           <div className="flex items-center gap-2">
                             <div
                               className={cn(
-                                'text-sm font-black',
+                                'text-sm font-black tabular-nums',
                                 isLent
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-amber-600 dark:text-amber-400'
@@ -926,7 +898,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                          <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">
                             {formattedDate}
                             {p.note ? ` • ${p.note}` : ''}
                           </div>
@@ -938,7 +910,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               type="button"
                               disabled={Boolean(deletingId) || isSavingEdit}
                               onClick={() => handleStartEdit(p)}
-                              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                               title="تعديل هذه الدفعة"
                             >
                               <Pencil className="w-4 h-4" />
@@ -952,7 +924,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               setConfirmDeleteId(p.id)
                               setDeletePaymentTx(true)
                             }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                             title="حذف هذه الدفعة"
                           >
                             <Trash2 className="w-4 h-4" />

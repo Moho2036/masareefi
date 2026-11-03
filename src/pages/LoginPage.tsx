@@ -118,6 +118,14 @@ export const LoginPage: React.FC = () => {
         setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.')
       } else if (errCode === 'auth/weak-password') {
         setError('كلمة المرور ضعيفة جداً. يرجى اختيار كلمة مرور أقوى.')
+      } else if (errCode === 'auth/operation-not-allowed') {
+        setError('التسجيل بالبريد وكلمة المرور غير مفعّل حالياً، يرجى الدخول بحساب Google.')
+      } else if (errCode === 'auth/account-exists-with-different-credential') {
+        setError('هذا البريد مرتبط بحساب Google، يرجى الضغط على الدخول بحساب Google أدناه.')
+      } else if (errCode === 'auth/too-many-requests') {
+        setError('تم إيقاف المحاولات مؤقتاً لكثرة الطلبات. يرجى المحاولة بعد قليل.')
+      } else if (errCode === 'auth/network-request-failed') {
+        setError('تعذر الاتصال بالشبكة. يرجى التحقق من اتصال الإنترنت والمحاولة مجدداً.')
       } else {
         setError('تعذر إتمام العملية. يرجى التحقق من اتصالك والمحاولة مجدداً.')
       }
@@ -173,7 +181,7 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center p-4 bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 font-sans">
       <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-3xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
         {/* App Logo */}
-        <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-3xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shadow-lg p-3">
+        <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-zinc-900 dark:bg-zinc-800/90 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-center shadow-xs p-2.5">
           <img src="/icons/icon.svg" alt="Baseer Logo" className="w-full h-full object-contain" />
         </div>
 
@@ -258,7 +266,7 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: محمد أحمد"
                   required={mode === 'signup'}
-                  className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
+                  className="w-full h-11 ps-10 pe-3.5 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
                 />
                 <UserIcon className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -278,7 +286,7 @@ export const LoginPage: React.FC = () => {
                 placeholder="name@example.com"
                 dir="ltr"
                 required
-                className="w-full ps-10 pe-3.5 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                className="w-full h-11 ps-10 pe-3.5 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
               />
               <Mail className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
             </div>
@@ -297,7 +305,7 @@ export const LoginPage: React.FC = () => {
                 placeholder="••••••••"
                 dir="ltr"
                 required
-                className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                className="w-full h-11 ps-10 pe-10 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
               />
               <Lock className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
               <button
@@ -372,7 +380,7 @@ export const LoginPage: React.FC = () => {
                   placeholder="••••••••"
                   dir="ltr"
                   required={mode === 'signup'}
-                  className="w-full ps-10 pe-10 py-2.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
+                  className="w-full h-11 ps-10 pe-10 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-start"
                 />
                 <Lock className="w-4 h-4 text-zinc-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
                 <button
@@ -390,7 +398,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={submitting || signingInGoogle}
-            className="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-zinc-900 hover:bg-zinc-800 dark:bg-blue-600 dark:hover:bg-blue-500 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+            className="w-full h-11 px-4 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
           >
             {submitting ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

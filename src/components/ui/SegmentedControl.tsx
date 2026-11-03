@@ -47,7 +47,7 @@ export function SegmentedControl<T extends string>({
               'flex-1 inline-flex items-center justify-center gap-1.5 font-medium rounded-lg transition-all cursor-pointer select-none',
               size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
               isSelected
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs font-semibold'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs dark:shadow-none font-semibold'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50',
               disabled && 'cursor-not-allowed',
             )}

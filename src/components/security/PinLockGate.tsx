@@ -286,7 +286,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
         </div>
 
         {/* PIN Dots */}
-        <div className="flex items-center justify-center gap-4 py-2">
+        <div dir="ltr" className="flex items-center justify-center gap-4 py-2">
           {[0, 1, 2, 3].map((index) => {
             const isFilled = inputPin.length > index
             return (
@@ -310,7 +310,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
         )}
 
         {/* Numeric Keypad */}
-        <div className="grid grid-cols-3 gap-3 w-full pt-2">
+        <div dir="ltr" className="grid grid-cols-3 gap-3 w-full pt-2">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
               key={digit}

@@ -6,6 +6,8 @@ import {
   Percent,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Input } from '../ui/Input'
@@ -183,6 +185,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   const [isCustomItemPrice, setIsCustomItemPrice] = useState<boolean>(initialPrefs.isCustomItemPrice)
 
   const [hasInteracted, setHasInteracted] = useState<boolean>(initialPrefs.hasInteracted)
+  const [isSalaryExpanded, setIsSalaryExpanded] = useState(false)
 
   const { data: settings } = useUserSettings()
   const appData = useContext(AppDataContext)
@@ -392,7 +395,31 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
         <div className="lg:col-span-5 space-y-5">
           {/* Work & Salary Card */}
           <Card title="بيانات العمل والراتب">
-            <div className="space-y-3.5 pt-1">
+            {/* Mobile Compact Summary Bar */}
+            <div className="lg:hidden flex items-center justify-between gap-2 pb-2 text-xs border-b border-zinc-100 dark:border-zinc-800">
+              <div className="text-zinc-600 dark:text-zinc-300 font-medium truncate">
+                <span>
+                  الراتب: {salaryStr || '0'} {config.symbol} • أجر الساعة:{' '}
+                </span>
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                  <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} />
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSalaryExpanded((prev) => !prev)}
+                className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer py-0.5 px-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40"
+              >
+                <span>تعديل</span>
+                {isSalaryExpanded ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+
+            <div className={cn('space-y-3 pt-1', !isSalaryExpanded && 'hidden lg:block')}>
               <div>
                 <Input
                   label={`صافي راتبك الشهري (${config.symbol})`}
@@ -404,7 +431,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                     setIsCustomSalary(true)
                     setHasInteracted(true)
                   }}
-                  startIcon={<Briefcase className="w-4 h-4 text-slate-400" />}
+                  startIcon={<Briefcase className="w-4 h-4 text-zinc-400" />}
                 />
               </div>
 
@@ -415,18 +442,18 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   inputMode="decimal"
                   value={dailyHoursStr}
                   onChange={handleDailyHoursChange}
-                  startIcon={<Clock className="w-4 h-4 text-slate-400" />}
+                  startIcon={<Clock className="w-4 h-4 text-zinc-400" />}
                 />
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label
                       htmlFor="work-days-input"
-                      className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                      className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
                     >
                       {workDaysMode === 'week' ? 'أيام العمل في الأسبوع' : 'أيام العمل / شهر'}
                     </label>
-                    <div className="flex items-center bg-slate-200/70 dark:bg-slate-700 p-0.5 rounded-lg text-[10px] font-bold">
+                    <div className="flex items-center bg-zinc-200/70 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-bold">
                       <button
                         type="button"
                         onClick={() => {
@@ -436,8 +463,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                         }}
                         className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
                           workDaysMode === 'month'
-                            ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                            ? 'bg-white dark:bg-[#121215] text-blue-600 dark:text-blue-400 shadow-2xs'
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
                         }`}
                       >
                         شهرياً
@@ -451,8 +478,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                         }}
                         className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
                           workDaysMode === 'week'
-                            ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                            ? 'bg-white dark:bg-[#121215] text-blue-600 dark:text-blue-400 shadow-2xs'
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
                         }`}
                       >
                         أسبوعياً
@@ -470,9 +497,9 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-750/60 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+              <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
                 <span className="font-medium">صافي أجرك في الساعة الواحدة:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="font-bold text-blue-600 dark:text-blue-400">
                   <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} /> / ساعة
                 </span>
               </div>
@@ -481,47 +508,92 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
           {/* Item details */}
           <Card title="السلعة المراد شراؤها">
-            <div className="space-y-3.5 pt-1">
-              <Input
-                label="اسم السلعة أو الخدمة"
-                placeholder="مثال: ساعة يد، وجبة فاخرة، جوال"
-                value={itemName}
-                onChange={(e) => {
-                  setItemName(e.target.value)
-                  setHasInteracted(true)
-                }}
-                startIcon={<ShoppingBag className="w-4 h-4 text-slate-400" />}
-              />
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="اسم السلعة أو الخدمة"
+                  placeholder="مثال: ساعة يد، وجبة فاخرة، جوال"
+                  value={itemName}
+                  onChange={(e) => {
+                    setItemName(e.target.value)
+                    setHasInteracted(true)
+                  }}
+                  startIcon={<ShoppingBag className="w-4 h-4 text-zinc-400" />}
+                />
 
-              <Input
-                label={`سعر السلعة (${config.symbol})`}
-                type="text"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={itemPriceStr}
-                onChange={(e) => {
-                  setItemPriceStr(toWesternDigits(e.target.value))
-                  setIsCustomItemPrice(true)
-                  setHasInteracted(true)
-                }}
-              />
+                <Input
+                  label={`سعر السلعة (${config.symbol})`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={itemPriceStr}
+                  onChange={(e) => {
+                    setItemPriceStr(toWesternDigits(e.target.value))
+                    setIsCustomItemPrice(true)
+                    setHasInteracted(true)
+                  }}
+                />
+              </div>
+
+              {/* Quick comparison benchmarks */}
+              <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="text-[11px] font-bold text-zinc-400 mb-1.5">أمثلة سريعة للمقارنة:</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemName('كوب قهوة')
+                      setItemPriceStr(String(benchmarks.coffee))
+                      setIsCustomItemPrice(true)
+                      setHasInteracted(true)
+                    }}
+                    className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-300"
+                  >
+                    قهوة ({benchmarks.coffee} {config.symbol})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemName('عشاء مطعم')
+                      setItemPriceStr(String(benchmarks.dinner))
+                      setIsCustomItemPrice(true)
+                      setHasInteracted(true)
+                    }}
+                    className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-300"
+                  >
+                    عشاء ({benchmarks.dinner} {config.symbol})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemName('حذاء رياضي')
+                      setItemPriceStr(String(benchmarks.shoes))
+                      setIsCustomItemPrice(true)
+                      setHasInteracted(true)
+                    }}
+                    className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-300"
+                  >
+                    حذاء ({benchmarks.shoes} {config.symbol})
+                  </button>
+                </div>
+              </div>
             </div>
           </Card>
         </div>
 
         {/* Right Column: Visual Result Card */}
         <div className="lg:col-span-7">
-          <Card className="h-full flex flex-col justify-between border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-400">التكلفة الفعلية للشراء</span>
+          <Card className="h-full flex flex-col justify-between border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-xs font-bold text-zinc-400">التكلفة الفعلية للشراء</span>
                 <span
                   className={cn(
                     'inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full',
                     impactTier === 'none' &&
-                      'bg-slate-100 dark:bg-slate-750 text-slate-500 dark:text-slate-400',
+                      'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400',
                     impactTier === 'light' &&
-                      'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300',
+                      'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300',
                     impactTier === 'medium' &&
                       'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300',
                     impactTier === 'heavy' &&
@@ -531,8 +603,8 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   <span
                     className={cn(
                       'w-2 h-2 rounded-full shrink-0',
-                      impactTier === 'none' && 'bg-slate-400',
-                      impactTier === 'light' && 'bg-emerald-500',
+                      impactTier === 'none' && 'bg-zinc-400',
+                      impactTier === 'light' && 'bg-blue-500',
                       impactTier === 'medium' && 'bg-amber-500',
                       impactTier === 'heavy' && 'bg-rose-500'
                     )}
@@ -548,34 +620,34 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
               {/* Main hours counter */}
               {salary <= 0 || itemPrice <= 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                <div className="py-6 text-center space-y-2">
+                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto leading-relaxed">
                     يرجى إدخال راتب شهري وسعر سلعة أكبر من الصفر لاحتساب ساعات العمل المطلوبة
                   </p>
                 </div>
               ) : (
-                <div className="py-2 text-center space-y-2">
-                  <p className="text-xs font-semibold text-slate-400">
-                    لشراء <span className="font-bold text-slate-700 dark:text-slate-200">"{itemName || 'هذه السلعة'}"</span> بسعر <FormattedMoney amountFils={toFils(itemPrice, config.decimals)} maskAmount={false} />، تحتاج إلى:
+                <div className="py-1 text-center space-y-1.5">
+                  <p className="text-xs font-semibold text-zinc-400">
+                    لشراء <span className="font-bold text-zinc-700 dark:text-zinc-200">"{itemName || 'هذه السلعة'}"</span> بسعر <FormattedMoney amountFils={toFils(itemPrice, config.decimals)} maskAmount={false} />، تحتاج إلى:
                   </p>
 
-                  <div className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white select-none tracking-tight">
+                  <div className="text-4xl sm:text-5xl font-black text-zinc-900 dark:text-white select-none tracking-tight">
                     {fullHours}{' '}
-                    <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
                       ساعة
                     </span>
                     {remainingMinutes > 0 && (
-                      <span className="text-2xl sm:text-3xl font-extrabold text-slate-400 ms-2">
+                      <span className="text-2xl sm:text-3xl font-extrabold text-zinc-400 ms-2">
                         و {remainingMinutes} دقيقة
                       </span>
                     )}
                   </div>
 
-                  <div className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5 pt-1">
-                    <Briefcase className="w-4 h-4 text-emerald-500" />
+                  <div className="text-xs sm:text-sm font-bold text-zinc-500 dark:text-zinc-400 flex items-center justify-center gap-1.5 pt-1">
+                    <Briefcase className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>
                       ما يعادل تقريباً{' '}
-                      <strong className="text-emerald-600 dark:text-emerald-400 font-black">
+                      <strong className="text-blue-600 dark:text-blue-400 font-black">
                         {equivalentWorkDays}
                       </strong>{' '}
                       يوم دوام عملي
@@ -584,78 +656,17 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                 </div>
               )}
 
-              {/* Direct Metrics Breakdown */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                      <Percent className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-medium text-slate-400">من الراتب الشهري</div>
-                      <div className="text-sm font-black text-slate-800 dark:text-slate-100">
-                        %{salaryPercent}
-                      </div>
-                    </div>
+              {/* Direct Metric: Percent of Monthly Salary */}
+              <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <Percent className="w-3.5 h-3.5" />
                   </div>
+                  <span className="font-medium text-zinc-600 dark:text-zinc-300">من الراتب الشهري:</span>
                 </div>
-
-                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-750/50 border border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-medium text-slate-400">أجرك في الساعة</div>
-                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick comparison benchmarks */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 mt-4">
-              <div className="text-[11px] font-bold text-slate-400 mb-2">أمثلة سريعة للمقارنة:</div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setItemName('كوب قهوة')
-                    setItemPriceStr(String(benchmarks.coffee))
-                    setIsCustomItemPrice(true)
-                    setHasInteracted(true)
-                  }}
-                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
-                >
-                  قهوة ({benchmarks.coffee} {config.symbol})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setItemName('عشاء مطعم')
-                    setItemPriceStr(String(benchmarks.dinner))
-                    setIsCustomItemPrice(true)
-                    setHasInteracted(true)
-                  }}
-                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
-                >
-                  عشاء ({benchmarks.dinner} {config.symbol})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setItemName('حذاء رياضي')
-                    setItemPriceStr(String(benchmarks.shoes))
-                    setIsCustomItemPrice(true)
-                    setHasInteracted(true)
-                  }}
-                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-750 text-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
-                >
-                  حذاء ({benchmarks.shoes} {config.symbol})
-                </button>
+                <span className="text-sm font-black text-zinc-800 dark:text-zinc-100">
+                  %{salaryPercent}
+                </span>
               </div>
             </div>
           </Card>
@@ -666,9 +677,9 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
       {itemPrice > 0 && (
         <Card
           title="بصيرة القرار الشرائي على ميزانية هذا الشهر"
-          className="border border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
+          className="border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none"
         >
-          <div className="space-y-4 pt-1">
+          <div className="space-y-3.5 pt-1">
             {/* Status Alert Banner */}
             {forecast.freeBalance <= 0 ? (
               <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 flex items-start gap-3 text-rose-800 dark:text-rose-200 text-xs">
@@ -677,7 +688,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   <span className="font-bold block text-sm mb-0.5">
                     تحذير: لا يوجد رصيد حر متاح هذا الشهر (<FormattedMoney amountFils={forecast.freeBalance} />)
                   </span>
-                  <span>
+                  <span className="text-[11px] leading-relaxed">
                     ميزانيتك للشهر الحالي مستنفدة بالكامل أو في حالة عجز مالي. إتمام هذا الشراء سيزيد من العجز المرحّل للشهر القادم.
                   </span>
                 </div>
@@ -689,51 +700,55 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                   <span className="font-bold block text-sm mb-0.5">
                     تنبيه: سعر السلعة يتجاوز رصيدك الحر المتبقي!
                   </span>
-                  <span>
+                  <span className="text-[11px] leading-relaxed">
                     سعر السلعة (<FormattedMoney amountFils={toFils(itemPrice, config.decimals)} />) أكبر من رصيدك الحر المتبقي (<FormattedMoney amountFils={forecast.freeBalance} />) بمقدار <FormattedMoney amountFils={toFils(itemPrice, config.decimals) - forecast.freeBalance} />.
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3 text-emerald-800 dark:text-emerald-200 text-xs">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-start gap-3 text-zinc-800 dark:text-zinc-200 text-xs">
+                <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold block text-sm mb-0.5">
+                  <span className="font-bold block text-sm mb-0.5 text-blue-600 dark:text-blue-400">
                     قرار شراء آمن ضمن حدود رصيدك المتاح
                   </span>
-                  <span>
+                  <span className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
                     سعر السلعة يقع بالكامل ضمن رصيدك الحر المتبقي لهذا الشهر (<FormattedMoney amountFils={forecast.freeBalance} />).
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
-                <span className="text-[11px] font-bold text-slate-400 block mb-1">
-                  نسبة الاستهلاك من الرصيد الحر
-                </span>
-                <span className="text-xl font-black text-slate-900 dark:text-white">
-                  {forecast.freeBalance <= 0
-                    ? '100%+ (عجز)'
-                    : toFils(itemPrice, config.decimals) > forecast.freeBalance
-                      ? '100%+ (يتجاوز المتاح)'
-                      : `${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}%`}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+            {/* Metrics Grid: 3 columns even on mobile */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                    نسبة الاستهلاك من الرصيد الحر
+                  </span>
+                  <span className="text-base sm:text-xl font-black text-zinc-900 dark:text-white">
+                    {forecast.freeBalance <= 0
+                      ? '100%+ (عجز)'
+                      : toFils(itemPrice, config.decimals) > forecast.freeBalance
+                        ? '100%+ (يتجاوز المتاح)'
+                        : `${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}%`}
+                  </span>
+                </div>
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
                   الرصيد الحر الحالي: <FormattedMoney amountFils={forecast.freeBalance} />
                 </span>
               </div>
 
-              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
-                <span className="text-[11px] font-bold text-slate-400 block mb-1">
-                  الأثر على حد الصرف اليومي
-                </span>
-                <span className="text-xl font-black text-rose-600 dark:text-rose-400">
-                  - <FormattedMoney amountFils={forecast.dailySafeFils > 0 && newFreeBalance >= 0 ? dailySafeDropFils : itemDailyBurdenFils} maskAmount={false} /> / يوم
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+              <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                    الأثر على حد الصرف اليومي
+                  </span>
+                  <span className="text-base sm:text-xl font-black text-rose-600 dark:text-rose-400">
+                    - <FormattedMoney amountFils={forecast.dailySafeFils > 0 && newFreeBalance >= 0 ? dailySafeDropFils : itemDailyBurdenFils} maskAmount={false} /> / يوم
+                  </span>
+                </div>
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
                   {forecast.dailySafeFils > 0 ? (
                     <>
                       ينخفض من <FormattedMoney amountFils={forecast.dailySafeFils} /> إلى <FormattedMoney amountFils={newDailySafeFils} />
@@ -746,22 +761,24 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                 </span>
               </div>
 
-              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60">
-                <span className="text-[11px] font-bold text-slate-400 block mb-1">
-                  الأيام المتبقية في الشهر المالي
-                </span>
-                <span className="text-xl font-black text-slate-900 dark:text-white">
-                  {forecast.remainingDays} يوم
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+              <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                    الأيام المتبقية في الشهر المالي
+                  </span>
+                  <span className="text-base sm:text-xl font-black text-zinc-900 dark:text-white">
+                    {forecast.remainingDays} يوم
+                  </span>
+                </div>
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
                   حتى موعد تجدد الدورة المالية
                 </span>
               </div>
             </div>
 
             {/* Quick Record Action */}
-            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-emerald-100 dark:border-emerald-900/30">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                 اتخذت قرارك النهائي بشراء هذه السلعة؟
               </span>
               <Button

@@ -3,9 +3,10 @@
 This repository contains **بَصير (Baseer)**, a privacy-first, bilingual (Arabic UI, Western digits 0-9) personal finance and wealth management Progressive Web App (PWA) built with React 19, Vite, TypeScript, Tailwind CSS v4, and Firebase Firestore.
 
 Before starting any task, read:
-1. `AGENTS.md` (Always-on binding agent rules)
-2. `docs/CONVENTIONS.md` (Strict engineering conventions)
-3. `docs/PROJECT_BIBLE.md` (Unified architectural single source of truth & data models)
+1. `DESIGN_SYSTEM.md` (الدستور البصري الشامل ولغة التصميم السويسرية الموحدة والمحرمات البصرية الـ 13)
+2. `AGENTS.md` (Always-on binding agent rules)
+3. `docs/CONVENTIONS.md` (Strict engineering conventions)
+4. `docs/PROJECT_BIBLE.md` (Unified architectural single source of truth & data models)
 
 ---
 
@@ -84,7 +85,8 @@ Before starting any task, read:
 ## Core Stack & Architectural Rules
 
 - **Frontend:** React 19, Vite, TypeScript (strict mode, zero `any`), Tailwind CSS v4 (`@tailwindcss/vite`).
-- **Design System:** Swiss Carbon & Sapphire Clarity (`#2563EB` / `#3B82F6`, IBM Plex Sans Arabic + Cairo font). Logical RTL utilities (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`).
+- **Design System:** Swiss Carbon & Sapphire Clarity (`#2563EB` / `#3B82F6`, IBM Plex Sans Arabic + Cairo font). Logical RTL utilities (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`). Prohibit nested boxes (`Box-in-Box`) and restrict semantic colors to explicit financial numbers and top indicator line (`h-1`) only per `DESIGN_SYSTEM.md`.
+- **Custom UI Controls:** Zero native OS pickers; strictly prohibit raw `<select>` and `<input type="date">`, always use custom `<Select>` and `<DatePickerInput>`.
 - **Icons & Visuals:** `lucide-react` for system icons, `CategoryIcon` for categories.
 - **Navigation:** Desktop Sidebar on the right (`start`), Mobile Bottom Nav (`الرئيسية`, `المعاملات`, `[+]`, `الديون`, `المزيد`).
 - **Zero Blocking Spinners:** Use skeleton loaders (`AppShellSkeleton`, `DashboardSkeleton`, `PageSkeleton`).

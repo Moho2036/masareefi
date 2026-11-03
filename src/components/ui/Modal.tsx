@@ -12,6 +12,7 @@ export interface ModalProps {
   closeOnBackdropClick?: boolean
   closeOnOverlayClick?: boolean
   enableHistoryBack?: boolean
+  hideCloseButton?: boolean
 }
 
 // Module-level stack tracking open modal IDs for nested modal handling
@@ -68,6 +69,7 @@ export const Modal: React.FC<ModalProps> = ({
   closeOnBackdropClick,
   closeOnOverlayClick,
   enableHistoryBack = true,
+  hideCloseButton = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
   const [isNudging, setIsNudging] = useState(false)
@@ -249,6 +251,8 @@ export const Modal: React.FC<ModalProps> = ({
     }
   }
 
+  const hasTitle = Boolean(title && title.trim())
+
   const modalNode = (
     <div
       className="fixed inset-0 z-[100] flex items-end lg:items-center justify-center overflow-hidden"
@@ -268,7 +272,7 @@ export const Modal: React.FC<ModalProps> = ({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-labelledby={hasTitle ? 'modal-title' : undefined}
         tabIndex={-1}
         style={{
           WebkitOverflowScrolling: 'touch',
@@ -280,7 +284,7 @@ export const Modal: React.FC<ModalProps> = ({
           'relative z-10 w-full bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xl outline-none smooth-touch-scroll flex flex-col',
           isNudging && 'scale-[1.015]',
           // Mobile: Bottom Sheet with dynamic max-height
-          'rounded-t-[2rem] max-h-[90dvh] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
+          'rounded-t-2xl max-h-[90dvh] p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
           // Desktop >= lg: Centered Dialog
           'lg:rounded-2xl lg:max-w-lg lg:p-6 lg:m-4 lg:max-h-[85vh]',
           className
@@ -299,26 +303,37 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
 
           {/* Modal Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
-            {title ? (
+          {hasTitle ? (
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
               <h2
                 id="modal-title"
-                className="text-lg font-bold text-zinc-900 dark:text-zinc-100"
+                className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100"
               >
                 {title}
               </h2>
-            ) : (
-              <div />
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="إغلاق"
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+              {!hideCloseButton && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="إغلاق"
+                  className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          ) : !hideCloseButton ? (
+            <div className="flex items-center justify-end pb-1">
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="إغلاق"
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Modal Scrollable Content Container */}

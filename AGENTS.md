@@ -1,6 +1,8 @@
 # بَصير (Baseer) — Engineering Conventions & Agent Rules (binding for every agent)
 
-Read `docs/PROJECT_BIBLE.md` (architecture, data model, design system) before working.
+Before starting any task, read:
+1. `DESIGN_SYSTEM.md` (الدستور البصري الشامل ولغة التصميم السويسرية الموحدة والمحرمات البصرية الـ 13).
+2. `docs/PROJECT_BIBLE.md` (architecture, data model, design system).
 
 ---
 
@@ -90,6 +92,8 @@ Read `docs/PROJECT_BIBLE.md` (architecture, data model, design system) before wo
 - Dark mode: class strategy on `<html>` (`.dark`), setting = system | light | dark (default system). Use `@custom-variant dark (&:where(.dark, .dark *));`.
 - Desktop (≥ lg): sidebar on the RIGHT (start side). Mobile: bottom nav (الرئيسية، المعاملات، [+ FAB]، الديون، المزيد).
 - Zero blocking spinners: Use skeleton loading (`AppShellSkeleton`, `DashboardSkeleton`, `HeroCardSkeleton`, `PageSkeleton`) instead of full-screen spinners or blank screens. Guard balance hero cards against flashing deficit (`danger`) states during initial data resolution.
+- Zero native OS pickers: Strictly prohibit using raw `<select>` and `<input type="date">`; always use custom `<Select>` and `<DatePickerInput>` components.
+- Anti-patterns & color purity: Strictly prohibit nested boxes (`Box-in-Box`). Restrict semantic colors (red/green/amber) to explicit financial numbers and top indicator line (`h-1`) only; never use semantic colors as card/badge/avatar/button backgrounds per `DESIGN_SYSTEM.md`.
 - All user-facing text in Arabic. Numbers in Western digits (0-9) for readability: use `Intl.NumberFormat('ar-JO', { numberingSystem: 'latn' })`.
 
 ## Money & dates
