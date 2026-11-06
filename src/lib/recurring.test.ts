@@ -9,6 +9,7 @@ import {
   isOccurrenceSkipped,
   getNextCircleDueMonth,
   getNextCircleDueDate,
+  MAX_CATCHUP_OCCURRENCES,
 } from './recurring'
 import type { Recurring } from '../types'
 
@@ -165,6 +166,32 @@ describe('recurring pure logic', () => {
       expect(result.dates).toHaveLength(1)
       expect(result.dates[0].toISOString().slice(0, 10)).toBe('2026-03-01')
       expect(result.shouldDeactivate).toBe(true)
+    })
+
+    it('caps catch-up occurrences to MAX_CATCHUP_OCCURRENCES (12) for long absence and advances newNextDate past today', () => {
+      const today = new Date('2026-10-01T12:00:00Z')
+      const startDate = new Date('2026-04-04T12:00:00Z') // 180 days in the past
+      const rec: Recurring = {
+        id: 'rec-daily-backlog',
+        type: 'expense',
+        amountFils: 5000,
+        categoryId: 'c1',
+        note: 'اشتراك يومي',
+        frequency: 'daily',
+        startDate,
+        nextDate: startDate,
+        active: true,
+      }
+
+      const result = calculateDueOccurrences(rec, today)
+
+      expect(result.dates).toHaveLength(MAX_CATCHUP_OCCURRENCES)
+      expect(result.dates.length).toBe(12)
+      expect(result.newNextDate.getTime()).toBeGreaterThan(today.getTime())
+      // The last generated date in finalDates should be today
+      const lastDate = result.dates[result.dates.length - 1]
+      expect(lastDate.toISOString().slice(0, 10)).toBe('2026-10-01')
+      expect(result.shouldDeactivate).toBe(false)
     })
 
     it('preserves target day across short months (Jan 31 -> Feb 28 -> Mar 31)', () => {

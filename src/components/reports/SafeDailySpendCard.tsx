@@ -110,6 +110,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                   'text-2xl sm:text-3xl font-black select-none tracking-tight',
                   isSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
                 )}
+                dir="ltr"
               >
                 {isSurplus ? `+ ${format(Math.abs(availableBalance))}` : `- ${format(Math.abs(availableBalance))}`}
               </div>
@@ -312,6 +313,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                         ? 'text-red-500 dark:text-red-400'
                         : 'text-slate-500 dark:text-slate-400'
                   )}
+                  dir="ltr"
                 >
                   {format(freeBalance)}
                 </div>
@@ -327,6 +329,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                       ? 'text-slate-700 dark:text-slate-200'
                       : 'text-red-500 dark:text-red-400'
                   )}
+                  dir="ltr"
                 >
                   {rolloverBalance >= 0
                     ? `+ ${format(rolloverBalance)}`
@@ -497,6 +500,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                     ? 'text-slate-800 dark:text-slate-200'
                     : 'text-red-500 dark:text-red-400'
                 )}
+                dir="ltr"
               >
                 {format(freeBalance)}
               </div>
@@ -516,6 +520,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-red-500 dark:text-red-400'
                 )}
+                dir="ltr"
               >
                 {rolloverBalance > 0
                   ? `+ ${format(rolloverBalance)}`
@@ -586,7 +591,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               </div>
               <p>
                 رصيدك النقدي الحالي قبل نزول الدخل المتكرر القادم هو (
-                <strong className="font-black text-amber-700 dark:text-amber-400">
+                <strong className="font-black text-amber-700 dark:text-amber-400" dir="ltr">
                   {format(availableBalance)}
                 </strong>
                 )، وتعتمد ميزانية الصرف الآمن على الدخل المتكرر المجدول بقيمة (

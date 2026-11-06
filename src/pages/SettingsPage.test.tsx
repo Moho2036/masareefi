@@ -706,4 +706,26 @@ describe('SettingsPage Extended Features', () => {
       )
     })
   })
+
+  it('rejects reconciliation if the target amount exceeds MAX_AMOUNT_FILS', async () => {
+    render(<SettingsPage />)
+
+    const openBtn = screen.getByRole('button', { name: 'تسوية وتعديل الرصيد' })
+    fireEvent.click(openBtn)
+
+    const amountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(amountInput, { target: { value: '1000000001' } })
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ وتسوية الرصيد' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'المبلغ يتجاوز الحد الأقصى المسموح به',
+        'error'
+      )
+    })
+    expect(mockUpdateSettings).not.toHaveBeenCalled()
+    expect(mockAddTransaction).not.toHaveBeenCalled()
+  })
 })

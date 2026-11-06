@@ -4,8 +4,6 @@ import {
   query,
   where,
   limit,
-  getDocs,
-  getDoc,
   orderBy,
   onSnapshot,
   addDoc,
@@ -17,6 +15,7 @@ import {
 import { db } from '../lib/firebase'
 import type { Category } from '../types'
 import { categoryConverter } from './converters'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
 
 export function subscribeCategories(
   uid: string,
@@ -44,10 +43,13 @@ export async function addCategory(
   category: Omit<Category, 'id'>
 ): Promise<string> {
   const colRef = collection(db, 'users', uid, 'categories').withConverter(categoryConverter)
-  const docRef = await addDoc(colRef, {
-    ...category,
-    id: '', // converter ignores id and writes document fields
-  })
+  const docRef = await commitFirestoreWrite(
+    addDoc(colRef, {
+      ...category,
+      id: '', // converter ignores id and writes document fields
+    }),
+    { id: 'offline_cat_' + Date.now() } as never
+  )
   return docRef.id
 }
 
@@ -76,7 +78,7 @@ export async function updateCategory(
   }
 
   if (Object.keys(payload).length > 0) {
-    await updateDoc(docRef, payload)
+    await commitFirestoreWrite(updateDoc(docRef, payload))
   }
 }
 
@@ -88,12 +90,12 @@ export async function archiveCategory(
   const docRef = doc(db, 'users', uid, 'categories', id)
 
   if (archived) {
-    const snap = await getDoc(docRef)
+    const snap = await safeGetDoc(docRef)
     if (snap.exists()) {
       const catData = snap.data() as Category | undefined
       if (catData?.type && !catData?.archived) {
         const colRef = collection(db, 'users', uid, 'categories')
-        const activeSnap = await getDocs(
+        const activeSnap = await safeGetDocs(
           query(colRef, where('type', '==', catData.type), where('archived', '==', false))
         )
         if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
@@ -103,7 +105,7 @@ export async function archiveCategory(
     }
   }
 
-  await updateDoc(docRef, { archived })
+  await commitFirestoreWrite(updateDoc(docRef, { archived }))
 }
 
 export async function archiveCategoriesBatch(
@@ -118,17 +120,17 @@ export async function archiveCategoriesBatch(
     const docRef = doc(db, 'users', uid, 'categories', id)
     batch.update(docRef, { archived })
   }
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export async function deleteCategory(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
-  const catSnap = await getDoc(docRef)
+  const catSnap = await safeGetDoc(docRef)
   if (catSnap.exists()) {
     const catData = catSnap.data() as Category | undefined
     if (catData?.type && !catData?.archived) {
       const colRef = collection(db, 'users', uid, 'categories')
-      const activeSnap = await getDocs(
+      const activeSnap = await safeGetDocs(
         query(colRef, where('type', '==', catData.type), where('archived', '==', false))
       )
       if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
@@ -142,11 +144,11 @@ export async function deleteCategory(uid: string, id: string): Promise<void> {
   const circlesCol = collection(db, 'users', uid, 'circles')
 
   const [snapTx, snapRec, snapCircleExp, snapCircleInc, snapCircleCat] = await Promise.all([
-    getDocs(query(txsCol, where('categoryId', '==', id), limit(1))),
-    getDocs(query(recCol, where('categoryId', '==', id), limit(1))),
-    getDocs(query(circlesCol, where('expenseCategoryId', '==', id), limit(1))),
-    getDocs(query(circlesCol, where('incomeCategoryId', '==', id), limit(1))),
-    getDocs(query(circlesCol, where('categoryId', '==', id), limit(1))),
+    safeGetDocs(query(txsCol, where('categoryId', '==', id), limit(1))),
+    safeGetDocs(query(recCol, where('categoryId', '==', id), limit(1))),
+    safeGetDocs(query(circlesCol, where('expenseCategoryId', '==', id), limit(1))),
+    safeGetDocs(query(circlesCol, where('incomeCategoryId', '==', id), limit(1))),
+    safeGetDocs(query(circlesCol, where('categoryId', '==', id), limit(1))),
   ])
 
   if (!snapTx.empty) {
@@ -159,7 +161,7 @@ export async function deleteCategory(uid: string, id: string): Promise<void> {
     throw new Error('لا يمكن حذف هذا التصنيف نهائياً لأنه مرتبط بجمعية مالية. يمكنك أرشفته أو تغيير تصنيف الجمعية أولاً.')
   }
 
-  await deleteDoc(docRef)
+  await commitFirestoreWrite(deleteDoc(docRef))
 }
 
 export async function reassignAndDeleteCategory(
@@ -175,8 +177,8 @@ export async function reassignAndDeleteCategory(
   const targetRef = doc(db, 'users', uid, 'categories', targetCatId)
 
   const [sourceSnap, targetSnap] = await Promise.all([
-    getDoc(sourceRef),
-    getDoc(targetRef),
+    safeGetDoc(sourceRef),
+    safeGetDoc(targetRef),
   ])
 
   if (!sourceSnap.exists()) {
@@ -195,7 +197,7 @@ export async function reassignAndDeleteCategory(
 
   if (!sourceData.archived && targetData.archived) {
     const colRef = collection(db, 'users', uid, 'categories')
-    const activeSnap = await getDocs(
+    const activeSnap = await safeGetDocs(
       query(colRef, where('type', '==', sourceData.type), where('archived', '==', false))
     )
     if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === sourceCatId)) {
@@ -208,11 +210,11 @@ export async function reassignAndDeleteCategory(
   const circlesCol = collection(db, 'users', uid, 'circles')
 
   const [snapTxs, snapRecs, snapCircExp, snapCircInc, snapCircCat] = await Promise.all([
-    getDocs(query(txsCol, where('categoryId', '==', sourceCatId))),
-    getDocs(query(recCol, where('categoryId', '==', sourceCatId))),
-    getDocs(query(circlesCol, where('expenseCategoryId', '==', sourceCatId))),
-    getDocs(query(circlesCol, where('incomeCategoryId', '==', sourceCatId))),
-    getDocs(query(circlesCol, where('categoryId', '==', sourceCatId))),
+    safeGetDocs(query(txsCol, where('categoryId', '==', sourceCatId))),
+    safeGetDocs(query(recCol, where('categoryId', '==', sourceCatId))),
+    safeGetDocs(query(circlesCol, where('expenseCategoryId', '==', sourceCatId))),
+    safeGetDocs(query(circlesCol, where('incomeCategoryId', '==', sourceCatId))),
+    safeGetDocs(query(circlesCol, where('categoryId', '==', sourceCatId))),
   ])
 
   type PendingOp = {
@@ -266,7 +268,7 @@ export async function reassignAndDeleteCategory(
         batch.delete(op.ref)
       }
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   }
 }
 

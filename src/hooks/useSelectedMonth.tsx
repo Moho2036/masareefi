@@ -17,6 +17,7 @@ import {
   getFiscalMonthInfo,
 } from '../lib/dates'
 import { useUserSettings } from './useUserSettings'
+import { useAuth } from './useAuth'
 
 interface SelectedMonthContextValue {
   selectedDate: Date
@@ -37,10 +38,18 @@ interface SelectedMonthContextValue {
 export const SelectedMonthContext = createContext<SelectedMonthContextValue | null>(null)
 
 export function SelectedMonthProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  const [prevUid, setPrevUid] = useState<string | undefined>(user?.uid)
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [manualNavKey, setManualNavKey] = useState<number>(0)
   const [refreshKey, setRefreshKey] = useState<number>(0)
   const { data: settings } = useUserSettings()
+
+  if (prevUid !== user?.uid) {
+    setPrevUid(user?.uid)
+    setSelectedDate(new Date())
+    setManualNavKey(0)
+  }
 
   const monthStartDay = settings?.monthStartDay ?? 1
   const [prevMonthStartDay, setPrevMonthStartDay] = useState<number>(monthStartDay)

@@ -1,8 +1,6 @@
 import {
   doc,
   collection,
-  getDoc,
-  getDocs,
   query,
   limit,
   setDoc,
@@ -20,6 +18,8 @@ import { db, auth } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
 import { addDefaultCategoriesToBatch } from './seed'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
+import { MAX_AMOUNT_FILS } from '../lib/money'
 
 export const DEFAULT_SETTINGS: Omit<UserSettings, 'uid' | 'createdAt'> = {
   displayName: 'مستخدم',
@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'uid' | 'createdAt'> = {
 
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
-  const snap = await getDoc(userRef)
+  const snap = await safeGetDoc(userRef)
 
   const candidateName = (user.displayName || auth?.currentUser?.displayName || '').trim()
 
@@ -46,7 +46,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
       candidateName !== 'مستخدم'
     ) {
       const realName = candidateName.slice(0, 100)
-      await updateDoc(doc(db, 'users', user.uid), { displayName: realName })
+      await commitFirestoreWrite(updateDoc(doc(db, 'users', user.uid), { displayName: realName }))
       return { ...data, displayName: realName }
     }
     return data
@@ -55,7 +55,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const rawUserDoc = doc(db, 'users', user.uid)
 
   // Re-verify before batch creation in case a concurrent call created the doc
-  const reCheckSnap = await getDoc(userRef)
+  const reCheckSnap = await safeGetDoc(userRef)
   if (reCheckSnap.exists()) {
     const existingData = reCheckSnap.data()
     if (
@@ -64,7 +64,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
       candidateName !== 'مستخدم'
     ) {
       const realName = candidateName.slice(0, 100)
-      await updateDoc(rawUserDoc, { displayName: realName })
+      await commitFirestoreWrite(updateDoc(rawUserDoc, { displayName: realName }))
       return { ...existingData, displayName: realName }
     }
     return existingData
@@ -92,7 +92,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
     createdAt: serverTimestamp(),
   })
   addDefaultCategoriesToBatch(batch, user.uid)
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 
   return initialSettings
 }
@@ -147,6 +147,9 @@ export async function updateUserSettings(
     Number.isFinite(Number(partial.openingBalanceFils)) &&
     Number(partial.openingBalanceFils) >= 0
   ) {
+    if (Math.round(Number(partial.openingBalanceFils)) > MAX_AMOUNT_FILS) {
+      throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
+    }
     cleanUpdates.openingBalanceFils = Math.round(Number(partial.openingBalanceFils))
   }
   if (partial.hideBalances !== undefined) {
@@ -221,10 +224,10 @@ export async function updateUserSettings(
   // Ensure createdAt is never passed in updates
   delete (cleanUpdates as Record<string, unknown>).createdAt
 
-  const snap = await getDoc(userRef)
+  const snap = await safeGetDoc(userRef)
   if (snap.exists()) {
     if (Object.keys(cleanUpdates).length > 0) {
-      await updateDoc(userRef, cleanUpdates)
+      await commitFirestoreWrite(updateDoc(userRef, cleanUpdates))
     }
   } else {
     const payloadUpdates = { ...cleanUpdates }
@@ -236,7 +239,7 @@ export async function updateUserSettings(
       ...payloadUpdates,
       createdAt: serverTimestamp(),
     }
-    await setDoc(userRef, fullPayload)
+    await commitFirestoreWrite(setDoc(userRef, fullPayload))
   }
 }
 
@@ -248,10 +251,10 @@ export async function hasExistingUserData(uid: string): Promise<boolean> {
     const circleCol = collection(db, 'users', uid, 'circles')
 
     const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
-      getDocs(query(txCol, limit(1))),
-      getDocs(query(debtCol, limit(1))),
-      getDocs(query(recCol, limit(1))),
-      getDocs(query(circleCol, limit(1))),
+      safeGetDocs(query(txCol, limit(1))),
+      safeGetDocs(query(debtCol, limit(1))),
+      safeGetDocs(query(recCol, limit(1))),
+      safeGetDocs(query(circleCol, limit(1))),
     ])
 
     return !txSnap.empty || !debtSnap.empty || !recSnap.empty || !circleSnap.empty
@@ -266,36 +269,45 @@ export async function hasExistingUserData(uid: string): Promise<boolean> {
  * and resets openingBalanceFils to 0, preserving categories and user settings.
  */
 export async function resetUserData(uid: string): Promise<void> {
-  const txCol = collection(db, 'users', uid, 'transactions')
-  const debtCol = collection(db, 'users', uid, 'debts')
-  const recCol = collection(db, 'users', uid, 'recurring')
-  const circleCol = collection(db, 'users', uid, 'circles')
-
-  const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
-    getDocs(txCol),
-    getDocs(debtCol),
-    getDocs(recCol),
-    getDocs(circleCol),
-  ])
-
-  const docsToDelete = [
-    ...txSnap.docs.map((d) => d.ref),
-    ...debtSnap.docs.map((d) => d.ref),
-    ...recSnap.docs.map((d) => d.ref),
-    ...circleSnap.docs.map((d) => d.ref),
-  ]
-
-  const CHUNK_SIZE = 400
-  for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
-    const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
-    const batch = writeBatch(db)
-    for (const ref of chunk) {
-      batch.delete(ref)
-    }
-    await batch.commit()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('baseer-bulk-op-start'))
   }
+  try {
+    const txCol = collection(db, 'users', uid, 'transactions')
+    const debtCol = collection(db, 'users', uid, 'debts')
+    const recCol = collection(db, 'users', uid, 'recurring')
+    const circleCol = collection(db, 'users', uid, 'circles')
 
-  await updateUserSettings(uid, { openingBalanceFils: 0 })
+    const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
+      safeGetDocs(txCol),
+      safeGetDocs(debtCol),
+      safeGetDocs(recCol),
+      safeGetDocs(circleCol),
+    ])
+
+    const docsToDelete = [
+      ...txSnap.docs.map((d) => d.ref),
+      ...debtSnap.docs.map((d) => d.ref),
+      ...recSnap.docs.map((d) => d.ref),
+      ...circleSnap.docs.map((d) => d.ref),
+    ]
+
+    const CHUNK_SIZE = 400
+    for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
+      const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
+      const batch = writeBatch(db)
+      for (const ref of chunk) {
+        batch.delete(ref)
+      }
+      await commitFirestoreWrite(batch.commit())
+    }
+
+    await updateUserSettings(uid, { openingBalanceFils: 0 })
+  } finally {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('baseer-bulk-op-end'))
+    }
+  }
 }
 
 /**
@@ -310,11 +322,11 @@ export async function deleteUserFirestoreData(uid: string): Promise<void> {
   const catCol = collection(db, 'users', uid, 'categories')
 
   const [txSnap, debtSnap, recSnap, circleSnap, catSnap] = await Promise.all([
-    getDocs(txCol),
-    getDocs(debtCol),
-    getDocs(recCol),
-    getDocs(circleCol),
-    getDocs(catCol),
+    safeGetDocs(txCol),
+    safeGetDocs(debtCol),
+    safeGetDocs(recCol),
+    safeGetDocs(circleCol),
+    safeGetDocs(catCol),
   ])
 
   const docsToDelete = [
@@ -332,8 +344,8 @@ export async function deleteUserFirestoreData(uid: string): Promise<void> {
     for (const ref of chunk) {
       batch.delete(ref)
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   }
 
-  await deleteDoc(doc(db, 'users', uid))
+  await commitFirestoreWrite(deleteDoc(doc(db, 'users', uid)))
 }

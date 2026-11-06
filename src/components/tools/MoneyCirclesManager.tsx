@@ -79,6 +79,18 @@ export const MoneyCirclesManager: React.FC = () => {
     })
   }, [circles])
 
+  const activeCircles = useMemo(
+    () => sortedCircles.filter((c) => c.status !== 'completed'),
+    [sortedCircles]
+  )
+  const completedCircles = useMemo(
+    () => sortedCircles.filter((c) => c.status === 'completed'),
+    [sortedCircles]
+  )
+  const [userToggledCompleted, setUserToggledCompleted] = useState<boolean | null>(null)
+  const isCompletedExpanded =
+    userToggledCompleted !== null ? userToggledCompleted : completedCircles.length <= 3
+
   const defaultExpenseCategory = useMemo(() => {
     const active = categories.filter((c) => c.type === 'expense' && !c.archived)
     return (
@@ -946,8 +958,9 @@ export const MoneyCirclesManager: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-4">
-          {sortedCircles.map((circle) => {
-            const now = new Date()
+          {(() => {
+            const renderCircleCard = (circle: MoneyCircle) => {
+              const now = new Date()
             const start = new Date(circle.startDate)
             const diffMonths = getCircleCycleIndex(circle.startDate, now, monthStartDay)
             const isStarted = diffMonths >= 0
@@ -1740,7 +1753,51 @@ export const MoneyCirclesManager: React.FC = () => {
                 )}
               </Card>
             )
-          })}
+          }
+
+          return (
+            <>
+              {/* Active circles */}
+              {activeCircles.map(renderCircleCard)}
+
+              {/* If no active circles, but completed circles exist */}
+              {activeCircles.length === 0 && completedCircles.length > 0 && (
+                <Card className="p-6 text-center border-dashed border-[#E4E4E7] dark:border-[#27272A] bg-white/50 dark:bg-[#121215]/50 shadow-2xs dark:shadow-none">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    لا توجد جمعيات مالية نشطة حالياً.
+                  </p>
+                </Card>
+              )}
+
+              {/* Completed circles collapsible archive section */}
+              {completedCircles.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserToggledCompleted(!isCompletedExpanded)}
+                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                    aria-expanded={isCompletedExpanded}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>الجمعيات المكتملة ({completedCircles.length})</span>
+                    </div>
+                    {isCompletedExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-zinc-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-500" />
+                    )}
+                  </button>
+                  {isCompletedExpanded && (
+                    <div className="space-y-4 animate-slide-down">
+                      {completedCircles.map(renderCircleCard)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )
+        })()}
         </div>
       )}
 

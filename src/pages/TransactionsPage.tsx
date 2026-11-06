@@ -266,10 +266,10 @@ export const TransactionsPage: React.FC = () => {
     const filtered = categories.filter((c) => {
       const matchesType = filterType === 'all' ? true : c.type === filterType
       if (!matchesType) return false
-      return !c.archived || usedCategoryIds.has(c.id)
+      return !c.archived || usedCategoryIds.has(c.id) || selectedCategories.includes(c.id)
     })
     return sortCategoriesUnified(filtered, usageMap, userSettings?.categorySortMode || 'usage')
-  }, [categories, filterType, usageMap, rawTransactions, userSettings?.categorySortMode])
+  }, [categories, filterType, usageMap, rawTransactions, userSettings?.categorySortMode, selectedCategories])
 
   // Filtered transactions (using deferredQuery to prevent keyboard lag on mobile)
   const filteredTransactions = useMemo(() => {

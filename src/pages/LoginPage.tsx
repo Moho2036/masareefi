@@ -114,6 +114,8 @@ export const LoginPage: React.FC = () => {
         setError('البريد الإلكتروني المدخل غير صالح.')
       } else if (errCode === 'auth/user-not-found') {
         setError('لا يوجد حساب مسجل بهذا البريد الإلكتروني.')
+      } else if (errCode === 'auth/user-disabled') {
+        setError('تم تعطيل هذا الحساب. يرجى التواصل مع الدعم الفني.')
       } else if (errCode === 'auth/wrong-password' || errCode === 'auth/invalid-credential') {
         setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.')
       } else if (errCode === 'auth/weak-password') {
@@ -155,6 +157,10 @@ export const LoginPage: React.FC = () => {
         setError('لا يوجد حساب مسجل بهذا البريد الإلكتروني.')
       } else if (errCode === 'auth/invalid-email') {
         setError('البريد الإلكتروني المدخل غير صالح.')
+      } else if (errCode === 'auth/too-many-requests') {
+        setError('تم إيقاف المحاولات مؤقتاً لكثرة الطلبات. يرجى المحاولة بعد قليل.')
+      } else if (errCode === 'auth/network-request-failed') {
+        setError('تعذر الاتصال بالشبكة. يرجى التحقق من اتصال الإنترنت والمحاولة مجدداً.')
       } else {
         setError('تعذر إرسال رابط إعادة تعيين كلمة المرور. يرجى التحقق من البريد الإلكتروني والمحاولة لاحقاً.')
       }
@@ -171,7 +177,18 @@ export const LoginPage: React.FC = () => {
       await signInWithGoogle()
     } catch (err: unknown) {
       console.error('Google sign-in error:', err)
-      setError('تعذر تسجيل الدخول باستخدام حساب Google. يرجى المحاولة مرة أخرى.')
+      const errCode = (err as { code?: string })?.code || ''
+      if (errCode === 'auth/popup-closed-by-user' || errCode === 'auth/cancelled-popup-request') {
+        setError('تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.')
+      } else if (errCode === 'auth/popup-blocked') {
+        setError('تم حظر نافذة تسجيل الدخول المنبثقة من قِبل المتصفح. يرجى السماح بالنوافذ المنبثقة لهذا الموقع والمحاولة مجدداً.')
+      } else if (errCode === 'auth/network-request-failed') {
+        setError('تعذر الاتصال بالشبكة. يرجى التحقق من اتصال الإنترنت والمحاولة مجدداً.')
+      } else if (errCode === 'auth/account-exists-with-different-credential') {
+        setError('هذا البريد مرتبط بطريقة دخول أخرى. يرجى تسجيل الدخول بالبريد وكلمة المرور.')
+      } else {
+        setError('تعذر تسجيل الدخول باستخدام حساب Google. يرجى المحاولة مرة أخرى.')
+      }
     } finally {
       setSigningInGoogle(false)
     }

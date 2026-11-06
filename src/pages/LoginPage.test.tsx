@@ -279,4 +279,25 @@ describe('LoginPage Component', () => {
       expect(screen.getByText('لا يوجد حساب مسجل بهذا البريد الإلكتروني.')).toBeDefined()
     })
   })
+
+  it('shows appropriate Arabic error message when Google sign-in fails with auth/popup-blocked', async () => {
+    mockSignInWithGoogle.mockRejectedValueOnce({ code: 'auth/popup-blocked' })
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    const googleBtn = screen.getByRole('button', { name: /الدخول بحساب Google/i })
+    fireEvent.click(googleBtn)
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'تم حظر نافذة تسجيل الدخول المنبثقة من قِبل المتصفح. يرجى السماح بالنوافذ المنبثقة لهذا الموقع والمحاولة مجدداً.'
+        )
+      ).toBeDefined()
+    })
+  })
 })

@@ -406,6 +406,12 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
         if (typeof e.transactionId === 'string' && e.transactionId.trim()) {
           item.transactionId = e.transactionId.trim().slice(0, 128)
         }
+        if (e.isMerged) {
+          item.isMerged = true
+        }
+        if (Array.isArray(e.mergedTransactionIds) && e.mergedTransactionIds.length > 0) {
+          item.mergedTransactionIds = e.mergedTransactionIds.filter(Boolean)
+        }
         return item
       })
     }
@@ -466,6 +472,10 @@ export const debtConverter: FirestoreDataConverter<Debt> = {
           : e.createdAt
             ? new Date(e.createdAt as string | number)
             : new Date(),
+      ...(e.isMerged ? { isMerged: true } : {}),
+      ...(Array.isArray(e.mergedTransactionIds) && e.mergedTransactionIds.length > 0
+        ? { mergedTransactionIds: (e.mergedTransactionIds as unknown[]).map(String) }
+        : {}),
     }))
 
     return {

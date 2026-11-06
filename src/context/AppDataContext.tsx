@@ -73,6 +73,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const [rolloverBalanceFils, setRolloverBalanceFils] = useState<number>(0)
   const [rolloverLoading, setRolloverLoading] = useState<boolean>(false)
+  const [isBulkOpActive, setIsBulkOpActive] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleStart = () => setIsBulkOpActive(true)
+    const handleEnd = () => setIsBulkOpActive(false)
+
+    window.addEventListener('baseer-bulk-op-start', handleStart)
+    window.addEventListener('baseer-bulk-op-end', handleEnd)
+
+    return () => {
+      window.removeEventListener('baseer-bulk-op-start', handleStart)
+      window.removeEventListener('baseer-bulk-op-end', handleEnd)
+    }
+  }, [])
 
   const userId = user?.uid
   const [prevUserId, setPrevUserId] = useState(userId)
@@ -319,7 +335,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       (user && isRolloverEnabled ? rolloverBalanceFils : 0) + openingFils
     const calculatedRolloverLoading = !user
       ? false
-      : settingsLoading || (isRolloverEnabled && rolloverLoading)
+      : isBulkOpActive || settingsLoading || (isRolloverEnabled && rolloverLoading)
 
     return {
       settings,
@@ -369,6 +385,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     rolloverBalanceFils,
     handleSetRolloverBalanceFils,
     rolloverLoading,
+    isBulkOpActive,
   ])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>

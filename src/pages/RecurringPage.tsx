@@ -15,6 +15,9 @@ import {
   History,
   CheckCircle2,
   SkipForward,
+  ChevronDown,
+  ChevronUp,
+  Clock,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -188,6 +191,18 @@ export const RecurringPage: React.FC = () => {
     })
   }, [recurringItems])
 
+  const activeItems = useMemo(
+    () => sortedRecurringItems.filter((r) => r.active !== false),
+    [sortedRecurringItems]
+  )
+  const pausedItems = useMemo(
+    () => sortedRecurringItems.filter((r) => r.active === false),
+    [sortedRecurringItems]
+  )
+  const [userToggledPaused, setUserToggledPaused] = useState<boolean | null>(null)
+  const isPausedExpanded =
+    userToggledPaused !== null ? userToggledPaused : pausedItems.length <= 3
+
   const handleToggleActive = async (item: Recurring) => {
     if (!user) return
     const newActive = !item.active
@@ -353,9 +368,10 @@ export const RecurringPage: React.FC = () => {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sortedRecurringItems.map((item) => {
-            const cat = categoryMap.get(item.categoryId)
+        <div className="space-y-6">
+          {(() => {
+            const renderRecurringCard = (item: Recurring) => {
+              const cat = categoryMap.get(item.categoryId)
             const icon = cat?.icon ?? '➕'
             const color = cat?.color ?? '#94A3B8'
             const name = cat?.name ?? 'غير مصنف'
@@ -617,7 +633,52 @@ export const RecurringPage: React.FC = () => {
                 </div>
               </div>
             )
-          })}
+          }
+
+          return (
+            <>
+              {/* Active recurring items */}
+              {activeItems.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeItems.map(renderRecurringCard)}
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-[#121215] rounded-2xl border border-dashed border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    لا توجد معاملات متكررة نشطة حالياً.
+                  </p>
+                </div>
+              )}
+
+              {/* Paused recurring items collapsible archive section */}
+              {pausedItems.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserToggledPaused(!isPausedExpanded)}
+                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                    aria-expanded={isPausedExpanded}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-zinc-500" />
+                      <span>المعاملات المتكررة المتوقفة ({pausedItems.length})</span>
+                    </div>
+                    {isPausedExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-zinc-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-500" />
+                    )}
+                  </button>
+                  {isPausedExpanded && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-slide-down">
+                      {pausedItems.map(renderRecurringCard)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )
+        })()}
         </div>
       )}
 

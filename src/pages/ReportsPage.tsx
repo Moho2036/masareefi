@@ -388,17 +388,44 @@ export const ReportsPage: React.FC = () => {
 
   const yearOptions = useMemo(() => {
     const calendarYear = new Date().getFullYear()
-    const maxYear = Math.max(calendarYear, currentYear, selectedYear)
-    const baseYears = [maxYear, maxYear - 1, maxYear - 2, maxYear - 3, maxYear - 4]
-    if (!baseYears.includes(selectedYear)) {
-      baseYears.push(selectedYear)
-      baseYears.sort((a, b) => b - a)
+
+    let createdYear = calendarYear
+    if (settings?.createdAt) {
+      const rawCreated = settings.createdAt
+      const createdDate =
+        rawCreated instanceof Date
+          ? rawCreated
+          : typeof (rawCreated as { toDate?: () => Date }).toDate === 'function'
+          ? (rawCreated as { toDate: () => Date }).toDate()
+          : new Date(rawCreated as unknown as string | number)
+      if (!isNaN(createdDate.getTime())) {
+        createdYear = createdDate.getFullYear()
+      }
     }
-    return baseYears.map((y) => ({
+
+    const maxYear = Math.max(calendarYear + 1, currentYear, selectedYear)
+    const minYear = Math.max(
+      maxYear - 14,
+      Math.min(calendarYear - 10, createdYear, selectedYear)
+    )
+
+    const yearsSet = new Set<number>()
+    yearsSet.add(selectedYear)
+    for (let y = maxYear; y >= minYear; y--) {
+      yearsSet.add(y)
+    }
+    const sortedYears = Array.from(yearsSet).sort((a, b) => b - a)
+    const finalYears = sortedYears.slice(0, 15)
+    if (!finalYears.includes(selectedYear)) {
+      finalYears.push(selectedYear)
+      finalYears.sort((a, b) => b - a)
+    }
+
+    return finalYears.map((y) => ({
       value: String(y),
       label: `سنة ${y}`,
     }))
-  }, [currentYear, selectedYear])
+  }, [currentYear, selectedYear, settings])
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -594,9 +621,17 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0
-                  ? `صافي الشهر المستقل (الرصيد المتاح مع المرحّل: ${format(monthSums.balance + effectiveRollover)})`
-                  : 'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'}
+                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0 ? (
+                  <>
+                    صافي الشهر المستقل (الرصيد المتاح مع المرحّل:{' '}
+                    <span dir="ltr" className="inline-block font-semibold">
+                      {format(monthSums.balance + effectiveRollover)}
+                    </span>
+                    )
+                  </>
+                ) : (
+                  'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'
+                )}
               </div>
             </Card>
 

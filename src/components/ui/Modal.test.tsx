@@ -206,4 +206,27 @@ describe('Modal Component', () => {
 
     expect(handleClose).toHaveBeenCalledTimes(1)
   })
+
+  it('traps focus inside the modal on Tab and Shift+Tab', () => {
+    render(
+      <Modal isOpen={true} onClose={vi.fn()} title="نافذة اختبار التركيز">
+        <input data-testid="input-1" aria-label="حقل 1" />
+        <button type="button" data-testid="button-2">زر 2</button>
+      </Modal>
+    )
+
+    const closeBtn = screen.getByRole('button', { name: 'إغلاق' })
+    const button2 = screen.getByTestId('button-2')
+
+    // Focus last element; Tab should wrap to first element (closeBtn)
+    button2.focus()
+    expect(document.activeElement).toBe(button2)
+
+    fireEvent.keyDown(window, { key: 'Tab' })
+    expect(document.activeElement).toBe(closeBtn)
+
+    // Focus first element; Shift+Tab should wrap to last element (button2)
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(button2)
+  })
 })

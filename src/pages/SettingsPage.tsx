@@ -69,7 +69,7 @@ import {
   type BackupValidationResult,
   type RestoreMode,
 } from '../lib/backupRestore'
-import { PRESET_CURRENCIES, getCurrencyConfig, toFils, fromFils } from '../lib/money'
+import { PRESET_CURRENCIES, getCurrencyConfig, toFils, fromFils, MAX_AMOUNT_FILS } from '../lib/money'
 import { cn } from '../lib/cn'
 import type { ThemePreference, NotificationPrefs } from '../types'
 
@@ -203,6 +203,13 @@ export const SettingsPage: React.FC = () => {
   const [showReauthModal, setShowReauthModal] = useState(false)
   const [reauthPassword, setReauthPassword] = useState('')
   const [reauthenticating, setReauthenticating] = useState(false)
+  const reauthenticatedAtRef = useRef<number>(0)
+  const pendingActionRef = useRef<'delete-account' | null>(null)
+
+  const isGoogleOnly = Boolean(
+    user?.providerData?.length &&
+      user.providerData.every((p) => p.providerId === 'google.com')
+  )
 
   // Sync PIN state on pinKey change during render
   const [prevPinKey, setPrevPinKey] = useState(pinKey)
@@ -291,8 +298,10 @@ export const SettingsPage: React.FC = () => {
       setConfirmPassword('')
     } catch (err: unknown) {
       const errorObj = err as { code?: string }
-      if (errorObj?.code === 'auth/requires-recent-login' || errorObj?.code === 'auth/wrong-password') {
-        showToast('كلمة المرور الحالية غير صحيحة أو يتطلب الإجراء إعادة تسجيل الدخول', 'error')
+      if (errorObj?.code === 'auth/wrong-password' || errorObj?.code === 'auth/invalid-credential') {
+        showToast('كلمة المرور الحالية غير صحيحة', 'error')
+      } else if (errorObj?.code === 'auth/requires-recent-login') {
+        showToast('يتطلب هذا الإجراء إعادة تسجيل الدخول', 'error')
         setShowPasswordModal(false)
         setShowReauthModal(true)
       } else {
@@ -448,6 +457,10 @@ export const SettingsPage: React.FC = () => {
       showToast('يرجى إدخال مبلغ صالح', 'error')
       return
     }
+    if (targetFils > MAX_AMOUNT_FILS) {
+      showToast('المبلغ يتجاوز الحد الأقصى المسموح به', 'error')
+      return
+    }
     setSavingReconcile(true)
     try {
       const currentCycle = getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
@@ -583,6 +596,12 @@ export const SettingsPage: React.FC = () => {
       if (legacyPinKey) {
         localStorage.setItem(legacyPinKey, hash)
       }
+      if (typeof window !== 'undefined' && window.sessionStorage && uid) {
+        sessionStorage.setItem(`baseer_session_unlocked_${uid}`, 'true')
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('baseer-pin-changed'))
+      }
       setHasPinSet(true)
       setShowPinModal(false)
       setPinInput('')
@@ -598,6 +617,12 @@ export const SettingsPage: React.FC = () => {
     if (pinKey) localStorage.removeItem(pinKey)
     if (legacyPinKey) localStorage.removeItem(legacyPinKey)
     if (bioKey) localStorage.removeItem(bioKey)
+    if (typeof window !== 'undefined' && window.sessionStorage && uid) {
+      sessionStorage.removeItem(`baseer_session_unlocked_${uid}`)
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('baseer-pin-changed'))
+    }
     setHasPinSet(false)
     setBioEnabled(false)
     showToast('تم إلغاء قفل التطبيق', 'info')
@@ -787,14 +812,8 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
-  const handleDeleteAccount = async () => {
+  const executeAccountDeletion = async () => {
     if (!user) return
-    if (!isOnline) {
-      showToast('يجب الاتصال بالإنترنت لإتمام حذف الحساب', 'error')
-      return
-    }
-    if (deleteConfirmText.trim() !== 'حذف نهائي') return
-
     setDeletingAccount(true)
     try {
       await deleteUserFirestoreData(user.uid)
@@ -809,6 +828,7 @@ export const SettingsPage: React.FC = () => {
       console.error('Failed to delete account:', err)
       const errorObj = err as { code?: string }
       if (errorObj?.code === 'auth/requires-recent-login') {
+        pendingActionRef.current = 'delete-account'
         setShowDeleteModal(false)
         setShowReauthModal(true)
       } else {
@@ -817,6 +837,29 @@ export const SettingsPage: React.FC = () => {
     } finally {
       setDeletingAccount(false)
     }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!user) return
+    if (!isOnline) {
+      showToast('يجب الاتصال بالإنترنت لإتمام حذف الحساب', 'error')
+      return
+    }
+    if (deleteConfirmText.trim() !== 'حذف نهائي') return
+
+    const FOUR_MINUTES_MS = 4 * 60 * 1000
+    if (user.metadata?.lastSignInTime) {
+      const elapsedSinceSignIn = Date.now() - new Date(user.metadata.lastSignInTime).getTime()
+      const elapsedSinceReauth = Date.now() - reauthenticatedAtRef.current
+      if (elapsedSinceSignIn > FOUR_MINUTES_MS && elapsedSinceReauth > FOUR_MINUTES_MS) {
+        pendingActionRef.current = 'delete-account'
+        setShowDeleteModal(false)
+        setShowReauthModal(true)
+        return
+      }
+    }
+
+    await executeAccountDeletion()
   }
 
   const handleReauthAndComplete = async () => {
@@ -828,9 +871,15 @@ export const SettingsPage: React.FC = () => {
       } else {
         await reauthenticateCurrentGoogle()
       }
-      showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
+      reauthenticatedAtRef.current = Date.now()
       setShowReauthModal(false)
       setReauthPassword('')
+      if (pendingActionRef.current === 'delete-account') {
+        pendingActionRef.current = null
+        await executeAccountDeletion()
+      } else {
+        showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
+      }
     } catch (err) {
       console.error('Re-auth failed:', err)
       showToast('فشل تأكيد الهوية، يرجى التحقق من كلمة المرور', 'error')
@@ -848,10 +897,6 @@ export const SettingsPage: React.FC = () => {
       })
     : null
   const userCreationDate = rawCreationDate ? toWesternDigits(rawCreationDate) : null
-  const isGoogleOnly = Boolean(
-    user?.providerData?.length &&
-      user.providerData.every((p) => p.providerId === 'google.com')
-  )
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-slide-up text-start">
@@ -2336,56 +2381,79 @@ export const SettingsPage: React.FC = () => {
       {/* Re-Authentication Modal */}
       <Modal
         isOpen={showReauthModal}
-        onClose={() => setShowReauthModal(false)}
+        onClose={() => {
+          setShowReauthModal(false)
+          pendingActionRef.current = null
+        }}
         enableHistoryBack={false}
         title="تأكيد الهوية (إعادة تسجيل الدخول)"
       >
         <div className="space-y-4">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
-            لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس تأكيد كلمة المرور أو إعادة التحقق عبر حسابك قبل الاستمرار:
+            {isGoogleOnly
+              ? 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس إعادة التحقق عبر حساب Google قبل الاستمرار:'
+              : 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس تأكيد كلمة المرور أو إعادة التحقق عبر حسابك قبل الاستمرار:'}
           </p>
 
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-              أدخل كلمة المرور الحالية لحسابك
-            </label>
-            <Input
-              type="password"
-              value={reauthPassword}
-              onChange={(e) => setReauthPassword(e.target.value)}
-              placeholder="••••••••"
-              dir="ltr"
-            />
-          </div>
+          {!isGoogleOnly && (
+            <div>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                أدخل كلمة المرور الحالية لحسابك
+              </label>
+              <Input
+                type="password"
+                value={reauthPassword}
+                onChange={(e) => setReauthPassword(e.target.value)}
+                placeholder="••••••••"
+                dir="ltr"
+              />
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleReauthAndComplete}
-              disabled={reauthenticating}
-              className="w-full sm:w-auto"
-            >
-              إعادة التحقق عبر Google
-            </Button>
+            {!isGoogleOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReauthAndComplete}
+                disabled={reauthenticating}
+                className="w-full sm:w-auto"
+              >
+                إعادة التحقق عبر Google
+              </Button>
+            )}
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowReauthModal(false)}
+                onClick={() => {
+                  setShowReauthModal(false)
+                  pendingActionRef.current = null
+                }}
                 disabled={reauthenticating}
               >
                 إلغاء
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleReauthAndComplete}
-                disabled={reauthenticating || !reauthPassword}
-              >
-                {reauthenticating ? 'جاري التحقق...' : 'تأكيد ومتابعة'}
-              </Button>
+              {isGoogleOnly ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleReauthAndComplete}
+                  disabled={reauthenticating}
+                >
+                  {reauthenticating ? 'جاري التحقق...' : 'تأكيد الهوية عبر حساب Google'}
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleReauthAndComplete}
+                  disabled={reauthenticating || !reauthPassword}
+                >
+                  {reauthenticating ? 'جاري التحقق...' : 'تأكيد ومتابعة'}
+                </Button>
+              )}
             </div>
           </div>
         </div>

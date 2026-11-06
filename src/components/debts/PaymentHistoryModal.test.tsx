@@ -2,13 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PaymentHistoryModal } from './PaymentHistoryModal'
 import * as debtServices from '../../services/debts'
-import type { Debt } from '../../types'
+import type { Debt, DebtEntry } from '../../types'
 
 vi.mock('../../services/debts', () => ({
   deleteDebtPayment: vi.fn().mockResolvedValue(undefined),
   updateDebtPayment: vi.fn().mockResolvedValue(undefined),
   checkDebtPaymentTransactionExists: vi.fn().mockResolvedValue(true),
   compactDebtPayments: vi.fn().mockResolvedValue({ mergedCount: 85, mergedAmountFils: 170000 }),
+  compactDebtEntries: vi.fn().mockResolvedValue({ mergedCount: 80, mergedAmountFils: 240000 }),
   addDebtEntry: vi.fn().mockResolvedValue('entry-new'),
   updateDebtEntry: vi.fn().mockResolvedValue(undefined),
   deleteDebtEntry: vi.fn().mockResolvedValue(undefined),
@@ -518,5 +519,104 @@ describe('PaymentHistoryModal', () => {
     expect(screen.getByText('نسخ للحافظة')).toBeInTheDocument()
     expect(screen.getByText('إرسال عبر واتساب')).toBeInTheDocument()
     expect(screen.getByText('طباعة الكشف')).toBeInTheDocument()
+  })
+
+  it('renders compaction banner when entries length >= 90 and triggers compactDebtEntries on click', async () => {
+    const mockEntries: DebtEntry[] = Array.from({ length: 92 }, (_, i) => ({
+      id: `e-${i + 1}`,
+      amountFils: 2000,
+      date: new Date(2026, 0, i + 1),
+      title: `سلفة ${i + 1}`,
+      note: '',
+      createdAt: new Date(),
+    }))
+
+    const debtWithManyEntries: Debt = {
+      id: 'd-many-entries',
+      personName: 'عمر',
+      type: 'lent',
+      amountFils: 184000,
+      paidFils: 0,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      entries: mockEntries,
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    const mockOnSuccess = vi.fn()
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={debtWithManyEntries}
+        onSuccess={mockOnSuccess}
+      />
+    )
+
+    expect(screen.getByText(/وصل عدد السلف إلى 92/i)).toBeInTheDocument()
+    const compactBtn = screen.getByRole('button', { name: /دمج السلف القديمة/i })
+    expect(compactBtn).toBeInTheDocument()
+
+    fireEvent.click(compactBtn)
+
+    await waitFor(() => {
+      expect(debtServices.compactDebtEntries).toHaveBeenCalledWith('user-1', 'd-many-entries')
+      expect(mockOnSuccess).toHaveBeenCalled()
+    })
+  })
+
+  it('renders merged entry badge and hides edit button for isMerged entry', () => {
+    const debtWithMergedEntry: Debt = {
+      id: 'd-merged-entry',
+      personName: 'كريم',
+      type: 'lent',
+      amountFils: 50000,
+      paidFils: 0,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      entries: [
+        {
+          id: 'compacted_entry_123',
+          amountFils: 40000,
+          date: new Date('2026-01-15'),
+          title: 'رصيد سلف سابقة مدمجة (20 سلفة)',
+          note: 'سلف قديمة',
+          createdAt: new Date(),
+          isMerged: true,
+          mergedTransactionIds: ['tx-e1', 'tx-e2'],
+        },
+        {
+          id: 'e-active',
+          amountFils: 10000,
+          date: new Date('2026-01-20'),
+          title: 'سلفة حديثة',
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={debtWithMergedEntry}
+      />
+    )
+
+    // Merged badge appears for the compacted entry
+    expect(screen.getByText('سلف مدمجة')).toBeInTheDocument()
+
+    // Edit button must NOT be rendered for merged entry
+    expect(screen.queryByTitle('تعديل السلفة رصيد سلف سابقة مدمجة (20 سلفة)')).not.toBeInTheDocument()
+
+    // Edit button IS available for the active entry
+    expect(screen.getByTitle('تعديل السلفة')).toBeInTheDocument()
   })
 })

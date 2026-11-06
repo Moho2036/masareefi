@@ -4,6 +4,7 @@ import { ar } from 'date-fns/locale'
 import {
   Trash2,
   AlertCircle,
+  AlertTriangle,
   Pencil,
   Plus,
   Share2,
@@ -20,6 +21,7 @@ import {
   updateDebtPayment,
   checkDebtPaymentTransactionExists,
   compactDebtPayments,
+  compactDebtEntries,
   addDebtEntry,
   updateDebtEntry,
   deleteDebtEntry,
@@ -80,6 +82,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [isSavingEditEntry, setIsSavingEditEntry] = useState(false)
   const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null)
   const [isDeletingEntry, setIsDeletingEntry] = useState(false)
+  const [isCompactingEntries, setIsCompactingEntries] = useState(false)
 
   const handleClose = () => {
     setConfirmDeleteId(null)
@@ -233,6 +236,25 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     }
   }
 
+  const handleCompactEntries = async () => {
+    if (!user || !debt) return
+    setIsCompactingEntries(true)
+    try {
+      const result = await compactDebtEntries(user.uid, debt.id)
+      if (result.mergedCount > 0) {
+        showToast(`تم دمج ${result.mergedCount} سلفة قديمة بنجاح`, 'success')
+        onSuccess?.()
+      } else {
+        showToast('لا توجد سلف كافية للدمج', 'info')
+      }
+    } catch (err) {
+      console.error('Failed to compact entries:', err)
+      showToast(err instanceof Error ? err.message : 'فشل دمج السلف', 'error')
+    } finally {
+      setIsCompactingEntries(false)
+    }
+  }
+
   const rawEntries: DebtEntry[] =
     debt.entries && debt.entries.length > 0
       ? debt.entries
@@ -360,6 +382,24 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+
+  const handleNativeShare = async () => {
+    if (!canShare) return
+    try {
+      const text = formatDebtAccountStatement(debt, config.symbol)
+      await navigator.share({
+        title: `كشف حساب — ${debt.personName}`,
+        text,
+      })
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return
+      }
+      console.error('Native share failed:', err)
+    }
+  }
+
   const handlePrint = () => {
     window.print()
   }
@@ -401,7 +441,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         </div>
 
         {/* Share Account Statement Strip */}
-        <div className="grid grid-cols-3 gap-2 print-hide">
+        <div className={cn('grid gap-2 print-hide', canShare ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3')}>
           <button
             type="button"
             onClick={handleCopyStatement}
@@ -418,6 +458,16 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
             <span>إرسال عبر واتساب</span>
           </button>
+          {canShare && (
+            <button
+              type="button"
+              onClick={handleNativeShare}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+            >
+              <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+              <span>مشاركة الكشف</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handlePrint}
@@ -447,6 +497,31 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           {entryError && (
             <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/50">
               {entryError}
+            </div>
+          )}
+
+          {/* Compaction Warning Banner for Entries */}
+          {(debt.entries?.length ?? 0) >= 90 && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1.5 print-hide">
+              <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>
+                  وصل عدد السلف إلى {debt.entries?.length ?? 0} (الحد الأقصى 100)
+                </span>
+              </div>
+              <p className="text-amber-700 dark:text-amber-400">
+                يمكنك دمج السلف القديمة في سلفة واحدة لفتح مساحة لسلف جديدة دون أي تأثير على إجمالي أصل الدين.
+              </p>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  disabled={isCompactingEntries || isSavingEditEntry || Boolean(confirmDeleteEntryId)}
+                  onClick={handleCompactEntries}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isCompactingEntries ? 'جاري الدمج...' : 'دمج السلف القديمة'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -642,6 +717,11 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 tabular-nums">
                         ({formatCurrency(e.amountFils)})
                       </span>
+                      {(e.isMerged || e.id.startsWith('compacted_entry_')) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] font-semibold">
+                          سلف مدمجة
+                        </span>
+                      )}
                       {e.transactionId && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] font-semibold">
                           مرتبط بالرصيد
@@ -654,14 +734,16 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                   </div>
                   {debt.entries && debt.entries.length > 0 && (
                     <div className="flex items-center gap-1 shrink-0 print-hide">
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditEntry(e)}
-                        className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
-                        title="تعديل السلفة"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      {!e.isMerged && !e.id.startsWith('compacted_entry_') && (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditEntry(e)}
+                          className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
+                          title="تعديل السلفة"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteEntryId(e.id)}

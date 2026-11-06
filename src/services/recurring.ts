@@ -3,8 +3,6 @@ import {
   doc,
   query,
   where,
-  getDocs,
-  getDoc,
   writeBatch,
   onSnapshot,
   addDoc,
@@ -20,6 +18,7 @@ import type { Recurring, MoneyCircle } from '../types'
 import { recurringConverter } from './converters'
 import { calculateDueOccurrences, getDeterministicTxId, advanceDateWithTargetDay, isOccurrenceSkipped } from '../lib/recurring'
 import { getCircleCycleIndex, circleConverter } from './moneyCircles'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
 
 export function subscribeRecurring(
   uid: string,
@@ -53,12 +52,15 @@ export async function addRecurring(
   }
 
   const colRef = collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)
-  const docRef = await addDoc(colRef, {
-    ...rec,
-    id: '',
-    note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
-    ...(typeof rec.requireConfirmation === 'boolean' ? { requireConfirmation: rec.requireConfirmation } : {}),
-  })
+  const docRef = await commitFirestoreWrite(
+    addDoc(colRef, {
+      ...rec,
+      id: '',
+      note: typeof rec.note === 'string' ? rec.note.slice(0, 500) : '',
+      ...(typeof rec.requireConfirmation === 'boolean' ? { requireConfirmation: rec.requireConfirmation } : {}),
+    }),
+    { id: 'offline_rec_' + Date.now() } as never
+  )
 
   return docRef.id
 }
@@ -161,7 +163,7 @@ export async function updateRecurring(
   }
 
   if (Object.keys(payload).length > 0) {
-    await updateDoc(docRef, payload)
+    await commitFirestoreWrite(updateDoc(docRef, payload))
   }
 }
 
@@ -171,7 +173,7 @@ export async function deleteRecurring(uid: string, id: string): Promise<void> {
   batch.delete(docRef)
 
   try {
-    const snap = await getDoc(docRef)
+    const snap = await safeGetDoc(docRef)
     let linkedCircleId: string | undefined
     if (snap.exists()) {
       const data = snap.data()
@@ -189,7 +191,7 @@ export async function deleteRecurring(uid: string, id: string): Promise<void> {
     // Also clean up any circle referencing this recurringId
     const circlesCol = collection(db, 'users', uid, 'circles')
     const q = query(circlesCol, where('recurringId', '==', id))
-    const circleSnap = await getDocs(q)
+    const circleSnap = await safeGetDocs(q)
     for (const cDoc of circleSnap.docs) {
       if (cDoc.id !== linkedCircleId) {
         batch.update(cDoc.ref, { recurringId: deleteField() })
@@ -199,7 +201,7 @@ export async function deleteRecurring(uid: string, id: string): Promise<void> {
     console.error('Failed to unlink recurring from circles:', err)
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 /**
@@ -223,7 +225,7 @@ export async function processDueRecurring(
     where('nextDate', '<=', Timestamp.fromDate(endOfToday))
   )
 
-  const snap = await getDocs(q)
+  const snap = await safeGetDocs(q)
   if (snap.empty) {
     return 0
   }
@@ -246,7 +248,7 @@ export async function processDueRecurring(
 
   const circleDocs = await Promise.all(
     circleIds.map((cid) =>
-      getDoc(doc(db, 'users', uid, 'circles', cid).withConverter(circleConverter))
+      safeGetDoc(doc(db, 'users', uid, 'circles', cid).withConverter(circleConverter))
     )
   )
   const circleMap = new Map<string, MoneyCircle>()
@@ -313,7 +315,7 @@ export async function processDueRecurring(
   const circleModified = new Set<string>()
 
   // Fetch verification documents concurrently via Promise.all
-  const txSnaps = await Promise.all(pendingTxs.map((item) => getDoc(item.txRef)))
+  const txSnaps = await Promise.all(pendingTxs.map((item) => safeGetDoc(item.txRef)))
 
   let createdCount = 0
   type BatchOp = (b: ReturnType<typeof writeBatch>) => void
@@ -395,7 +397,7 @@ export async function processDueRecurring(
     for (const op of chunk) {
       op(batch)
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   }
 
   return createdCount
@@ -468,7 +470,7 @@ export async function confirmRecurringOccurrence(
   if (rec.circleId) {
     try {
       const circleDocRef = doc(db, 'users', uid, 'circles', rec.circleId).withConverter(circleConverter)
-      const circleSnap = await getDoc(circleDocRef)
+      const circleSnap = await safeGetDoc(circleDocRef)
       if (circleSnap.exists()) {
         const circle = circleSnap.data()
         const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
@@ -503,7 +505,7 @@ export async function confirmRecurringOccurrence(
     }
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return txId
 }
 
@@ -539,5 +541,5 @@ export async function skipRecurringOccurrence(
     recUpdate.active = false
   }
 
-  await updateDoc(recRef, recUpdate)
+  await commitFirestoreWrite(updateDoc(recRef, recUpdate))
 }

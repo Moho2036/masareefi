@@ -14,6 +14,7 @@ import { TransactionModalProvider } from './hooks/useTransactionModal'
 import { ToastContainer } from './components/ui/Toast'
 import { useTheme } from './hooks/useTheme'
 import { useRecurringProcessor } from './hooks/useRecurringProcessor'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Lazy loaded secondary/heavy pages to prevent blocking the initial bundle
 const DebtsPage = lazy(() => import('./pages/DebtsPage').then((m) => ({ default: m.DebtsPage })))
@@ -31,52 +32,56 @@ function AppRoutes() {
   useRecurringProcessor()
 
   return (
-    <Routes>
-      {/* Auth Route without shell (redirects to / if already logged in) */}
-      <Route path="/login" element={<LoginPage />} />
+    <ErrorBoundary>
+      <Routes>
+        {/* Auth Route without shell (redirects to / if already logged in) */}
+        <Route path="/login" element={<LoginPage />} />
 
-      {/* Protected Application Routes wrapped in AppShell */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <PinLockGate>
-              <AppShell />
-            </PinLockGate>
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<DashboardPage />} />
-        <Route path="transactions" element={<TransactionsPage />} />
-        <Route path="debts" element={<DebtsPage />} />
-        <Route path="tools" element={<ToolsPage />} />
-        <Route path="recurring" element={<RecurringPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="categories" element={<CategoriesPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
+        {/* Protected Application Routes wrapped in AppShell */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <PinLockGate>
+                <AppShell />
+              </PinLockGate>
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<DashboardPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="debts" element={<DebtsPage />} />
+          <Route path="tools" element={<ToolsPage />} />
+          <Route path="recurring" element={<RecurringPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppDataProvider>
-          <ToastProvider>
-            <SelectedMonthProvider>
-              <TransactionModalProvider>
-                <AppRoutes />
-                <ToastContainer />
-              </TransactionModalProvider>
-            </SelectedMonthProvider>
-          </ToastProvider>
-        </AppDataProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppDataProvider>
+            <ToastProvider>
+              <SelectedMonthProvider>
+                <TransactionModalProvider>
+                  <AppRoutes />
+                  <ToastContainer />
+                </TransactionModalProvider>
+              </SelectedMonthProvider>
+            </ToastProvider>
+          </AppDataProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 

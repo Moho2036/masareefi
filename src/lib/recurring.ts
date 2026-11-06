@@ -85,6 +85,8 @@ export function getDeterministicTxId(recurringId: string, date: Date): string {
   return `${recurringId}_${dateKey}`
 }
 
+export const MAX_CATCHUP_OCCURRENCES = 12
+
 export interface DueOccurrencesResult {
   dates: Date[]
   newNextDate: Date
@@ -166,7 +168,7 @@ export function calculateDueOccurrences(
   const targetDay = startDate.getDate()
 
   // Safety safeguard against unbounded iterations
-  let loopLimit = 500
+  let loopLimit = 5000
 
   while (curNextDate <= endOfToday && loopLimit-- > 0) {
     if (endOfEndDate && curNextDate > endOfEndDate) {
@@ -183,8 +185,13 @@ export function calculateDueOccurrences(
     endOfEndDate && curNextDate > endOfEndDate
   )
 
+  const finalDates =
+    dates.length > MAX_CATCHUP_OCCURRENCES
+      ? dates.slice(-MAX_CATCHUP_OCCURRENCES)
+      : dates
+
   return {
-    dates,
+    dates: finalDates,
     newNextDate: curNextDate,
     shouldDeactivate,
   }

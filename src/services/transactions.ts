@@ -18,6 +18,7 @@ import { db } from '../lib/firebase'
 import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { Transaction } from '../types'
 import { transactionConverter } from './converters'
+import { commitFirestoreWrite } from '../lib/firestoreOffline'
 
 export function subscribeTransactions(
   uid: string,
@@ -94,12 +95,15 @@ export async function addTransaction(
   }
 
   const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
-  const docRef = await addDoc(colRef, {
-    ...tx,
-    id: '',
-    note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
-    createdAt: new Date(),
-  })
+  const docRef = await commitFirestoreWrite(
+    addDoc(colRef, {
+      ...tx,
+      id: '',
+      note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
+      createdAt: new Date(),
+    }),
+    { id: 'offline_tx_' + Date.now() } as never
+  )
 
   return docRef.id
 }
@@ -154,13 +158,13 @@ export async function updateTransaction(
   }
 
   if (Object.keys(payload).length > 0) {
-    await updateDoc(docRef, payload)
+    await commitFirestoreWrite(updateDoc(docRef, payload))
   }
 }
 
 export async function deleteTransaction(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'transactions', id)
-  await deleteDoc(docRef)
+  await commitFirestoreWrite(deleteDoc(docRef))
 }
 
 export async function getAllTransactions(uid: string): Promise<Transaction[]> {

@@ -13,6 +13,47 @@ import {
 import { getFinancialMonthRange } from '../lib/dates'
 import { useTransactions } from './useTransactions'
 
+export const MAX_STORED_NOTIFICATION_IDS = 400
+
+/**
+ * Prunes a collection of notification IDs to prevent unbounded localStorage growth.
+ * Preserves up to MAX_STORED_NOTIFICATION_IDS (400) IDs using FIFO (oldest at the front
+ * are pruned first, newest at the end are kept), while prioritizing any keepPriorityIds.
+ */
+export function pruneNotificationIds(
+  ids: Iterable<string>,
+  keepPriorityIds?: Set<string>
+): Set<string> {
+  const uniqueArr = Array.from(new Set(ids))
+  if (uniqueArr.length <= MAX_STORED_NOTIFICATION_IDS) {
+    return new Set(uniqueArr)
+  }
+
+  const result = new Set<string>()
+
+  // 1. Keep priority IDs first (if present in input)
+  if (keepPriorityIds && keepPriorityIds.size > 0) {
+    for (const id of uniqueArr) {
+      if (keepPriorityIds.has(id)) {
+        result.add(id)
+        if (result.size >= MAX_STORED_NOTIFICATION_IDS) {
+          return result
+        }
+      }
+    }
+  }
+
+  // 2. Take newest IDs from the end of the array until reaching the limit
+  for (let i = uniqueArr.length - 1; i >= 0; i--) {
+    result.add(uniqueArr[i])
+    if (result.size >= MAX_STORED_NOTIFICATION_IDS) {
+      break
+    }
+  }
+
+  return result
+}
+
 export function useNotifications() {
   const { user } = useAuth()
   const uid = user?.uid
@@ -52,7 +93,7 @@ export function useNotifications() {
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
-          return new Set<string>(parsed)
+          return pruneNotificationIds(parsed)
         }
       }
     } catch {
@@ -72,7 +113,7 @@ export function useNotifications() {
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
-          return new Set<string>(parsed)
+          return pruneNotificationIds(parsed)
         }
       }
     } catch {
@@ -90,7 +131,7 @@ export function useNotifications() {
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed)) {
-          return new Set<string>(parsed)
+          return pruneNotificationIds(parsed)
         }
       }
     } catch {
@@ -157,10 +198,11 @@ export function useNotifications() {
   // Save readIds helper
   const persistReadIds = useCallback(
     (nextSet: Set<string>) => {
-      setReadIds(nextSet)
+      const pruned = pruneNotificationIds(nextSet)
+      setReadIds(pruned)
       if (storageKey && typeof window !== 'undefined' && window.localStorage) {
         try {
-          const payload = JSON.stringify(Array.from(nextSet))
+          const payload = JSON.stringify(Array.from(pruned))
           window.localStorage.setItem(storageKey, payload)
           if (legacyStorageKey) {
             window.localStorage.setItem(legacyStorageKey, payload)
@@ -177,10 +219,11 @@ export function useNotifications() {
   // Save dismissedIds helper (archivedIds)
   const persistDismissedIds = useCallback(
     (nextSet: Set<string>) => {
-      setDismissedIds(nextSet)
+      const pruned = pruneNotificationIds(nextSet)
+      setDismissedIds(pruned)
       if (dismissedStorageKey && typeof window !== 'undefined' && window.localStorage) {
         try {
-          const payload = JSON.stringify(Array.from(nextSet))
+          const payload = JSON.stringify(Array.from(pruned))
           window.localStorage.setItem(dismissedStorageKey, payload)
           if (legacyDismissedStorageKey) {
             window.localStorage.setItem(legacyDismissedStorageKey, payload)
@@ -197,10 +240,11 @@ export function useNotifications() {
   // Save permanently deleted IDs helper
   const persistDeletedIds = useCallback(
     (nextSet: Set<string>) => {
-      setPermanentlyDeletedIds(nextSet)
+      const pruned = pruneNotificationIds(nextSet)
+      setPermanentlyDeletedIds(pruned)
       if (permanentlyDeletedKey && typeof window !== 'undefined' && window.localStorage) {
         try {
-          const payload = JSON.stringify(Array.from(nextSet))
+          const payload = JSON.stringify(Array.from(pruned))
           window.localStorage.setItem(permanentlyDeletedKey, payload)
           window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
         } catch {

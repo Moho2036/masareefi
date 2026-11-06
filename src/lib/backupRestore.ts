@@ -1,13 +1,12 @@
 import {
   collection,
   doc,
-  getDocs,
-  getDoc,
   writeBatch,
   Timestamp,
   serverTimestamp,
   type WriteBatch,
 } from 'firebase/firestore'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from './firestoreOffline'
 import { formatDateInput, parseLocalDateInput } from './dates'
 import { db } from './firebase'
 import type { Category, Transaction, Debt, Recurring, MoneyCircle, UserSettings, Frequency } from '../types'
@@ -81,12 +80,12 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
     recurringSnap,
     circlesSnap,
   ] = await Promise.all([
-    getDoc(doc(db, 'users', uid).withConverter(userSettingsConverter)),
-    getDocs(collection(db, 'users', uid, 'categories').withConverter(categoryConverter)),
-    getDocs(collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)),
-    getDocs(collection(db, 'users', uid, 'debts').withConverter(debtConverter)),
-    getDocs(collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)),
-    getDocs(collection(db, 'users', uid, 'circles').withConverter(circleConverter)),
+    safeGetDoc(doc(db, 'users', uid).withConverter(userSettingsConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'categories').withConverter(categoryConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'debts').withConverter(debtConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'circles').withConverter(circleConverter)),
   ])
 
   const settings = settingsSnap.exists() ? settingsSnap.data() : undefined
@@ -445,9 +444,13 @@ export async function restoreBackup(
   backup: MasareefiBackup,
   optionsOrMode: RestoreMode | RestoreOptions = 'merge'
 ): Promise<void> {
-  if (!backup || !backup.data || typeof backup.data !== 'object') {
-    throw new Error('بيانات النسخة الاحتياطية غير صالحة أو مفقودة')
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('baseer-bulk-op-start'))
   }
+  try {
+    if (!backup || !backup.data || typeof backup.data !== 'object') {
+      throw new Error('بيانات النسخة الاحتياطية غير صالحة أو مفقودة')
+    }
 
   // Restore work hours calculator preferences to localStorage if present
   if (
@@ -494,12 +497,12 @@ export async function restoreBackup(
     existingRecSnap,
     existingCirclesSnap,
   ] = await Promise.all([
-    backup.data.settings ? getDoc(rawUserRef) : Promise.resolve(null),
-    getDocs(collection(db, 'users', uid, 'categories').withConverter(categoryConverter)),
-    getDocs(collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)),
-    getDocs(collection(db, 'users', uid, 'debts').withConverter(debtConverter)),
-    getDocs(collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)),
-    getDocs(collection(db, 'users', uid, 'circles').withConverter(circleConverter)),
+    backup.data.settings ? safeGetDoc(rawUserRef) : Promise.resolve(null),
+    safeGetDocs(collection(db, 'users', uid, 'categories').withConverter(categoryConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'debts').withConverter(debtConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'recurring').withConverter(recurringConverter)),
+    safeGetDocs(collection(db, 'users', uid, 'circles').withConverter(circleConverter)),
   ])
 
   // 1. Settings
@@ -531,7 +534,7 @@ export async function restoreBackup(
       Number.isFinite(Number(s.openingBalanceFils)) &&
       Number(s.openingBalanceFils) >= 0
     ) {
-      baseSettings.openingBalanceFils = Math.round(Number(s.openingBalanceFils))
+      baseSettings.openingBalanceFils = Math.min(1000000000000, Math.round(Number(s.openingBalanceFils)))
     } else if (userExists && mode === 'replace') {
       baseSettings.openingBalanceFils = 0
     }
@@ -981,8 +984,13 @@ export async function restoreBackup(
     for (const op of chunk) {
       op(batch)
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   }
+} finally {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('baseer-bulk-op-end'))
+  }
+}
 }
 
 export const restoreBackupData = restoreBackup

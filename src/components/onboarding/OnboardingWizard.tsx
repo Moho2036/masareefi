@@ -14,7 +14,7 @@ import { CategoryIcon } from '../ui/CategoryIcon'
 import { useAuth } from '../../hooks/useAuth'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { useCategories } from '../../hooks/useCategories'
-import { PRESET_CURRENCIES, toFils, detectDefaultCurrency } from '../../lib/money'
+import { PRESET_CURRENCIES, toFils, detectDefaultCurrency, MAX_AMOUNT_FILS } from '../../lib/money'
 import { archiveCategory, archiveCategoriesBatch, addCategory } from '../../services/categories'
 import { addRecurring, processDueRecurring } from '../../services/recurring'
 import type { Category } from '../../types'
@@ -173,7 +173,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
     try {
       const isCustom = isCustomCurrency || !PRESET_CURRENCIES[currency]
       const decimalsOrCurrency = isCustom ? customCurrencyDecimals : currency
-      const openingBalanceFils = openingBalance ? Math.max(0, toFils(openingBalance, decimalsOrCurrency)) : 0
+      const openingBalanceFils = openingBalance
+        ? Math.min(MAX_AMOUNT_FILS, Math.max(0, toFils(openingBalance, decimalsOrCurrency)))
+        : 0
       const safeMonthStartDay = Math.min(28, Math.max(1, Math.round(monthStartDay || 1)))
 
       // 1. Update user settings in Firestore
@@ -191,7 +193,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
 
       // 2. Add recurring salary rule if chosen
       if (addSalary && salaryAmount) {
-        const salaryFils = toFils(salaryAmount, decimalsOrCurrency)
+        const rawSalaryFils = toFils(salaryAmount, decimalsOrCurrency)
+        const salaryFils = Math.min(MAX_AMOUNT_FILS, Math.max(0, rawSalaryFils))
         if (salaryFils > 0) {
           const incomeCategories = categories.filter((c) => c.type === 'income' && !c.archived)
           const salaryCat =

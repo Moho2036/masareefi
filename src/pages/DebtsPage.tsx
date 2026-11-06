@@ -9,6 +9,9 @@ import {
   AlertCircle,
   X,
   GitMerge,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -72,6 +75,20 @@ export const DebtsPage: React.FC = () => {
       search: deferredSearch,
     })
   }, [debts, typeFilter, statusFilter, deferredSearch])
+
+  // Collapsible archive for settled debts when viewing all with no active search
+  const [userToggledSettled, setUserToggledSettled] = useState<boolean | null>(null)
+  const isArchiveMode = statusFilter === 'all' && !deferredSearch.trim()
+  const activeDebts = useMemo(
+    () => (isArchiveMode ? filteredDebts.filter((d) => !d.settled) : filteredDebts),
+    [isArchiveMode, filteredDebts]
+  )
+  const settledDebts = useMemo(
+    () => (isArchiveMode ? filteredDebts.filter((d) => d.settled) : []),
+    [isArchiveMode, filteredDebts]
+  )
+  const isSettledExpanded =
+    userToggledSettled !== null ? userToggledSettled : settledDebts.length <= 3
 
   // Grouped debts by person
   const groupedDebts = useMemo(() => {
@@ -510,6 +527,66 @@ export const DebtsPage: React.FC = () => {
               )
             }
           />
+        </div>
+      ) : isArchiveMode ? (
+        <div className="space-y-6">
+          {/* Active debts grid */}
+          {activeDebts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {activeDebts.map((debt) => (
+                <DebtCard
+                  key={debt.id}
+                  debt={debt}
+                  onOpenPaymentModal={handleOpenPaymentModal}
+                  onOpenHistoryModal={handleOpenHistoryModal}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-dashed border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
+              <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                لا توجد ديون أو التزامات نشطة حالياً.
+              </p>
+            </div>
+          )}
+
+          {/* Settled debts collapsible archive section */}
+          {settledDebts.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToggledSettled(!isSettledExpanded)}
+                className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                aria-expanded={isSettledExpanded}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>الديون المسددة سابقاً ({settledDebts.length})</span>
+                </div>
+                {isSettledExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-zinc-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-500" />
+                )}
+              </button>
+              {isSettledExpanded && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-slide-down">
+                  {settledDebts.map((debt) => (
+                    <DebtCard
+                      key={debt.id}
+                      debt={debt}
+                      onOpenPaymentModal={handleOpenPaymentModal}
+                      onOpenHistoryModal={handleOpenHistoryModal}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

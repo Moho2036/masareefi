@@ -64,6 +64,7 @@ const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => 
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-red-500 dark:text-red-400'
               )}
+              dir="ltr"
             >
               {format(item.balance)}
             </span>

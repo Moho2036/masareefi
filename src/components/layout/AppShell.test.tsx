@@ -159,4 +159,48 @@ describe('AppShell displayName resolution', () => {
 
     expect(mockGoToCurrentMonth).toHaveBeenCalledTimes(1)
   })
+
+  it('toggles privacy mode (hideBalances) when clicking the privacy button in header', () => {
+    mockUseAuth.mockReturnValue({
+      user: { displayName: 'محمد', photoURL: null },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'محمد', hideBalances: false },
+      updateSettings: mockUpdateSettings,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    const privacyBtn = screen.getByRole('button', { name: 'إخفاء الأرصدة' })
+    expect(privacyBtn).toBeInTheDocument()
+
+    fireEvent.click(privacyBtn)
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ hideBalances: true })
+  })
+
+  it('shows "إظهار الأرصدة" when hideBalances is true and toggles to false on click', () => {
+    mockUseAuth.mockReturnValue({
+      user: { displayName: 'محمد', photoURL: null },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'محمد', hideBalances: true },
+      updateSettings: mockUpdateSettings,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    const privacyBtn = screen.getByRole('button', { name: 'إظهار الأرصدة' })
+    expect(privacyBtn).toBeInTheDocument()
+
+    fireEvent.click(privacyBtn)
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ hideBalances: false })
+  })
 })

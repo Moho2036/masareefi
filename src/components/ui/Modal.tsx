@@ -157,17 +157,57 @@ export const Modal: React.FC<ModalProps> = ({
     }
   }, [isOpen, enableHistoryBack, modalId])
 
-  // Handle ESC key press (only top of stack responds)
+  // Handle ESC and Tab focus trap (only top of stack responds)
   useEffect(() => {
     if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const isTopModal =
+        openModalStack.length === 0 ||
+        openModalStack[openModalStack.length - 1] === modalId
+
+      if (!isTopModal) return
+
       if (e.key === 'Escape') {
-        const isTopModal =
-          openModalStack.length === 0 ||
-          openModalStack[openModalStack.length - 1] === modalId
-        if (isTopModal) {
-          onCloseRef.current()
+        onCloseRef.current()
+        return
+      }
+
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusableElements = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]):not(.sr-only), select:not([disabled]):not(.sr-only), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter((el) => {
+          return el.style.display !== 'none' && el.getAttribute('aria-hidden') !== 'true'
+        })
+
+        if (focusableElements.length === 0) {
+          e.preventDefault()
+          dialogRef.current.focus()
+          return
+        }
+
+        const firstElement = focusableElements[0]
+        const lastElement = focusableElements[focusableElements.length - 1]
+
+        if (e.shiftKey) {
+          if (
+            document.activeElement === firstElement ||
+            document.activeElement === dialogRef.current ||
+            !dialogRef.current.contains(document.activeElement)
+          ) {
+            e.preventDefault()
+            lastElement.focus()
+          }
+        } else {
+          if (
+            document.activeElement === lastElement ||
+            !dialogRef.current.contains(document.activeElement)
+          ) {
+            e.preventDefault()
+            firstElement.focus()
+          }
         }
       }
     }

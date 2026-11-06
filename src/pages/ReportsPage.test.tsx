@@ -312,6 +312,28 @@ describe('ReportsPage month switching and period header', () => {
     expect(option2020).toBeInTheDocument()
   })
 
+  it('expands yearOptions to cover historical years and includes user account creation year', () => {
+    mockUserSettings = {
+      ...mockUserSettings,
+      createdAt: new Date('2021-03-15'),
+    }
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    const yearlyRadio = screen.getByRole('radio', { name: 'تقرير سنوي' })
+    fireEvent.click(yearlyRadio)
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value)
+
+    expect(options.length).toBeGreaterThanOrEqual(10)
+    expect(options).toContain('2021')
+  })
+
   it('renders print button in header', () => {
     render(
       <MemoryRouter>

@@ -6,8 +6,6 @@ import {
   writeBatch,
   deleteDoc,
   deleteField,
-  getDoc,
-  getDocs,
   query,
   where,
   limit,
@@ -23,6 +21,7 @@ import {
 import { db } from '../lib/firebase'
 import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { MoneyCircle } from '../types'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
 
 interface FirestoreCircleMember {
   id: string
@@ -210,7 +209,7 @@ export async function addMoneyCircle(
 
   const batch = writeBatch(db)
   batch.set(docRef, newCircle)
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 
   return docRef.id
 }
@@ -228,7 +227,7 @@ export async function updateMoneyCircle(
   options?: UpdateMoneyCircleOptions
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'circles', id)
-  const circleSnap = await getDoc(docRef)
+  const circleSnap = await safeGetDoc(docRef)
   if (!circleSnap.exists()) {
     throw new Error('الجمعية غير موجودة')
   }
@@ -352,14 +351,14 @@ export async function updateMoneyCircle(
     updates.recurringId = deleteField()
     if (currentCircle.recurringId) {
       const oldRecRef = doc(db, 'users', uid, 'recurring', currentCircle.recurringId)
-      const oldRecSnap = await getDoc(oldRecRef)
+      const oldRecSnap = await safeGetDoc(oldRecRef)
       if (oldRecSnap.exists()) {
         batch.delete(oldRecRef)
       }
     }
     // Also clean up any recurring rules linked via circleId
     try {
-      const recQuerySnap = await getDocs(
+      const recQuerySnap = await safeGetDocs(
         query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
       )
       for (const d of recQuerySnap.docs) {
@@ -372,7 +371,7 @@ export async function updateMoneyCircle(
     }
   } else if (candidateRecId) {
     const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
-    const recSnap = await getDoc(recRef)
+    const recSnap = await safeGetDoc(recRef)
     if (recSnap.exists()) {
       const recData = recSnap.data()
       const recUpdates: Record<string, unknown> = {
@@ -524,7 +523,7 @@ export async function updateMoneyCircle(
   // If circle status is marked as completed, deactivate all recurring rules linked to this circle
   if (partial.status === 'completed') {
     try {
-      const recQuerySnap = await getDocs(
+      const recQuerySnap = await safeGetDocs(
         query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
       )
       for (const d of recQuerySnap.docs) {
@@ -544,7 +543,7 @@ export async function updateMoneyCircle(
     if (diffMonths >= 0) return
     if (monthStartDay === undefined) {
       try {
-        const userSnap = await getDoc(doc(db, 'users', uid))
+        const userSnap = await safeGetDoc(doc(db, 'users', uid))
         if (userSnap?.exists?.()) {
           monthStartDay = userSnap.data()?.monthStartDay
         }
@@ -559,7 +558,7 @@ export async function updateMoneyCircle(
 
   const payoutRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
   try {
-    const payoutSnap = await getDoc(payoutRef)
+    const payoutSnap = await safeGetDoc(payoutRef)
     if (payoutSnap?.exists?.()) {
       await ensureCycleComputed()
       if (diffMonths < 0 || currentMonthIndex < effectiveTurn) {
@@ -622,7 +621,7 @@ export async function updateMoneyCircle(
   if (mayHaveSecondPayout) {
     const payoutRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
     try {
-      const payoutSnap2 = await getDoc(payoutRef2)
+      const payoutSnap2 = await safeGetDoc(payoutRef2)
       if (payoutSnap2?.exists?.()) {
         await ensureCycleComputed()
         if (
@@ -690,7 +689,7 @@ export async function updateMoneyCircle(
     if (currentCircle.recurringId) allRecIds.add(currentCircle.recurringId)
     if (candidateRecId) allRecIds.add(candidateRecId)
     try {
-      const recQuerySnap = await getDocs(
+      const recQuerySnap = await safeGetDocs(
         query(collection(db, 'users', uid, 'recurring'), where('circleId', '==', id))
       )
       recQuerySnap.docs.forEach((d) => allRecIds.add(d.id))
@@ -700,14 +699,14 @@ export async function updateMoneyCircle(
 
     for (const rId of allRecIds) {
       try {
-        const txSnap = await getDocs(
+        const txSnap = await safeGetDocs(
           query(collection(db, 'users', uid, 'transactions'), where('recurringId', '==', rId))
         )
         for (const txDoc of txSnap.docs) {
           const verifiedTx =
             typeof txDoc.data === 'function' && typeof txDoc.exists === 'function'
               ? txDoc
-              : await getDoc(txDoc.ref)
+              : await safeGetDoc(txDoc.ref)
           if (verifiedTx.exists()) {
             const txData = typeof verifiedTx.data === 'function' ? verifiedTx.data() : undefined
             const rawDate = txData?.date
@@ -740,7 +739,7 @@ export async function updateMoneyCircle(
   }
 
   batch.update(docRef, updates)
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export async function checkCirclePayoutExists(
@@ -750,7 +749,7 @@ export async function checkCirclePayoutExists(
 ): Promise<boolean> {
   const txId = isSecondTurn ? `circle_payout_${circleId}_t2` : `circle_payout_${circleId}`
   const txRef = doc(db, 'users', uid, 'transactions', txId)
-  const snap = await getDoc(txRef)
+  const snap = await safeGetDoc(txRef)
   return Boolean(snap?.exists?.())
 }
 
@@ -774,14 +773,14 @@ export async function checkCircleHasTransactions(
     if (recurringId) {
       const txColRef = collection(db, 'users', uid, 'transactions')
       const q = query(txColRef, where('recurringId', '==', recurringId), limit(1))
-      const txSnap = await getDocs(q)
+      const txSnap = await safeGetDocs(q)
       if (!txSnap.empty) {
         return true
       }
     }
 
     // 3. Check manual installment transactions
-    const manualSnap = await getDoc(doc(db, 'users', uid, 'transactions', 'circle_' + circleId + '_m1'))
+    const manualSnap = await safeGetDoc(doc(db, 'users', uid, 'transactions', 'circle_' + circleId + '_m1'))
     if (manualSnap?.exists?.()) {
       return true
     }
@@ -800,7 +799,7 @@ export async function depositCircleNetPayout(
 ): Promise<string> {
   const payoutTxId = isSecondTurn ? `circle_payout_${circle.id}_t2` : `circle_payout_${circle.id}`
   const txRef = doc(db, 'users', uid, 'transactions', payoutTxId)
-  const snap = await getDoc(txRef)
+  const snap = await safeGetDoc(txRef)
   if (snap.exists()) {
     return payoutTxId
   }
@@ -848,7 +847,7 @@ export async function depositCircleNetPayout(
     createdAt: Timestamp.fromDate(now),
   })
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 
   return payoutTxId
 }
@@ -860,7 +859,7 @@ export async function deleteCirclePayout(
 ): Promise<void> {
   const txId = isSecondTurn ? `circle_payout_${circleId}_t2` : `circle_payout_${circleId}`
   const txRef = doc(db, 'users', uid, 'transactions', txId)
-  await deleteDoc(txRef).catch(() => {})
+  await commitFirestoreWrite(deleteDoc(txRef)).catch(() => {})
 }
 
 /**
@@ -877,7 +876,7 @@ export async function toggleCircleMemberPayment(
   defaultCategoryId?: string
 ): Promise<{ isUser: boolean; paid: boolean }> {
   const circleRef = doc(db, 'users', uid, 'circles', circleId)
-  const circleSnap = await getDoc(circleRef)
+  const circleSnap = await safeGetDoc(circleRef)
   if (!circleSnap.exists()) {
     throw new Error('الجمعية غير موجودة')
   }
@@ -950,7 +949,7 @@ export async function toggleCircleMemberPayment(
     const txRef = doc(db, 'users', uid, 'transactions', deterministicTxId)
 
     if (newPaid) {
-      const txSnap = await getDoc(txRef)
+      const txSnap = await safeGetDoc(txRef)
       if (!txSnap.exists()) {
         batch.set(txRef, {
           type: 'expense',
@@ -965,7 +964,7 @@ export async function toggleCircleMemberPayment(
       }
     } else {
       // Delete manual transaction if exists
-      const txSnap = await getDoc(txRef)
+      const txSnap = await safeGetDoc(txRef)
       if (txSnap.exists()) {
         batch.delete(txRef)
       }
@@ -974,7 +973,7 @@ export async function toggleCircleMemberPayment(
         const dateKey = format(targetDate, 'yyyy-MM-dd')
         const recurringTxId = `${circle.recurringId}_${dateKey}`
         const recTxRef = doc(db, 'users', uid, 'transactions', recurringTxId)
-        const recTxSnap = await getDoc(recTxRef)
+        const recTxSnap = await safeGetDoc(recTxRef)
         if (recTxSnap.exists()) {
           batch.delete(recTxRef)
         }
@@ -985,7 +984,7 @@ export async function toggleCircleMemberPayment(
     const candidateRecId = circle.recurringId
     if (candidateRecId) {
       const recRef = doc(db, 'users', uid, 'recurring', candidateRecId)
-      const recSnap = await getDoc(recRef)
+      const recSnap = await safeGetDoc(recRef)
       if (recSnap.exists()) {
         const updatedUserMember = updatedMembers.find((m) => m.turnMonth === circle.myTurnMonth)
         const exemptMonths =
@@ -1008,7 +1007,7 @@ export async function toggleCircleMemberPayment(
     }
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return { isUser, paid: newPaid }
 }
 
@@ -1023,7 +1022,7 @@ export async function deleteMoneyCircle(
       : Boolean(optionsOrFlag?.deleteTransactions)
 
   const docRef = doc(db, 'users', uid, 'circles', id)
-  const circleSnap = await getDoc(docRef)
+  const circleSnap = await safeGetDoc(docRef)
   const circleData = circleSnap.data()
 
   const refsToDelete: DocumentReference[] = [docRef]
@@ -1047,7 +1046,7 @@ export async function deleteMoneyCircle(
   // 2. Query any recurring transaction linked via circleId === id
   const recColRef = collection(db, 'users', uid, 'recurring')
   const q = query(recColRef, where('circleId', '==', id))
-  const recSnap = await getDocs(q)
+  const recSnap = await safeGetDocs(q)
   for (const recDoc of recSnap.docs) {
     addRefToDelete(recDoc.ref)
     recIds.add(recDoc.id)
@@ -1074,7 +1073,7 @@ export async function deleteMoneyCircle(
     for (const recId of recIds) {
       const txColRef = collection(db, 'users', uid, 'transactions')
       const txQuery = query(txColRef, where('recurringId', '==', recId))
-      const txSnap = await getDocs(txQuery)
+      const txSnap = await safeGetDocs(txQuery)
       if (txSnap?.docs) {
         for (const txDoc of txSnap.docs) {
           addRefToDelete(txDoc.ref)
@@ -1090,7 +1089,7 @@ export async function deleteMoneyCircle(
     for (const ref of chunk) {
       batch.delete(ref)
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   }
 }
 
@@ -1106,7 +1105,7 @@ export async function removeCircleInstallmentPayment(
   monthNum: number
 ): Promise<void> {
   const circleRef = doc(db, 'users', uid, 'circles', circleId)
-  const circleSnap = await getDoc(circleRef)
+  const circleSnap = await safeGetDoc(circleRef)
   if (!circleSnap.exists()) return
 
   const circle = circleConverter.fromFirestore(circleSnap)
@@ -1153,7 +1152,7 @@ export async function removeCircleInstallmentPayment(
     batch.delete(recTxRef)
 
     const recRef = doc(db, 'users', uid, 'recurring', circle.recurringId)
-    const recSnap = await getDoc(recRef)
+    const recSnap = await safeGetDoc(recRef)
     if (recSnap.exists()) {
       const updatedUser = updatedMembers.find((m) => m.turnMonth === circle.myTurnMonth)
       const exemptMonths =
@@ -1175,7 +1174,7 @@ export async function removeCircleInstallmentPayment(
     }
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 /**
@@ -1291,7 +1290,7 @@ export async function swapMemberTurns(
   options?: { monthStartDay?: number }
 ): Promise<void> {
   const circleRef = doc(db, 'users', uid, 'circles', circleId)
-  const snap = await getDoc(circleRef)
+  const snap = await safeGetDoc(circleRef)
   if (!snap.exists()) {
     throw new Error('الجمعية غير موجودة')
   }

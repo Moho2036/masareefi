@@ -13,6 +13,8 @@ import {
   RotateCcw,
   Calculator,
   Bell,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
@@ -342,6 +344,26 @@ export const AppShell: React.FC = () => {
 
           {/* Top Header Actions / Month Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Privacy Mode (hideBalances) Toggle Button */}
+            <button
+              type="button"
+              onClick={() => updateSettings?.({ hideBalances: !settings?.hideBalances })}
+              aria-label={settings?.hideBalances ? 'إظهار الأرصدة' : 'إخفاء الأرصدة'}
+              title={settings?.hideBalances ? 'إظهار الأرصدة' : 'وضع الخصوصية (إخفاء الأرصدة)'}
+              className={cn(
+                'relative p-2 rounded-xl transition-colors cursor-pointer',
+                settings?.hideBalances
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                  : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              )}
+            >
+              {settings?.hideBalances ? (
+                <EyeOff className="w-5 h-5 stroke-[2.2]" />
+              ) : (
+                <Eye className="w-5 h-5 stroke-[2.2]" />
+              )}
+            </button>
+
             {/* Notifications Bell Button */}
             <button
               type="button"

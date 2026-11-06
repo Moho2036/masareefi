@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Modal } from '../components/ui/Modal'
 import { TransactionForm } from '../components/TransactionForm'
+import { useAuth } from './useAuth'
 import type { Transaction, TxType } from '../types'
 
 interface TransactionModalContextValue {
@@ -22,11 +23,21 @@ interface TransactionModalContextValue {
 const TransactionModalContext = createContext<TransactionModalContextValue | null>(null)
 
 export function TransactionModalProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  const [prevUid, setPrevUid] = useState<string | undefined>(user?.uid)
   const [isOpen, setIsOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [duplicateTransaction, setDuplicateTransaction] = useState<Transaction | null>(null)
   const [defaultType, setDefaultType] = useState<TxType>('expense')
   const [isFormDirty, setIsFormDirty] = useState(false)
+
+  if (prevUid !== user?.uid) {
+    setPrevUid(user?.uid)
+    setIsOpen(false)
+    setEditingTransaction(null)
+    setDuplicateTransaction(null)
+    setIsFormDirty(false)
+  }
 
   const openAdd = useCallback((type: TxType = 'expense') => {
     setEditingTransaction(null)

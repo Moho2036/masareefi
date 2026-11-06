@@ -8,6 +8,7 @@ import {
   updateDebtPayment,
   deleteDebtPayment,
   compactDebtPayments,
+  compactDebtEntries,
   addDebtEntry,
   updateDebtEntry,
   deleteDebtEntry,
@@ -1831,6 +1832,119 @@ describe('debts service with accounting link', () => {
           date: new Date(),
         })
       ).rejects.toThrow('تم الوصول للحد الأقصى لعدد السلف (100 سلفة) لهذا السجل')
+    })
+  })
+
+  describe('compactDebtEntries', () => {
+    it('throws error when debt does not exist', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => false,
+        data: () => null,
+      })
+
+      await expect(compactDebtEntries('user-1', 'non-existent')).rejects.toThrow(
+        'سجل الدين غير موجود'
+      )
+    })
+
+    it('returns zero and does not update when entries count is 10 or fewer', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-entries-1',
+          amountFils: 100000,
+          paidFils: 0,
+          settled: false,
+          entries: Array.from({ length: 8 }, (_, i) => ({
+            id: `entry-${i}`,
+            amountFils: 5000,
+            date: new Date(`2026-10-0${i + 1}`),
+            note: '',
+            createdAt: new Date(),
+          })),
+        }),
+      })
+
+      const result = await compactDebtEntries('user-1', 'debt-compact-entries-1')
+      expect(result).toEqual({ mergedCount: 0, mergedAmountFils: 0 })
+      expect(mockBatchUpdate).not.toHaveBeenCalled()
+    })
+
+    it('merges oldest entries keeping latest 10 and creates consolidated entry with isMerged: true and compacted_entry_ id', async () => {
+      const totalEntries = 25
+      const mockEntries: DebtEntry[] = Array.from({ length: totalEntries }, (_, i) => ({
+        id: `entry-${i + 1}`,
+        amountFils: 3000,
+        date: new Date(2026, 9, i + 1),
+        title: `سلفة رقم ${i + 1}`,
+        note: `تفاصيل سلفة ${i + 1}`,
+        createdAt: new Date(2026, 9, i + 1),
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-entries-2',
+          amountFils: 75000,
+          paidFils: 0,
+          settled: false,
+          entries: mockEntries,
+        }),
+      })
+
+      const result = await compactDebtEntries('user-1', 'debt-compact-entries-2')
+
+      // toMerge = 25 - 10 = 15 entries
+      // mergedAmount = 15 * 3000 = 45,000 fils
+      expect(result.mergedCount).toBe(15)
+      expect(result.mergedAmountFils).toBe(45000)
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      // 1 consolidated entry + 10 kept entries = 11 entries
+      expect(updatedData.entries).toHaveLength(11)
+      expect(updatedData.entries[0].amountFils).toBe(45000)
+      expect(updatedData.entries[0].title).toBe('رصيد سلف سابقة مدمجة (15 سلفة)')
+      expect(updatedData.entries[0].isMerged).toBe(true)
+      expect(updatedData.entries[0].id).toMatch(/^compacted_entry_/)
+      // Kept entries remain intact
+      expect(updatedData.entries[1].id).toBe('entry-16')
+      expect(updatedData.entries[10].id).toBe('entry-25')
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('collects transactionIds and falls back to debt_entry_${e.id} in mergedTransactionIds', async () => {
+      const mockEntries: DebtEntry[] = Array.from({ length: 15 }, (_, i) => ({
+        id: `e-${i + 1}`,
+        amountFils: 2000,
+        date: new Date(2026, 9, i + 1),
+        note: '',
+        createdAt: new Date(2026, 9, i + 1),
+        transactionId: i < 3 ? `tx-entry-${i + 1}` : undefined,
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: 'debt-compact-entries-3',
+          amountFils: 30000,
+          paidFils: 0,
+          settled: false,
+          entries: mockEntries,
+        }),
+      })
+
+      const result = await compactDebtEntries('user-1', 'debt-compact-entries-3')
+      expect(result.mergedCount).toBe(5)
+
+      const updatedData = mockBatchUpdate.mock.calls[0][1]
+      expect(updatedData.entries[0].mergedTransactionIds).toEqual([
+        'tx-entry-1',
+        'tx-entry-2',
+        'tx-entry-3',
+        'debt_entry_e-4',
+        'debt_entry_e-5',
+      ])
     })
   })
 })

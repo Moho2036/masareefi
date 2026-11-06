@@ -313,6 +313,8 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
 }
 
 export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ'): string {
+  const formatAmount = (fils: number): number => Math.round(fromFils(fils) * 1000) / 1000
+
   const isLent = debt.type === 'lent'
   const typeText = isLent ? 'مستحقات لك (سلف / إقراض)' : 'التزامات عليك (اقتراض)'
   const statusText = debt.settled ? 'مسدد بالكامل' : 'قيد السداد'
@@ -323,17 +325,17 @@ export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ')
       ? debt.entries
           .map(
             (e, idx) =>
-              `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${fromFils(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
+              `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${formatAmount(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
           )
           .join('\n')
-      : `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${fromFils(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
+      : `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${formatAmount(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
 
   let paymentsText = 'لا توجد دفعات مسجلة بعد.'
   if (debt.payments && debt.payments.length > 0) {
     paymentsText = debt.payments
       .map(
         (p, idx) =>
-          `${idx + 1}. ${format(new Date(p.date), 'yyyy/MM/dd')}: ${fromFils(p.amountFils)} ${currencySymbol}${p.note ? ` (${p.note})` : ''}`
+          `${idx + 1}. ${format(new Date(p.date), 'yyyy/MM/dd')}: ${formatAmount(p.amountFils)} ${currencySymbol}${p.note ? ` (${p.note})` : ''}`
       )
       .join('\n')
   }
@@ -351,9 +353,9 @@ ${entriesText}
 ${paymentsText}
 
 ────────────────
-*إجمالي المبلغ:* ${fromFils(debt.amountFils)} ${currencySymbol}
-*المسدد:* ${fromFils(debt.paidFils || 0)} ${currencySymbol}
-*المتبقي:* ${fromFils(remaining)} ${currencySymbol}
+*إجمالي المبلغ:* ${formatAmount(debt.amountFils)} ${currencySymbol}
+*المسدد:* ${formatAmount(debt.paidFils || 0)} ${currencySymbol}
+*المتبقي:* ${formatAmount(remaining)} ${currencySymbol}
 ────────────────
 تم إنشاء كشف الحساب في ${format(new Date(), 'yyyy/MM/dd')}`
 }

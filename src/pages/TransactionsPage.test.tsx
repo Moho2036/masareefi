@@ -12,6 +12,7 @@ const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</
 const mockCategories: Category[] = [
   { id: 'c-food', name: 'طعام وبقالة', type: 'expense', icon: '🛒', color: '#F59E0B', archived: false, order: 0 },
   { id: 'c-salary', name: 'راتب', type: 'income', icon: '💼', color: '#10B981', archived: false, order: 1 },
+  { id: 'c-archived', name: 'تصنيف مؤرشف قديم', type: 'expense', icon: '📦', color: '#6B7280', archived: true, order: 2 },
 ]
 
 let mockTransactions: Transaction[] = []
@@ -779,6 +780,18 @@ describe('TransactionsPage Component', () => {
 
     expect(screen.getByText('راتب شهري')).toBeInTheDocument()
     expect(screen.queryByText('مشتريات بقالة')).not.toBeInTheDocument()
+  })
+
+  it('keeps selected archived category visible in filter chips even when current month has no transactions for it', () => {
+    mockTransactions = []
+
+    render(
+      <MemoryRouter initialEntries={['/transactions?categoryId=c-archived']}>
+        <TransactionsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('تصنيف مؤرشف قديم')).toBeInTheDocument()
   })
 })
 

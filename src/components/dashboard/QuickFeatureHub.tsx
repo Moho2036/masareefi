@@ -6,11 +6,9 @@ import {
   BarChart3,
   RefreshCw,
 } from 'lucide-react'
-import type { ForecastResult } from '../../lib/forecast'
 import { cn } from '../../lib/cn'
 
 export interface QuickFeatureHubProps {
-  forecast?: ForecastResult
   className?: string
 }
 

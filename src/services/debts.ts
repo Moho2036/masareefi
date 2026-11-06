@@ -5,8 +5,6 @@ import {
   where,
   orderBy,
   onSnapshot,
-  getDoc,
-  getDocs,
   setDoc,
   writeBatch,
   Timestamp,
@@ -19,6 +17,7 @@ import { db } from '../lib/firebase'
 import { MAX_AMOUNT_FILS } from '../lib/money'
 import type { Debt, DebtPayment, DebtEntry, TxType } from '../types'
 import { debtConverter, categoryConverter } from './converters'
+import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
 
 export function subscribeDebts(
   uid: string,
@@ -51,7 +50,7 @@ export async function getOrCreateDebtCategory(
   type: TxType
 ): Promise<string> {
   const colRef = collection(db, 'users', uid, 'categories').withConverter(categoryConverter)
-  const snap = await getDocs(colRef)
+  const snap = await safeGetDocs(colRef)
   const categories = snap.docs.map((d) => d.data())
 
   if (type === 'expense') {
@@ -67,7 +66,7 @@ export async function getOrCreateDebtCategory(
 
     try {
       const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
-      await setDoc(newDocRef, {
+      await commitFirestoreWrite(setDoc(newDocRef, {
         id: '',
         name: 'الديون والسلف',
         type: 'expense',
@@ -75,7 +74,7 @@ export async function getOrCreateDebtCategory(
         color: '#D97706',
         archived: false,
         order: 0,
-      })
+      }))
       return newDocRef.id
     } catch (err) {
       console.error('Failed to create expense debt category:', err)
@@ -96,7 +95,7 @@ export async function getOrCreateDebtCategory(
 
     try {
       const newDocRef = doc(collection(db, 'users', uid, 'categories')).withConverter(categoryConverter)
-      await setDoc(newDocRef, {
+      await commitFirestoreWrite(setDoc(newDocRef, {
         id: '',
         name: 'الديون والسلف',
         type: 'income',
@@ -104,7 +103,7 @@ export async function getOrCreateDebtCategory(
         color: '#10B981',
         archived: false,
         order: 0,
-      })
+      }))
       return newDocRef.id
     } catch (err) {
       console.error('Failed to create income debt category:', err)
@@ -208,7 +207,7 @@ export async function addDebt(
     batch.set(txRef, txData)
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return debtId
 }
 
@@ -267,6 +266,12 @@ function serializeDebtEntry(e: DebtEntry): Record<string, unknown> {
   if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
     item.transactionId = e.transactionId.trim().slice(0, 128)
   }
+  if (e.isMerged) {
+    item.isMerged = true
+  }
+  if (Array.isArray(e.mergedTransactionIds) && e.mergedTransactionIds.length > 0) {
+    item.mergedTransactionIds = e.mergedTransactionIds.filter(Boolean)
+  }
   return item
 }
 
@@ -278,7 +283,7 @@ async function findLegacyInitTransactionId(
   try {
     const txColRef = collection(db, 'users', uid, 'transactions')
     const q = query(txColRef, where('amountFils', '==', debt.amountFils))
-    const snap = await getDocs(q)
+    const snap = await safeGetDocs(q)
     if (!snap || !snap.docs || snap.docs.length === 0) return null
 
     const dDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
@@ -323,7 +328,7 @@ export async function checkDebtInitialTransactionExists(
   debt?: Debt
 ): Promise<boolean> {
   const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${debtId}`)
-  const snap = await getDoc(initTxRef)
+  const snap = await safeGetDoc(initTxRef)
   if (snap && typeof snap.exists === 'function' && snap.exists()) return true
   if (debt) {
     const legacyId = await findLegacyInitTransactionId(uid, debtId, debt)
@@ -339,11 +344,11 @@ export async function checkDebtPaymentTransactionExists(
 ): Promise<boolean> {
   if (payment.transactionId) {
     const txRef = doc(db, 'users', uid, 'transactions', payment.transactionId)
-    const snap = await getDoc(txRef)
+    const snap = await safeGetDoc(txRef)
     if (snap && typeof snap.exists === 'function' && snap.exists()) return true
   }
   const defaultPayTxRef = doc(db, 'users', uid, 'transactions', `debt_pay_${payment.id}`)
-  const defaultSnap = await getDoc(defaultPayTxRef)
+  const defaultSnap = await safeGetDoc(defaultPayTxRef)
   if (defaultSnap && typeof defaultSnap.exists === 'function' && defaultSnap.exists()) return true
 
   const legacyId = await findLegacyPaymentTransactionId(uid, payment, debt)
@@ -357,7 +362,7 @@ export async function updateDebt(
   options?: { syncTransaction?: boolean }
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'debts', id).withConverter(debtConverter)
-  const debtSnap = await getDoc(docRef)
+  const debtSnap = await safeGetDoc(docRef)
   if (debtSnap && typeof debtSnap.exists === 'function' && !debtSnap.exists()) {
     throw new Error('الدين غير موجود')
   }
@@ -425,7 +430,7 @@ export async function updateDebt(
 
   // Synchronize with initial transaction debt_init_${id} or legacy initial transaction
   const initTxRef = doc(db, 'users', uid, 'transactions', `debt_init_${id}`)
-  const initTxSnap = await getDoc(initTxRef)
+  const initTxSnap = await safeGetDoc(initTxRef)
   let effectiveInitTxRef = initTxRef
   let initTxExists = Boolean(initTxSnap && typeof initTxSnap.exists === 'function' && initTxSnap.exists())
 
@@ -521,7 +526,7 @@ export async function updateDebt(
           const candidateIds = [p.transactionId, `debt_pay_${p.id}`].filter(Boolean) as string[]
           for (const cId of candidateIds) {
             const candidateRef = doc(db, 'users', uid, 'transactions', cId)
-            const snap = await getDoc(candidateRef)
+            const snap = await safeGetDoc(candidateRef)
             if (snap.exists()) {
               payTxRef = candidateRef
               payTxSnap = snap
@@ -533,7 +538,7 @@ export async function updateDebt(
             const legacyTxId = await findLegacyPaymentTransactionId(uid, id, currentDebt, p)
             if (legacyTxId) {
               const legRef = doc(db, 'users', uid, 'transactions', legacyTxId)
-              const snap = await getDoc(legRef)
+              const snap = await safeGetDoc(legRef)
               if (snap.exists()) {
                 payTxRef = legRef
                 payTxSnap = snap
@@ -571,7 +576,7 @@ export async function updateDebt(
               p.mergedTransactionIds.map(async (mergedTxId) => {
                 if (!mergedTxId) return null
                 const mergedRef = doc(db, 'users', uid, 'transactions', mergedTxId)
-                const mergedSnap = await getDoc(mergedRef)
+                const mergedSnap = await safeGetDoc(mergedRef)
                 if (mergedSnap.exists()) {
                   return { ref: mergedRef, updates: payTxUpdates }
                 }
@@ -614,7 +619,7 @@ export async function updateDebt(
           let entryTxRef: DocumentReference | null = null
           for (const cId of filteredCandidateIds) {
             const candidateRef = doc(db, 'users', uid, 'transactions', cId)
-            const snap = await getDoc(candidateRef)
+            const snap = await safeGetDoc(candidateRef)
             if (snap.exists()) {
               entryTxRef = candidateRef
               break
@@ -650,7 +655,7 @@ export async function updateDebt(
     }
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export async function deleteDebt(
@@ -659,7 +664,7 @@ export async function deleteDebt(
   optionsOrFlag?: { deleteTransactions?: boolean } | boolean
 ): Promise<void> {
   const debtRef = doc(db, 'users', uid, 'debts', id).withConverter(debtConverter)
-  const snap = await getDoc(debtRef)
+  const snap = await safeGetDoc(debtRef)
   const debt = snap.data()
   const payments: DebtPayment[] = debt?.payments || []
 
@@ -716,8 +721,15 @@ export async function deleteDebt(
     for (const e of debt?.entries || []) {
       if (e.transactionId) {
         addRefToDelete(doc(db, 'users', uid, 'transactions', e.transactionId))
-      } else if (e.id) {
+      } else if (e.id && !e.isMerged && !e.id.startsWith('compacted_entry_')) {
         addRefToDelete(doc(db, 'users', uid, 'transactions', `debt_entry_${e.id}`))
+      }
+      if (Array.isArray(e.mergedTransactionIds)) {
+        for (const mId of e.mergedTransactionIds) {
+          if (mId) {
+            addRefToDelete(doc(db, 'users', uid, 'transactions', mId))
+          }
+        }
       }
     }
   }
@@ -727,7 +739,7 @@ export async function deleteDebt(
     for (const ref of refsToDelete) {
       batch.delete(ref)
     }
-    await batch.commit()
+    await commitFirestoreWrite(batch.commit())
   } else {
     for (let i = 0; i < refsToDelete.length; i += 450) {
       const chunk = refsToDelete.slice(i, i + 450)
@@ -735,7 +747,7 @@ export async function deleteDebt(
       for (const ref of chunk) {
         batch.delete(ref)
       }
-      await batch.commit()
+      await commitFirestoreWrite(batch.commit())
     }
   }
 }
@@ -835,7 +847,7 @@ export async function addDebtPayment(
     batch.set(txRef, txData)
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return paymentId
 }
 
@@ -865,7 +877,7 @@ async function findLegacyPaymentTransactionId(
 
     const txColRef = collection(db, 'users', uid, 'transactions')
     const q = query(txColRef, where('amountFils', '==', payment.amountFils))
-    const snap = await getDocs(q)
+    const snap = await safeGetDocs(q)
     if (!snap || !snap.docs || snap.docs.length === 0) return null
 
     const pDate = payment.date instanceof Date ? payment.date : new Date(payment.date)
@@ -978,7 +990,7 @@ export async function deleteDebtPayment(
     }
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export const removeDebtPayment = deleteDebtPayment
@@ -1005,7 +1017,7 @@ export async function updateDebtPayment(
   let debt: Debt
   if (typeof debtOrId === 'string') {
     const docRef = doc(db, 'users', uid, 'debts', debtOrId).withConverter(debtConverter)
-    const snap = await getDoc(docRef)
+    const snap = await safeGetDoc(docRef)
     if (!snap.exists() || !snap.data()) {
       throw new Error('سجل الدين غير موجود')
     }
@@ -1063,7 +1075,7 @@ export async function updateDebtPayment(
   const candidateIds = [existingPayment.transactionId, `debt_pay_${paymentId}`].filter(Boolean) as string[]
   for (const cId of candidateIds) {
     const candidateRef = doc(db, 'users', uid, 'transactions', cId)
-    const snap = await getDoc(candidateRef)
+    const snap = await safeGetDoc(candidateRef)
     if (snap.exists()) {
       existingTxId = cId
       existingTxRef = candidateRef
@@ -1075,7 +1087,7 @@ export async function updateDebtPayment(
     const legacyId = await findLegacyPaymentTransactionId(uid, debt.id, debt, existingPayment)
     if (legacyId) {
       const legRef = doc(db, 'users', uid, 'transactions', legacyId)
-      const snap = await getDoc(legRef)
+      const snap = await safeGetDoc(legRef)
       if (snap.exists()) {
         existingTxId = legacyId
         existingTxRef = legRef
@@ -1211,7 +1223,7 @@ export async function updateDebtPayment(
     batch.set(newTxData.ref, newTxData.data)
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export interface CompactDebtPaymentsResult {
@@ -1224,7 +1236,7 @@ export async function compactDebtPayments(
   debtId: string
 ): Promise<CompactDebtPaymentsResult> {
   const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
-  const snap = await getDoc(docRef)
+  const snap = await safeGetDoc(docRef)
   if (!snap.exists() || !snap.data()) {
     throw new Error('سجل الدين غير موجود')
   }
@@ -1322,14 +1334,123 @@ export async function compactDebtPayments(
     payments: serializedPayments,
   })
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
+  return { mergedCount, mergedAmountFils }
+}
+
+export interface CompactDebtEntriesResult {
+  mergedCount: number
+  mergedAmountFils: number
+}
+
+export async function compactDebtEntries(
+  uid: string,
+  debtId: string
+): Promise<CompactDebtEntriesResult> {
+  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
+  const snap = await safeGetDoc(docRef)
+  if (!snap.exists() || !snap.data()) {
+    throw new Error('سجل الدين غير موجود')
+  }
+
+  const debt = snap.data()!
+  const entries = debt.entries || []
+
+  // If 10 or fewer entries, compaction is not required
+  if (entries.length <= 10) {
+    return { mergedCount: 0, mergedAmountFils: 0 }
+  }
+
+  // Keep the latest 10 entries separate
+  const toKeep = entries.slice(-10)
+  // Merge all older entries
+  const toMerge = entries.slice(0, -10)
+  const mergedCount = toMerge.reduce((count, e) => {
+    if (e.isMerged && typeof e.title === 'string') {
+      const match = e.title.match(/\((\d+)\s*سلفة\)/)
+      return count + (match ? parseInt(match[1], 10) : 1)
+    }
+    return count + 1
+  }, 0)
+  const mergedAmountFils = toMerge.reduce((sum, e) => sum + e.amountFils, 0)
+
+  const lastMergedEntry = toMerge[toMerge.length - 1]
+  const mergedDate =
+    lastMergedEntry.date instanceof Date
+      ? lastMergedEntry.date
+      : new Date(lastMergedEntry.date)
+
+  const mergedTxIds: string[] = []
+  for (const e of toMerge) {
+    if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
+      if (!mergedTxIds.includes(e.transactionId.trim())) {
+        mergedTxIds.push(e.transactionId.trim())
+      }
+    } else if (!e.isMerged && e.id) {
+      const defaultTxId = `debt_entry_${e.id}`
+      if (!mergedTxIds.includes(defaultTxId)) {
+        mergedTxIds.push(defaultTxId)
+      }
+    }
+    if (Array.isArray(e.mergedTransactionIds)) {
+      for (const mId of e.mergedTransactionIds) {
+        if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
+          mergedTxIds.push(mId.trim())
+        }
+      }
+    }
+  }
+
+  const genericTitles = new Set([
+    'سلفة إضافية',
+    'سلفة',
+    'دفعة سلفة',
+  ])
+  const customNotes: string[] = []
+  for (const e of toMerge) {
+    const rawText = (e.title || e.note || '').trim()
+    if (rawText && !genericTitles.has(rawText)) {
+      const cleaned = rawText
+        .replace(/^رصيد سلف سابقة مدمجة \(\d+\s*سلفة\):?\s*/, '')
+        .trim()
+      if (cleaned && !customNotes.includes(cleaned)) {
+        customNotes.push(cleaned)
+      }
+    }
+  }
+  const baseMergedTitle = `رصيد سلف سابقة مدمجة (${mergedCount} سلفة)`
+  const finalMergedNote =
+    customNotes.length > 0
+      ? `رصيد مدمج: ${customNotes.join(' ، ')}`.slice(0, 500)
+      : `رصيد مدمج لـ ${mergedCount} سلفة سابقة`
+
+  const consolidatedEntry: DebtEntry = {
+    id: `compacted_entry_${Date.now()}`,
+    amountFils: mergedAmountFils,
+    date: mergedDate,
+    title: baseMergedTitle,
+    note: finalMergedNote,
+    createdAt: new Date(),
+    isMerged: true,
+    mergedTransactionIds: mergedTxIds,
+  }
+
+  const newEntries = [consolidatedEntry, ...toKeep]
+  const serializedEntries = newEntries.map(serializeDebtEntry)
+
+  const batch = writeBatch(db)
+  batch.update(docRef, {
+    entries: serializedEntries,
+  })
+
+  await commitFirestoreWrite(batch.commit())
   return { mergedCount, mergedAmountFils }
 }
 
 export async function getAllDebts(uid: string): Promise<Debt[]> {
   const colRef = collection(db, 'users', uid, 'debts').withConverter(debtConverter)
   const q = query(colRef, orderBy('startDate', 'desc'))
-  const snap = await getDocs(q)
+  const snap = await safeGetDocs(q)
   return snap.docs.map((d) => d.data())
 }
 
@@ -1421,7 +1542,7 @@ export async function addDebtEntry(
     entries: newEntries.map(serializeDebtEntry),
   })
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return entryId
 }
 
@@ -1465,7 +1586,7 @@ export async function updateDebtEntry(
 
   if (oldEntry.transactionId) {
     const txRef = doc(db, 'users', uid, 'transactions', oldEntry.transactionId)
-    const txSnap = await getDoc(txRef)
+    const txSnap = await safeGetDoc(txRef)
     const shouldUpdateTx =
       txSnap && typeof txSnap.exists === 'function' ? txSnap.exists() : txSnap === undefined
     if (shouldUpdateTx) {
@@ -1487,15 +1608,29 @@ export async function updateDebtEntry(
     note: updated.note?.trim() || '',
   }
 
+  // Calculate the earliest date among entries to keep debt startDate synchronized
+  let earliestEntryDate = updated.date
+  for (const e of newEntries) {
+    const eDate = e.date instanceof Date ? e.date : new Date(e.date)
+    if (eDate.getTime() < earliestEntryDate.getTime()) {
+      earliestEntryDate = eDate
+    }
+  }
+
+  const currentDebtStartDate = debt.startDate instanceof Date ? debt.startDate : new Date(debt.startDate)
+  const shouldUpdateStartDate =
+    newEntries.length === 1 || earliestEntryDate.getTime() < currentDebtStartDate.getTime()
+
   const settled = (debt.paidFils || 0) === newAmountFils
   const debtRef = doc(db, 'users', uid, 'debts', debt.id).withConverter(debtConverter)
   batch.update(debtRef, {
     amountFils: newAmountFils,
     settled,
     entries: newEntries.map(serializeDebtEntry),
+    ...(shouldUpdateStartDate ? { startDate: toTimestamp(earliestEntryDate) } : {}),
   })
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export async function deleteDebtEntry(
@@ -1524,6 +1659,14 @@ export async function deleteDebtEntry(
     const txRef = doc(db, 'users', uid, 'transactions', targetEntry.transactionId)
     batch.delete(txRef)
   }
+  if (Array.isArray(targetEntry.mergedTransactionIds)) {
+    for (const mId of targetEntry.mergedTransactionIds) {
+      if (mId) {
+        const mTxRef = doc(db, 'users', uid, 'transactions', mId)
+        batch.delete(mTxRef)
+      }
+    }
+  }
 
   const newEntries = entries.filter((e) => e.id !== entryId)
   const settled = (debt.paidFils || 0) === newAmountFils
@@ -1534,7 +1677,7 @@ export async function deleteDebtEntry(
     entries: newEntries.map(serializeDebtEntry),
   })
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 export async function mergePersonDebts(
@@ -1694,6 +1837,27 @@ export async function mergePersonDebts(
         ? lastMergedEntry.date
         : new Date(lastMergedEntry.date)
 
+    const mergedTxIds: string[] = []
+    for (const e of toMergeEntries) {
+      if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
+        if (!mergedTxIds.includes(e.transactionId.trim())) {
+          mergedTxIds.push(e.transactionId.trim())
+        }
+      } else if (!e.isMerged && e.id) {
+        const defaultTxId = `debt_entry_${e.id}`
+        if (!mergedTxIds.includes(defaultTxId)) {
+          mergedTxIds.push(defaultTxId)
+        }
+      }
+      if (Array.isArray(e.mergedTransactionIds)) {
+        for (const mId of e.mergedTransactionIds) {
+          if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
+            mergedTxIds.push(mId.trim())
+          }
+        }
+      }
+    }
+
     const consolidatedEntry: DebtEntry = {
       id: `compacted_entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       amountFils: mergedEntriesAmountFils,
@@ -1701,6 +1865,8 @@ export async function mergePersonDebts(
       title: `رصيد سلف سابقة مدمجة (${mergedEntriesCount} سلفة)`,
       note: `رصيد مدمج لـ ${mergedEntriesCount} سلفة سابقة`,
       createdAt: new Date(),
+      isMerged: true,
+      mergedTransactionIds: mergedTxIds,
     }
 
     finalEntries = [consolidatedEntry, ...toKeepEntries]
@@ -1725,6 +1891,6 @@ export async function mergePersonDebts(
     batch.delete(secRef)
   }
 
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
   return primaryDebt.id
 }
