@@ -57,7 +57,7 @@ describe('PaymentModal Component', () => {
     )
 
     expect(screen.getByText('تسجيل دفعة استرداد')).toBeInTheDocument()
-    expect(screen.getByText('80 د.أ')).toBeInTheDocument() // Remaining: 100 - 20 = 80
+    expect(screen.getByText('80')).toBeInTheDocument() // Remaining: 100 - 20 = 80
 
     // Fill amount input
     const input = screen.getByPlaceholderText('0.000')
@@ -98,7 +98,7 @@ describe('PaymentModal Component', () => {
 
     // Warning banner should be displayed
     expect(screen.getByText(/تم الوصول للحد الأقصى للدفعات \(100 دفعة\)/)).toBeInTheDocument()
-    expect(screen.getByText(/تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين/)).toBeInTheDocument()
+    expect(screen.getByText(/تم استيفاء الحد الأقصى لسجل حركات هذا الدين/)).toBeInTheDocument()
 
     // Compaction button should be available
     const compactBtn = screen.getByRole('button', { name: /دمج الدفعات القديمة لفتح مساحة/i })
@@ -121,7 +121,7 @@ describe('PaymentModal Component', () => {
       />
     )
 
-    const fillBtn = screen.getByRole('button', { name: /سداد كامل المبلغ المتبقي/i })
+    const fillBtn = screen.getByRole('button', { name: /كامل المبلغ المتبقي/i })
     fireEvent.click(fillBtn)
 
     const input = screen.getByPlaceholderText('0.000') as HTMLInputElement
@@ -150,7 +150,7 @@ describe('PaymentModal Component', () => {
       />
     )
 
-    const fillBtn = screen.getByRole('button', { name: /سداد كامل المبلغ المتبقي/i })
+    const fillBtn = screen.getByRole('button', { name: /كامل المبلغ المتبقي/i })
     fireEvent.click(fillBtn)
 
     const input = screen.getByPlaceholderText('0.00') as HTMLInputElement

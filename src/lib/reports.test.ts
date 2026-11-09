@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calculateDailyExpenses,
   generateDailyExpenses,
   calculateCategoryDistribution,
   calculateYearlyBreakdown,
   calculateSavingsRate,
-  calculateYearlyMonthlyAverage,
   calculateAnnualSummary,
   getDailyExpenseStats,
   ARABIC_MONTH_NAMES,
@@ -19,17 +17,17 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
     { id: 'cat-salary', name: 'راتب شهري', type: 'income', icon: '💼', color: '#3B82F6', archived: false, order: 2 },
   ]
 
-  describe('calculateDailyExpenses', () => {
+  describe('generateDailyExpenses', () => {
     it('returns empty array when start date >= end date', () => {
       const start = new Date(2026, 9, 10)
       const end = new Date(2026, 9, 5)
-      expect(calculateDailyExpenses([], start, end)).toEqual([])
+      expect(generateDailyExpenses([], start, end)).toEqual([])
     })
 
     it('returns zero-filled array of days for empty transactions', () => {
       const start = new Date(2026, 9, 1) // Oct 1, 2026
       const end = new Date(2026, 9, 4) // Oct 4, 2026 (3 days: 1, 2, 3)
-      const result = calculateDailyExpenses([], start, end)
+      const result = generateDailyExpenses([], start, end)
 
       expect(result).toHaveLength(3)
       expect(result[0]).toEqual({ day: 1, date: new Date(2026, 9, 1), amountFils: 0 })
@@ -80,7 +78,7 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
         },
       ]
 
-      const result = calculateDailyExpenses(txs, start, end)
+      const result = generateDailyExpenses(txs, start, end)
 
       expect(result).toHaveLength(4)
       expect(result[0]).toEqual({ day: 1, date: new Date(2026, 9, 1), amountFils: 0 })
@@ -93,7 +91,7 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       // Month of October (31 days) where DST changes frequently occur
       const start = new Date(2026, 9, 1, 0, 0, 0)
       const end = new Date(2026, 10, 1, 0, 0, 0) // Exclusive end: Nov 1
-      const result = calculateDailyExpenses([], start, end)
+      const result = generateDailyExpenses([], start, end)
 
       expect(result).toHaveLength(31)
       expect(result[0].day).toBe(1)
@@ -412,11 +410,13 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(breakdown[0].income).toBe(800000)
       expect(breakdown[0].expense).toBe(200000)
       expect(breakdown[0].balance).toBe(600000)
+      expect(breakdown[0].dateRange).toBe('25 يناير – 24 فبراير')
 
       // Month 11 (Dec cycle: Dec 25 - Jan 25): expense 150,000
       expect(breakdown[11].income).toBe(0)
       expect(breakdown[11].expense).toBe(150000)
       expect(breakdown[11].balance).toBe(-150000)
+      expect(breakdown[11].dateRange).toBe('25 ديسمبر – 24 يناير')
     })
   })
 
@@ -441,37 +441,6 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
 
       // Income: 1000 JOD, Expense: 5000 JOD -> clamped at -100%
       expect(calculateSavingsRate(1000000, 5000000)).toBe(-100)
-    })
-  })
-
-  describe('calculateYearlyMonthlyAverage', () => {
-    it('divides by elapsed months in current year based on currentMonthIndex', () => {
-      // In April (monthIndex 3), 4 months have elapsed
-      const avgApril = calculateYearlyMonthlyAverage(120000, 2026, 2026, 3, 4)
-      expect(avgApril).toBe(30000)
-
-      // In January (monthIndex 0), 1 month has elapsed
-      const avgJan = calculateYearlyMonthlyAverage(50000, 2026, 2026, 0, 1)
-      expect(avgJan).toBe(50000)
-
-      // In December (monthIndex 11), 12 months have elapsed
-      const avgDec = calculateYearlyMonthlyAverage(120000, 2026, 2026, 11, 12)
-      expect(avgDec).toBe(10000)
-    })
-
-    it('divides past years by number of active months with activity', () => {
-      // User only had activity in 3 months during 2025
-      const avgPastPartial = calculateYearlyMonthlyAverage(90000, 2025, 2026, 3, 3)
-      expect(avgPastPartial).toBe(30000)
-
-      // Full year activity (12 months)
-      const avgPastFull = calculateYearlyMonthlyAverage(120000, 2025, 2026, 3, 12)
-      expect(avgPastFull).toBe(10000)
-    })
-
-    it('falls back safely to 12 if no active months in past years', () => {
-      const avgEmpty = calculateYearlyMonthlyAverage(0, 2025, 2026, 3, 0)
-      expect(avgEmpty).toBe(0)
     })
   })
 
@@ -510,6 +479,7 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       // Total expense = 300,000. Active expense months count = 2 (NOT 3!)
       expect(res.activeMonthsCount).toBe(2)
       expect(res.averageMonthlyExpenseFils).toBe(150000) // 300,000 / 2 = 150,000
+      expect(res.averageMonthlyIncomeFils).toBe(500000)
       expect(res.isCurrentMonthOnly).toBe(false)
       expect(res.note).toBeUndefined()
     })

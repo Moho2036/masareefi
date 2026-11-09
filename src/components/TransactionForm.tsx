@@ -3,6 +3,7 @@ import {
   Check,
   Trash2,
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Copy,
   Users,
@@ -47,6 +48,8 @@ import {
   getCategoryUsageMap,
   recordCategoryUsage,
   sortCategoriesUnified,
+  buildUsageFromTransactions,
+  mergeUsageMaps,
 } from '../lib/categoryUsage'
 import { calculateForecast } from '../lib/forecast'
 import { calculateNextDateOnEdit, getOccurrenceMonthIndex } from '../lib/recurring'
@@ -384,15 +387,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [onDirtyChange, initialTransaction, duplicateFrom, amountStr, title, note])
   const [deleting, setDeleting] = useState(false)
 
-  // Track category usage frequencies to prioritize top categories (read once on open)
-  const usageMap = useMemo(() => getCategoryUsageMap(), [])
+  // Track category usage frequencies from loaded transactions & synchronized cache
+  const usageMap = useMemo(() => {
+    if (monthTransactions && monthTransactions.length > 0) {
+      return mergeUsageMaps(buildUsageFromTransactions(monthTransactions))
+    }
+    return getCategoryUsageMap()
+  }, [monthTransactions])
 
   // Filter & sort available categories for current transaction type
-  // Preserve current transaction's category even if archived
+  // Preserve current transaction's category even if archived or legacy
   const originalCatId = initialTransaction?.categoryId || duplicateFrom?.categoryId
   const availableCategories = useMemo(() => {
     const filtered = categories.filter(
-      (c) => c.type === type && (!c.archived || c.id === originalCatId)
+      (c) => (c.type === type && !c.archived) || c.id === originalCatId
     )
     return sortCategoriesUnified(
       filtered,
@@ -402,12 +410,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [categories, type, usageMap, originalCatId, userSettings?.categorySortMode])
 
   // Compute the effectively selected category ID:
-  // If user selected one that belongs to available categories, use it.
-  // Otherwise, fallback to the top (most frequent) available category.
-  const activeCategoryId =
-    categoryId && availableCategories.some((c) => c.id === categoryId)
-      ? categoryId
-      : availableCategories[0]?.id ?? ''
+  // Preserve original/selected categoryId even if missing, never silently overwrite it.
+  // Only default to first available category if categoryId was never set.
+  const activeCategoryId = categoryId || (availableCategories[0]?.id ?? '')
+  const isSelectedCategoryMissing =
+    Boolean(activeCategoryId) &&
+    !categories.some((c) => c.id === activeCategoryId)
 
   // Foldable categories grid: first 6 (ensuring selected category is visible if chosen) or all
   const displayedCategories = useMemo(() => {
@@ -919,7 +927,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleDuplicateCurrent = async () => {
     if (!initialTransaction) return
-    const parsedFils = toFils(amountStr, currencyConfig.decimals)
+    const evaluated = evaluateMathExpression(amountStr)
+    const cleanAmountStr = evaluated !== null ? String(evaluated) : amountStr
+    const parsedFils = toFils(cleanAmountStr, currencyConfig.decimals)
     const finalFils = parsedFils > 0 ? parsedFils : initialTransaction.amountFils
 
     const currentData: Transaction = {
@@ -972,8 +982,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Linked Debt Init or Entry Warning Banner */}
       {((isLinkedToDebtInit && isDebtExists) || (isLinkedToDebtEntry && isDebtEntryExists)) &&
         !isSourceDeleted && (
-          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
-            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-amber-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
               <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
                 {isLinkedToDebtEntry
@@ -981,7 +991,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   : 'معاملة أصل الدين متزامنة مع سجل الديون'}
               </span>
             </div>
-            <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
               {isLinkedToDebtEntry
                 ? 'هذه المعاملة تمثل سلفة إضافية مرتبطة بالدين. لتعديل المبلغ أو حذف السلفة، يرجى إدارتها من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'
                 : 'هذه المعاملة تمثل نشوء الدين الأصلي. لتعديل المبلغ أو حذف الدين، يرجى إدارته من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'}
@@ -989,7 +999,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <Link
               to="/debts"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
             >
               <span>الانتقال إلى سجل الديون</span>
               <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
@@ -1000,26 +1010,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Linked Debt Payment Warning Banner */}
       {isLinkedToDebtPayment && (
         linkedDebtPayment?.payment?.isMerged ? (
-          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-2">
-            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-amber-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
               <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>معاملة مرتبطة بدفعة دين مدمجة لـ ({linkedDebtPayment.debt.personName})</span>
             </div>
-            <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80 pe-1">
+            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
               هذه المعاملة تمثل رصيد دفعات سابقة تم دمجها في سجل الدين. لا يمكن تعديل مبلغها أو حذفها من هنا، يرجى إدارتها من صفحة الديون.
             </p>
             <Link
               to="/debts"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
             >
               <span>الانتقال إلى سجل الديون</span>
               <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
             </Link>
           </div>
         ) : (
-          <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
               <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>
                 {linkedDebtPayment
@@ -1027,7 +1037,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   : 'معاملة مرتبطة بدفعة سداد دين'}
               </span>
             </div>
-            <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
+            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
               عند تعديل المبلغ أو حذف هذه المعاملة، سيتم تلقائياً تحديث دفعة السداد في سجل الدين وإعادة احتساب رصيد الدين وحالة الإغلاق.
             </p>
           </div>
@@ -1036,18 +1046,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Linked Circle Payout Warning Banner */}
       {isLinkedToCircle && isCircleExists && !isSourceDeleted && (
-        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-2">
-          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+        <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
             <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span>معاملة مرتبطة بإيداع جمعية مالية</span>
           </div>
-          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
+          <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
             هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لتعديل المبلغ أو حذفها يرجى الانتقال إلى صفحة الجمعيات، أو يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
           </p>
           <Link
             to="/tools?tool=circles"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
           >
             <span>الانتقال إلى صفحة الجمعيات</span>
             <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
@@ -1057,12 +1067,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {/* Linked Circle Installment Warning Banner */}
       {isLinkedToCircleInstallment && isCircleInstallmentExists && (
-        <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+        <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
             <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span>معاملة مرتبطة بقسط جمعية ({linkedCircleInstallment?.name || 'جمعية'}) - شهر {circleInstallmentMonth}</span>
           </div>
-          <p className="text-[11px] leading-relaxed text-blue-700/90 dark:text-blue-300/80 pe-1">
+          <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
             عند حذف هذه المعاملة، سيتم تلقائياً تحديث حالة القسط في جدول الجمعية وإلغاء تسجيل الدفع.
           </p>
         </div>
@@ -1071,7 +1081,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Orphaned Unlocked Banner */}
       {isSourceMissing &&
         (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle) && (
-          <div className="p-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-200 text-xs flex items-center gap-2">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-zinc-500 shrink-0" />
             <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
           </div>
@@ -1096,7 +1106,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       <div>
         <div
           className={cn(
-            'flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-zinc-900/70 rounded-2xl border transition-all',
+            'flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-zinc-900/70 rounded-xl border transition-all',
             error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
               : 'border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20',
@@ -1165,7 +1175,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </span>
             <span>
               حد الصرف اليومي الآمن:{' '}
-              <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+              <strong
+                className={cn(
+                  forecast.dailySafeFils > 0
+                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                    : forecast.dailySafeFils < 0
+                      ? 'text-red-600 dark:text-red-400 font-bold'
+                      : 'text-zinc-500 dark:text-zinc-400 font-bold'
+                )}
+              >
                 <FormattedMoney amountFils={forecast.dailySafeFils} />
               </strong>
             </span>
@@ -1206,12 +1224,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         ) : (
           <div>
-            <div
-              className={cn(
-                'grid grid-cols-3 gap-1.5 p-0.5',
-                isCategoriesExpanded && 'max-h-48 overflow-y-auto'
-              )}
-            >
+            {isSelectedCategoryMissing && (
+              <div className="mb-2 p-2.5 rounded-xl border-s-2 border-amber-500 bg-zinc-50 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="font-semibold">
+                    التصنيف الأصلي لهذه المعاملة غير متوفر أو محذوف. تم الاحتفاظ به، ويمكنك اختيار تصنيف بديل من القائمة أدناه.
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
+                  تصنيف مفقود
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-1.5 p-0.5">
               {displayedCategories.map((cat) => {
                 const isSelected = activeCategoryId === cat.id
                 return (
@@ -1225,14 +1251,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                     className={cn(
                       'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
                       isSelected
-                        ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20 shadow-xs'
+                        ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20 shadow-xs dark:shadow-none'
                         : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
                     )}
                   >
-                    <span
-                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${cat.color}25` }}
-                    >
+                    <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
                       <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                     </span>
                     <span className="truncate flex-1 text-xs font-semibold">
@@ -1288,7 +1311,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1.5 font-medium">
             <Calendar className="w-3.5 h-3.5 shrink-0" />
             <span>
-              تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً ({formatDateInput(range.start)}). يمكنك تغييره بحرية.
+              تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً ({formatDateInput(range.start)})
             </span>
           </p>
         )}
@@ -1365,9 +1388,22 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : (
         <div className="space-y-3">
           <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                ملاحظة تفصيلية (اختياري)
+              </label>
+              {!note.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setShowNoteField(false)}
+                  className="text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors cursor-pointer"
+                >
+                  طي
+                </button>
+              )}
+            </div>
             <Input
               type="text"
-              label="ملاحظة تفصيلية (اختياري)"
               placeholder="مثال: غداء مع الأصدقاء"
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -1517,7 +1553,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               checked={hasEndDate}
               onChange={setHasEndDate}
               label="تحديد تاريخ انتهاء للتكرار"
-              description="يتوقف التكرار التلقائي بعد هذا التاريخ"
             />
             {hasEndDate && (
               <DatePickerInput
@@ -1533,12 +1568,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           {/* Past date schedule notice */}
           {parseLocalDateInput(dateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
             <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-[11px] text-zinc-600 dark:text-zinc-300 flex items-center justify-between gap-2">
-              <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من تاريخ اليوم.</span>
-              <input
-                type="checkbox"
+              <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من اليوم</span>
+              <Toggle
                 checked={scheduleNextIfPast}
-                onChange={(e) => setScheduleNextIfPast(e.target.checked)}
-                className="rounded border-zinc-300 text-blue-600 focus:ring-blue-600"
+                onChange={setScheduleNextIfPast}
               />
             </div>
           )}

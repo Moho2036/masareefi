@@ -9,8 +9,11 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useTheme } from '../hooks/useTheme'
 import {
   signInWithGoogle,
   signInWithEmail,
@@ -21,6 +24,7 @@ import { AppShellSkeleton } from '../components/skeletons/AppShellSkeleton'
 
 export const LoginPage: React.FC = () => {
   const { user, loading } = useAuth()
+  const { resolvedTheme, setTheme } = useTheme()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -195,8 +199,25 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 font-sans">
-      <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-3xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
+    <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 font-sans">
+      {/* Theme Toggle Button */}
+      <div className="absolute top-4 end-4 sm:top-6 sm:end-6 z-10">
+        <button
+          type="button"
+          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          aria-label={resolvedTheme === 'dark' ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن'}
+          title={resolvedTheme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}
+          className="press-scale p-2.5 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 shadow-xs dark:shadow-none transition-colors cursor-pointer"
+        >
+          {resolvedTheme === 'dark' ? (
+            <Sun className="w-5 h-5 text-amber-500" />
+          ) : (
+            <Moon className="w-5 h-5 text-zinc-600" />
+          )}
+        </button>
+      </div>
+
+      <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-2xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
         {/* App Logo */}
         <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-zinc-900 dark:bg-zinc-800/90 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-center shadow-xs p-2.5">
           <img src="/icons/icon.svg" alt="Baseer Logo" className="w-full h-full object-contain" />

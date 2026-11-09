@@ -300,4 +300,17 @@ describe('LoginPage Component', () => {
       ).toBeDefined()
     })
   })
+
+  it('renders theme toggle button on login screen and toggles theme', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    const themeBtn = screen.getByRole('button', { name: /التبديل إلى الوضع/i })
+    expect(themeBtn).toBeDefined()
+    fireEvent.click(themeBtn)
+    expect(screen.getByRole('button', { name: /التبديل إلى الوضع/i })).toBeDefined()
+  })
 })

@@ -24,15 +24,14 @@ import { FormattedMoney } from '../components/ui/FormattedMoney'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useTransactions } from '../hooks/useTransactions'
-import { useSelectedMonth } from '../hooks/useSelectedMonth'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../hooks/useCurrency'
 import { useUserSettings } from '../hooks/useUserSettings'
 import {
   archiveCategory,
   deleteCategory,
-  updateCategory,
   reassignAndDeleteCategory,
+  reorderCategories,
 } from '../services/categories'
 import { useAppData } from '../context/AppDataContext'
 import {
@@ -41,17 +40,17 @@ import {
   sortCategoriesUnified,
   type CategoryUsageDetails,
 } from '../lib/categoryUsage'
+import { getFinancialMonthRange } from '../lib/dates'
 import { triggerHaptic } from '../lib/haptics'
 import { cn } from '../lib/cn'
 import type { Category, TxType } from '../types'
 
-export const CategoriesPage: React.FC = () => {
+export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDate }) => {
   const { user } = useAuth()
   const { data: categories, loading: categoriesLoading } = useCategories()
   const appData = useAppData()
   const recurring = useMemo(() => appData?.recurring ?? [], [appData?.recurring])
   const moneyCircles = useMemo(() => appData?.moneyCircles ?? [], [appData?.moneyCircles])
-  const { range } = useSelectedMonth()
   const { data: transactions, loading: txLoading } = useTransactions()
   const { showToast } = useToast()
   const { config: currencyConfig } = useCurrency()
@@ -61,18 +60,26 @@ export const CategoriesPage: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false)
+  const [catToArchive, setCatToArchive] = useState<Category | null>(null)
+  const [isArchiving, setIsArchiving] = useState(false)
   const [catToDelete, setCatToDelete] = useState<Category | null>(null)
   const [deleteMode, setDeleteMode] = useState<'archive' | 'reassign'>('archive')
   const [targetReassignCatId, setTargetReassignCatId] = useState<string>('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [lastMovedId, setLastMovedId] = useState<string | null>(null)
 
+  // Current financial month range calculated strictly for the current date and user's monthStartDay
+  const monthStartDay = userSettings?.monthStartDay ?? 1
+  const currentFinancialRange = useMemo(() => {
+    return getFinancialMonthRange(referenceDate ?? new Date(), monthStartDay)
+  }, [referenceDate, monthStartDay])
+
   // Transaction count and total spend per category for current financial month
   const currentMonthStats = useMemo(() => {
     const stats: Record<string, { totalFils: number; count: number }> = {}
     const currentMonthTxs = transactions.filter((tx) => {
       const txTime = tx.date instanceof Date ? tx.date.getTime() : new Date(tx.date).getTime()
-      return txTime >= range.start.getTime() && txTime < range.end.getTime()
+      return txTime >= currentFinancialRange.start.getTime() && txTime < currentFinancialRange.end.getTime()
     })
     for (const tx of currentMonthTxs) {
       if (!stats[tx.categoryId]) {
@@ -82,7 +89,7 @@ export const CategoriesPage: React.FC = () => {
       stats[tx.categoryId].count += 1
     }
     return stats
-  }, [transactions, range])
+  }, [transactions, currentFinancialRange])
 
   const currentMonthTxCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -243,17 +250,31 @@ export const CategoriesPage: React.FC = () => {
     reordered[targetIndex] = temp
 
     try {
-      const updates: Promise<void>[] = []
-      reordered.forEach((item, idx) => {
-        if (item.order !== idx || idx === currentIndex || idx === targetIndex) {
-          updates.push(updateCategory(user.uid, item.id, { order: idx }))
-        }
-      })
-      await Promise.all(updates)
+      await reorderCategories(user.uid, reordered.map((item) => item.id))
     } catch (err) {
       console.error('Failed to reorder category:', err)
       showToast('تعذر تغيير ترتيب التصنيف', 'error')
     }
+  }
+
+  const handleRequestArchive = (cat: Category) => {
+    if (!user) return
+
+    // Prevent archiving the last active category of a type
+    if (!cat.archived) {
+      const remainingActive = categories.filter(
+        (c) => c.type === cat.type && !c.archived
+      ).length
+      if (remainingActive <= 1) {
+        showToast(
+          'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.',
+          'error'
+        )
+        return
+      }
+    }
+
+    setCatToArchive(cat)
   }
 
   const handleArchive = async (cat: Category) => {
@@ -274,6 +295,7 @@ export const CategoriesPage: React.FC = () => {
     }
 
     try {
+      setIsArchiving(true)
       const isUsedInActiveRecurring = recurring.some(
         (r) => (r.active !== false) && r.categoryId === cat.id
       )
@@ -288,19 +310,28 @@ export const CategoriesPage: React.FC = () => {
       await archiveCategory(user.uid, cat.id, true)
       if (isUsedInActiveRecurring && isUsedInActiveCircle) {
         showToast(
-          'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة وجمعيات نشطة',
+          'تمت أرشفة التصنيف. تنبيه: لا يزال هذا التصنيف مستخدماً في معاملات متكررة وجمعيات نشطة.',
           'info'
         )
       } else if (isUsedInActiveRecurring) {
-        showToast('تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة نشطة', 'info')
+        showToast(
+          'تمت أرشفة التصنيف. تنبيه: لا يزال هذا التصنيف مستخدماً في معاملات متكررة نشطة.',
+          'info'
+        )
       } else if (isUsedInActiveCircle) {
-        showToast('تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في جمعية مالية نشطة', 'info')
+        showToast(
+          'تمت أرشفة التصنيف. تنبيه: لا يزال هذا التصنيف مستخدماً في جمعية مالية نشطة.',
+          'info'
+        )
       } else {
         showToast('تمت أرشفة التصنيف بنجاح', 'info')
       }
     } catch (err) {
       console.error('Failed to archive category:', err)
       showToast(err instanceof Error ? err.message : 'تعذر أرشفة التصنيف', 'error')
+    } finally {
+      setIsArchiving(false)
+      setCatToArchive(null)
     }
   }
 
@@ -313,6 +344,25 @@ export const CategoriesPage: React.FC = () => {
       console.error('Failed to restore category:', err)
       showToast(err instanceof Error ? err.message : 'تعذر استعادة التصنيف', 'error')
     }
+  }
+
+  const getLinkedCommitmentsText = (catId: string): string | null => {
+    const details = usageDetailsByCategory[catId]
+    if (!details) return null
+    const parts: string[] = []
+    if (details.recurringCount > 0) {
+      if (details.recurringCount === 1) parts.push('معاملة متكررة مرتبطة')
+      else if (details.recurringCount === 2) parts.push('معاملتان متكررتان')
+      else if (details.recurringCount <= 10) parts.push(`${details.recurringCount} معاملات متكررة`)
+      else parts.push(`${details.recurringCount} معاملة متكررة`)
+    }
+    if (details.circlesCount > 0) {
+      if (details.circlesCount === 1) parts.push('جمعية مالية مرتبطة')
+      else if (details.circlesCount === 2) parts.push('جمعيتان ماليتان')
+      else if (details.circlesCount <= 10) parts.push(`${details.circlesCount} جمعيات مالية`)
+      else parts.push(`${details.circlesCount} جمعية مالية`)
+    }
+    return parts.length > 0 ? parts.join(' • ') : null
   }
 
   const formatUsageText = (catId: string) => {
@@ -345,13 +395,15 @@ export const CategoriesPage: React.FC = () => {
     if (details.recurringCount > 0) {
       if (details.recurringCount === 1) parts.push('معاملة متكررة مرتبطة')
       else if (details.recurringCount === 2) parts.push('معاملتان متكررتان')
-      else parts.push(`${details.recurringCount} معاملات متكررة`)
+      else if (details.recurringCount <= 10) parts.push(`${details.recurringCount} معاملات متكررة`)
+      else parts.push(`${details.recurringCount} معاملة متكررة`)
     }
 
     if (details.circlesCount > 0) {
       if (details.circlesCount === 1) parts.push('جمعية مالية مرتبطة')
       else if (details.circlesCount === 2) parts.push('جمعيتان ماليتان')
-      else parts.push(`${details.circlesCount} جمعيات مالية`)
+      else if (details.circlesCount <= 10) parts.push(`${details.circlesCount} جمعيات مالية`)
+      else parts.push(`${details.circlesCount} جمعية مالية`)
     }
 
     return parts.join(' • ')
@@ -376,7 +428,7 @@ export const CategoriesPage: React.FC = () => {
       />
 
       {/* Tabs: المصاريف / المداخيل & Sort Mode Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-3">
         <SegmentedControl<TxType>
           value={categoryType}
           onChange={setCategoryType}
@@ -388,7 +440,7 @@ export const CategoriesPage: React.FC = () => {
         />
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
             الترتيب:
           </span>
           <SegmentedControl<'usage' | 'manual'>
@@ -446,10 +498,7 @@ export const CategoriesPage: React.FC = () => {
               >
                 {/* Right side: Icon & Details */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
-                  >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
                     <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
                   </div>
 
@@ -485,6 +534,14 @@ export const CategoriesPage: React.FC = () => {
                                   ? `${currentMonthStats[cat.id].count} معاملات هذا الشهر`
                                   : `${currentMonthStats[cat.id].count} معاملة هذا الشهر`}
                           </span>
+                          {getLinkedCommitmentsText(cat.id) && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                {getLinkedCommitmentsText(cat.id)}
+                              </span>
+                            </>
+                          )}
                         </span>
                       ) : (
                         <span>{formatUsageText(cat.id)}</span>
@@ -528,7 +585,7 @@ export const CategoriesPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleArchive(cat)}
+                    onClick={() => handleRequestArchive(cat)}
                     className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
                     aria-label={`أرشفة تصنيف ${cat.name}`}
                     title="أرشفة التصنيف"
@@ -560,14 +617,14 @@ export const CategoriesPage: React.FC = () => {
 
       {/* Collapsed Archived Section */}
       {archivedCategories.length > 0 && (
-        <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800">
+        <div className="pt-6 border-t border-zinc-200/80 dark:border-zinc-800">
           <button
             type="button"
             onClick={() => setIsArchivedExpanded((prev) => !prev)}
-            className="flex items-center justify-between w-full p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm transition-colors cursor-pointer"
+            className="flex items-center justify-between w-full p-4 rounded-2xl bg-zinc-100/80 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-bold text-sm transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Archive className="w-4 h-4 text-slate-400" />
+              <Archive className="w-4 h-4 text-zinc-400" />
               <span>التصنيفات المؤرشفة ({archivedCategories.length})</span>
             </div>
             {isArchivedExpanded ? (
@@ -586,10 +643,7 @@ export const CategoriesPage: React.FC = () => {
                     className="bg-white dark:bg-[#121215] rounded-2xl p-3.5 sm:p-4 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between gap-3 opacity-80"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
-                      >
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
                         <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
                       </div>
                       <span className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 truncate">
@@ -609,9 +663,18 @@ export const CategoriesPage: React.FC = () => {
                       </Button>
                       <button
                         type="button"
+                        onClick={() => handleOpenEdit(cat)}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        aria-label={`تعديل تصنيف ${cat.name}`}
+                        title="تعديل التصنيف"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           setCatToDelete(cat)
-                          setDeleteMode('archive')
+                          setDeleteMode('reassign')
                           const otherCats = categories.filter(
                             (c) => c.type === cat.type && c.id !== cat.id && !c.archived
                           )
@@ -640,13 +703,73 @@ export const CategoriesPage: React.FC = () => {
         defaultType={categoryType}
       />
 
+      {/* Archive Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(catToArchive)}
+        onClose={() => {
+          if (!isArchiving) setCatToArchive(null)
+        }}
+        title="تأكيد أرشفة التصنيف"
+      >
+        {catToArchive && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
+                <CategoryIcon icon={catToArchive.icon} color={catToArchive.color} size="md" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                  {catToArchive.name}
+                </div>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {catToArchive.type === 'expense' ? 'تصنيف مصروفات' : 'تصنيف مداخيل'}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+              هل أنت متأكد من رغبتك في أرشفة هذا التصنيف؟ سيتم إخفاؤه من شاشات إضافة المعاملات الجديدة مع الإبقاء على كافة سجلاته وتقاريره التاريخية، ويمكنك استعادته في أي وقت من قسم &quot;التصنيفات المؤرشفة&quot;.
+            </p>
+
+            {getLinkedCommitmentsText(catToArchive.id) && (
+              <div className="flex items-start gap-2.5 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200/80 dark:border-amber-900/60 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div>
+                  <span className="font-bold">تنبيه: </span>
+                  لا يزال هذا التصنيف مرتبطاً بالتزامات نشطة ({getLinkedCommitmentsText(catToArchive.id)}). ستظل هذه الالتزامات قائمة.
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setCatToArchive(null)}
+                disabled={isArchiving}
+              >
+                إلغاء
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => handleArchive(catToArchive)}
+                disabled={isArchiving}
+              >
+                {isArchiving ? 'جاري الأرشفة...' : 'أرشفة التصنيف'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Smart Delete Confirmation Modal */}
       <Modal
         isOpen={Boolean(catToDelete)}
         onClose={() => {
           if (!isDeleting) setCatToDelete(null)
         }}
-        title="تأكيد حذف أو أرشفة التصنيف"
+        title={catToDelete?.archived ? 'تأكيد حذف التصنيف المؤرشف' : 'تأكيد حذف أو أرشفة التصنيف'}
       >
         {catToDelete && (
           (() => {
@@ -662,6 +785,62 @@ export const CategoriesPage: React.FC = () => {
             )
 
             if (usageDetails.isInUse) {
+              if (catToDelete.archived) {
+                // Category is already archived and in-use: prompt for target category to reassign & delete permanently
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
+                      <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                      <div className="text-xs sm:text-sm">
+                        <p className="font-bold mb-1">
+                          هذا التصنيف مؤرشف بالفعل ومرتبط بسجلات مالية ({formatUsageText(catToDelete.id)})
+                        </p>
+                        <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed text-xs">
+                          لحذف هذا التصنيف المؤرشف نهائياً دون الإضرار ببياناتك المالية، يرجى تحديد تصنيف نشط بديل لترحيل كافة المعاملات والالتزامات المرتبطة به إليه.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                      <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                        التصنيف البديل لنقل السجلات إليه:
+                      </label>
+                      {otherActiveCats.length === 0 ? (
+                        <div className="text-xs text-red-500 font-semibold p-2">
+                          لا توجد تصنيفات نشطة أخرى من نفس النوع لنقل السجلات إليها. يجب إضافة تصنيف نشط أولاً.
+                        </div>
+                      ) : (
+                        <Select
+                          value={targetReassignCatId}
+                          onChange={(e) => setTargetReassignCatId(e.target.value)}
+                          options={otherActiveCats.map((c) => ({ value: c.id, label: c.name }))}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() => setCatToDelete(null)}
+                        disabled={isDeleting}
+                      >
+                        إلغاء
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="md"
+                        onClick={handleReassignAndDelete}
+                        disabled={isDeleting || otherActiveCats.length === 0 || !targetReassignCatId}
+                      >
+                        {isDeleting ? 'جاري نقل السجلات...' : 'نقل السجلات وحذف التصنيف نهائياً'}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
+
+              // Active category in-use: choice between archive and reassign
               return (
                 <div className="space-y-4">
                   <div className="flex items-start gap-3 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200/80 dark:border-amber-900/60">
@@ -670,7 +849,7 @@ export const CategoriesPage: React.FC = () => {
                       <p className="font-bold mb-1">
                         هذا التصنيف مرتبط بسجلات مالية حالية ({formatUsageText(catToDelete.id)})
                       </p>
-                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-xs">
+                      <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed text-xs">
                         لحماية دقة تقاريرك، يمكنك إما <strong>أرشفة التصنيف</strong> (لإخفائه من شاشات الإضافة مع حفظ التاريخ)، أو <strong>نقل كافة السجلات المرتبطة به</strong> إلى تصنيف بديل ثم حذفه نهائياً.
                       </p>
                     </div>
@@ -678,7 +857,7 @@ export const CategoriesPage: React.FC = () => {
 
                   {/* Choice Selector: أرشفة أو نقل وحذف */}
                   <div className="space-y-2.5">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+                    <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
                       اختر الإجراء المطلوب:
                     </label>
                     <div className="grid grid-cols-1 gap-2">
@@ -687,7 +866,7 @@ export const CategoriesPage: React.FC = () => {
                           'flex items-center gap-2.5 p-3 rounded-xl border text-xs sm:text-sm font-semibold cursor-pointer transition-all',
                           deleteMode === 'archive'
                             ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 text-blue-950 dark:text-blue-100 ring-2 ring-blue-600/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                         )}
                       >
                         <input
@@ -699,7 +878,7 @@ export const CategoriesPage: React.FC = () => {
                         />
                         <div className="min-w-0">
                           <div className="font-bold">أرشفة التصنيف (مستحسن)</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal">
                             إخفاء التصنيف من شاشات الإضافة مع الإبقاء على كافة المعاملات والتقارير التاريخية دون أي تعديل.
                           </div>
                         </div>
@@ -710,7 +889,7 @@ export const CategoriesPage: React.FC = () => {
                           'flex items-center gap-2.5 p-3 rounded-xl border text-xs sm:text-sm font-semibold cursor-pointer transition-all',
                           deleteMode === 'reassign'
                             ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 text-blue-950 dark:text-blue-100 ring-2 ring-blue-600/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                         )}
                       >
                         <input
@@ -722,7 +901,7 @@ export const CategoriesPage: React.FC = () => {
                         />
                         <div className="min-w-0">
                           <div className="font-bold">نقل كافة السجلات إلى تصنيف آخر وحذفه نهائياً</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal">
                             ترحيل جميع المعاملات والمتكررة والجمعيات المرتبطة به إلى تصنيف نشط آخر ثم حذف هذا التصنيف.
                           </div>
                         </div>
@@ -732,8 +911,8 @@ export const CategoriesPage: React.FC = () => {
 
                   {/* If Reassign mode: choose target category */}
                   {deleteMode === 'reassign' && (
-                    <div className="space-y-1.5 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <div className="space-y-1.5 p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                      <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300">
                         التصنيف البديل لنقل السجلات إليه:
                       </label>
                       {otherActiveCats.length === 0 ? (
@@ -751,7 +930,7 @@ export const CategoriesPage: React.FC = () => {
                   )}
 
                   {/* Actions */}
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                     <Button
                       variant="outline"
                       size="md"

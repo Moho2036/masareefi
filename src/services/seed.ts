@@ -62,24 +62,24 @@ export function addDefaultCategoriesToBatch(batch: WriteBatch, uid: string): voi
   }
 }
 
-export async function seedDefaultCategories(uid: string): Promise<void> {
+async function seedDefaultCategories(uid: string): Promise<void> {
   const batch = writeBatch(db)
   addDefaultCategoriesToBatch(batch, uid)
   await batch.commit()
 }
 
-export const SEED_V2_STORAGE_KEY_PREFIX = 'baseer_categories_seed_v2_'
-export const LEGACY_SEED_V2_STORAGE_KEY_PREFIX = 'masareefi_categories_seed_v2_'
+const SEED_V2_STORAGE_KEY_PREFIX = 'baseer_categories_seed_v2_'
+const LEGACY_SEED_V2_STORAGE_KEY_PREFIX = 'masareefi_categories_seed_v2_'
 
-export function getCategoriesSeedV2Key(uid: string): string {
+function getCategoriesSeedV2Key(uid: string): string {
   return `${SEED_V2_STORAGE_KEY_PREFIX}${uid}`
 }
 
-export function getLegacyCategoriesSeedV2Key(uid: string): string {
+function getLegacyCategoriesSeedV2Key(uid: string): string {
   return `${LEGACY_SEED_V2_STORAGE_KEY_PREFIX}${uid}`
 }
 
-export function isCategoriesSeedUpgraded(uid: string): boolean {
+function isCategoriesSeedUpgraded(uid: string): boolean {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       return (
@@ -93,7 +93,7 @@ export function isCategoriesSeedUpgraded(uid: string): boolean {
   return false
 }
 
-export function markCategoriesSeedUpgraded(uid: string): void {
+function markCategoriesSeedUpgraded(uid: string): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(getCategoriesSeedV2Key(uid), 'true')

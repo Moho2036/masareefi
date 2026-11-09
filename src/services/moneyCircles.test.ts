@@ -6,7 +6,6 @@ import {
   isCircleFullyPaid,
   circleConverter,
   deleteMoneyCircle,
-  deleteCircle,
   updateMoneyCircle,
   checkCircleHasTransactions,
   toggleCircleMemberPayment,
@@ -216,7 +215,7 @@ describe('moneyCircles service', () => {
     })
   })
 
-  describe('deleteMoneyCircle & deleteCircle', () => {
+  describe('deleteMoneyCircle', () => {
     beforeEach(() => {
       vi.clearAllMocks()
     })
@@ -270,7 +269,7 @@ describe('moneyCircles service', () => {
         docs: [],
       })
 
-      await deleteCircle('uid-1', 'circle-2')
+      await deleteMoneyCircle('uid-1', 'circle-2')
 
       expect(mockBatchDelete).toHaveBeenCalledTimes(2)
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
@@ -362,7 +361,7 @@ describe('moneyCircles service', () => {
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
-    it('deletes payout transaction if user moves turnMonth to future', async () => {
+    it('preserves and updates payout transaction date instead of silently deleting it if user moves turnMonth', async () => {
       // 1. circle doc exists with turn in future (turnMonth 10 while circle started recently)
       mockGetDoc.mockResolvedValueOnce({
         id: 'circle-1',
@@ -393,8 +392,11 @@ describe('moneyCircles service', () => {
         { monthStartDay: 1 }
       )
 
-      expect(mockBatchDelete).toHaveBeenCalledTimes(1)
-      expect(mockBatchDelete.mock.calls[0][0].path).toBe('users/uid-1/transactions/circle_payout_circle-1')
+      expect(mockBatchDelete).not.toHaveBeenCalled()
+      const payoutUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circle_payout_circle-1')
+      )
+      expect(payoutUpdateCall).toBeDefined()
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
 
@@ -1279,6 +1281,8 @@ describe('moneyCircles service', () => {
       })
       // 2. txRef check for deterministic ID circle_circle-1_m1 -> does not exist
       mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 2b. recurring tx check -> does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
       // 3. recRef check -> exists
       mockGetDoc.mockResolvedValueOnce({
         id: 'rec-1',
@@ -1613,6 +1617,142 @@ describe('moneyCircles service', () => {
       expect(updatedM2.paidMonths).not.toContain(1)
       expect(updatedM2.paidMonths).toEqual([2])
       expect(updatedM2.paymentsByMonth?.['1']).toBeUndefined()
+    })
+  })
+
+  describe('toggleCircleMemberPayment & removeCircleInstallmentPayment double-share & duplicate prevention', () => {
+    it('does not create duplicate manual installment transaction if recurring transaction already exists', async () => {
+      const { toggleCircleMemberPayment } = await import('./moneyCircles')
+
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-dup-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية الدوبلكس',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 3,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-user', name: 'أنت', turnMonth: 3, paidMonths: [] },
+            { id: 'm-other', name: 'عضو', turnMonth: 1, paidMonths: [] },
+          ],
+          status: 'active',
+          recurringId: 'rec-dup-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. manual txRef check: circle_c-dup-1_m1 -> does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 3. recurring tx check: rec-dup-1_2026-01-01 -> EXISTS!
+      mockGetDoc.mockResolvedValueOnce({ exists: () => true })
+      // 4. recRef check -> exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-dup-1',
+        exists: () => true,
+        data: () => ({ title: 'قسط' }),
+      })
+
+      const res = await toggleCircleMemberPayment('uid-1', 'c-dup-1', 'm-user', 1)
+      expect(res.isUser).toBe(true)
+      expect(res.paid).toBe(true)
+
+      // Must NOT set manual transaction because recurring transaction already exists
+      expect(mockBatchSet).not.toHaveBeenCalled()
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('correctly matches user member and combines paid months for double-share circle in toggleCircleMemberPayment and removeCircleInstallmentPayment', async () => {
+      const { toggleCircleMemberPayment, removeCircleInstallmentPayment } = await import('./moneyCircles')
+
+      // 1. circle doc for toggle
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-double-user',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية سهمين',
+          monthlyAmountFils: 50000,
+          membersCount: 6,
+          totalAmountFils: 300000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 5,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-user-1', name: 'أنت (سهم 1)', turnMonth: 2, paidMonths: [1] },
+            { id: 'm-user-2', name: 'أنت (سهم 2)', turnMonth: 5, paidMonths: [] },
+            { id: 'm-other', name: 'عضو', turnMonth: 1, paidMonths: [] },
+          ],
+          status: 'active',
+          recurringId: 'rec-double-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. manual txRef check -> does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 3. recurring tx check -> does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 4. recRef check -> exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-double-1',
+        exists: () => true,
+        data: () => ({ title: 'قسط سهمين' }),
+      })
+
+      // Toggle user-2 (second turn member) for month 3
+      const res = await toggleCircleMemberPayment('uid-1', 'c-double-user', 'm-user-2', 3)
+      expect(res.isUser).toBe(true)
+      expect(res.paid).toBe(true)
+
+      // Check recurring rule update used combined paid months [1, 3]
+      const recUpdateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('recurring/rec-double-1')
+      )
+      expect(recUpdateCall).toBeDefined()
+      expect(recUpdateCall![1].nextDate).toBeDefined()
+
+      // Reset mocks for removeCircleInstallmentPayment
+      mockBatchUpdate.mockClear()
+      mockBatchDelete.mockClear()
+      mockBatchCommit.mockClear()
+
+      // 1. circle doc for remove
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-double-user',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية سهمين',
+          monthlyAmountFils: 50000,
+          membersCount: 6,
+          totalAmountFils: 300000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 5,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-user-1', name: 'أنت (سهم 1)', turnMonth: 2, paidMonths: [1, 3] },
+            { id: 'm-user-2', name: 'أنت (سهم 2)', turnMonth: 5, paidMonths: [3] },
+          ],
+          status: 'active',
+          recurringId: 'rec-double-1',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. recRef check -> exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'rec-double-1',
+        exists: () => true,
+        data: () => ({ title: 'قسط سهمين' }),
+      })
+
+      await removeCircleInstallmentPayment('uid-1', 'c-double-user', 3)
+
+      expect(mockBatchDelete).toHaveBeenCalled()
+      expect(mockBatchUpdate).toHaveBeenCalled()
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
     })
   })
 })

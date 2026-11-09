@@ -94,12 +94,30 @@ export async function addTransaction(
     throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
   }
 
+  const sanitizedTx: Omit<Transaction, 'id' | 'createdAt'> = {
+    ...tx,
+    note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
+  }
+
+  const trimmedTitle = typeof tx.title === 'string' ? tx.title.trim() : ''
+  if (trimmedTitle) {
+    sanitizedTx.title = trimmedTitle.slice(0, 100)
+  } else {
+    delete sanitizedTx.title
+  }
+
+  const trimmedRecId = typeof tx.recurringId === 'string' ? tx.recurringId.trim() : ''
+  if (trimmedRecId) {
+    sanitizedTx.recurringId = trimmedRecId.slice(0, 128)
+  } else {
+    delete sanitizedTx.recurringId
+  }
+
   const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
   const docRef = await commitFirestoreWrite(
     addDoc(colRef, {
-      ...tx,
+      ...sanitizedTx,
       id: '',
-      note: typeof tx.note === 'string' ? tx.note.slice(0, 500) : '',
       createdAt: new Date(),
     }),
     { id: 'offline_tx_' + Date.now() } as never
@@ -200,10 +218,13 @@ export function subscribePriorBalance(
       let balance = 0
       for (const d of snapshot.docs) {
         const tx = d.data()
+        if (typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) {
+          continue
+        }
         if (tx.type === 'income') {
-          balance += tx.amountFils || 0
+          balance += tx.amountFils
         } else if (tx.type === 'expense') {
-          balance -= tx.amountFils || 0
+          balance -= tx.amountFils
         }
       }
       cb(balance)
@@ -215,34 +236,4 @@ export function subscribePriorBalance(
   )
 }
 
-export async function getPriorBalance(
-  uid: string,
-  beforeDate: Date,
-  afterDate?: Date | null
-): Promise<number> {
-  try {
-    const colRef = collection(db, 'users', uid, 'transactions').withConverter(transactionConverter)
-    const constraints = [
-      where('date', '<', Timestamp.fromDate(beforeDate)),
-    ]
-    if (afterDate) {
-      constraints.push(where('date', '>=', Timestamp.fromDate(afterDate)))
-    }
-    const q = query(colRef, ...constraints)
-    const snap = await getDocs(q)
-    let balance = 0
-    for (const d of snap.docs) {
-      const tx = d.data()
-      if (tx.type === 'income') {
-        balance += tx.amountFils || 0
-      } else if (tx.type === 'expense') {
-        balance -= tx.amountFils || 0
-      }
-    }
-    return balance
-  } catch (err) {
-    console.error('getPriorBalance error:', err)
-    return 0
-  }
-}
 

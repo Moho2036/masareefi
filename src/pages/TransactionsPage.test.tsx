@@ -365,7 +365,7 @@ describe('TransactionsPage Component', () => {
     ).toBeInTheDocument()
 
     // Search for the old February transaction
-    const searchInput = screen.getByPlaceholderText(/ابحث في العنوان، الملاحظات، الفئة، أو المبلغ/i)
+    const searchInput = screen.getByPlaceholderText(/ابحث في العنوان، الملاحظات، (?:الفئة|التصنيف)، أو المبلغ/i)
     fireEvent.change(searchInput, { target: { value: 'فبراير' } })
 
     // Only the February transaction matches
@@ -792,6 +792,95 @@ describe('TransactionsPage Component', () => {
     )
 
     expect(screen.getByText('تصنيف مؤرشف قديم')).toBeInTheDocument()
+  })
+
+  it('shows warning alert in modal when deleting a circle installment transaction', async () => {
+    mockCircles = [
+      {
+        id: 'circle-1',
+        name: 'جمعية العائلة',
+        monthlyAmountFils: 50000,
+        totalAmountFils: 250000,
+        membersCount: 5,
+        myTurnMonth: 2,
+        startDate: new Date('2026-09-01'),
+        status: 'active',
+        members: [],
+        createdAt: new Date(),
+      },
+    ]
+
+    mockTransactions = [
+      {
+        id: 'circle_circle-1_m2',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-01'),
+        title: 'قسط جمعية العائلة (2 من 5)',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    const deleteBtn = screen.getByLabelText('حذف المعاملة')
+    fireEvent.click(deleteBtn)
+
+    expect(await screen.findByText(/تنبيه: هذه المعاملة مرتبطة بقسط جمعية/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/جمعية العائلة/i).length).toBeGreaterThanOrEqual(1)
+
+    const allDeleteBtns = screen.getAllByRole('button', { name: 'حذف المعاملة' })
+    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1]
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(circleServices.removeCircleInstallmentPayment).toHaveBeenCalledWith('user-123', 'circle-1', 2)
+    })
+  })
+
+  it('exports CSV in active sort order (e.g. oldest first)', () => {
+    const exportSpy = vi.spyOn(exportCsvModule, 'exportTransactionsToCsv').mockImplementation(() => {})
+
+    mockTransactions = [
+      {
+        id: 'tx-2',
+        type: 'expense',
+        amountFils: 10000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-15'),
+        title: 'معاملة أحدث',
+        note: '',
+        createdAt: new Date('2026-10-15'),
+      },
+      {
+        id: 'tx-1',
+        type: 'expense',
+        amountFils: 20000,
+        categoryId: 'c-food',
+        date: new Date('2026-10-02'),
+        title: 'معاملة أقدم',
+        note: '',
+        createdAt: new Date('2026-10-02'),
+      },
+    ]
+
+    renderWithRouter(<TransactionsPage />)
+
+    // Switch sort order to oldest first
+    const sortSelect = screen.getByDisplayValue('الأحدث أولاً')
+    fireEvent.change(sortSelect, { target: { value: 'oldest' } })
+
+    const exportBtn = screen.getByRole('button', { name: /تصدير CSV/i })
+    fireEvent.click(exportBtn)
+
+    expect(exportSpy).toHaveBeenCalled()
+    const exportedList = exportSpy.mock.calls[0][0] as Transaction[]
+    expect(exportedList[0].id).toBe('tx-1')
+    expect(exportedList[1].id).toBe('tx-2')
+
+    exportSpy.mockRestore()
   })
 })
 

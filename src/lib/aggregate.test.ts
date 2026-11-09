@@ -4,7 +4,6 @@ import {
   filterTransactions,
   sumByType,
   groupByDay,
-  countByCategory,
   sortTransactions,
 } from './aggregate'
 import type { Transaction } from '../types'
@@ -344,6 +343,63 @@ describe('aggregate helpers', () => {
       const totals = sumByType([])
       expect(totals).toEqual({ expense: 0, income: 0, balance: 0 })
     })
+
+    it('guards against corrupted or NaN amounts and normalizes negative amounts with Math.abs', () => {
+      const corruptedTxs = [
+        {
+          id: '1',
+          type: 'expense' as const,
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '2',
+          type: 'expense' as const,
+          amountFils: NaN,
+          categoryId: 'c1',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '3',
+          type: 'expense' as const,
+          amountFils: -3000, // Negative amount normalized via Math.abs
+          categoryId: 'c1',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '4',
+          type: 'income' as const,
+          amountFils: '10000' as unknown as number, // String corrupted
+          categoryId: 'c2',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '5',
+          type: 'income' as const,
+          amountFils: 50000,
+          categoryId: 'c2',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        null as unknown as Transaction,
+      ]
+
+      const totals = sumByType(corruptedTxs)
+      expect(totals.expense).toBe(8000) // 5000 + 3000
+      expect(totals.income).toBe(50000) // only valid 50000
+      expect(totals.balance).toBe(42000)
+      expect(Number.isNaN(totals.balance)).toBe(false)
+    })
   })
 
   describe('groupByDay', () => {
@@ -433,22 +489,6 @@ describe('aggregate helpers', () => {
         'second-added',
         'first-added',
       ])
-    })
-  })
-
-  describe('countByCategory', () => {
-    it('counts occurrences per categoryId', () => {
-      const txs: Transaction[] = [
-        { id: '1', type: 'expense', amountFils: 1, categoryId: 'cat-a', date: new Date(), note: '', createdAt: new Date() },
-        { id: '2', type: 'expense', amountFils: 2, categoryId: 'cat-b', date: new Date(), note: '', createdAt: new Date() },
-        { id: '3', type: 'expense', amountFils: 3, categoryId: 'cat-a', date: new Date(), note: '', createdAt: new Date() },
-      ]
-
-      const counts = countByCategory(txs)
-      expect(counts).toEqual({
-        'cat-a': 2,
-        'cat-b': 1,
-      })
     })
   })
 
@@ -575,6 +615,195 @@ describe('aggregate helpers', () => {
     it('sorts lowest amount first', () => {
       const sorted = sortTransactions(list, 'lowest')
       expect(sorted.map((t) => t.id)).toEqual(['tx-1', 'tx-3', 'tx-2'])
+    })
+  })
+
+  describe('groupByDay direction and filterTransactions enhancements', () => {
+    it('supports direction="asc" in groupByDay', () => {
+      const txs: Transaction[] = [
+        {
+          id: '1',
+          type: 'expense',
+          amountFils: 1000,
+          categoryId: 'c1',
+          date: new Date('2026-10-05T14:00:00Z'),
+          note: '',
+          createdAt: new Date('2026-10-05T14:00:00Z'),
+        },
+        {
+          id: '2',
+          type: 'expense',
+          amountFils: 2000,
+          categoryId: 'c1',
+          date: new Date('2026-10-01T10:00:00Z'),
+          note: '',
+          createdAt: new Date('2026-10-01T10:00:00Z'),
+        },
+        {
+          id: '3',
+          type: 'expense',
+          amountFils: 3000,
+          categoryId: 'c1',
+          date: new Date('2026-10-01T15:00:00Z'),
+          note: '',
+          createdAt: new Date('2026-10-01T15:00:00Z'),
+        },
+      ]
+
+      const ascGroups = groupByDay(txs, 'asc')
+      expect(ascGroups[0].dateKey).toBe('2026-10-01')
+      expect(ascGroups[1].dateKey).toBe('2026-10-05')
+      expect(ascGroups[0].transactions.map((t) => t.id)).toEqual(['2', '3'])
+
+      const descGroups = groupByDay(txs, 'desc')
+      expect(descGroups[0].dateKey).toBe('2026-10-05')
+      expect(descGroups[1].dateKey).toBe('2026-10-01')
+      expect(descGroups[1].transactions.map((t) => t.id)).toEqual(['3', '2'])
+    })
+
+    it('matches circle installments via circleRecurringIdsSet and linked debts via debtTransactionIdsSet', () => {
+      const txs: Transaction[] = [
+        {
+          id: 'rec-tx-1',
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'c1',
+          date: new Date('2026-10-01T10:00:00Z'),
+          note: 'قسط جمعية',
+          recurringId: 'rec-circle-99',
+          createdAt: new Date(),
+        },
+        {
+          id: 'custom-bank-tx-88',
+          type: 'expense',
+          amountFils: 10000,
+          categoryId: 'c1',
+          date: new Date('2026-10-02T10:00:00Z'),
+          note: 'سداد دفعة دين',
+          createdAt: new Date(),
+        },
+      ]
+
+      const circleRes = filterTransactions(txs, {
+        sourceType: 'circle',
+        circleRecurringIdsSet: new Set(['rec-circle-99']),
+      })
+      expect(circleRes).toHaveLength(1)
+      expect(circleRes[0].id).toBe('rec-tx-1')
+
+      const debtRes = filterTransactions(txs, {
+        sourceType: 'debt',
+        debtTransactionIdsSet: new Set(['custom-bank-tx-88']),
+      })
+      expect(debtRes).toHaveLength(1)
+      expect(debtRes[0].id).toBe('custom-bank-tx-88')
+    })
+
+    it('safely handles transactions with undefined note during search query', () => {
+      const txs: Transaction[] = [
+        {
+          id: 'no-note-tx',
+          type: 'expense',
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date('2026-10-01T10:00:00Z'),
+          title: 'شراء قهوة',
+          note: undefined as unknown as string,
+          createdAt: new Date(),
+        },
+      ]
+
+      expect(() => {
+        const res = filterTransactions(txs, { query: 'قهوة' })
+        expect(res).toHaveLength(1)
+      }).not.toThrow()
+    })
+
+    it('rejects transactions with invalid dates when filtering by dateRange', () => {
+      const txsWithInvalidDate: Transaction[] = [
+        {
+          id: 'valid-tx',
+          type: 'expense',
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date('2026-10-10T10:00:00Z'),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'invalid-date-tx',
+          type: 'expense',
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date('invalid date string'),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const filtered = filterTransactions(txsWithInvalidDate, {
+        dateRange: {
+          from: new Date('2026-10-01T00:00:00Z'),
+          to: new Date('2026-10-31T23:59:59Z'),
+        },
+      })
+      expect(filtered.map((t) => t.id)).toEqual(['valid-tx'])
+    })
+
+    it('groupByDay falls back to 1970-01-01 and never produces NaN-NaN-NaN dateKey', () => {
+      const txs = [
+        {
+          id: 'invalid-d',
+          type: 'expense' as const,
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date('invalid'),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const groups = groupByDay(txs)
+      expect(groups).toHaveLength(1)
+      expect(groups[0].dateKey).toBe('1970-01-01')
+      expect(groups[0].dateKey).not.toContain('NaN')
+    })
+
+    it('sortTransactions handles invalid dates and corrupted amounts gracefully without breaking sorting', () => {
+      const list = [
+        {
+          id: 'tx-valid',
+          type: 'expense' as const,
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: new Date('2026-10-05T10:00:00Z'),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-invalid-date',
+          type: 'expense' as const,
+          amountFils: 10000,
+          categoryId: 'c1',
+          date: new Date('invalid'),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-nan-amount',
+          type: 'expense' as const,
+          amountFils: NaN,
+          categoryId: 'c1',
+          date: new Date('2026-10-01T10:00:00Z'),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      expect(() => sortTransactions(list, 'newest')).not.toThrow()
+      expect(() => sortTransactions(list, 'oldest')).not.toThrow()
+      expect(() => sortTransactions(list, 'highest')).not.toThrow()
+      expect(() => sortTransactions(list, 'lowest')).not.toThrow()
     })
   })
 })

@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import React, { useState, useMemo, useEffect, useDeferredValue, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import {
@@ -40,7 +39,15 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { deleteTransaction } from '../services/transactions'
 import { removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
-import { formatDayHeader, formatDateInput, parseLocalDateInput } from '../lib/dates'
+import {
+  formatDayHeader,
+  formatDateInput,
+  parseLocalDateInput,
+  formatFinancialMonthLabel,
+  toWesternDigits,
+} from '../lib/dates'
+import { format as formatDate } from 'date-fns'
+import { ar } from 'date-fns/locale'
 import { exportTransactionsToCsv } from '../lib/exportCsv'
 import { getOccurrenceMonthIndex } from '../lib/recurring'
 import {
@@ -57,7 +64,318 @@ import {
   type TransactionSortOption,
 } from '../lib/aggregate'
 import { cn } from '../lib/cn'
-import type { Transaction, TxType, Debt } from '../types'
+import type { Transaction, TxType, Debt, Category } from '../types'
+
+interface TransactionRowItemProps {
+  tx: Transaction
+  showDateBadge: boolean
+  cat?: Category
+  isExpense: boolean
+  primaryLabel: string
+  timeDisplay: string
+  name: string
+  showCategoryInSub: boolean
+  showNoteInSub: boolean
+  isLockedDebt: boolean
+  isLockedCircle: boolean
+  isMergedDebtPayment: boolean
+  isSystemLinked: boolean
+  circleRecurringIdsSet: Set<string>
+  openEdit: (tx: Transaction) => void
+  openDuplicate: (tx: Transaction) => void
+  setTxToDelete: (tx: Transaction) => void
+}
+
+const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
+  tx,
+  showDateBadge,
+  cat,
+  isExpense,
+  primaryLabel,
+  timeDisplay,
+  name,
+  showCategoryInSub,
+  showNoteInSub,
+  isLockedDebt,
+  isLockedCircle,
+  isMergedDebtPayment,
+  isSystemLinked,
+  circleRecurringIdsSet,
+  openEdit,
+  openDuplicate,
+  setTxToDelete,
+}) => {
+  const { formatWithSign } = useCurrency()
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+  const icon = cat?.icon ?? '➕'
+  const color = cat?.color ?? '#94A3B8'
+
+  const maxSwipe = isSystemLinked || isLockedDebt || isLockedCircle ? 100 : 160
+
+  return (
+    <div className="relative overflow-hidden select-none group">
+      {/* Mobile Swipe-to-Right Action Reveal Strip */}
+      <div
+        className={cn(
+          'absolute inset-y-0 end-0 flex items-center pe-2 gap-1.5 z-0 transition-opacity sm:hidden print:hidden',
+          swipeOffset > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setSwipeOffset(0)
+            openEdit(tx)
+          }}
+          className="h-8 px-2.5 rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 flex items-center gap-1 text-xs font-bold active:scale-95 transition-all cursor-pointer"
+          aria-label="سحب لتعديل المعاملة"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          <span>تعديل</span>
+        </button>
+
+        {!(isLockedDebt || isLockedCircle || isSystemLinked) && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+              openDuplicate(tx)
+            }}
+            className="h-8 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs dark:shadow-none"
+            aria-label="سحب لتكرار المعاملة"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>تكرار</span>
+          </button>
+        )}
+
+        {isLockedDebt ? (
+          <Link
+            to="/debts"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+            }}
+            className="h-8 px-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center gap-1 text-xs font-bold active:scale-95 transition-all"
+            aria-label="سحب للانتقال إلى صفحة الديون"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>الديون</span>
+          </Link>
+        ) : isLockedCircle ? (
+          <Link
+            to="/tools?tool=circles"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+            }}
+            className="h-8 px-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center gap-1 text-xs font-bold active:scale-95 transition-all"
+            aria-label="سحب للانتقال إلى صفحة الجمعيات"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>الجمعيات</span>
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+              setTxToDelete(tx)
+            }}
+            className="h-8 px-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-2xs dark:shadow-none"
+            aria-label="سحب لحذف المعاملة"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>حذف</span>
+          </button>
+        )}
+      </div>
+
+      {/* Main Row Surface */}
+      <div
+        onClick={() => {
+          if (swipeOffset > 0) {
+            setSwipeOffset(0)
+            return
+          }
+          openEdit(tx)
+        }}
+        onTouchStart={(e) => {
+          touchStartX.current = e.touches[0].clientX
+        }}
+        onTouchMove={(e) => {
+          if (touchStartX.current === null) return
+          const diff = e.touches[0].clientX - touchStartX.current
+          if (diff > 8) {
+            setSwipeOffset(Math.min(diff, maxSwipe + 15))
+          } else if (swipeOffset > 0 && diff < -8) {
+            setSwipeOffset(0)
+          }
+        }}
+        onTouchEnd={() => {
+          if (touchStartX.current === null) return
+          touchStartX.current = null
+          if (swipeOffset > 40) {
+            setSwipeOffset(maxSwipe)
+          } else {
+            setSwipeOffset(0)
+          }
+        }}
+        style={{
+          transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
+        }}
+        className={cn(
+          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10',
+          swipeOffset === 0 && 'transition-transform duration-200 ease-out'
+        )}
+      >
+        {/* Right side: Icon + Title + Subline */}
+        <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0">
+            <CategoryIcon icon={icon} color={color} size="md" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                {primaryLabel}
+              </span>
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-normal shrink-0">
+                {timeDisplay}
+              </span>
+              {showDateBadge && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                  {formatDateInput(tx.date)}
+                </span>
+              )}
+              {tx.id.startsWith('debt_') && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                  <HandCoins className="w-2.5 h-2.5" />
+                  <span>دين</span>
+                </span>
+              )}
+              {(tx.id.startsWith('circle_payout_') ||
+                /^circle_(.+)_m(\d+)$/.test(tx.id) ||
+                Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))) && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                  <Users className="w-2.5 h-2.5" />
+                  <span>جمعية</span>
+                </span>
+              )}
+              {tx.recurringId && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
+                  <span>متكررة</span>
+                </span>
+              )}
+            </div>
+
+            {(showCategoryInSub || showNoteInSub) && (
+              <div className="flex items-start gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                {showCategoryInSub && (
+                  <>
+                    <span className="font-medium text-zinc-500 dark:text-zinc-400 shrink-0">{name}</span>
+                    {showNoteInSub ? <span>•</span> : null}
+                  </>
+                )}
+                {showNoteInSub && (
+                  <span className="line-clamp-2 whitespace-pre-wrap text-zinc-500 dark:text-zinc-400">
+                    {tx.note}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Left side: Amount & Desktop Hover Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div
+            className={cn(
+              'font-extrabold text-xs sm:text-sm tabular-nums select-none ps-1',
+              isExpense
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-emerald-600 dark:text-emerald-400'
+            )}
+          >
+            {formatWithSign(tx.amountFils, tx.type)}
+          </div>
+
+          {/* Desktop Hover Quick Actions (Hidden on Mobile) */}
+          <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
+            {!(isLockedDebt || isLockedCircle || isSystemLinked) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openDuplicate(tx)
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                aria-label="تكرار المعاملة"
+                title="تكرار المعاملة"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                openEdit(tx)
+              }}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+              aria-label="تعديل المعاملة"
+              title="تعديل المعاملة"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            {isLockedDebt ? (
+              <Link
+                to="/debts"
+                onClick={(e) => e.stopPropagation()}
+                className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
+                aria-label="الانتقال إلى صفحة الديون"
+                title={
+                  isMergedDebtPayment
+                    ? 'مرتبط بدفعة دين مدمجة - افتح صفحة الديون للإدارة'
+                    : 'مرتبط بسجل الديون - افتح صفحة الديون للإدارة'
+                }
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            ) : isLockedCircle ? (
+              <Link
+                to="/tools?tool=circles"
+                onClick={(e) => e.stopPropagation()}
+                className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
+                aria-label="الانتقال إلى صفحة الجمعيات"
+                title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setTxToDelete(tx)
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                aria-label="حذف المعاملة"
+                title="حذف المعاملة"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export const TransactionsPage: React.FC = () => {
   const { user } = useAuth()
@@ -74,9 +392,15 @@ export const TransactionsPage: React.FC = () => {
     if (allMonths) {
       setAllMonths(false)
     }
+    if (isCustomDateRange) {
+      setIsCustomDateRange(false)
+      setCustomDateFrom('')
+      setCustomDateTo('')
+    }
   }
 
-  const fetchAll = allMonths || isCustomDateRange
+  const isCustomDateActive = isCustomDateRange && Boolean(customDateFrom || customDateTo)
+  const fetchAll = allMonths || isCustomDateActive
   const { data: rawTransactions, loading: txLoading } = useTransactions(fetchAll ? undefined : range)
 
   const hasLoadedOnceRef = useRef(false)
@@ -91,7 +415,7 @@ export const TransactionsPage: React.FC = () => {
   const { data: circles } = useMoneyCircles()
   const { openAdd, openEdit, openDuplicate } = useTransactionModal()
   const { showToast } = useToast()
-  const { formatWithSign, config: currencyConfig } = useCurrency()
+  const { config: currencyConfig } = useCurrency()
   const { data: userSettings } = useUserSettings()
 
   const circleIdsSet = useMemo(() => {
@@ -141,6 +465,13 @@ export const TransactionsPage: React.FC = () => {
       paymentByTxIdMap,
     }
   }, [debts])
+
+  const debtTransactionIdsSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const key of debtLookup.entryTxIdsSet) set.add(key)
+    for (const key of debtLookup.paymentByTxIdMap.keys()) set.add(key)
+    return set
+  }, [debtLookup])
 
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -206,8 +537,7 @@ export const TransactionsPage: React.FC = () => {
     (selectedCategories.length > 0 && !selectedCategories.includes('all')) ||
     selectedSource !== 'all' ||
     isCustomDateRange ||
-    allMonths ||
-    sortBy !== 'newest'
+    allMonths
   )
 
   const handleResetFilters = () => {
@@ -280,6 +610,8 @@ export const TransactionsPage: React.FC = () => {
         type: filterType,
         categoryIds: selectedCategories.length > 0 ? selectedCategories : undefined,
         sourceType: selectedSource,
+        circleRecurringIdsSet,
+        debtTransactionIdsSet,
         dateRange:
           isCustomDateRange && (customDateFrom || customDateTo)
             ? {
@@ -296,6 +628,8 @@ export const TransactionsPage: React.FC = () => {
     filterType,
     selectedCategories,
     selectedSource,
+    circleRecurringIdsSet,
+    debtTransactionIdsSet,
     isCustomDateRange,
     customDateFrom,
     customDateTo,
@@ -334,6 +668,33 @@ export const TransactionsPage: React.FC = () => {
     return new Date()
   }, [rawTransactions, focusTick])
 
+  const allDaysNetMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const tx of filteredTransactions) {
+      const d = tx.date instanceof Date ? tx.date : new Date(tx.date)
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const dateKey = `${year}-${month}-${day}`
+      const diff = tx.type === 'income' ? tx.amountFils : -tx.amountFils
+      map.set(dateKey, (map.get(dateKey) || 0) + diff)
+    }
+    return map
+  }, [filteredTransactions])
+
+  const [isPrinting, setIsPrinting] = useState(false)
+
+  useEffect(() => {
+    const handleBeforePrint = () => setIsPrinting(true)
+    const handleAfterPrint = () => setIsPrinting(false)
+    window.addEventListener('beforeprint', handleBeforePrint)
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint)
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+  }, [])
+
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sortedTransactions.length / PAGE_SIZE))
   const safeCurrentPage = Math.min(currentPage, totalPages)
@@ -343,35 +704,38 @@ export const TransactionsPage: React.FC = () => {
     return sortedTransactions.slice(start, start + PAGE_SIZE)
   }, [sortedTransactions, safeCurrentPage])
 
+  const displayedTransactions = isPrinting ? sortedTransactions : paginatedTransactions
+
   const dayGroups = useMemo(() => {
     if (sortBy === 'highest' || sortBy === 'lowest') {
       return []
     }
-    const rawGroups = groupByDay(paginatedTransactions)
+    const sortDirection = sortBy === 'oldest' ? 'asc' : 'desc'
+    const sourceTxs = isPrinting ? sortedTransactions : paginatedTransactions
+    const rawGroups = groupByDay(sourceTxs, sortDirection)
     return rawGroups.map((group) => {
-      const netFils = group.transactions.reduce((acc, tx) => {
-        return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
-      }, 0)
       return {
         ...group,
-        dayNetFils: netFils,
+        dayNetFils: allDaysNetMap.get(group.dateKey) ?? 0,
       }
     })
-  }, [paginatedTransactions, sortBy])
+  }, [isPrinting, sortedTransactions, paginatedTransactions, sortBy, allDaysNetMap])
+
+  const transactionListRef = useRef<HTMLDivElement>(null)
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
     if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      transactionListRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     }
   }
 
   const handleExportCsv = () => {
-    if (filteredTransactions.length === 0) {
+    if (sortedTransactions.length === 0) {
       showToast('لا توجد معاملات لتصديرها', 'info')
       return
     }
-    exportTransactionsToCsv(filteredTransactions, categories, {
+    exportTransactionsToCsv(sortedTransactions, categories, {
       symbol: currencyConfig.symbol,
       decimals: currencyConfig.decimals,
     })
@@ -382,6 +746,20 @@ export const TransactionsPage: React.FC = () => {
       'success'
     )
   }
+
+  const circleInstallmentToDelete = useMemo(() => {
+    if (!txToDelete) return null
+    const match = txToDelete.id.match(/^circle_(.+)_m(\d+)$/)
+    if (match) {
+      const c = circles.find((circle) => circle.id === match[1])
+      return { name: c?.name || 'الجمعية' }
+    }
+    if (txToDelete.recurringId) {
+      const c = circles.find((circle) => circle.recurringId === txToDelete.recurringId)
+      if (c) return { name: c.name || 'الجمعية' }
+    }
+    return null
+  }, [txToDelete, circles])
 
   const handleDeleteConfirm = async () => {
     if (!user || !txToDelete) return
@@ -490,8 +868,6 @@ export const TransactionsPage: React.FC = () => {
 
   const renderTransactionRow = (tx: Transaction, showDateBadge = false) => {
     const cat = categoryMap.get(tx.categoryId)
-    const icon = cat?.icon ?? '➕'
-    const color = cat?.color ?? '#94A3B8'
     const isDebtInitOrEntry = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_entry_')
     const rawName = cat?.name ?? 'غير مصنف'
     const name = isDebtInitOrEntry && rawName === 'سداد الديون والأقساط' ? 'الديون والسلف' : rawName
@@ -502,182 +878,60 @@ export const TransactionsPage: React.FC = () => {
     const showCategoryInSub = hasTitle || hasNote
     const showNoteInSub = hasTitle && hasNote && tx.note.trim() !== tx.title!.trim()
 
+    const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    const txTime = tx.createdAt ? (tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt)) : txDate
+    const timeDisplay = toWesternDigits(formatDate(txTime, 'hh:mm a', { locale: ar }))
+
+    const linkedPaymentItem = debtLookup.paymentByTxIdMap.get(tx.id)
+    const isMergedDebtPayment = Boolean(linkedPaymentItem?.payment?.isMerged)
+
+    const isDebtInit = tx.id.startsWith('debt_init_')
+    const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
+    const isDebtExists = Boolean(
+      (debtId && debtLookup.debtIdsSet.has(debtId)) ||
+        debtLookup.entryTxIdsSet.has(tx.id)
+    )
+
+    const isDebtEntry = tx.id.startsWith('debt_entry_')
+    const isDebtEntryExists = Boolean(
+      isDebtEntry && debtLookup.entryTxIdsSet.has(tx.id)
+    )
+
+    const isCirclePayout = tx.id.startsWith('circle_payout_')
+    const circleId = isCirclePayout ? tx.id.replace('circle_payout_', '') : null
+    const isCircleExists = Boolean(
+      isCirclePayout && circleId && circleIdsSet.has(circleId)
+    )
+
+    const isLockedDebt =
+      (isDebtInit && isDebtExists) || isDebtEntryExists || isMergedDebtPayment
+    const isLockedCircle = isCirclePayout && isCircleExists
+    const isSystemLinked =
+      tx.id.startsWith('debt_') ||
+      tx.id.startsWith('circle_') ||
+      Boolean(tx.note?.includes('تسوية رصيد'))
+
     return (
-      <div
+      <TransactionRowItem
         key={tx.id}
-        onClick={() => openEdit(tx)}
-        className="group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
-      >
-        {/* Right side: Icon + Title + Subline */}
-        <div className="flex items-center gap-3 min-w-0 flex-1 pe-3">
-          <div
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: `${color}20` }}
-          >
-            <CategoryIcon icon={icon} color={color} size="md" />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 truncate">
-                {primaryLabel}
-              </span>
-              {showDateBadge && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
-                  {formatDateInput(tx.date)}
-                </span>
-              )}
-              {tx.id.startsWith('debt_') && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
-                  <HandCoins className="w-2.5 h-2.5" />
-                  <span>دين</span>
-                </span>
-              )}
-              {(tx.id.startsWith('circle_payout_') ||
-                /^circle_(.+)_m(\d+)$/.test(tx.id) ||
-                Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))) && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
-                  <Users className="w-2.5 h-2.5" />
-                  <span>جمعية</span>
-                </span>
-              )}
-              {tx.recurringId && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
-                  <span>متكررة</span>
-                </span>
-              )}
-            </div>
-
-            {(showCategoryInSub || showNoteInSub) && (
-              <div className="flex items-start gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-                {showCategoryInSub && (
-                  <>
-                    <span className="font-medium text-zinc-500 dark:text-zinc-400 shrink-0">{name}</span>
-                    {showNoteInSub ? <span>•</span> : null}
-                  </>
-                )}
-                {showNoteInSub && (
-                  <span className="line-clamp-2 whitespace-pre-wrap text-zinc-500 dark:text-zinc-400">
-                    {tx.note}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Left side: Amount & Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div
-            className={cn(
-              'font-extrabold text-xs sm:text-sm tabular-nums select-none ps-1',
-              isExpense
-                ? 'text-red-600 dark:text-red-400'
-                : 'text-emerald-600 dark:text-emerald-400'
-            )}
-          >
-            {formatWithSign(tx.amountFils, tx.type)}
-          </div>
-
-          <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-            {(() => {
-              const linkedPaymentItem = debtLookup.paymentByTxIdMap.get(tx.id)
-              const isMergedDebtPayment = Boolean(linkedPaymentItem?.payment?.isMerged)
-
-              const isDebtInit = tx.id.startsWith('debt_init_')
-              const debtId = isDebtInit ? tx.id.replace('debt_init_', '') : null
-              const isDebtExists = Boolean(
-                (debtId && debtLookup.debtIdsSet.has(debtId)) ||
-                  debtLookup.entryTxIdsSet.has(tx.id)
-              )
-
-              const isDebtEntry = tx.id.startsWith('debt_entry_')
-              const isDebtEntryExists = Boolean(
-                isDebtEntry && debtLookup.entryTxIdsSet.has(tx.id)
-              )
-
-              const isCirclePayout = tx.id.startsWith('circle_payout_')
-              const circleId = isCirclePayout ? tx.id.replace('circle_payout_', '') : null
-              const isCircleExists = Boolean(
-                isCirclePayout && circleId && circleIdsSet.has(circleId)
-              )
-
-              const isLockedDebt =
-                (isDebtInit && isDebtExists) || isDebtEntryExists || isMergedDebtPayment
-              const isLockedCircle = isCirclePayout && isCircleExists
-
-              return (
-                <>
-                  {!(isLockedDebt || isLockedCircle || tx.id.startsWith('debt_pay_')) && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openDuplicate(tx)
-                      }}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
-                      aria-label="تكرار المعاملة"
-                      title="تكرار المعاملة"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(tx)
-                    }}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-                    aria-label="تعديل المعاملة"
-                    title="تعديل المعاملة"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  {isLockedDebt ? (
-                    <Link
-                      to="/debts"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
-                      aria-label="الانتقال إلى صفحة الديون"
-                      title={
-                        isMergedDebtPayment
-                          ? 'مرتبط بدفعة دين مدمجة - افتح صفحة الديون للإدارة'
-                          : 'مرتبط بسجل الديون - افتح صفحة الديون للإدارة'
-                      }
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </Link>
-                  ) : isLockedCircle ? (
-                    <Link
-                      to="/tools?tool=circles"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
-                      aria-label="الانتقال إلى صفحة الجمعيات"
-                      title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setTxToDelete(tx)
-                      }}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-                      aria-label="حذف المعاملة"
-                      title="حذف المعاملة"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      </div>
+        tx={tx}
+        showDateBadge={showDateBadge}
+        cat={cat}
+        isExpense={isExpense}
+        primaryLabel={primaryLabel}
+        timeDisplay={timeDisplay}
+        name={name}
+        showCategoryInSub={showCategoryInSub}
+        showNoteInSub={showNoteInSub}
+        isLockedDebt={isLockedDebt}
+        isLockedCircle={isLockedCircle}
+        isMergedDebtPayment={isMergedDebtPayment}
+        isSystemLinked={isSystemLinked}
+        circleRecurringIdsSet={circleRecurringIdsSet}
+        openEdit={openEdit}
+        openDuplicate={openDuplicate}
+        setTxToDelete={setTxToDelete}
+      />
     )
   }
 
@@ -723,9 +977,9 @@ export const TransactionsPage: React.FC = () => {
       </div>
 
       {/* 2-Column Responsive Layout on Desktop (Filters/Totals in Sticky Sidebar, Transactions in Main) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:block">
         {/* Sidebar Column: Filter Bar & Monthly Totals */}
-        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20 print-hide">
+        <aside className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto no-scrollbar print-hide">
           {/* Filter Bar */}
           <div className="bg-white dark:bg-[#121215] p-3 sm:p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none space-y-3 print-hide">
             {/* Top Permanent Row: Type Segmented Control + Mobile Search & Filter Action Buttons */}
@@ -782,7 +1036,7 @@ export const TransactionsPage: React.FC = () => {
                 >
                   <SlidersHorizontal className="w-4 h-4" />
                   {activeAdvancedFiltersCount > 0 && (
-                    <span className="absolute -top-1 -end-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-black flex items-center justify-center">
+                    <span className="absolute -top-1 -end-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">
                       {activeAdvancedFiltersCount}
                     </span>
                   )}
@@ -800,7 +1054,7 @@ export const TransactionsPage: React.FC = () => {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ابحث في العنوان، الملاحظات، الفئة، أو المبلغ..."
+                placeholder="ابحث في العنوان، الملاحظات، التصنيف، أو المبلغ..."
                 className="w-full ps-9 pe-8 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-hidden focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
               />
               {query.trim() && (
@@ -832,7 +1086,7 @@ export const TransactionsPage: React.FC = () => {
                     { value: 'highest', label: 'الأعلى قيمة' },
                     { value: 'lowest', label: 'الأقل قيمة' },
                   ]}
-                  className="h-9 py-1 text-xs font-bold"
+                  className="text-xs font-bold"
                 />
               </div>
             </div>
@@ -855,7 +1109,7 @@ export const TransactionsPage: React.FC = () => {
                     className={cn(
                       'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
                       allMonths
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                     )}
                     title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
@@ -878,7 +1132,7 @@ export const TransactionsPage: React.FC = () => {
                     className={cn(
                       'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
                       isCustomDateRange
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                     )}
                     title="فلترة المعاملات ضمن نطاق زمني مخصص"
@@ -890,25 +1144,39 @@ export const TransactionsPage: React.FC = () => {
                 </div>
 
                 {isCustomDateRange && (
-                  <div className="grid grid-cols-2 gap-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
-                    <DatePickerInput
-                      id="tx-custom-from"
-                      label="من تاريخ"
-                      value={customDateFrom}
-                      onChange={(val) => {
-                        setCustomDateFrom(val)
-                        setCurrentPage(1)
-                      }}
-                    />
-                    <DatePickerInput
-                      id="tx-custom-to"
-                      label="إلى تاريخ"
-                      value={customDateTo}
-                      onChange={(val) => {
-                        setCustomDateTo(val)
-                        setCurrentPage(1)
-                      }}
-                    />
+                  <div className="space-y-2 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
+                    <div className="grid grid-cols-2 gap-2">
+                      <DatePickerInput
+                        id="tx-custom-from"
+                        label="من تاريخ"
+                        value={customDateFrom}
+                        max={customDateTo || undefined}
+                        onChange={(val) => {
+                          setCustomDateFrom(val)
+                          setCurrentPage(1)
+                        }}
+                      />
+                      <DatePickerInput
+                        id="tx-custom-to"
+                        label="إلى تاريخ"
+                        value={customDateTo}
+                        min={customDateFrom || undefined}
+                        popoverAlign="end"
+                        onChange={(val) => {
+                          setCustomDateTo(val)
+                          setCurrentPage(1)
+                        }}
+                      />
+                    </div>
+                    {customDateFrom && customDateTo && customDateFrom > customDateTo ? (
+                      <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                        تاريخ البداية يجب أن يسبق أو يطابق تاريخ النهاية.
+                      </p>
+                    ) : !customDateFrom && !customDateTo ? (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                        حدد تاريخ البداية والنهاية لتطبيق الفلترة المخصصة.
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -918,7 +1186,7 @@ export const TransactionsPage: React.FC = () => {
                 <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
                   المصدر
                 </label>
-                <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-0.5 select-none text-xs scrollbar-none">
+                <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-0.5 select-none text-xs no-scrollbar">
                   {[
                     { value: 'all', label: 'كافة المصادر' },
                     { value: 'manual', label: 'يدوية' },
@@ -938,7 +1206,7 @@ export const TransactionsPage: React.FC = () => {
                         className={cn(
                           'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
                           isSelected
-                            ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                            ? 'bg-blue-600 text-white shadow-2xs dark:shadow-none font-bold'
                             : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                         )}
                       >
@@ -962,7 +1230,7 @@ export const TransactionsPage: React.FC = () => {
                   )}
                 </div>
                 <div className="relative">
-                  <div className="flex items-center gap-1.5 overflow-x-auto lg:overflow-visible flex-nowrap lg:flex-wrap pb-1 pt-0.5 select-none text-xs scrollbar-none">
+                  <div className="flex items-center gap-1.5 overflow-x-auto lg:overflow-visible flex-nowrap lg:flex-wrap pb-1 pt-0.5 select-none text-xs no-scrollbar">
                     <button
                       type="button"
                       onClick={() => {
@@ -972,7 +1240,7 @@ export const TransactionsPage: React.FC = () => {
                       className={cn(
                         'px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer',
                         selectedCategories.length === 0 || selectedCategories.includes('all')
-                          ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                          ? 'bg-blue-600 text-white shadow-2xs dark:shadow-none font-bold'
                           : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                       )}
                     >
@@ -992,7 +1260,7 @@ export const TransactionsPage: React.FC = () => {
                           className={cn(
                             'flex items-center gap-1.5 px-3 py-1.5 rounded-xl whitespace-nowrap transition-all shrink-0 cursor-pointer',
                             isSelected
-                              ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                              ? 'bg-blue-600 text-white shadow-2xs dark:shadow-none font-bold'
                               : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
                           )}
                         >
@@ -1018,10 +1286,10 @@ export const TransactionsPage: React.FC = () => {
 
           {/* All Months Indicator Banner */}
           {allMonths && (
-            <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-2xs dark:shadow-none print-hide">
-              <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-0" />
-              <div className="flex-1">
-                وضع <strong>البحث في كامل السجل (كل الأشهر)</strong> مفعّل حالياً. النتائج المعروضة وتصدير CSV يشملان كافة الأشهر. (التنقل بين الأشهر من الشريط العلوي سيعيدك تلقائياً لتصفح ذلك الشهر).
+            <div className="flex items-center justify-between gap-2.5 px-3.5 py-2 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl text-xs text-blue-800 dark:text-blue-300 shadow-2xs dark:shadow-none print-hide">
+              <div className="flex items-center gap-2 min-w-0 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span className="truncate">وضع البحث في كامل السجل (كل الأشهر) مفعّل حالياً</span>
               </div>
               <button
                 type="button"
@@ -1078,8 +1346,23 @@ export const TransactionsPage: React.FC = () => {
         </aside>
 
         {/* Main Column: Transactions List */}
-        <main className="lg:col-span-8 space-y-4">
-          {!hasLoadedOnceRef.current && txLoading && rawTransactions.length === 0 ? (
+        <main className="lg:col-span-8 print:w-full space-y-4">
+          {/* Print-only Header */}
+          <div className="hidden print:block mb-4 p-4 border border-zinc-300 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <h1 className="text-base font-extrabold text-zinc-900">تقرير المعاملات المالية</h1>
+              <span className="text-xs text-zinc-600 font-medium">
+                {allMonths ? 'كافة الأشهر' : formatFinancialMonthLabel(range, userSettings?.monthStartDay || 1)}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs border-t border-zinc-200 pt-2 font-medium">
+              <div>إجمالي المداخيل: <strong className="text-emerald-700"><FormattedMoney amountFils={totals.income} /></strong></div>
+              <div>إجمالي المصاريف: <strong className="text-red-700"><FormattedMoney amountFils={totals.expense} /></strong></div>
+              <div>صافي الرصيد: <strong><FormattedMoney amountFils={totals.balance} withSign="auto" /></strong></div>
+            </div>
+          </div>
+
+          {txLoading && rawTransactions.length === 0 ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
                 <div
@@ -1090,34 +1373,46 @@ export const TransactionsPage: React.FC = () => {
             </div>
           ) : paginatedTransactions.length === 0 ? (
             <EmptyState
-              icon={<ArrowLeftRight className="w-8 h-8" />}
+              icon={<ArrowLeftRight className="w-6 h-6" />}
               title={
                 isFilterActive
-                  ? 'لا توجد معاملات مطابقة للفلترة'
+                  ? 'لا توجد معاملات مطابقة للبحث أو الفلترة'
                   : 'لا توجد معاملات لهذا الشهر'
               }
               description={
-                allMonths
-                  ? 'لم يتم العثور على أي معاملات مطابقة في كامل سجل المعاملات.'
-                  : 'ابدأ بتسجيل مصاريفك أو مداخيلك لمتابعة ميزانيتك أولاً بأول.'
+                isFilterActive
+                  ? 'لم نجد أي معاملات تطابق معايير الفلترة أو البحث المحددة. جرب تغيير كلمات البحث أو مسح الفلاتر.'
+                  : allMonths
+                    ? 'لم يتم تسجيل أي معاملات في كامل السجل حتى الآن.'
+                    : 'ابدأ بتسجيل مصاريفك أو مداخيلك لهذا الشهر لمتابعة ميزانيتك أولاً بأول.'
               }
               action={
-                <Button
-                  variant="primary"
-                  size="md"
-                  icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-                  onClick={() => openAdd('expense')}
-                >
-                  إضافة أول معاملة
-                </Button>
+                isFilterActive ? (
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={handleResetFilters}
+                  >
+                    مسح كافة الفلاتر
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+                    onClick={() => openAdd('expense')}
+                  >
+                    إضافة معاملة
+                  </Button>
+                )
               }
             />
           ) : (
-            <div className="space-y-5">
+            <div ref={transactionListRef} className="space-y-5 scroll-mt-20">
               {/* Flat list for amount-based sorting */}
               {sortBy === 'highest' || sortBy === 'lowest' ? (
                 <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
-                  {paginatedTransactions.map((tx) => renderTransactionRow(tx, true))}
+                  {displayedTransactions.map((tx) => renderTransactionRow(tx, true))}
                 </div>
               ) : (
                 /* Grouped by day for date-based sorting */
@@ -1159,7 +1454,7 @@ export const TransactionsPage: React.FC = () => {
               )}
 
               {/* Pagination Controls */}
-              {totalPages > 1 && (
+              {!isPrinting && totalPages > 1 && (
                 <div className="flex items-center justify-between gap-3 p-3.5 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none text-xs font-semibold print-hide">
                   <div className="text-zinc-500 dark:text-zinc-400">
                     صفحة <span className="font-bold text-zinc-800 dark:text-zinc-200">{safeCurrentPage}</span> من{' '}
@@ -1210,6 +1505,17 @@ export const TransactionsPage: React.FC = () => {
               </div>
               <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
                 هذه المعاملة مرتبطة بسجل دين لـ <strong>{linkedDebtPayment.debt.personName}</strong>. عند تأكيد الحذف، سيتم أيضاً حذف دفعة السداد وإعادة فتح المبلغ المستحق في سجل الديون للحفاظ على تطابق الرصيد المحاسبي.
+              </p>
+            </div>
+          )}
+          {circleInstallmentToDelete && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>تنبيه: هذه المعاملة مرتبطة بقسط جمعية</span>
+              </div>
+              <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
+                هذه المعاملة مرتبطة بقسط في <strong>{circleInstallmentToDelete.name}</strong>. عند تأكيد الحذف، سيتم تحويل حالة القسط تلقائياً إلى "غير مسدد" في جدول الجمعية للحفاظ على دقة الحسابات.
               </p>
             </div>
           )}

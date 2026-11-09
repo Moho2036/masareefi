@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { format as formatDate } from 'date-fns'
+import { format as formatDate, addMonths } from 'date-fns'
+import { ar } from 'date-fns/locale'
 import {
   Users,
   Plus,
@@ -12,8 +13,10 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Zap,
+  RefreshCw,
+  Calendar,
   ArrowLeftRight,
+  RotateCcw,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -24,10 +27,12 @@ import { Toggle } from '../ui/Toggle'
 import { EmptyState } from '../ui/EmptyState'
 import { Select } from '../ui/Select'
 import { CategoryIcon } from '../ui/CategoryIcon'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrency } from '../../hooks/useCurrency'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { useMoneyCircles } from '../../hooks/useMoneyCircles'
+import { useTransactions } from '../../hooks/useTransactions'
 import { useRecurring } from '../../hooks/useRecurring'
 import { useCategories } from '../../hooks/useCategories'
 import { useToast } from '../../hooks/useToast'
@@ -49,6 +54,7 @@ import {
   swapMemberTurns,
 } from '../../services/moneyCircles'
 import { toFils, fromFils } from '../../lib/money'
+import { parseNumeric } from '../../lib/workHours'
 import { parseLocalDateInput, toWesternDigits, getFinancialMonthRange } from '../../lib/dates'
 import { getNextCircleDueDate } from '../../lib/recurring'
 import { triggerHaptic } from '../../lib/haptics'
@@ -62,7 +68,8 @@ export const MoneyCirclesManager: React.FC = () => {
   const { data: circles, loading } = useMoneyCircles()
   const { data: recurringList } = useRecurring()
   const { data: categories } = useCategories()
-  const { format, config } = useCurrency()
+  const { data: transactions } = useTransactions()
+  const { config } = useCurrency()
   const { showToast } = useToast()
 
   // Sorted circles: active circles first, completed last. Within each group, newest startDate first.
@@ -116,10 +123,108 @@ export const MoneyCirclesManager: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [deleteCircleId, setDeleteCircleId] = useState<string | null>(null)
   const [deleteTransactions, setDeleteTransactions] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmCompleteCircle, setConfirmCompleteCircle] = useState<MoneyCircle | null>(null)
+  const [isCompleting, setIsCompleting] = useState(false)
   const [depositingCircleId, setDepositingCircleId] = useState<string | null>(null)
   const [togglingMemberKey, setTogglingMemberKey] = useState<string | null>(null)
-  const [depositedCircleIds, setDepositedCircleIds] = useState<Set<string>>(new Set())
+  const [extraDepositedIds, setExtraDepositedIds] = useState<Set<string>>(new Set())
+  const [removedDepositedIds, setRemovedDepositedIds] = useState<Set<string>>(new Set())
+
+  // Check which circles have already had their net payout deposited in transactions (synchronous from in-memory AppDataContext)
+  const depositedCircleIds = useMemo(() => {
+    const set = new Set<string>()
+    if (transactions) {
+      for (const tx of transactions) {
+        if (tx.id.startsWith('circle_payout_')) {
+          const key = tx.id.replace('circle_payout_', '')
+          set.add(key)
+        }
+      }
+    }
+    for (const id of extraDepositedIds) {
+      set.add(id)
+    }
+    for (const id of removedDepositedIds) {
+      set.delete(id)
+    }
+    return set
+  }, [transactions, extraDepositedIds, removedDepositedIds])
+
+  const addDepositedCircleId = (id: string) => {
+    setExtraDepositedIds((prev) => new Set([...prev, id]))
+    setRemovedDepositedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }
+
+  const removeDepositedCircleId = (id: string) => {
+    setRemovedDepositedIds((prev) => new Set([...prev, id]))
+    setExtraDepositedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }
+
   const checkedCirclesRef = useRef<Set<string>>(new Set())
+
+  // Check which circles have already had their net payout deposited in transactions (synchronous fallback / verification)
+  useEffect(() => {
+    let isCancelled = false
+    const checkPayouts = async () => {
+      if (!user || circles.length === 0) return
+
+      const now = new Date()
+      const eligibleToCheck = circles.filter((c) => {
+        const currentMonth = getCurrentCircleMonth(c, now, monthStartDay)
+        const checkTurn1 =
+          currentMonth >= c.myTurnMonth &&
+          !depositedCircleIds.has(c.id) &&
+          !checkedCirclesRef.current.has(c.id)
+        const checkTurn2 = Boolean(
+          c.shareType === 'double' &&
+            c.secondTurnMonth &&
+            currentMonth >= c.secondTurnMonth &&
+            !depositedCircleIds.has(`${c.id}_t2`) &&
+            !checkedCirclesRef.current.has(`${c.id}_t2`)
+        )
+        return checkTurn1 || checkTurn2
+      })
+
+      if (eligibleToCheck.length === 0) return
+
+      for (const c of eligibleToCheck) {
+        if (!depositedCircleIds.has(c.id) && !checkedCirclesRef.current.has(c.id)) {
+          checkedCirclesRef.current.add(c.id)
+          const exists = await checkCirclePayoutExists(user.uid, c.id)
+          if (exists && !isCancelled) {
+            addDepositedCircleId(c.id)
+          }
+        }
+        if (
+          c.shareType === 'double' &&
+          c.secondTurnMonth &&
+          !depositedCircleIds.has(`${c.id}_t2`) &&
+          !checkedCirclesRef.current.has(`${c.id}_t2`)
+        ) {
+          checkedCirclesRef.current.add(`${c.id}_t2`)
+          const exists = await checkCirclePayoutExists(user.uid, `${c.id}_t2`)
+          if (exists && !isCancelled) {
+            addDepositedCircleId(`${c.id}_t2`)
+          }
+        }
+      }
+    }
+
+    checkPayouts()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [user, circles, monthStartDay, depositedCircleIds])
 
   // Swap turn state
   const [swapTarget, setSwapTarget] = useState<{ circle: MoneyCircle; member: CircleMember } | null>(null)
@@ -141,84 +246,6 @@ export const MoneyCirclesManager: React.FC = () => {
     const cycleStart = getFinancialMonthRange(new Date(), startDay).start
     return formatDate(cycleStart, 'yyyy-MM-dd')
   }
-
-  // Check which circles have already had their net payout deposited in transactions (only when due and not checked)
-  useEffect(() => {
-    let isCancelled = false
-    const checkPayouts = async () => {
-      if (!user || circles.length === 0) {
-        if (!isCancelled) {
-          setDepositedCircleIds((prev) => (prev.size === 0 ? prev : new Set()))
-        }
-        return
-      }
-
-      const now = new Date()
-      const eligibleToCheck = circles.filter((c) => {
-        const currentMonth = getCurrentCircleMonth(c, now, monthStartDay)
-        const checkTurn1 =
-          currentMonth >= c.myTurnMonth &&
-          !depositedCircleIds.has(c.id) &&
-          !checkedCirclesRef.current.has(c.id)
-        const checkTurn2 = Boolean(
-          c.shareType === 'double' &&
-            c.secondTurnMonth &&
-            currentMonth >= c.secondTurnMonth &&
-            !depositedCircleIds.has(`${c.id}_t2`) &&
-            !checkedCirclesRef.current.has(`${c.id}_t2`)
-        )
-        return checkTurn1 || checkTurn2
-      })
-
-      if (eligibleToCheck.length === 0) return
-
-      const newlyDeposited: string[] = []
-      await Promise.all(
-        eligibleToCheck.map(async (c) => {
-          const currentMonth = getCurrentCircleMonth(c, now, monthStartDay)
-          try {
-            if (
-              currentMonth >= c.myTurnMonth &&
-              !depositedCircleIds.has(c.id) &&
-              !checkedCirclesRef.current.has(c.id)
-            ) {
-              const exists = await checkCirclePayoutExists(user.uid, c.id)
-              checkedCirclesRef.current.add(c.id)
-              if (exists) {
-                newlyDeposited.push(c.id)
-              }
-            }
-            if (
-              c.shareType === 'double' &&
-              c.secondTurnMonth &&
-              currentMonth >= c.secondTurnMonth &&
-              !depositedCircleIds.has(`${c.id}_t2`) &&
-              !checkedCirclesRef.current.has(`${c.id}_t2`)
-            ) {
-              const exists2 = await checkCirclePayoutExists(user.uid, c.id, true)
-              checkedCirclesRef.current.add(`${c.id}_t2`)
-              if (exists2) {
-                newlyDeposited.push(`${c.id}_t2`)
-              }
-            }
-          } catch {
-            // ignore
-          }
-        })
-      )
-      if (!isCancelled && newlyDeposited.length > 0) {
-        setDepositedCircleIds((prev) => {
-          const next = new Set(prev)
-          newlyDeposited.forEach((id) => next.add(id))
-          return next
-        })
-      }
-    }
-    void checkPayouts()
-    return () => {
-      isCancelled = true
-    }
-  }, [user, circles, monthStartDay, depositedCircleIds])
 
   // Form state (Add / Edit)
   const [editingCircle, setEditingCircle] = useState<MoneyCircle | null>(null)
@@ -288,7 +315,7 @@ export const MoneyCirclesManager: React.FC = () => {
         hasRecurringProgressed ||
         hasLinkedTx)
   )
-  const currentEnteredFils = toFils(parseFloat(monthlyAmountStr) || 0, config.decimals)
+  const currentEnteredFils = toFils(parseNumeric(monthlyAmountStr), config.decimals)
   const isMonthlyAmountChanged = Boolean(
     editingCircle && currentEnteredFils !== editingCircle.monthlyAmountFils
   )
@@ -447,7 +474,7 @@ export const MoneyCirclesManager: React.FC = () => {
       return
     }
 
-    const monthlyAmount = parseFloat(monthlyAmountStr) || 0
+    const monthlyAmount = parseNumeric(monthlyAmountStr)
     if (monthlyAmount <= 0) {
       setFormError('يرجى إدخال قسط شهري صحيح')
       return
@@ -624,12 +651,11 @@ export const MoneyCirclesManager: React.FC = () => {
         }
 
         const exists = await checkCirclePayoutExists(user.uid, editingCircle.id)
-        setDepositedCircleIds((prev) => {
-          const next = new Set(prev)
-          if (exists) next.add(editingCircle.id)
-          else next.delete(editingCircle.id)
-          return next
-        })
+        if (exists) {
+          addDepositedCircleId(editingCircle.id)
+        } else {
+          removeDepositedCircleId(editingCircle.id)
+        }
 
         triggerHaptic('light')
         showToast('تم تعديل الجمعية بنجاح', 'success')
@@ -747,7 +773,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
       await depositCircleNetPayout(user.uid, circle, incomeCatId, isSecondTurnDeposit)
       const depositedKey = isSecondTurnDeposit ? `${circle.id}_t2` : circle.id
-      setDepositedCircleIds((prev) => new Set([...prev, depositedKey]))
+      addDepositedCircleId(depositedKey)
       showToast('تم إيداع صافي الجمعية في رصيدك بنجاح', 'success')
     } catch (err) {
       console.error('Failed to deposit circle net:', err)
@@ -757,25 +783,21 @@ export const MoneyCirclesManager: React.FC = () => {
     }
   }
 
-  const handleUndoDepositCircleNet = async (circle: MoneyCircle) => {
+  const handleUndoDepositCircleNet = async (circle: MoneyCircle, targetTurn?: 't1' | 't2') => {
     if (!user) return
     setDepositingCircleId(circle.id)
     try {
-      const isSecondTurn = Boolean(
-        circle.shareType === 'double' && depositedCircleIds.has(`${circle.id}_t2`)
-      )
+      const isSecondTurn = targetTurn
+        ? targetTurn === 't2'
+        : Boolean(circle.shareType === 'double' && depositedCircleIds.has(`${circle.id}_t2`))
       await deleteCirclePayout(user.uid, circle.id, isSecondTurn)
-      setDepositedCircleIds((prev) => {
-        const next = new Set(prev)
-        if (isSecondTurn) {
-          next.delete(`${circle.id}_t2`)
-          checkedCirclesRef.current.delete(`${circle.id}_t2`)
-        } else {
-          next.delete(circle.id)
-          checkedCirclesRef.current.delete(circle.id)
-        }
-        return next
-      })
+      if (isSecondTurn) {
+        removeDepositedCircleId(`${circle.id}_t2`)
+        checkedCirclesRef.current.delete(`${circle.id}_t2`)
+      } else {
+        removeDepositedCircleId(circle.id)
+        checkedCirclesRef.current.delete(circle.id)
+      }
       showToast('تم إلغاء إيداع صافي الجمعية من الرصيد', 'info')
     } catch (err) {
       console.error('Failed to undo deposit circle net:', err)
@@ -808,11 +830,20 @@ export const MoneyCirclesManager: React.FC = () => {
     if (togglingMemberKey === toggleKey) return
 
     const targetMember = circle.members.find((m) => m.id === memberId)
+    const isUserMember = Boolean(
+      targetMember &&
+        (targetMember.turnMonth === circle.myTurnMonth ||
+          (circle.shareType === 'double' &&
+            circle.secondTurnMonth !== undefined &&
+            targetMember.turnMonth === circle.secondTurnMonth))
+    )
     // The receiver for monthNum is exempt and cannot be toggled
     const isTargetExempt = Boolean(
       targetMember &&
         (targetMember.turnMonth === monthNum ||
-          (targetMember.turnMonth === circle.myTurnMonth && circle.secondTurnMonth === monthNum))
+          (isUserMember &&
+            (monthNum === circle.myTurnMonth ||
+              (circle.shareType === 'double' && monthNum === circle.secondTurnMonth))))
     )
     if (isTargetExempt) return
 
@@ -842,20 +873,22 @@ export const MoneyCirclesManager: React.FC = () => {
   }
 
   const handleDelete = async () => {
-    if (!user || !deleteCircleId) return
+    if (!user || !deleteCircleId || isDeleting) return
+    setIsDeleting(true)
     try {
       await deleteMoneyCircle(user.uid, deleteCircleId, { deleteTransactions })
-      setDepositedCircleIds((prev) => {
-        const next = new Set(prev)
-        next.delete(deleteCircleId)
-        return next
-      })
+      removeDepositedCircleId(deleteCircleId)
+      removeDepositedCircleId(`${deleteCircleId}_t2`)
+      checkedCirclesRef.current.delete(deleteCircleId)
+      checkedCirclesRef.current.delete(`${deleteCircleId}_t2`)
       showToast('تم حذف الجمعية بنجاح', 'info')
       setDeleteCircleId(null)
       setDeleteTransactions(false)
     } catch (err) {
       console.error('Failed to delete circle:', err)
       showToast('تعذر حذف الجمعية', 'error')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -875,6 +908,22 @@ export const MoneyCirclesManager: React.FC = () => {
     }
   }
 
+  const handleRestoreCircle = async (circle: MoneyCircle) => {
+    if (!user) return
+    try {
+      await updateMoneyCircle(
+        user.uid,
+        circle.id,
+        { status: 'active' },
+        { monthStartDay }
+      )
+      showToast('تمت استعادة الجمعية إلى القائمة النشطة بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to restore circle:', err)
+      showToast('تعذر استعادة الجمعية', 'error')
+    }
+  }
+
   const handleConfirmSwap = async () => {
     if (!user || !swapTarget || !swapWithMemberId) return
     setIsSwapping(true)
@@ -882,6 +931,10 @@ export const MoneyCirclesManager: React.FC = () => {
       await swapMemberTurns(user.uid, swapTarget.circle.id, swapTarget.member.id, swapWithMemberId, {
         monthStartDay,
       })
+      removeDepositedCircleId(swapTarget.circle.id)
+      removeDepositedCircleId(`${swapTarget.circle.id}_t2`)
+      checkedCirclesRef.current.delete(swapTarget.circle.id)
+      checkedCirclesRef.current.delete(`${swapTarget.circle.id}_t2`)
       showToast('تم تبديل الأدوار بنجاح', 'success')
       setSwapTarget(null)
       setSwapWithMemberId('')
@@ -903,7 +956,7 @@ export const MoneyCirclesManager: React.FC = () => {
             <span>نظام الجمعيات والصناديق المشتركة</span>
           </h3>
           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-            تتبع أدوار الاستلام، الأقساط الشهرية، ومعرفة مين دفع ومين ما دفع بكل شفافية
+            متابعة تحصيل الاشتراكات، الأقساط الشهرية، وسجل سداد الأعضاء بكل شفافية
           </p>
         </div>
 
@@ -1007,11 +1060,17 @@ export const MoneyCirclesManager: React.FC = () => {
                 : circle.shareType === 'double'
                   ? circle.monthlyAmountFils * 2
                   : circle.monthlyAmountFils
-            const userGrossFils =
+            const userTotalGrossFils =
+              circle.shareType === 'half'
+                ? Math.round(circle.totalAmountFils / 2)
+                : circle.shareType === 'double'
+                  ? circle.totalAmountFils * 2
+                  : circle.totalAmountFils
+            const turnGrossFils =
               circle.shareType === 'half'
                 ? Math.round(circle.totalAmountFils / 2)
                 : circle.totalAmountFils
-            const netAmountFils = userGrossFils - userMonthlyFils
+            const netAmountFils = turnGrossFils - userMonthlyFils
 
             // Unpaid user months up to currentMonth
             const unpaidUserMonths =
@@ -1036,11 +1095,26 @@ export const MoneyCirclesManager: React.FC = () => {
             const isScheduledPaused = Boolean(linkedRec && linkedRec.active === false)
             const isScheduled = isScheduledActive
 
-            // Calculate payments for viewing month: non-receivers who paid + 1 (the exempt receiver)
-            const nonReceiverPaidCount = circle.members.filter(
-              (m) => m.turnMonth !== viewingMonth && m.paidMonths.includes(viewingMonth)
-            ).length
-            const paidMembersCount = Math.min(circle.membersCount, nonReceiverPaidCount + 1)
+            // Calculate payments for viewing month: non-receivers who paid + exempt receiver(s)
+            const isUserReceivingInViewingMonth =
+              viewingMonth === circle.myTurnMonth ||
+              (circle.shareType === 'double' &&
+                circle.secondTurnMonth !== undefined &&
+                viewingMonth === circle.secondTurnMonth)
+
+            const exemptCount = (circle.shareType === 'double' && isUserReceivingInViewingMonth) ? 2 : 1
+
+            const nonReceiverPaidCount = circle.members.filter((m) => {
+              if (circle.shareType === 'double' && isUserReceivingInViewingMonth) {
+                if (m.turnMonth === circle.myTurnMonth || m.turnMonth === circle.secondTurnMonth) {
+                  return false
+                }
+              } else if (m.turnMonth === viewingMonth) {
+                return false
+              }
+              return m.paidMonths.includes(viewingMonth)
+            }).length
+            const paidMembersCount = Math.min(circle.membersCount, nonReceiverPaidCount + exemptCount)
 
             return (
               <Card
@@ -1089,7 +1163,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         )}
                       </h4>
                       <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
-                        <span>قسط: {format(userMonthlyFils)} / شهر</span>
+                        <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /> / شهر</span>
                         <span>•</span>
                         <span>{circle.membersCount} أشهر ({circle.membersCount} أعضاء)</span>
                       </div>
@@ -1102,7 +1176,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCompleteCircle(circle)}
+                        onClick={() => setConfirmCompleteCircle(circle)}
                         className="text-xs text-zinc-600 dark:text-zinc-300"
                         icon={<CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
                       >
@@ -1110,10 +1184,23 @@ export const MoneyCirclesManager: React.FC = () => {
                       </Button>
                     )}
 
+                    {circle.status === 'completed' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRestoreCircle(circle)}
+                        className="text-xs text-zinc-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
+                        icon={<RotateCcw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                      >
+                        استعادة للنشطة
+                      </Button>
+                    )}
+
                     <div className="text-end me-2">
                       <div className="text-[11px] text-zinc-400">إجمالي المقبوض</div>
-                      <div className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400">
-                        {format(userGrossFils)}
+                      <div className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100 select-none">
+                        <FormattedMoney amountFils={userTotalGrossFils} />
                       </div>
                     </div>
 
@@ -1157,7 +1244,7 @@ export const MoneyCirclesManager: React.FC = () => {
                       type="button"
                       variant="primary"
                       size="sm"
-                      onClick={() => handleCompleteCircle(circle)}
+                      onClick={() => setConfirmCompleteCircle(circle)}
                       className="text-xs shrink-0 self-end sm:self-auto"
                       icon={<CheckCircle2 className="w-4 h-4" />}
                     >
@@ -1186,12 +1273,12 @@ export const MoneyCirclesManager: React.FC = () => {
                     <div>
                       <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                         <Crown className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(userGrossFils)}.</span>
+                        <span>هذا الشهر هو دورك في الاستلام! ستقبض <FormattedMoney amountFils={turnGrossFils} />.</span>
                       </div>
                       <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                        حان موعد استلام حصتك من الجمعية! الصافي بعد حسم قسطك لهذا الشهر ({format(userMonthlyFils)}):{' '}
+                        حان موعد استلام حصتك من الجمعية! الصافي بعد حسم قسطك لهذا الشهر (<FormattedMoney amountFils={userMonthlyFils} />):{' '}
                         <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
-                          {format(netAmountFils)}
+                          <FormattedMoney amountFils={netAmountFils} />
                         </strong>
                       </div>
                     </div>
@@ -1218,16 +1305,16 @@ export const MoneyCirclesManager: React.FC = () => {
                   <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-800 dark:text-zinc-200 flex items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
                       <Crown className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>هذا الشهر هو دورك في الاستلام! ستقبض {format(userGrossFils)}.</span>
+                      <span>هذا الشهر هو دورك في الاستلام! ستقبض <FormattedMoney amountFils={turnGrossFils} />.</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
-                        {hasUserDeposited ? 'تم إيداع الصافي في الرصيد ✓' : 'لا يُخصم منك قسط'}
+                        {hasUserDeposited ? 'تم إيداع الصافي في الرصيد' : 'لا يُخصم منك قسط'}
                       </span>
                       {hasUserDeposited && (
                         <button
                           type="button"
-                          onClick={() => handleUndoDepositCircleNet(circle)}
+                          onClick={() => handleUndoDepositCircleNet(circle, isSecondTurnActiveNow ? 't2' : 't1')}
                           disabled={depositingCircleId === circle.id}
                           className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 underline cursor-pointer disabled:opacity-50"
                         >
@@ -1237,33 +1324,108 @@ export const MoneyCirclesManager: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
+                  <div className="mt-3.5 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col sm:flex-row sm:items-center justify-between text-xs text-zinc-600 dark:text-zinc-400 gap-2">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-500" />
+                      <Clock className="w-4 h-4 text-amber-500 shrink-0" />
                       <span>
                         دورك في الاستلام:{' '}
                         <strong className="text-zinc-800 dark:text-zinc-100 font-bold">
-                          الشهر رقم {circle.myTurnMonth}
+                          الشهر رقم {circle.myTurnMonth}{' '}
+                          <span className="text-[11px] font-normal text-zinc-500">
+                            (
+                            {formatDate(
+                              addMonths(
+                                circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+                                circle.myTurnMonth - 1
+                              ),
+                              'MMMM yyyy',
+                              { locale: ar }
+                            )}
+                            )
+                          </span>
+                          {circle.shareType === 'double' && circle.secondTurnMonth && (
+                            <>
+                              {' '}و الشهر رقم {circle.secondTurnMonth}{' '}
+                              <span className="text-[11px] font-normal text-zinc-500">
+                                (
+                                {formatDate(
+                                  addMonths(
+                                    circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+                                    circle.secondTurnMonth - 1
+                                  ),
+                                  'MMMM yyyy',
+                                  { locale: ar }
+                                )}
+                                )
+                              </span>
+                            </>
+                          )}
                         </strong>
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] font-semibold text-zinc-400">
-                        {circle.myTurnMonth > currentMonth
-                          ? `باقي ${circle.myTurnMonth - currentMonth} أشهر على دورك`
-                          : hasUserDeposited
-                            ? 'تم استلام حصتك وإيداعها في الرصيد ✓'
-                            : 'حان دورك ولم يتم إيداع الصافي بعد!'}
-                      </span>
-                      {hasUserDeposited && (
-                        <button
-                          type="button"
-                          onClick={() => handleUndoDepositCircleNet(circle)}
-                          disabled={depositingCircleId === circle.id}
-                          className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 underline cursor-pointer disabled:opacity-50"
-                        >
-                          إلغاء الإيداع
-                        </button>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {circle.shareType === 'double' && circle.secondTurnMonth ? (
+                        <>
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <span className="text-zinc-400">دور 1:</span>
+                            <span className="font-semibold text-zinc-600 dark:text-zinc-300">
+                              {hasDepositedTurn1 ? 'تم إيداع الصافي' : circle.myTurnMonth > currentMonth ? `باقي ${circle.myTurnMonth - currentMonth} أشهر` : 'حان دورك'}
+                            </span>
+                            {hasDepositedTurn1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleUndoDepositCircleNet(circle, 't1')}
+                                disabled={depositingCircleId === circle.id}
+                                className="text-red-500 hover:text-red-600 dark:text-red-400 underline font-bold cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <span className="text-zinc-400">دور 2:</span>
+                            <span className="font-semibold text-zinc-600 dark:text-zinc-300">
+                              {hasDepositedTurn2 ? 'تم إيداع الصافي' : circle.secondTurnMonth > currentMonth ? `باقي ${circle.secondTurnMonth - currentMonth} أشهر` : 'حان دورك'}
+                            </span>
+                            {hasDepositedTurn2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleUndoDepositCircleNet(circle, 't2')}
+                                disabled={depositingCircleId === circle.id}
+                                className="text-red-500 hover:text-red-600 dark:text-red-400 underline font-bold cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[11px] font-semibold text-zinc-400">
+                            {circle.myTurnMonth > currentMonth
+                              ? (() => {
+                                  const diff = circle.myTurnMonth - currentMonth
+                                  if (diff === 1) return 'باقي شهر واحد على دورك'
+                                  if (diff === 2) return 'باقي شهران على دورك'
+                                  if (diff <= 10) return `باقي ${diff} أشهر على دورك`
+                                  return `باقي ${diff} شهراً على دورك`
+                                })()
+                              : hasUserDeposited
+                                ? 'تم استلام حصتك وإيداعها في الرصيد'
+                                : 'حان دورك ولم يتم إيداع الصافي بعد!'}
+                          </span>
+                          {hasUserDeposited && (
+                            <button
+                              type="button"
+                              onClick={() => handleUndoDepositCircleNet(circle, 't1')}
+                              disabled={depositingCircleId === circle.id}
+                              className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 underline cursor-pointer disabled:opacity-50"
+                            >
+                              إلغاء الإيداع
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -1278,9 +1440,9 @@ export const MoneyCirclesManager: React.FC = () => {
                         <span>حان موعد استلام حصتك من الجمعية!</span>
                       </div>
                       <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                        الصافي بعد حسم قسطك لهذا الشهر ({format(userMonthlyFils)}):{' '}
+                        الصافي بعد حسم قسطك لهذا الشهر (<FormattedMoney amountFils={userMonthlyFils} />):{' '}
                         <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
-                          {format(netAmountFils)}
+                          <FormattedMoney amountFils={netAmountFils} />
                         </strong>
                       </div>
                     </div>
@@ -1304,20 +1466,20 @@ export const MoneyCirclesManager: React.FC = () => {
                 <div className="mt-3.5 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs">
                   {isScheduledActive ? (
                     <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300 font-bold">
-                      <Zap className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                       <span>مجدولة في المعاملات المتكررة (معفاة من الخصم في الشهر {circle.myTurnMonth})</span>
                     </div>
                   ) : isScheduledPaused && linkedRec ? (
                     <div className="flex items-center justify-between w-full gap-2">
                       <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold">
-                        <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <RefreshCw className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                         <span>الجدولة التلقائية متوقفة مؤقتاً</span>
                       </div>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        icon={<Zap className="w-3 h-3 text-amber-500" />}
+                        icon={<RefreshCw className="w-3 h-3 text-amber-500" />}
                         onClick={() => handleResumeRecurring(linkedRec.id)}
                       >
                         تفعيل الجدولة
@@ -1330,7 +1492,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         type="button"
                         variant="outline"
                         size="sm"
-                        icon={<Zap className="w-3 h-3 text-amber-500" />}
+                        icon={<Calendar className="w-3 h-3 text-zinc-500" />}
                         onClick={() => handleScheduleCircle(circle)}
                       >
                         جدولة القسط تلقائياً
@@ -1341,12 +1503,12 @@ export const MoneyCirclesManager: React.FC = () => {
 
                 {/* Unpaid User Installment Alert Banner */}
                 {unpaidUserMonths.length > 0 && userMember && (
-                  <div className="mt-3.5 p-3.5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-700/60 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-2 text-xs">
                       <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <div>
                         <span>
-                          قسطك الشخصي لشهر {unpaidUserMonths[0]} بقيمة {format(userMonthlyFils)} غير مسدد بعد
+                          قسطك الشخصي لشهر {unpaidUserMonths[0]} بقيمة <FormattedMoney amountFils={userMonthlyFils} /> غير مسدد بعد
                           {userMember.paymentsByMonth?.[String(unpaidUserMonths[0])] === false && (
                             <span className="font-bold text-amber-800 dark:text-amber-300">
                               {' '}(تم إلغاء الخصم التلقائي — بانتظار سدادك)
@@ -1354,7 +1516,14 @@ export const MoneyCirclesManager: React.FC = () => {
                           )}
                           {unpaidUserMonths.length > 1 && (
                             <span className="text-[11px] text-amber-700 dark:text-amber-300 font-normal">
-                              {' '}(لديك {unpaidUserMonths.length} أقساط غير مسددة)
+                              {' '}
+                              (لديك{' '}
+                              {unpaidUserMonths.length === 2
+                                ? 'قسطان غير مسددين'
+                                : unpaidUserMonths.length <= 10
+                                  ? `${unpaidUserMonths.length} أقساط غير مسددة`
+                                  : `${unpaidUserMonths.length} قسطاً غير مسدد`}
+                              )
                             </span>
                           )}
                         </span>
@@ -1366,7 +1535,7 @@ export const MoneyCirclesManager: React.FC = () => {
                       size="sm"
                       disabled={togglingMemberKey === `${circle.id}_${userMember.id}_${unpaidUserMonths[0]}`}
                       onClick={() => handleToggleMemberPayment(circle, userMember.id, unpaidUserMonths[0])}
-                      className="text-xs shrink-0 self-end sm:self-auto bg-amber-600 hover:bg-amber-700 text-white"
+                      className="text-xs shrink-0 self-end sm:self-auto"
                       icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                     >
                       تسجيل سداد قسطي الآن
@@ -1424,7 +1593,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     </span>
                     {viewingMonth < currentMonth && (circle.membersCount - paidMembersCount) > 0 && (
                       <span className="text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950/60 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800">
-                        ({circle.members.filter((m) => !m.paidMonths.includes(viewingMonth) && m.turnMonth !== viewingMonth).length} متأخر)
+                        ({circle.membersCount - paidMembersCount} متأخر)
                       </span>
                     )}
                   </div>
@@ -1435,7 +1604,7 @@ export const MoneyCirclesManager: React.FC = () => {
                     size="sm"
                     icon={isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   >
-                    {isExpanded ? 'إخفاء جدول الأعضاء' : 'تتبع دفعات الأعضاء (مين دفع)'}
+                    {isExpanded ? 'إخفاء جدول الأعضاء' : 'تتبع دفعات الأعضاء وسجل السداد'}
                   </Button>
                 </div>
 
@@ -1447,11 +1616,12 @@ export const MoneyCirclesManager: React.FC = () => {
                       <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
                         عرض دفعات الشهر:
                       </span>
-                      <div className="flex items-center gap-1 overflow-x-auto py-1 max-w-full">
+                      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 max-w-full">
                         {Array.from({ length: circle.membersCount }, (_, i) => i + 1).map((mNum) => (
                           <button
                             key={mNum}
                             type="button"
+                            aria-label={`شهر ${mNum}`}
                             onClick={() =>
                               setSelectedCircleMonth((prev) => ({ ...prev, [circle.id]: mNum }))
                             }
@@ -1463,22 +1633,40 @@ export const MoneyCirclesManager: React.FC = () => {
                             )}
                           >
                             شهر {mNum}
+                            <span className="text-[10px] opacity-80 ms-1 font-normal">
+                              (
+                              {formatDate(
+                                addMonths(
+                                  circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+                                  mNum - 1
+                                ),
+                                'MMM yyyy',
+                                { locale: ar }
+                              )}
+                              )
+                            </span>
                           </button>
                         ))}
                       </div>
                     </div>
 
-                    {/* Member grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {/* Member grid - Swiss divided list */}
+                    <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] overflow-hidden bg-white dark:bg-[#121215]">
                       {circle.members.map((member) => {
                         const hasPaid = member.paidMonths.includes(viewingMonth)
-                        const isReceiverThisMonth = member.turnMonth === viewingMonth
                         const isUserFirstTurn = member.turnMonth === circle.myTurnMonth
                         const isUserSecondTurn =
                           circle.shareType === 'double' &&
                           circle.secondTurnMonth !== undefined &&
                           member.turnMonth === circle.secondTurnMonth
                         const isUserMember = isUserFirstTurn || isUserSecondTurn
+                        const isReceiverThisMonth =
+                          member.turnMonth === viewingMonth ||
+                          (isUserMember &&
+                            (viewingMonth === circle.myTurnMonth ||
+                              (circle.shareType === 'double' &&
+                                circle.secondTurnMonth !== undefined &&
+                                viewingMonth === circle.secondTurnMonth)))
                         const displayName =
                           isUserSecondTurn && member.name.startsWith('عضو ')
                             ? 'أنت (سهم 2)'
@@ -1489,25 +1677,14 @@ export const MoneyCirclesManager: React.FC = () => {
                           <div
                             key={member.id}
                             className={cn(
-                              'flex items-center justify-between p-2.5 rounded-xl border transition-all',
+                              'flex items-center justify-between p-3 transition-colors',
                               isReceiverThisMonth
-                                ? 'bg-amber-500/10 border-amber-300 dark:border-amber-700/50'
-                                : hasPaid
-                                  ? 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
-                                  : isOverdue
-                                    ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
-                                    : 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
+                                ? 'bg-amber-50/30 dark:bg-amber-950/20'
+                                : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-900/40'
                             )}
                           >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={cn(
-                                  'w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0',
-                                  isReceiverThisMonth
-                                    ? 'bg-amber-500 text-white'
-                                    : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
-                                )}
-                              >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                                 {member.turnMonth}
                               </span>
                               <div className="min-w-0">
@@ -1548,13 +1725,17 @@ export const MoneyCirclesManager: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="text-[10px] text-zinc-400">
-                                  {isReceiverThisMonth
-                                    ? 'يقبض هذا الشهر'
-                                    : isUserMember && isScheduled
-                                      ? member.paymentsByMonth?.[String(viewingMonth)] === false
-                                        ? `قسط: ${format(userMonthlyFils)} (معلق يدوياً)`
-                                        : `قسط: ${format(userMonthlyFils)} (يُقتطع تلقائياً)`
-                                      : `قسط: ${isUserMember ? format(userMonthlyFils) : format(circle.monthlyAmountFils)}`}
+                                  {isReceiverThisMonth ? (
+                                    'يقبض هذا الشهر'
+                                  ) : isUserMember && isScheduled ? (
+                                    member.paymentsByMonth?.[String(viewingMonth)] === false ? (
+                                      <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /> (معلق يدوياً)</span>
+                                    ) : (
+                                      <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /> (يُقتطع تلقائياً)</span>
+                                    )
+                                  ) : (
+                                    <span>قسط: <FormattedMoney amountFils={isUserMember ? userMonthlyFils : circle.monthlyAmountFils} /></span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1572,7 +1753,7 @@ export const MoneyCirclesManager: React.FC = () => {
                                     }
                                   }}
                                   className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                                  title="تبديل الدور ⇄"
+                                  title="تبديل الدور"
                                   aria-label={`تبديل دور ${displayName}`}
                                 >
                                   <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -1580,8 +1761,8 @@ export const MoneyCirclesManager: React.FC = () => {
                               )}
 
                               {isReceiverThisMonth ? (
-                                <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1">
-                                  <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 select-none flex items-center gap-1">
+                                  <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                                   <span>مستلم الدورة (معفى)</span>
                                 </span>
                               ) : (
@@ -1590,11 +1771,11 @@ export const MoneyCirclesManager: React.FC = () => {
                                   disabled={togglingMemberKey === `${circle.id}_${member.id}_${viewingMonth}`}
                                   onClick={() => handleToggleMemberPayment(circle, member.id, viewingMonth)}
                                   className={cn(
-                                    'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
+                                    'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
                                     hasPaid
                                       ? 'bg-blue-600 text-white hover:bg-blue-700'
                                       : isOverdue
-                                        ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
+                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-red-600 dark:text-red-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-red-200 dark:border-red-900/40'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400'
                                   )}
                                 >
@@ -1655,7 +1836,7 @@ export const MoneyCirclesManager: React.FC = () => {
                         <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
                           سجل دفعاتك الشهرية لهذه الجمعية:
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] overflow-hidden bg-white dark:bg-[#121215]">
                           {Array.from({ length: circle.membersCount }, (_, i) => i + 1).map((mNum) => {
                             const isExempt = userExemptMonths.has(mNum)
                             const hasPaid =
@@ -1668,25 +1849,14 @@ export const MoneyCirclesManager: React.FC = () => {
                               <div
                                 key={mNum}
                                 className={cn(
-                                  'flex items-center justify-between p-2.5 rounded-xl border transition-all',
+                                  'flex items-center justify-between p-3 transition-colors',
                                   isExempt
-                                    ? 'bg-amber-500/10 border-amber-300 dark:border-amber-700/50'
-                                    : hasPaid
-                                      ? 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
-                                      : isOverdue
-                                        ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
-                                        : 'bg-zinc-50/70 dark:bg-zinc-900/50 border-[#E4E4E7] dark:border-[#27272A]'
+                                    ? 'bg-amber-50/30 dark:bg-amber-950/20'
+                                    : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-900/40'
                                 )}
                               >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span
-                                    className={cn(
-                                      'w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0',
-                                      isExempt
-                                        ? 'bg-amber-500 text-white'
-                                        : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
-                                    )}
-                                  >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
                                     {mNum}
                                   </span>
                                   <div className="min-w-0">
@@ -1707,15 +1877,15 @@ export const MoneyCirclesManager: React.FC = () => {
                                     <div className="text-[10px] text-zinc-400">
                                       {isExempt
                                         ? 'شهر استلام حصتك'
-                                        : `قسط: ${format(userMonthlyFils)}`}
+                                        : <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /></span>}
                                     </div>
                                   </div>
                                 </div>
 
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {isExempt ? (
-                                    <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 select-none flex items-center gap-1">
-                                      <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 select-none flex items-center gap-1">
+                                      <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                                       <span>دورك في القبض (معفى)</span>
                                     </span>
                                   ) : (
@@ -1724,18 +1894,18 @@ export const MoneyCirclesManager: React.FC = () => {
                                       disabled={togglingMemberKey === `${circle.id}_${userMember.id}_${mNum}`}
                                       onClick={() => handleToggleMemberPayment(circle, userMember.id, mNum)}
                                       className={cn(
-                                        'px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
+                                        'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed',
                                         hasPaid
                                           ? 'bg-blue-600 text-white hover:bg-blue-700'
                                           : isOverdue
-                                            ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 hover:bg-red-200 border border-red-300 dark:border-red-800'
+                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-red-600 dark:text-red-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-red-200 dark:border-red-900/40'
                                             : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400'
                                       )}
                                     >
                                       {hasPaid ? (
                                         <>
                                           <CheckCircle2 className="w-3 h-3" />
-                                          <span>تم الدفع ✓</span>
+                                          <span>تم الدفع</span>
                                         </>
                                       ) : (
                                         <span>تسجيل الدفع</span>
@@ -1746,6 +1916,74 @@ export const MoneyCirclesManager: React.FC = () => {
                               </div>
                             )
                           })}
+                        </div>
+
+                        {/* Member Turn Schedule Transparency for Non-Managers */}
+                        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                          <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 flex items-center justify-between">
+                            <span>جدول أدوار الجمعية ومواعيد الاستلام:</span>
+                            <span className="text-[11px] font-normal text-zinc-400">للاطلاع والشفافية</span>
+                          </div>
+                          <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] overflow-hidden bg-white dark:bg-[#121215]">
+                            {circle.members.map((member) => {
+                              const turnDate = addMonths(
+                                circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+                                member.turnMonth - 1
+                              )
+                              const isUserFirst = member.turnMonth === circle.myTurnMonth
+                              const isUserSecond =
+                                circle.shareType === 'double' &&
+                                circle.secondTurnMonth !== undefined &&
+                                member.turnMonth === circle.secondTurnMonth
+                              const isUser = isUserFirst || isUserSecond
+                              const displayName =
+                                isUserSecond && member.name.startsWith('عضو ')
+                                  ? 'أنت (سهم 2)'
+                                  : isUserFirst
+                                    ? 'أنت'
+                                    : member.name
+
+                              return (
+                                <div
+                                  key={member.id}
+                                  className={cn(
+                                    'flex items-center justify-between p-2.5 text-xs transition-colors',
+                                    isUser
+                                      ? 'bg-blue-50/50 dark:bg-blue-950/20'
+                                      : 'bg-white dark:bg-[#121215] hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center text-[10px] font-black shrink-0 border border-[#E4E4E7] dark:border-[#27272A]">
+                                      {member.turnMonth}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-zinc-800 dark:text-zinc-200 truncate flex items-center gap-1.5">
+                                        <span>{displayName}</span>
+                                        {isUser && (
+                                          <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                            (دورك)
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-zinc-400">
+                                        شهر {member.turnMonth} ({formatDate(turnDate, 'MMMM yyyy', { locale: ar })})
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {member.turnMonth <= currentMonth ? (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
+                                      {member.turnMonth === currentMonth ? 'استلام هذا الشهر' : 'تم الاستلام'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
+                                      قادم
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1762,7 +2000,7 @@ export const MoneyCirclesManager: React.FC = () => {
 
               {/* If no active circles, but completed circles exist */}
               {activeCircles.length === 0 && completedCircles.length > 0 && (
-                <Card className="p-6 text-center border-dashed border-[#E4E4E7] dark:border-[#27272A] bg-white/50 dark:bg-[#121215]/50 shadow-2xs dark:shadow-none">
+                <Card className="p-6 text-center border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xs">
                   <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                     لا توجد جمعيات مالية نشطة حالياً.
                   </p>
@@ -1775,7 +2013,7 @@ export const MoneyCirclesManager: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setUserToggledCompleted(!isCompletedExpanded)}
-                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-900 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
                     aria-expanded={isCompletedExpanded}
                   >
                     <div className="flex items-center gap-2">
@@ -1839,9 +2077,8 @@ export const MoneyCirclesManager: React.FC = () => {
 
             <Input
               label="عدد الأعضاء (الأشهر)"
-              type="number"
-              min="2"
-              max="50"
+              type="text"
+              inputMode="numeric"
               value={membersCountStr}
               onChange={(e) => {
                 const val = toWesternDigits(e.target.value)
@@ -1877,9 +2114,8 @@ export const MoneyCirclesManager: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="دورك في الاستلام (رقم الشهر)"
-              type="number"
-              min="1"
-              max={membersCount}
+              type="text"
+              inputMode="numeric"
               value={myTurnMonthStr}
               onChange={(e) => {
                 const val = toWesternDigits(e.target.value)
@@ -2009,7 +2245,7 @@ export const MoneyCirclesManager: React.FC = () => {
               </label>
               <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
                 {categories
-                  .filter((c) => c.type === 'expense' && !c.archived)
+                  .filter((c) => c.type === 'expense' && (!c.archived || c.id === expenseCategoryId || (editingCircle && c.id === editingCircle.expenseCategoryId)))
                   .map((cat) => {
                     const activeExpId = expenseCategoryId || defaultExpenseCategory?.id || ''
                     const isSelected = activeExpId === cat.id
@@ -2025,13 +2261,15 @@ export const MoneyCirclesManager: React.FC = () => {
                             : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                         )}
                       >
-                        <span
-                          className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: `${cat.color}25` }}
-                        >
+                        <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
                           <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                         </span>
-                        <span className="truncate flex-1">{cat.name}</span>
+                        <span className="truncate flex-1">
+                          {cat.name}
+                          {cat.archived && (
+                            <span className="text-[9px] text-zinc-400 ms-1 font-normal">(مؤرشف)</span>
+                          )}
+                        </span>
                         {isSelected && (
                           <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                         )}
@@ -2047,7 +2285,7 @@ export const MoneyCirclesManager: React.FC = () => {
               </label>
               <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
                 {categories
-                  .filter((c) => c.type === 'income' && !c.archived)
+                  .filter((c) => c.type === 'income' && (!c.archived || c.id === incomeCategoryId || (editingCircle && c.id === editingCircle.incomeCategoryId)))
                   .map((cat) => {
                     const activeIncId = incomeCategoryId || defaultIncomeCategory?.id || ''
                     const isSelected = activeIncId === cat.id
@@ -2063,13 +2301,15 @@ export const MoneyCirclesManager: React.FC = () => {
                             : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                         )}
                       >
-                        <span
-                          className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: `${cat.color}25` }}
-                        >
+                        <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
                           <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                         </span>
-                        <span className="truncate flex-1">{cat.name}</span>
+                        <span className="truncate flex-1">
+                          {cat.name}
+                          {cat.archived && (
+                            <span className="text-[9px] text-zinc-400 ms-1 font-normal">(مؤرشف)</span>
+                          )}
+                        </span>
                         {isSelected && (
                           <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                         )}
@@ -2080,19 +2320,34 @@ export const MoneyCirclesManager: React.FC = () => {
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-xs flex items-center justify-between font-bold text-zinc-800 dark:text-zinc-200">
-            <span>المبلغ الإجمالي المقبوض:</span>
-            <span className="text-sm font-black text-blue-600 dark:text-blue-400">
-              {format(
-                toFils(
-                  ((parseFloat(monthlyAmountStr) || 0) * membersCount) *
-                    (shareType === 'half' ? 0.5 : 1),
-                  config.decimals
-                )
-              )}
-              {shareType === 'double' ? ' (لكل دور استلام)' : ''}
-            </span>
-          </div>
+          {(() => {
+            const parsedMonthly = parseNumeric(monthlyAmountStr)
+            const grossPayoutFils = toFils(
+              parsedMonthly * membersCount * (shareType === 'half' ? 0.5 : 1),
+              config.decimals
+            )
+            const doubleShareMonthlyFils = toFils(parsedMonthly, config.decimals)
+            const netDoublePayoutFils = grossPayoutFils - doubleShareMonthlyFils * 2
+            return (
+              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-xs flex flex-col gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
+                <div className="flex items-center justify-between">
+                  <span>المبلغ الإجمالي المقبوض:</span>
+                  <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+                    <FormattedMoney amountFils={grossPayoutFils} />
+                    {shareType === 'double' ? ' (لكل دور استلام)' : ''}
+                  </span>
+                </div>
+                {shareType === 'double' && (
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 border-t border-[#E4E4E7]/60 dark:border-[#27272A]/60 pt-1.5">
+                    <span>الصافي المودع بعد استقطاع قسط الشهرين:</span>
+                    <span className="font-bold text-zinc-700 dark:text-zinc-300">
+                      <FormattedMoney amountFils={netDoublePayoutFils} />
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Auto Schedule Toggle */}
           <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A]">
@@ -2169,9 +2424,9 @@ export const MoneyCirclesManager: React.FC = () => {
                       <span className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-black flex items-center justify-center shrink-0">
                         {turn}
                       </span>
-                      <input
+                      <Input
                         type="text"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-xs text-zinc-800 dark:text-zinc-200 focus:outline-hidden focus:ring-1 focus:ring-blue-600"
+                        className="py-1.5 text-xs flex-1"
                         value={customMembers[i] ?? defaultVal}
                         onChange={(e) => {
                           const val = e.target.value
@@ -2228,25 +2483,13 @@ export const MoneyCirclesManager: React.FC = () => {
             هل أنت متأكد من رغبتك في حذف هذه الجمعية؟ لن تتمكن من استرجاع بيانات الأقساط والأعضاء المسجلة فيها.
           </p>
 
-          <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                htmlFor="delete-circle-txs"
-                className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer select-none"
-              >
-                حذف الأقساط والإيداعات المسجلة في المحفظة لهذه الجمعية
-              </label>
-              <input
-                id="delete-circle-txs"
-                type="checkbox"
-                checked={deleteTransactions}
-                onChange={(e) => setDeleteTransactions(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded-sm border-zinc-300 focus:ring-blue-600 cursor-pointer shrink-0"
-              />
-            </div>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-              تنبيه: إذا قمت بتحديد هذا الخيار، ستُحذف المعاملات وتتغير أرصدة محفظتك السابقة. الإبقاء عليها دون تحديد يضمن دقة تقاريرك المالية وسجل مصروفاتك التاريخي.
-            </p>
+          <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
+            <Toggle
+              checked={deleteTransactions}
+              onChange={setDeleteTransactions}
+              label="حذف الأقساط والإيداعات المسجلة في المحفظة لهذه الجمعية"
+              description="تنبيه: إذا قمت بتفعيل هذا الخيار، ستُحذف المعاملات وتتغير أرصدة محفظتك السابقة. الإبقاء عليها دون تفعيل يضمن دقة تقاريرك المالية وسجل مصروفاتك التاريخي."
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2">
@@ -2259,8 +2502,52 @@ export const MoneyCirclesManager: React.FC = () => {
             >
               إلغاء
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
-              نعم، حذف الجمعية
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'جاري الحذف...' : 'نعم، حذف الجمعية'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Complete Circle Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(confirmCompleteCircle)}
+        onClose={() => setConfirmCompleteCircle(null)}
+        title="تأكيد إنهاء الجمعية"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            هل أنت متأكد من رغبتك في نقل جمعية «<strong className="text-zinc-900 dark:text-zinc-100 font-bold">{confirmCompleteCircle?.name}</strong>» إلى قائمة الجمعيات المكتملة؟
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+            سيتم إيقاف أي جدولة متكررة متبقية لأقساط هذه الجمعية، ويمكنك استعادتها للجمعيات النشطة في أي وقت.
+          </p>
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmCompleteCircle(null)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="primary"
+              disabled={isCompleting}
+              onClick={async () => {
+                if (!confirmCompleteCircle) return
+                setIsCompleting(true)
+                try {
+                  await handleCompleteCircle(confirmCompleteCircle)
+                  setConfirmCompleteCircle(null)
+                } finally {
+                  setIsCompleting(false)
+                }
+              }}
+            >
+              {isCompleting ? 'جاري الإنهاء...' : 'تأكيد الإنهاء'}
             </Button>
           </div>
         </div>
@@ -2309,7 +2596,7 @@ export const MoneyCirclesManager: React.FC = () => {
               onClick={handleConfirmSwap}
               disabled={isSwapping || !swapWithMemberId}
             >
-              {isSwapping ? 'جاري التبديل...' : 'تأكيد تبديل الدور ⇄'}
+              {isSwapping ? 'جاري التبديل...' : 'تأكيد تبديل الدور'}
             </Button>
           </div>
         </div>

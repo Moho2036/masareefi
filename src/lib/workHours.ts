@@ -9,6 +9,7 @@ export function parseNumeric(val: string): number {
   let clean = toWesternDigits(val)
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
     .replace(/٫/g, '.') // Arabic decimal separator (U+066B)
+    .replace(/\u060C/g, ',') // Arabic comma (U+060C)
     .trim()
 
   // Handle both comma and dot present e.g. 1,000.50 or 1.000,50

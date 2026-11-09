@@ -168,6 +168,50 @@ describe('recurring pure logic', () => {
       expect(result.shouldDeactivate).toBe(true)
     })
 
+    it('safely normalizes nextDate and endDate when passed as strings or non-Date instances', () => {
+      const rec = {
+        id: 'r1',
+        type: 'expense',
+        amountFils: 20000,
+        categoryId: 'c1',
+        note: '',
+        frequency: 'monthly',
+        startDate: '2026-01-01',
+        nextDate: '2026-02-01',
+        endDate: '2026-02-01',
+        active: true,
+      } as unknown as Recurring
+
+      const result = calculateDueOccurrences(rec, new Date('2026-03-01'))
+      expect(result.dates).toHaveLength(1)
+      expect(result.dates[0].toISOString().slice(0, 10)).toBe('2026-02-01')
+      expect(result.shouldDeactivate).toBe(true)
+    })
+
+    it('passes monthStartDay to calculateDueOccurrences and skips exempt cycle accordingly', () => {
+      const circleRec: Recurring = {
+        id: 'r_circle_mstart',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c1',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-02-25'),
+        active: true,
+        circleId: 'circle_mstart',
+        skipMonth: 2, // Cycle 2 (Feb 25) should be skipped with monthStartDay = 25
+      }
+
+      // With monthStartDay = 25, Feb 25 is cycle 2 which is skipped
+      const resSkipped = calculateDueOccurrences(circleRec, new Date('2026-02-26'), 25)
+      expect(resSkipped.dates).toHaveLength(0)
+
+      // Without monthStartDay (default calendar 1..31), Feb 25 is Month 2, but relative to Jan 1 start
+      const resMonthlyEq = calculateMonthlyEquivalent([circleRec], new Date('2026-02-25'), 25)
+      expect(resMonthlyEq.monthlyExpense).toBe(0)
+    })
+
     it('caps catch-up occurrences to MAX_CATCHUP_OCCURRENCES (12) for long absence and advances newNextDate past today', () => {
       const today = new Date('2026-10-01T12:00:00Z')
       const startDate = new Date('2026-04-04T12:00:00Z') // 180 days in the past
@@ -455,6 +499,29 @@ describe('recurring pure logic', () => {
       expect(isOccurrenceSkipped(rec, new Date(2026, 4, 1))).toBe(false)
     })
 
+    it('respects monthStartDay in getOccurrenceMonthIndex and isOccurrenceSkipped', () => {
+      const rec: Recurring = {
+        id: 'r_custom_start',
+        type: 'expense',
+        amountFils: 50000,
+        categoryId: 'c1',
+        note: '',
+        frequency: 'monthly',
+        startDate: new Date(2026, 0, 1),
+        nextDate: new Date(2026, 0, 25),
+        active: true,
+        circleId: 'c_custom',
+        skipMonth: 2, // exempt in cycle 2
+      }
+      // With monthStartDay = 25:
+      // Cycle 1 starts Jan 25. Occurrence on Jan 25 is Cycle 1.
+      expect(getOccurrenceMonthIndex(rec.startDate, new Date(2026, 0, 25), 25)).toBe(1)
+      expect(isOccurrenceSkipped(rec, new Date(2026, 0, 25), 25)).toBe(false)
+      // Cycle 2 starts Feb 25. Occurrence on Feb 25 is Cycle 2.
+      expect(getOccurrenceMonthIndex(rec.startDate, new Date(2026, 1, 25), 25)).toBe(2)
+      expect(isOccurrenceSkipped(rec, new Date(2026, 1, 25), 25)).toBe(true)
+    })
+
     it('skips generating transaction for the turn month in calculateDueOccurrences', () => {
       // Circle started in Jan, today is May 15. User turn is Month 4 (April).
       const rec: Recurring = {
@@ -612,11 +679,12 @@ describe('recurring pure logic', () => {
         expect(dueDate.getMonth()).toBe(2) // March
       })
 
-      it('returns null for dueMonth and last month date when all non-exempt months are paid', () => {
+      it('returns null for dueMonth and one month past last cycle when all non-exempt months are paid', () => {
         // 5 members, turn is month 2. Paid: 1, 3, 4, 5.
         expect(getNextCircleDueMonth(5, 2, [1, 3, 4, 5])).toBeNull()
         const dueDate = getNextCircleDueDate(startDate, 5, 2, [1, 3, 4, 5])
-        expect(dueDate.getMonth()).toBe(1) // Oct + 4 months = Feb 2027 (month 5)
+        // With start = Oct 1, 2026, addMonths(start, 5) = March 1, 2027 (month index 2)
+        expect(dueDate.getMonth()).toBe(2) // March 2027 (one month past the 5th month)
         expect(dueDate.getFullYear()).toBe(2027)
       })
 

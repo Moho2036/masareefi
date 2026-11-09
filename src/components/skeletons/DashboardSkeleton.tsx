@@ -8,7 +8,7 @@ export const HeroCardSkeleton: React.FC<{ className?: string }> = ({ className }
       role="status"
       aria-label="جاري تحميل بيانات الرصيد"
       className={cn(
-        'bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-5 animate-pulse relative overflow-hidden flex flex-col justify-between',
+        'bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none rounded-2xl p-5 sm:p-6 space-y-5 animate-pulse relative overflow-hidden flex flex-col justify-between',
         className
       )}
     >

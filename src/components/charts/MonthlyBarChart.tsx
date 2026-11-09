@@ -11,6 +11,7 @@ import {
 import { BarChart3 } from 'lucide-react'
 import { fromFils, formatCompactNumber } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
+import { useTheme } from '../../hooks/useTheme'
 import { cn } from '../../lib/cn'
 import type { MonthlyBreakdownItem } from '../../lib/reports'
 
@@ -27,49 +28,61 @@ interface CustomTooltipProps {
 
 const CustomBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
   const { format } = useCurrency()
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
   if (active && payload && payload.length > 0) {
     const item = payload[0].payload
+    const isUnstarted = Boolean(item.isFutureMonth && item.income === 0 && item.expense === 0)
     return (
-      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3.5 rounded-xl shadow-lg text-xs space-y-2 z-50 text-start min-w-[170px]">
-        <div className="font-bold text-slate-800 dark:text-slate-100 border-b border-[#E4E4E7] dark:border-[#27272A] pb-1.5">
-          {item.monthName}
+      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3.5 rounded-xl shadow-lg dark:shadow-none text-xs space-y-2 z-50 text-start min-w-[170px]">
+        <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b border-[#E4E4E7] dark:border-[#27272A] pb-1.5 flex items-center justify-between gap-2">
+          <span>{item.monthName}</span>
+          {item.dateRange && (
+            <span className="text-[10px] text-zinc-400 font-normal">{item.dateRange}</span>
+          )}
         </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              المداخيل:
-            </span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">
-              {format(item.income)}
-            </span>
+        {isUnstarted ? (
+          <div className="text-zinc-400 dark:text-zinc-500 italic py-1 text-center font-medium">
+            الشهر لم يبدأ بعد
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-medium">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              المصاريف:
-            </span>
-            <span className="font-bold text-red-500 dark:text-red-400">
-              {format(item.expense)}
-            </span>
+        ) : (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 font-medium">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: isDark ? '#34D399' : '#16A34A' }} />
+                المداخيل:
+              </span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {format(item.income)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 font-medium">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: isDark ? '#F87171' : '#DC2626' }} />
+                المصاريف:
+              </span>
+              <span className="font-bold text-red-600 dark:text-red-400">
+                {format(item.expense)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-[#E4E4E7] dark:border-[#27272A]">
+              <span className="text-zinc-500 dark:text-zinc-400 font-semibold">
+                الصافي:
+              </span>
+              <span
+                className={cn(
+                  'font-black',
+                  item.balance >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400'
+                )}
+                dir="ltr"
+              >
+                {format(item.balance)}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center justify-between gap-3 pt-1 border-t border-[#E4E4E7] dark:border-[#27272A]">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">
-              الصافي:
-            </span>
-            <span
-              className={cn(
-                'font-black',
-                item.balance >= 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-red-500 dark:text-red-400'
-              )}
-              dir="ltr"
-            >
-              {format(item.balance)}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
     )
   }
@@ -81,15 +94,24 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   className,
   height = 300,
 }) => {
-  const { format: formatCurrency } = useCurrency()
-  const isMasked = formatCurrency(1000).includes('•••••')
+  const { hideBalances } = useCurrency()
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
+  const isMasked = hideBalances
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
+    let ticking = false
     const dismissTooltip = () => {
-      if (containerRef.current) {
-        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+          }
+          ticking = false
+        })
+        ticking = true
       }
     }
     const handleTouchOutside = (e: TouchEvent) => {
@@ -131,7 +153,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[220px]',
+          'flex flex-col items-center justify-center text-center p-6 text-zinc-400 dark:text-zinc-500 min-h-[220px]',
           className
         )}
       >
@@ -148,12 +170,12 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       {/* Legend */}
       <div className="flex items-center justify-end gap-4 text-xs font-bold pe-2">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-          <span className="text-slate-600 dark:text-slate-300">المداخيل</span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#16A34A]" />
+          <span className="text-zinc-600 dark:text-zinc-300">المداخيل</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-red-500" />
-          <span className="text-slate-600 dark:text-slate-300">المصاريف</span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#DC2626]" />
+          <span className="text-zinc-600 dark:text-zinc-300">المصاريف</span>
         </div>
       </div>
 
@@ -181,7 +203,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 11, fill: 'currentColor' }}
-              className="text-slate-400 dark:text-slate-500 font-medium"
+              className="text-zinc-400 dark:text-zinc-500 font-medium"
               dy={8}
             />
             <YAxis
@@ -189,14 +211,14 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 11, fill: 'currentColor' }}
-              className="text-slate-400 dark:text-slate-500"
+              className="text-zinc-400 dark:text-zinc-500"
               tickFormatter={(val: number) => (isMasked ? '•••' : formatCompactNumber(val))}
             />
             <Tooltip content={<CustomBarTooltip />} />
             <Bar
               dataKey="incomeJod"
               name="المداخيل"
-              fill="#10B981"
+              fill={isDark ? '#34D399' : '#16A34A'}
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
               isAnimationActive={false}
@@ -204,7 +226,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
             <Bar
               dataKey="expenseJod"
               name="المصاريف"
-              fill="#EF4444"
+              fill={isDark ? '#F87171' : '#DC2626'}
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
               isAnimationActive={false}

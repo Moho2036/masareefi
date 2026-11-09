@@ -9,7 +9,6 @@ import { useCategories } from '../hooks/useCategories'
 import { useToast } from '../hooks/useToast'
 import { addCategory, updateCategory } from '../services/categories'
 import { triggerHaptic } from '../lib/haptics'
-import { getCategoryLucideIcon } from '../lib/categoryIcons'
 import { cn } from '../lib/cn'
 import type { Category, TxType } from '../types'
 
@@ -143,8 +142,6 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
     typeof window !== 'undefined' &&
     ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0))
 
-  const isMappedIcon = Boolean(getCategoryLucideIcon(icon))
-
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {/* Type toggle (locked when editing) */}
@@ -201,12 +198,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           </label>
           {/* Visual preview pill */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold">
-            <span
-              className="w-5 h-5 rounded-md flex items-center justify-center text-xs"
-              style={{ backgroundColor: `${color}1F` }}
-            >
-              <CategoryIcon icon={icon} color={color} size="sm" />
-            </span>
+            <CategoryIcon icon={icon} color={color} size="sm" />
             <span>{name || 'معاينة'}</span>
           </div>
         </div>
@@ -228,31 +220,22 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           ))}
         </div>
 
-        {/* Custom Emoji Input */}
+        {/* Custom Emoji / Keyword Icon Input */}
         <div className="flex items-center gap-2 mb-3">
           <div className="relative flex-1 flex items-center">
-            {isMappedIcon && (
-              <div className="absolute inset-0 pointer-events-none flex items-center gap-2 px-3">
-                <span
-                  className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: `${color}1F` }}
-                >
-                  <CategoryIcon icon={icon} color={color} size="sm" />
-                </span>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate font-medium">
-                  أيقونة خطية مختارة (أو اكتب إيموجي مخصص...)
-                </span>
-              </div>
-            )}
+            <span className="absolute start-2.5 w-6 h-6 flex items-center justify-center shrink-0 pointer-events-none z-10">
+              <CategoryIcon icon={icon} color={color} size="sm" />
+            </span>
             <input
               type="text"
               value={icon}
               onChange={(e) => {
-                const val = e.target.value.trim()
+                const val = e.target.value.trimStart()
                 if (!val) {
                   setIcon('')
                   return
                 }
+
                 const segments: string[] =
                   typeof Intl !== 'undefined' && 'Segmenter' in Intl
                     ? Array.from(
@@ -261,28 +244,28 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
                       )
                     : Array.from(val)
 
-                if (segments.length === 0) {
-                  setIcon('')
-                  return
+                const hasEmoji = /\p{Extended_Pictographic}/u.test(val)
+
+                // If mobile emoji picker inserted an emoji next to an existing emoji
+                if (
+                  hasEmoji &&
+                  segments.length > 1 &&
+                  (segments.includes(icon) || segments.some((s) => /\p{Extended_Pictographic}/u.test(s)))
+                ) {
+                  const newSegment = segments.find(
+                    (s) => s !== icon && /\p{Extended_Pictographic}/u.test(s)
+                  )
+                  if (newSegment) {
+                    setIcon(newSegment)
+                    return
+                  }
                 }
 
-                let chosen: string
-                if (segments.length > 1) {
-                  const newSegment = segments.find((s) => s !== icon)
-                  chosen = newSegment ?? segments[segments.length - 1]
-                } else {
-                  chosen = segments[0]
-                }
-
-                setIcon(chosen.slice(0, 16))
+                // Keyword (e.g. car, tag, wallet) or single emoji / custom text
+                setIcon(val.slice(0, 30))
               }}
               placeholder="أو اكتب/الصق إيموجي مخصص..."
-              className={cn(
-                'w-full px-3 py-1.5 text-xs rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-800 placeholder:text-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all',
-                isMappedIcon
-                  ? 'text-transparent caret-zinc-900 dark:caret-zinc-100'
-                  : 'text-zinc-800 dark:text-zinc-100'
-              )}
+              className="w-full ps-10 pe-3 py-1.5 text-xs rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-zinc-800 placeholder:text-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all text-zinc-800 dark:text-zinc-100"
               maxLength={30}
             />
           </div>

@@ -308,30 +308,43 @@ describe('notifications engine', () => {
     expect(farItem).toBeUndefined()
   })
 
-  it('generates budget deficit and spending percentage warnings', () => {
-    // 1. Deficit: Spending 600 JOD with 500 JOD income
-    const deficitItems = generateNotifications({
-      settings: baseSettings,
+  it('generates budget deficit warning when spending with zero or negative liquidity', () => {
+    // Zero income and negative prior balance (-50 JOD), spent 20 JOD
+    const items = generateNotifications({
+      settings: { ...baseSettings, rolloverBalance: true },
       today,
+      currentMonthIncomeFils: 0,
+      priorBalanceFils: -50000,
+      currentMonthSpendingFils: 20000,
+    })
+
+    const deficit = items.find((i) => i.id.startsWith('budget_deficit'))
+    expect(deficit).toBeDefined()
+    expect(deficit?.isUrgent).toBe(true)
+  })
+
+  it('generates budget notification ids formatted with fiscal month key respecting monthStartDay', () => {
+    // Date: Nov 27, 2026. With monthStartDay = 25, fiscal month key is '2026-11'
+    const nov27 = new Date(2026, 10, 27)
+    const itemsNov27 = generateNotifications({
+      settings: { ...baseSettings, monthStartDay: 25 },
+      today: nov27,
       currentMonthIncomeFils: 500000,
       currentMonthSpendingFils: 600000,
     })
+    const deficitNov = itemsNov27.find((i) => i.id.startsWith('budget_deficit'))
+    expect(deficitNov?.id).toBe('budget_deficit_2026-11')
 
-    const deficit = deficitItems.find((i) => i.id.startsWith('budget_deficit'))
-    expect(deficit).toBeDefined()
-    expect(deficit?.isUrgent).toBe(true)
-
-    // 2. 80%+ warning: Spending 420 JOD out of 500 JOD income (84%)
-    const warningItems = generateNotifications({
-      settings: baseSettings,
-      today,
+    // Date: Dec 1, 2026. Still inside the cycle 25 Nov – 24 Dec! Fiscal key must remain '2026-11'
+    const dec1 = new Date(2026, 11, 1)
+    const itemsDec1 = generateNotifications({
+      settings: { ...baseSettings, monthStartDay: 25 },
+      today: dec1,
       currentMonthIncomeFils: 500000,
-      currentMonthSpendingFils: 420000,
+      currentMonthSpendingFils: 600000,
     })
-
-    const warning = warningItems.find((i) => i.id.startsWith('budget_warning_80'))
-    expect(warning).toBeDefined()
-    expect(warning?.title).toContain('84%')
+    const deficitDec = itemsDec1.find((i) => i.id.startsWith('budget_deficit'))
+    expect(deficitDec?.id).toBe('budget_deficit_2026-11')
   })
 
   it('generates daily reminder when enabled', () => {
@@ -550,5 +563,48 @@ describe('notifications engine', () => {
     const personalAlert = items.find((i) => i.id === 'circle_my_unpaid_c-double_m1')
     expect(personalAlert).toBeDefined()
     expect(personalAlert?.message).toContain('80 د.أ') // 40.000 * 2 = 80.000
+  })
+
+  it('generates budget deficit alert when income is zero but user has expenses', () => {
+    const jan15 = new Date('2026-01-15T12:00:00Z')
+    const items = generateNotifications({
+      settings: { ...baseSettings, monthStartDay: 1, rolloverBalance: true },
+      today: jan15,
+      currentMonthIncomeFils: 0,
+      priorBalanceFils: 0, // no rollover savings
+      currentMonthSpendingFils: 45000, // spent 45 JOD
+    })
+
+    const deficitAlert = items.find((i) => i.id.startsWith('budget_deficit_'))
+    expect(deficitAlert).toBeDefined()
+    expect(deficitAlert?.isUrgent).toBe(true)
+    expect(deficitAlert?.id).toBe('budget_deficit_2026-01')
+  })
+
+  it('uses fiscalMonthKey reflecting custom monthStartDay for budget alerts', () => {
+    // On Jan 27, 2026 with monthStartDay: 25, we are in fiscal cycle '2026-01' (Jan 25 - Feb 24)
+    const jan27 = new Date('2026-01-27T12:00:00Z')
+    const items = generateNotifications({
+      settings: { ...baseSettings, monthStartDay: 25, rolloverBalance: false },
+      today: jan27,
+      currentMonthIncomeFils: 100000,
+      currentMonthSpendingFils: 95000, // 95% spent
+    })
+
+    const budgetWarning = items.find((i) => i.id.startsWith('budget_warning_80_'))
+    expect(budgetWarning).toBeDefined()
+    expect(budgetWarning?.id).toBe('budget_warning_80_2026-01')
+
+    // On Feb 5, 2026 (calendar month changed, but fiscal cycle Jan 25 - Feb 24 still ongoing)
+    // The id must remain 'budget_warning_80_2026-01' so read status is preserved and not duplicated!
+    const feb5 = new Date('2026-02-05T12:00:00Z')
+    const itemsFeb5 = generateNotifications({
+      settings: { ...baseSettings, monthStartDay: 25, rolloverBalance: false },
+      today: feb5,
+      currentMonthIncomeFils: 100000,
+      currentMonthSpendingFils: 95000,
+    })
+    const budgetWarningFeb5 = itemsFeb5.find((i) => i.id.startsWith('budget_warning_80_'))
+    expect(budgetWarningFeb5?.id).toBe('budget_warning_80_2026-01')
   })
 })

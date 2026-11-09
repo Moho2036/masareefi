@@ -1,5 +1,6 @@
 import { addDays, addMonths, addYears, format } from 'date-fns'
 import type { Frequency, Recurring } from '../types'
+import { getFinancialMonthRange } from './dates'
 
 /**
  * Advances a date by one interval according to frequency.
@@ -99,9 +100,26 @@ export interface DueOccurrencesResult {
  * occurrence 2026-02-15 -> 2
  * occurrence 2026-04-15 -> 4
  */
-export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): number {
-  const start = startDate instanceof Date ? startDate : new Date(startDate)
+export function getOccurrenceMonthIndex(
+  startDate: Date,
+  occurrenceDate: Date,
+  monthStartDay?: number
+): number {
+  const rawStart = startDate instanceof Date ? startDate : new Date(startDate)
   const occ = occurrenceDate instanceof Date ? occurrenceDate : new Date(occurrenceDate)
+
+  let start = rawStart
+  const isNearMonthBoundary = rawStart.getDate() === 1 || rawStart.getDate() >= 28
+  if (monthStartDay !== undefined && monthStartDay > 1 && isNearMonthBoundary) {
+    const candidateStart = new Date(
+      rawStart.getFullYear(),
+      rawStart.getMonth(),
+      Math.min(28, Math.max(1, Math.round(monthStartDay)))
+    )
+    if (candidateStart <= occ || rawStart > occ) {
+      start = candidateStart
+    }
+  }
 
   const s = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0)
   const t = new Date(occ.getFullYear(), occ.getMonth(), occ.getDate(), 12, 0, 0)
@@ -113,11 +131,19 @@ export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): 
     return diffMonths + 1
   }
 
+  const anchorDay = start.getDate()
+  const addMonthsWithAnchor = (base: Date, count: number) => {
+    const d = new Date(base.getFullYear(), base.getMonth() + count, 1, 12, 0, 0)
+    const daysInM = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+    d.setDate(Math.min(anchorDay, daysInM))
+    return d
+  }
+
   let approxMonths = (t.getFullYear() - s.getFullYear()) * 12 + (t.getMonth() - s.getMonth())
-  while (addMonths(s, approxMonths) > t) {
+  while (addMonthsWithAnchor(s, approxMonths) > t) {
     approxMonths--
   }
-  while (addMonths(s, approxMonths + 1) <= t) {
+  while (addMonthsWithAnchor(s, approxMonths + 1) <= t) {
     approxMonths++
   }
   return approxMonths + 1
@@ -127,8 +153,12 @@ export function getOccurrenceMonthIndex(startDate: Date, occurrenceDate: Date): 
  * Determines whether a recurring occurrence should be skipped.
  * For money circles, the user's turn month is exempt from paying an installment.
  */
-export function isOccurrenceSkipped(recurring: Recurring, occurrenceDate: Date): boolean {
-  const monthIdx = getOccurrenceMonthIndex(recurring.startDate, occurrenceDate)
+export function isOccurrenceSkipped(
+  recurring: Recurring,
+  occurrenceDate: Date,
+  monthStartDay?: number
+): boolean {
+  const monthIdx = getOccurrenceMonthIndex(recurring.startDate, occurrenceDate, monthStartDay)
   if (Array.isArray(recurring.skipMonths) && recurring.skipMonths.length > 0) {
     if (recurring.skipMonths.includes(monthIdx)) {
       return true
@@ -149,17 +179,27 @@ export function isOccurrenceSkipped(recurring: Recurring, occurrenceDate: Date):
  */
 export function calculateDueOccurrences(
   recurring: Recurring,
-  today: Date = new Date()
+  today: Date = new Date(),
+  monthStartDay?: number
 ): DueOccurrencesResult {
   const dates: Date[] = []
-  let curNextDate = new Date(recurring.nextDate.getTime())
+  const rawNextDate =
+    recurring.nextDate instanceof Date ? recurring.nextDate : new Date(recurring.nextDate)
+  let curNextDate = new Date(rawNextDate.getTime())
 
   // Normalize today and endDate to end-of-day so occurrences due today (even if at noon)
   // are processed even when the user opens the app in the morning.
-  const endOfToday = new Date(today.getTime())
+  const rawToday = today instanceof Date ? today : new Date(today)
+  const endOfToday = new Date(rawToday.getTime())
   endOfToday.setHours(23, 59, 59, 999)
 
-  const endOfEndDate = recurring.endDate ? new Date(recurring.endDate.getTime()) : null
+  const endOfEndDate = recurring.endDate
+    ? new Date(
+        recurring.endDate instanceof Date
+          ? recurring.endDate.getTime()
+          : new Date(recurring.endDate).getTime()
+      )
+    : null
   if (endOfEndDate) {
     endOfEndDate.setHours(23, 59, 59, 999)
   }
@@ -175,7 +215,7 @@ export function calculateDueOccurrences(
       break
     }
     // Only push to dates if this occurrence is NOT skipped
-    if (!isOccurrenceSkipped(recurring, curNextDate)) {
+    if (!isOccurrenceSkipped(recurring, curNextDate, monthStartDay)) {
       dates.push(new Date(curNextDate.getTime()))
     }
     curNextDate = advanceDateWithTargetDay(curNextDate, recurring.frequency, targetDay)
@@ -306,7 +346,7 @@ export function getNextCircleDueDate(
     return addMonths(start, dueMonth - 1)
   }
 
-  return addMonths(start, Math.max(0, membersCount - 1))
+  return addMonths(start, membersCount)
 }
 
 export interface MonthlyEquivalentResult {
@@ -323,7 +363,8 @@ export interface MonthlyEquivalentResult {
  */
 export function calculateMonthlyEquivalent(
   items: Recurring[],
-  refDate: Date = new Date()
+  refDate: Date = new Date(),
+  monthStartDay?: number
 ): MonthlyEquivalentResult {
   let monthlyIncome = 0
   let monthlyExpense = 0
@@ -347,7 +388,7 @@ export function calculateMonthlyEquivalent(
     // For money circles, check if this month's occurrence is exempt from installment payment.
     // If referenceDate is the start of a custom financial cycle (e.g. Sep 25 for Oct),
     // nextDate might fall in [refDate, addMonths(refDate, 1)) in the upcoming calendar month (e.g. Oct 1..Oct 25).
-    let isSkipped = isOccurrenceSkipped(item, refDate)
+    let isSkipped = isOccurrenceSkipped(item, refDate, monthStartDay)
     if (!isSkipped && item.nextDate) {
       const nextDate = item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)
       const cycleEnd = addMonths(refDate, 1)
@@ -360,8 +401,14 @@ export function calculateMonthlyEquivalent(
           nextDate.getDate() <= 10 &&
           refDate.getHours() === 0 &&
           refDate.getMinutes() === 0
-        if (isSameCalendarMonth || isCustomCycleStartAnchor) {
-          isSkipped = isOccurrenceSkipped(item, nextDate)
+        const isFinancialCycleMatch =
+          typeof monthStartDay === 'number' && monthStartDay > 1
+            ? nextDate >= getFinancialMonthRange(refDate, monthStartDay).start &&
+              nextDate < getFinancialMonthRange(refDate, monthStartDay).end
+            : false
+
+        if (isSameCalendarMonth || isCustomCycleStartAnchor || isFinancialCycleMatch) {
+          isSkipped = isOccurrenceSkipped(item, nextDate, monthStartDay)
         }
       }
     }

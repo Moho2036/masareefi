@@ -11,6 +11,7 @@ import {
 export interface UseCurrencyResult {
   currency: string
   config: CurrencyInfo
+  hideBalances: boolean
   format: (fils: number, opts?: FormatOptions) => string
   formatWithSign: (fils: number, type: 'expense' | 'income', opts?: FormatOptions) => string
 }
@@ -55,7 +56,7 @@ export function useCurrency(): UseCurrencyResult {
   )
 
   return useMemo(
-    () => ({ currency, config, format, formatWithSign }),
-    [currency, config, format, formatWithSign]
+    () => ({ currency, config, hideBalances, format, formatWithSign }),
+    [currency, config, hideBalances, format, formatWithSign]
   )
 }

@@ -73,6 +73,23 @@ describe('CategoryForm Custom Emoji Input', () => {
     expect(emojiInput.value).toBe('')
   })
 
+  it('allows typing icon keywords like car and tag without grapheme truncation', () => {
+    render(
+      <CategoryForm
+        isOpen={true}
+        onClose={vi.fn()}
+        defaultType="expense"
+      />
+    )
+
+    const emojiInput = screen.getByPlaceholderText(/أو اكتب\/الصق إيموجي مخصص/i) as HTMLInputElement
+    fireEvent.change(emojiInput, { target: { value: 'car' } })
+    expect(emojiInput.value).toBe('car')
+
+    fireEvent.change(emojiInput, { target: { value: 'wallet' } })
+    expect(emojiInput.value).toBe('wallet')
+  })
+
   it('updates default icon and color when switching type from expense to income and vice versa', () => {
     render(
       <CategoryForm

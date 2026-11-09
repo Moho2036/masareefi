@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  parseNumeric,
   clampWorkHoursPerDay,
   clampWorkDaysPerWeek,
   clampWorkDaysPerMonth,
@@ -59,6 +60,33 @@ describe('workHours logic', () => {
       expect(clampWorkDaysPerMonth(1)).toBe(1)
       expect(clampWorkDaysPerMonth(22)).toBe(22)
       expect(clampWorkDaysPerMonth(31)).toBe(31)
+    })
+  })
+
+  describe('parseNumeric', () => {
+    it('handles thousands separator comma when followed by 3 digits', () => {
+      expect(parseNumeric('12,500')).toBe(12500)
+      expect(parseNumeric('1,000')).toBe(1000)
+      expect(parseNumeric('1,500')).toBe(1500)
+      expect(parseNumeric('1,000,000')).toBe(1000000)
+    })
+
+    it('handles decimal comma when not followed by 3 digits or when starting with 0', () => {
+      expect(parseNumeric('50,5')).toBe(50.5)
+      expect(parseNumeric('50,25')).toBe(50.25)
+      expect(parseNumeric('0,5')).toBe(0.5)
+      expect(parseNumeric('0,500')).toBe(0.5)
+    })
+
+    it('handles Arabic decimal comma (٫) and Arabic comma (،)', () => {
+      expect(parseNumeric('50٫5')).toBe(50.5)
+      expect(parseNumeric('50،5')).toBe(50.5)
+      expect(parseNumeric('12،500')).toBe(12500)
+    })
+
+    it('handles empty or invalid string gracefully', () => {
+      expect(parseNumeric('')).toBe(0)
+      expect(parseNumeric('abc')).toBe(0)
     })
   })
 })

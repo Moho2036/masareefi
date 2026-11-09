@@ -61,6 +61,8 @@ export interface ForecastResult {
   // Next cycle soon obligations (within 3 days of new cycle)
   nextCycleSoonObligationsFils?: number
   nextCycleSoonCount?: number
+  nextCycleSoonRecurringCount?: number
+  nextCycleSoonDebtCount?: number
 }
 
 /**
@@ -291,6 +293,8 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   // 3b. Proactive horizon for obligations due in next cycle within 3 days
   let nextCycleSoonObligationsFils = 0
   let nextCycleSoonCount = 0
+  let nextCycleSoonRecurringCount = 0
+  let nextCycleSoonDebtCount = 0
 
   if (isCurrentMonth) {
     const threeDaysHorizon = new Date(
@@ -328,6 +332,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
             if (!isOccurrenceSkipped(rec, curr)) {
               nextCycleSoonObligationsFils += rec.amountFils || 0
               nextCycleSoonCount++
+              nextCycleSoonRecurringCount++
             }
           }
         }
@@ -344,6 +349,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
           if (dueDay >= rangeEnd && dueDay <= threeDaysHorizon) {
             nextCycleSoonObligationsFils += remainingUnpaid
             nextCycleSoonCount++
+            nextCycleSoonDebtCount++
           }
         }
       }
@@ -369,10 +375,30 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   const dailySafeFils = remainingDays > 0 && freeBalance > 0 ? Math.floor(freeBalance / remainingDays) : 0
   const actualDailySpendFils = elapsedDays > 0 ? Math.round(pastDiscretionaryExpense / elapsedDays) : 0
 
+  // In the first few days of the current month (elapsedDays < 5), extrapolating a single early expense (e.g. bulk groceries)
+  // over the entire remaining month causes wild false projections. When spending rate exceeds the baseline discretionary budget,
+  // we blend the observed daily rate with the monthly baseline daily allowance.
+  const baselineDailyBudgetFils =
+    totalDays > 0 && freeBalance + pastDiscretionaryExpense > 0
+      ? Math.floor((freeBalance + pastDiscretionaryExpense) / totalDays)
+      : dailySafeFils
+
+  let projectedDailySpendFils = actualDailySpendFils
+  if (
+    isCurrentMonth &&
+    elapsedDays > 0 &&
+    elapsedDays < 5 &&
+    actualDailySpendFils > baselineDailyBudgetFils &&
+    baselineDailyBudgetFils > 0
+  ) {
+    const weight = elapsedDays / 5
+    projectedDailySpendFils = Math.round(actualDailySpendFils * weight + baselineDailyBudgetFils * (1 - weight))
+  }
+
   // 5. Month-End Forecast
   const futureUnelapsedDays = Math.max(0, totalDays - elapsedDays)
   const projectedDiscretionary =
-    isPastMonth || isFutureMonth ? 0 : actualDailySpendFils * futureUnelapsedDays
+    isPastMonth || isFutureMonth ? 0 : projectedDailySpendFils * futureUnelapsedDays
   const projectedExpense =
     currentExpense +
     projectedDiscretionary +
@@ -442,14 +468,25 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     } else {
       healthStatus = 'safe'
     }
+  } else if (isFutureMonth) {
+    // In future months, lack of recorded salary should not trigger red danger alert.
+    // Only flag danger if starting with an actual negative rollover deficit.
+    if (rolloverBalance < 0) {
+      healthStatus = 'danger'
+    } else if (freeBalance < 0) {
+      healthStatus = 'warning'
+    } else {
+      healthStatus = 'safe'
+    }
   } else if (
     freeBalance < 0 ||
-    isDeficitProjected ||
+    (isDeficitProjected && (elapsedDays >= 3 || freeBalance <= 0)) ||
     (freeBalance === 0 &&
       (upcomingRecurringExpenses > 0 || upcomingDebtObligations > 0 || currentExpense > 0))
   ) {
     healthStatus = 'danger'
   } else if (
+    isDeficitProjected ||
     actualDailySpendFils > dailySafeFils ||
     (isCurrentMonth &&
       availableBalance - futureDatedManualIncome < 0 &&
@@ -495,5 +532,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
     recommendedDailyReductionFils,
     nextCycleSoonObligationsFils,
     nextCycleSoonCount,
+    nextCycleSoonRecurringCount,
+    nextCycleSoonDebtCount,
   }
 }

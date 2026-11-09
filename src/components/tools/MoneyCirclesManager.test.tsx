@@ -181,11 +181,11 @@ describe('MoneyCirclesManager Component', () => {
     const deleteBtn = screen.getByRole('button', { name: /حذف الجمعية/i })
     fireEvent.click(deleteBtn)
 
-    // Verify modal and transaction cleanup checkbox appear
+    // Verify modal and transaction cleanup switch appear
     expect(screen.getByText('تأكيد حذف الجمعية')).toBeInTheDocument()
-    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة/i)
-    expect(checkbox).toBeInTheDocument()
-    expect((checkbox as HTMLInputElement).checked).toBe(false)
+    const toggle = screen.getByRole('switch', { name: /حذف الأقساط والإيداعات المسجلة/i })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
 
     // Confirm deletion without checking
     const confirmBtn = screen.getByRole('button', { name: 'نعم، حذف الجمعية' })
@@ -206,9 +206,9 @@ describe('MoneyCirclesManager Component', () => {
     const deleteBtn = screen.getByRole('button', { name: /حذف الجمعية/i })
     fireEvent.click(deleteBtn)
 
-    const checkbox = screen.getByLabelText(/حذف الأقساط والإيداعات المسجلة/i)
-    fireEvent.click(checkbox)
-    expect((checkbox as HTMLInputElement).checked).toBe(true)
+    const toggle = screen.getByRole('switch', { name: /حذف الأقساط والإيداعات المسجلة/i })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
 
     const confirmBtn = screen.getByRole('button', { name: 'نعم، حذف الجمعية' })
     fireEvent.click(confirmBtn)
@@ -638,6 +638,10 @@ describe('MoneyCirclesManager Component', () => {
 
     const completeBtn = screen.getAllByRole('button', { name: /إنهاء الجمعية/i })[0]
     fireEvent.click(completeBtn)
+
+    expect(screen.getByText('تأكيد إنهاء الجمعية')).toBeInTheDocument()
+    const confirmCompleteBtn = screen.getByRole('button', { name: 'تأكيد الإنهاء' })
+    fireEvent.click(confirmCompleteBtn)
 
     await waitFor(() => {
       expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
@@ -1070,13 +1074,13 @@ describe('MoneyCirclesManager Component', () => {
     fireEvent.click(expandBtn)
 
     // Member row swap button
-    const swapBtns = screen.getAllByTitle(/تبديل الدور ⇄/i)
+    const swapBtns = screen.getAllByTitle(/تبديل الدور/i)
     expect(swapBtns.length).toBeGreaterThanOrEqual(1)
     fireEvent.click(swapBtns[0]) // click swap for member 1
 
     expect(screen.getByText(/تبديل الدور بين الأعضاء/i)).toBeInTheDocument()
 
-    const confirmSwapBtn = screen.getByRole('button', { name: /تأكيد تبديل الدور ⇄/i })
+    const confirmSwapBtn = screen.getByRole('button', { name: /تأكيد تبديل الدور/i })
     fireEvent.click(confirmSwapBtn)
 
     await waitFor(() => {
@@ -1177,6 +1181,76 @@ describe('MoneyCirclesManager Component', () => {
         'mem_user',
         expect.any(Number),
         expect.anything()
+      )
+    })
+  })
+
+  it('displays double share payout text with gross and net payout deduction in create modal', () => {
+    render(<MoneyCirclesManager />)
+
+    const createBtn = screen.getByRole('button', { name: /إنشاء جمعية جديدة/i })
+    fireEvent.click(createBtn)
+
+    const doubleShareBtn = screen.getByRole('button', { name: /سهمان \(دورين\)/i })
+    fireEvent.click(doubleShareBtn)
+
+    expect(screen.getByText(/المبلغ الإجمالي المقبوض:/i)).toBeInTheDocument()
+    expect(screen.getByText(/الصافي المودع بعد استقطاع قسط الشهرين:/i)).toBeInTheDocument()
+  })
+
+  it('computes paidMembersCount accurately without false late badge for manager in double share circle', () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        isManager: true,
+        shareType: 'double',
+        myTurnMonth: 1,
+        secondTurnMonth: 3,
+        membersCount: 5,
+        monthlyAmountFils: 100000,
+        startDate: new Date(),
+        members: [
+          { id: 'm1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+          { id: 'm2', name: 'عضو 2', turnMonth: 2, paidMonths: [1] },
+          { id: 'm3', name: 'أنت (سهم 2)', turnMonth: 3, paidMonths: [] },
+          { id: 'm4', name: 'عضو 4', turnMonth: 4, paidMonths: [1] },
+          { id: 'm5', name: 'عضو 5', turnMonth: 5, paidMonths: [1] },
+        ],
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    // Expand manager table
+    const expandBtn = screen.getByRole('button', { name: /تتبع دفعات الأعضاء وسجل السداد/i })
+    fireEvent.click(expandBtn)
+
+    // In month 1, all 3 non-user members have paid, and user 2 shares are exempt.
+    // Total paid should be 5 out of 5!
+    expect(screen.getByText(/5 من 5 دفعوا/i)).toBeInTheDocument()
+    // Should NOT show any late indicator
+    expect(screen.queryByText(/متأخر/i)).not.toBeInTheDocument()
+  })
+
+  it('allows restoring a completed circle back to active status', async () => {
+    mockCircles = [
+      {
+        ...sampleCircle,
+        status: 'completed',
+      },
+    ]
+
+    render(<MoneyCirclesManager />)
+
+    const restoreBtn = screen.getByRole('button', { name: /استعادة للنشطة/i })
+    fireEvent.click(restoreBtn)
+
+    await waitFor(() => {
+      expect(circleServices.updateMoneyCircle).toHaveBeenCalledWith(
+        'user-123',
+        'circle-1',
+        { status: 'active' },
+        expect.any(Object)
       )
     })
   })

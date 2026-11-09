@@ -194,7 +194,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             aria-haspopup="listbox"
             aria-expanded={isOpen}
             className={cn(
-              'w-full h-11 flex items-center justify-between rounded-xl border bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 ps-3.5 pe-3 py-2 text-base sm:text-sm transition-all outline-none cursor-pointer text-start',
+              'w-full flex items-center justify-between rounded-xl border bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 ps-3.5 pe-3 py-2 text-base sm:text-sm transition-all outline-none cursor-pointer text-start',
+              !className?.includes('h-') && 'h-11',
               'border-[#E4E4E7] dark:border-[#27272A] hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20',
               isOpen && 'border-blue-600 ring-2 ring-blue-600/20',
               error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
@@ -216,7 +217,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           {/* Custom Swiss Dropdown Popover */}
           {isOpen && !disabled && (
             <div
-              className="absolute start-0 end-0 top-[calc(100%+0.35rem)] z-50 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl p-1.5 max-h-60 overflow-y-auto space-y-0.5 select-none animate-slide-down"
+              className="absolute start-0 end-0 top-[calc(100%+0.35rem)] z-50 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-1.5 max-h-60 overflow-y-auto space-y-0.5 select-none animate-slide-down"
               role="listbox"
             >
               {normalizedOptions.map((opt) => {

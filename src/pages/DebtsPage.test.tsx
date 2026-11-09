@@ -151,43 +151,43 @@ describe('DebtsPage Component', () => {
     expect(screen.getByText('خالد عبد الله')).toBeInTheDocument()
   })
 
-  it('opens delete confirmation modal with deleteTransactions unchecked by default and calls deleteDebt with false', async () => {
+  it('opens delete confirmation modal with deleteTransactions checked by default to prevent orphaned records', async () => {
     render(<DebtsPage />)
     const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
     fireEvent.click(deleteButtons[0]) // أحمد محمود has paidFils > 0
 
     expect(screen.getByText(/تأكيد حذف الدين/i)).toBeInTheDocument()
-    const checkbox = screen.getByRole('checkbox', {
+    const toggle = screen.getByRole('switch', {
       name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
-    }) as HTMLInputElement
-    expect(checkbox).toBeInTheDocument()
-    expect(checkbox.checked).toBe(false)
+    })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
 
     // Click confirm delete
     const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
-      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: false })
+      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: true })
     })
   })
 
-  it('allows checking deleteTransactions and calls deleteDebt with deleteTransactions = true', async () => {
+  it('allows unchecking deleteTransactions and calls deleteDebt with deleteTransactions = false', async () => {
     render(<DebtsPage />)
     const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
     fireEvent.click(deleteButtons[0])
 
-    const checkbox = screen.getByRole('checkbox', {
+    const toggle = screen.getByRole('switch', {
       name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
-    }) as HTMLInputElement
-    fireEvent.click(checkbox)
-    expect(checkbox.checked).toBe(true)
+    })
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
 
     const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
-      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: true })
+      expect(deleteDebt).toHaveBeenCalledWith('user-123', 'debt-1', { deleteTransactions: false })
     })
   })
 
@@ -200,10 +200,10 @@ describe('DebtsPage Component', () => {
     fireEvent.click(deleteButtons[1])
 
     await waitFor(() => {
-      const checkbox = screen.getByRole('checkbox', {
+      const toggle = screen.getByRole('switch', {
         name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
       })
-      expect(checkbox).toBeInTheDocument()
+      expect(toggle).toBeInTheDocument()
     })
   })
 

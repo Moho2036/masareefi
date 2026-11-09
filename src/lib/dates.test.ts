@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  toWesternDigits,
   getFinancialMonthRange,
   formatMonthLabel,
   formatFinancialMonthLabel,
@@ -138,8 +139,33 @@ describe('dates lib', () => {
       expect(formatDayHeader(saturdayOct3, sundayOct4)).toBe('أمس - السبت 3 أكتوبر')
     })
 
-    it('formats older days without today/yesterday prefix', () => {
+    it('formats older days without today/yesterday prefix in the current year', () => {
       expect(formatDayHeader(thursdayOct1, sundayOct4)).toBe('الخميس 1 أكتوبر')
+    })
+
+    it('includes year when date is in a past or future year', () => {
+      const pastDate = new Date(2025, 9, 1) // Oct 1, 2025
+      const futureDate = new Date(2027, 9, 1) // Oct 1, 2027
+      expect(formatDayHeader(pastDate, sundayOct4)).toBe('الأربعاء 1 أكتوبر 2025')
+      expect(formatDayHeader(futureDate, sundayOct4)).toBe('الجمعة 1 أكتوبر 2027')
+    })
+  })
+
+  describe('toWesternDigits', () => {
+    it('normalizes Arabic-Indic digits to Western ASCII digits', () => {
+      expect(toWesternDigits('٥٠')).toBe('50')
+      expect(toWesternDigits('المبلغ: ١٢٣.٤٥')).toBe('المبلغ: 123.45')
+    })
+
+    it('normalizes Eastern Arabic-Indic/Persian/Urdu digits to Western digits', () => {
+      expect(toWesternDigits('۵۰')).toBe('50')
+      expect(toWesternDigits('۱۲۳۴۵۶۷۸۹۰')).toBe('1234567890')
+    })
+
+    it('safely handles empty, null or undefined input', () => {
+      expect(toWesternDigits('')).toBe('')
+      expect(toWesternDigits(null)).toBe('')
+      expect(toWesternDigits(undefined)).toBe('')
     })
   })
 

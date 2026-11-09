@@ -87,7 +87,7 @@ export const AppShell: React.FC = () => {
   const isOnline = useOnlineStatus()
   const { goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
 
-  const isMonthPage = pathname === '/' || pathname === '/transactions'
+  const isMonthPage = pathname === '/' || pathname === '/transactions' || pathname === '/reports'
 
   const getPageTitle = (path: string): string => {
     if (path === '/') return 'لوحة التحكم'
@@ -274,11 +274,17 @@ export const AppShell: React.FC = () => {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm border border-blue-200 dark:border-blue-800 shrink-0">
+                <div
+                  style={{ backgroundColor: settings?.avatarColor || undefined }}
+                  className={cn(
+                    'w-9 h-9 rounded-full text-white font-bold flex items-center justify-center text-sm shrink-0 transition-colors',
+                    !settings?.avatarColor && 'bg-blue-600 dark:bg-blue-600'
+                  )}
+                >
                   {avatarInitial}
                 </div>
               )}
-              <div className="truncate text-start">
+              <div className="truncate text-start min-w-0 flex-1 max-w-[130px]">
                 <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                   {displayName}
                 </div>
@@ -318,8 +324,14 @@ export const AppShell: React.FC = () => {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-white flex items-center justify-center shadow-xs">
-                  <img src="/icons/icon.svg" alt="بَصير" className="w-5 h-5 object-contain" />
+                <div
+                  style={{ backgroundColor: settings?.avatarColor || undefined }}
+                  className={cn(
+                    'w-8 h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs transition-colors',
+                    !settings?.avatarColor && 'bg-blue-600'
+                  )}
+                >
+                  {avatarInitial}
                 </div>
               )}
             </Link>
@@ -387,12 +399,11 @@ export const AppShell: React.FC = () => {
                   <button
                     type="button"
                     onClick={goToCurrentMonth}
-                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
+                    className="press-scale hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
                     title="العودة إلى الشهر الحالي"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span className="hidden sm:inline">الشهر الحالي</span>
-                    <span className="sm:hidden">اليوم</span>
+                    <span>الشهر الحالي</span>
                   </button>
                 )}
                 <MonthSelector />

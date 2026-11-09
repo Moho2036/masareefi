@@ -82,6 +82,22 @@ export async function updateCategory(
   }
 }
 
+/**
+ * Atomically updates the sort order of multiple categories using a single Firestore batch.
+ */
+export async function reorderCategories(
+  uid: string,
+  categoryIds: string[]
+): Promise<void> {
+  if (categoryIds.length === 0) return
+  const batch = writeBatch(db)
+  categoryIds.forEach((id, idx) => {
+    const docRef = doc(db, 'users', uid, 'categories', id)
+    batch.update(docRef, { order: idx })
+  })
+  await commitFirestoreWrite(batch.commit())
+}
+
 export async function archiveCategory(
   uid: string,
   id: string,

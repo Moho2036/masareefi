@@ -23,6 +23,7 @@ interface SharedSubscription {
   initialized: boolean
   unsubscribe: () => void
   subscribers: Set<SubscriptionListener>
+  cleanupTimer?: ReturnType<typeof setTimeout> | null
 }
 
 // Module-level Shared Subscription Pool keyed by: `${uid}_${hasRange ? `${startTime}_${endTime}` : 'all'}`
@@ -87,6 +88,10 @@ function subscribeToPool(
       unsubscribeFirestore = subscribeAllTransactions(uid, onNext, onError)
     }
   } else {
+    if (entry.cleanupTimer) {
+      clearTimeout(entry.cleanupTimer)
+      entry.cleanupTimer = null
+    }
     entry.subscribers.add(listener)
     if (entry.initialized) {
       listener(entry.data, false, entry.error)
@@ -100,8 +105,15 @@ function subscribeToPool(
     currentEntry.subscribers.delete(listener)
 
     if (currentEntry.subscribers.size === 0) {
-      currentEntry.unsubscribe()
-      subscriptionPool.delete(key)
+      if (currentEntry.cleanupTimer) {
+        clearTimeout(currentEntry.cleanupTimer)
+      }
+      currentEntry.cleanupTimer = setTimeout(() => {
+        if (currentEntry.subscribers.size === 0) {
+          currentEntry.unsubscribe()
+          subscriptionPool.delete(key)
+        }
+      }, 5000)
     }
   }
 }

@@ -136,6 +136,14 @@ export const SettingsPage: React.FC = () => {
     setCustomCurrencyInput(isCustom ? settings?.currency || '' : '')
   }
 
+  const [prevCustomDecimals, setPrevCustomDecimals] = useState(settings?.customCurrencyDecimals)
+  if (settings?.customCurrencyDecimals !== prevCustomDecimals) {
+    setPrevCustomDecimals(settings?.customCurrencyDecimals)
+    if (typeof settings?.customCurrencyDecimals === 'number') {
+      setCustomDecimals(settings.customCurrencyDecimals)
+    }
+  }
+
   const [prevMonthStartDay, setPrevMonthStartDay] = useState(settings?.monthStartDay)
   if (settings?.monthStartDay !== prevMonthStartDay) {
     setPrevMonthStartDay(settings?.monthStartDay)
@@ -186,6 +194,7 @@ export const SettingsPage: React.FC = () => {
     return localStorage.getItem(bioKey) === 'true'
   })
   const [showPinModal, setShowPinModal] = useState(false)
+  const [showRemovePinModal, setShowRemovePinModal] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinConfirmInput, setPinConfirmInput] = useState('')
   const [pinError, setPinError] = useState<string | null>(null)
@@ -206,10 +215,13 @@ export const SettingsPage: React.FC = () => {
   const reauthenticatedAtRef = useRef<number>(0)
   const pendingActionRef = useRef<'delete-account' | null>(null)
 
-  const isGoogleOnly = Boolean(
-    user?.providerData?.length &&
-      user.providerData.every((p) => p.providerId === 'google.com')
+  const hasGoogleProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'google.com')
   )
+  const hasPasswordProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'password')
+  )
+  const isGoogleOnly = Boolean(hasGoogleProvider && !hasPasswordProvider)
 
   // Sync PIN state on pinKey change during render
   const [prevPinKey, setPrevPinKey] = useState(pinKey)
@@ -483,7 +495,8 @@ export const SettingsPage: React.FC = () => {
           return false
         }
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
-        if (txDate >= currentCycle.end) {
+        const now = new Date()
+        if (txDate > now || txDate >= currentCycle.end) {
           return false
         }
         if (settings?.rolloverBalance === false) {
@@ -580,18 +593,20 @@ export const SettingsPage: React.FC = () => {
   // PIN setup
   const handleSavePin = async () => {
     setPinError(null)
-    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+    const cleanPin = toWesternDigits(pinInput).replace(/\D/g, '')
+    const cleanConfirm = toWesternDigits(pinConfirmInput).replace(/\D/g, '')
+    if (cleanPin.length !== 4 || !/^\d{4}$/.test(cleanPin)) {
       setPinError('رمز PIN يجب أن يتكون من 4 أرقام')
       return
     }
-    if (pinInput !== pinConfirmInput) {
+    if (cleanPin !== cleanConfirm) {
       setPinError('رمزا الدخول غير متطابقين')
       return
     }
     if (!pinKey) return
 
     try {
-      const hash = await hashPin(pinInput)
+      const hash = await hashPin(cleanPin)
       localStorage.setItem(pinKey, hash)
       if (legacyPinKey) {
         localStorage.setItem(legacyPinKey, hash)
@@ -676,6 +691,10 @@ export const SettingsPage: React.FC = () => {
   // CSV Export
   const handleExportAllCsv = async () => {
     if (!user) return
+    if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      showToast('يجب الاتصال بالإنترنت لإتمام تصدير البيانات', 'error')
+      return
+    }
     setExportingCsv(true)
     try {
       const [txs, debts] = await Promise.all([
@@ -716,6 +735,10 @@ export const SettingsPage: React.FC = () => {
   // Backup & Restore
   const handleDownloadJsonBackup = async () => {
     if (!user) return
+    if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      showToast('يجب الاتصال بالإنترنت لإتمام تنزيل النسخة الاحتياطية', 'error')
+      return
+    }
     setExportingJson(true)
     try {
       const backup = await createFullBackup(user.uid)
@@ -740,6 +763,12 @@ export const SettingsPage: React.FC = () => {
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    const MAX_BACKUP_FILE_BYTES = 20 * 1024 * 1024 // 20 MB
+    if (file.size > MAX_BACKUP_FILE_BYTES) {
+      showToast('حجم الملف كبير جداً (الحد الأقصى 20 ميغابايت)، يرجى اختيار ملف نسخة احتياطية صالح', 'error')
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = (event) => {
@@ -797,6 +826,10 @@ export const SettingsPage: React.FC = () => {
   // Danger Zone Handlers
   const handleResetUserData = async () => {
     if (!user || resetConfirmText.trim() !== 'تصفير') return
+    if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      showToast('يجب الاتصال بالإنترنت لإتمام تصفير البيانات', 'error')
+      return
+    }
     setResettingData(true)
     try {
       await resetUserData(user.uid)
@@ -816,8 +849,15 @@ export const SettingsPage: React.FC = () => {
     if (!user) return
     setDeletingAccount(true)
     try {
+      // 1. Force fresh token validation to ensure credentials are active
+      await user.getIdToken(true)
+
+      // 2. Wipe Firestore data while credentials and request.auth are guaranteed active
       await deleteUserFirestoreData(user.uid)
+
+      // 3. Immediately delete Firebase Auth account
       await deleteUserAccount()
+
       if (typeof window !== 'undefined' && window.localStorage) {
         Object.keys(localStorage).forEach((k) => {
           if (k.includes(user.uid)) localStorage.removeItem(k)
@@ -841,36 +881,34 @@ export const SettingsPage: React.FC = () => {
 
   const handleDeleteAccount = async () => {
     if (!user) return
-    if (!isOnline) {
+    if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
       showToast('يجب الاتصال بالإنترنت لإتمام حذف الحساب', 'error')
       return
     }
     if (deleteConfirmText.trim() !== 'حذف نهائي') return
 
-    const FOUR_MINUTES_MS = 4 * 60 * 1000
-    if (user.metadata?.lastSignInTime) {
-      const elapsedSinceSignIn = Date.now() - new Date(user.metadata.lastSignInTime).getTime()
-      const elapsedSinceReauth = Date.now() - reauthenticatedAtRef.current
-      if (elapsedSinceSignIn > FOUR_MINUTES_MS && elapsedSinceReauth > FOUR_MINUTES_MS) {
-        pendingActionRef.current = 'delete-account'
-        setShowDeleteModal(false)
-        setShowReauthModal(true)
-        return
-      }
+    // Ensure fresh re-authentication before initiating data deletion
+    const ONE_MINUTE_MS = 60 * 1000
+    const elapsedSinceReauth = Date.now() - reauthenticatedAtRef.current
+    if (elapsedSinceReauth > ONE_MINUTE_MS) {
+      pendingActionRef.current = 'delete-account'
+      setShowDeleteModal(false)
+      setShowReauthModal(true)
+      return
     }
 
     await executeAccountDeletion()
   }
 
-  const handleReauthAndComplete = async () => {
+  const handleReauthWithPassword = async () => {
     if (!user) return
+    if (!reauthPassword.trim()) {
+      showToast('يرجى إدخال كلمة المرور', 'error')
+      return
+    }
     setReauthenticating(true)
     try {
-      if (reauthPassword) {
-        await reauthenticateCurrentPassword(reauthPassword)
-      } else {
-        await reauthenticateCurrentGoogle()
-      }
+      await reauthenticateCurrentPassword(reauthPassword)
       reauthenticatedAtRef.current = Date.now()
       setShowReauthModal(false)
       setReauthPassword('')
@@ -881,8 +919,29 @@ export const SettingsPage: React.FC = () => {
         showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
       }
     } catch (err) {
-      console.error('Re-auth failed:', err)
-      showToast('فشل تأكيد الهوية، يرجى التحقق من كلمة المرور', 'error')
+      console.error('Password re-auth failed:', err)
+      showToast('كلمة المرور غير صحيحة، يرجى التحقق والمحاولة ثانية', 'error')
+    } finally {
+      setReauthenticating(false)
+    }
+  }
+
+  const handleReauthWithGoogle = async () => {
+    if (!user) return
+    setReauthenticating(true)
+    try {
+      await reauthenticateCurrentGoogle()
+      reauthenticatedAtRef.current = Date.now()
+      setShowReauthModal(false)
+      if (pendingActionRef.current === 'delete-account') {
+        pendingActionRef.current = null
+        await executeAccountDeletion()
+      } else {
+        showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
+      }
+    } catch (err) {
+      console.error('Google re-auth failed:', err)
+      showToast('فشل تأكيد الهوية عبر Google، يرجى المحاولة مرة أخرى', 'error')
     } finally {
       setReauthenticating(false)
     }
@@ -1028,7 +1087,7 @@ export const SettingsPage: React.FC = () => {
 
           {/* Email Verification & Cloud Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+            <div className="p-3.5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-zinc-400" />
                 <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
@@ -1036,13 +1095,13 @@ export const SettingsPage: React.FC = () => {
                 </span>
               </div>
               {user?.emailVerified ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[11px] font-bold">
+                <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs font-bold">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   مؤكد
                 </span>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 text-[11px] font-bold">
+                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-bold">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     غير مؤكد
                   </span>
@@ -1057,14 +1116,14 @@ export const SettingsPage: React.FC = () => {
               )}
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+            <div className="p-3.5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Database className="w-4 h-4 text-blue-500" />
                 <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                   المزامنة السحابية
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[11px] font-bold">
+              <span className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 text-xs font-bold">
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                 متصل بالسحابة
               </span>
@@ -1541,7 +1600,7 @@ export const SettingsPage: React.FC = () => {
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={handleRemovePin}
+                    onClick={() => setShowRemovePinModal(true)}
                     className="font-bold text-xs"
                   >
                     إلغاء القفل
@@ -1621,7 +1680,7 @@ export const SettingsPage: React.FC = () => {
                 تثبيت التطبيق على جهازك
               </Button>
             ) : isIOS ? (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 text-xs font-bold shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold shrink-0">
                 <Smartphone className="w-4 h-4" />
                 <span>أجهزة آبل iOS</span>
               </div>
@@ -1639,16 +1698,16 @@ export const SettingsPage: React.FC = () => {
 
           {/* iOS Instructions */}
           {isIOS && !isInstalled && (
-            <div className="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/50 space-y-2.5">
-              <div className="flex items-center gap-2 text-xs font-bold text-sky-800 dark:text-sky-300">
-                <Share2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span>خطوات تثبيت التطبيق على الآيفون والآيباد (iOS Safari):</span>
               </div>
               <ol className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300 list-decimal list-inside ps-1">
                 <li className="leading-relaxed">
                   اضغط على زر{' '}
                   <span className="font-bold text-zinc-900 dark:text-white inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-2xs">
-                    المشاركة (Share <Share2 className="w-3 h-3 inline text-sky-500" />)
+                    المشاركة (Share <Share2 className="w-3 h-3 inline text-blue-600 dark:text-blue-400" />)
                   </span>{' '}
                   في شريط أدوات متصفح سفاري (Safari).
                 </li>
@@ -2039,7 +2098,7 @@ export const SettingsPage: React.FC = () => {
               inputMode="numeric"
               maxLength={4}
               value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setPinInput(toWesternDigits(e.target.value).replace(/\D/g, ''))}
               placeholder="••••"
               dir="ltr"
               className="font-mono tracking-widest text-center text-lg"
@@ -2057,7 +2116,7 @@ export const SettingsPage: React.FC = () => {
               inputMode="numeric"
               maxLength={4}
               value={pinConfirmInput}
-              onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setPinConfirmInput(toWesternDigits(e.target.value).replace(/\D/g, ''))}
               placeholder="••••"
               dir="ltr"
               className="font-mono tracking-widest text-center text-lg"
@@ -2378,6 +2437,38 @@ export const SettingsPage: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Remove PIN Confirmation Modal */}
+      <Modal
+        isOpen={showRemovePinModal}
+        onClose={() => setShowRemovePinModal(false)}
+        title="تأكيد إلغاء قفل التطبيق"
+      >
+        <div className="space-y-4 text-start">
+          <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            هل أنت متأكد من رغبتك في إلغاء قفل التطبيق؟ سيؤدي ذلك إلى مسح رمز PIN وتعطيل البصمة البيومترية، وإتاحة الوصول لبياناتك المالية مباشرة بدون رمز حماية.
+          </p>
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRemovePinModal(false)}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                handleRemovePin()
+                setShowRemovePinModal(false)
+              }}
+            >
+              تأكيد إلغاء القفل
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Re-Authentication Modal */}
       <Modal
         isOpen={showReauthModal}
@@ -2388,14 +2479,14 @@ export const SettingsPage: React.FC = () => {
         enableHistoryBack={false}
         title="تأكيد الهوية (إعادة تسجيل الدخول)"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 text-start">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
             {isGoogleOnly
               ? 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس إعادة التحقق عبر حساب Google قبل الاستمرار:'
               : 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس تأكيد كلمة المرور أو إعادة التحقق عبر حسابك قبل الاستمرار:'}
           </p>
 
-          {!isGoogleOnly && (
+          {!isGoogleOnly && hasPasswordProvider && (
             <div>
               <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                 أدخل كلمة المرور الحالية لحسابك
@@ -2411,15 +2502,15 @@ export const SettingsPage: React.FC = () => {
           )}
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            {!isGoogleOnly && (
+            {hasGoogleProvider && hasPasswordProvider && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleReauthAndComplete}
+                onClick={handleReauthWithGoogle}
                 disabled={reauthenticating}
                 className="w-full sm:w-auto"
               >
-                إعادة التحقق عبر Google
+                {reauthenticating ? 'جاري التحقق...' : 'إعادة التحقق عبر Google'}
               </Button>
             )}
 
@@ -2439,7 +2530,7 @@ export const SettingsPage: React.FC = () => {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleReauthAndComplete}
+                  onClick={handleReauthWithGoogle}
                   disabled={reauthenticating}
                 >
                   {reauthenticating ? 'جاري التحقق...' : 'تأكيد الهوية عبر حساب Google'}
@@ -2448,8 +2539,8 @@ export const SettingsPage: React.FC = () => {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleReauthAndComplete}
-                  disabled={reauthenticating || !reauthPassword}
+                  onClick={handleReauthWithPassword}
+                  disabled={reauthenticating || !reauthPassword.trim()}
                 >
                   {reauthenticating ? 'جاري التحقق...' : 'تأكيد ومتابعة'}
                 </Button>

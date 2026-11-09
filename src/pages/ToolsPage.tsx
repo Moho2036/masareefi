@@ -86,7 +86,7 @@ export const ToolsPage: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Tool 1: Money Circles */}
-        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs hover:border-blue-500/40 transition-all group">
+        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/40 transition-all group">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center shrink-0 transition-colors">
               <Users className="w-5 h-5 stroke-[2.2]" />
@@ -114,7 +114,7 @@ export const ToolsPage: React.FC = () => {
         </div>
 
         {/* Tool 2: Work Hours Calculator */}
-        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs hover:border-blue-500/40 transition-all group">
+        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/40 transition-all group">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center shrink-0 transition-colors">
               <Clock className="w-5 h-5 stroke-[2.2]" />

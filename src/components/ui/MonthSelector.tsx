@@ -86,7 +86,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       <button
         type="button"
         onClick={goToPreviousMonth}
-        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         aria-label="الشهر السابق"
       >
         <ChevronRight className="w-4 h-4" />
@@ -96,7 +96,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       <button
         type="button"
         onClick={handleToggleOpen}
-        className="flex flex-col items-center justify-center px-1.5 sm:px-2.5 py-0.5 text-center select-none min-w-0 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+        className="flex flex-col items-center justify-center px-1.5 sm:px-2.5 py-1 min-h-[36px] text-center select-none min-w-0 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
         aria-expanded={isOpen}
         aria-label="فتح قائمة اختيار الشهر والسنة"
       >
@@ -116,7 +116,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       <button
         type="button"
         onClick={goToNextMonth}
-        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         aria-label="الشهر التالي"
       >
         <ChevronLeft className="w-4 h-4" />
@@ -125,7 +125,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       {/* Swiss Popover Picker Panel */}
       {isOpen && (
         <div
-          className="absolute top-[calc(100%+0.35rem)] end-0 sm:start-1/2 sm:-translate-x-1/2 z-50 w-72 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl p-3.5 space-y-3 select-none animate-slide-down"
+          className="absolute top-[calc(100%+0.35rem)] end-0 sm:left-1/2 sm:-translate-x-1/2 z-50 w-72 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none animate-slide-down"
           role="dialog"
           aria-label="منتقي الشهر والسنة"
         >

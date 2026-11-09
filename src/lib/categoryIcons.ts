@@ -41,7 +41,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
+const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
   '🛒': ShoppingCart,
   '☕': Utensils,
   '🍔': Utensils,

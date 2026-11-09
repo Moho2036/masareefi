@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { DatePickerInput } from '../ui/DatePickerInput'
 import { Toggle } from '../ui/Toggle'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { addDebtPayment, compactDebtPayments } from '../../services/debts'
@@ -28,12 +29,14 @@ interface PaymentFormContentProps {
   debt: Debt
   onClose: () => void
   onSuccess?: () => void
+  onDirtyChange?: (isDirty: boolean) => void
 }
 
 const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
   debt,
   onClose,
   onSuccess,
+  onDirtyChange,
 }) => {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -43,6 +46,10 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
   const [dateStr, setDateStr] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [note, setNote] = useState('')
   const [syncTransaction, setSyncTransaction] = useState(true)
+
+  useEffect(() => {
+    onDirtyChange?.(amountStr.trim() !== '' || note.trim() !== '')
+  }, [amountStr, note, onDirtyChange])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isCompacting, setIsCompacting] = useState(false)
@@ -158,7 +165,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
           </div>
           <p>
             {isMaxPaymentsReached
-              ? 'تفرض قواعد الأمان حداً أقصى 100 دفعة لكل دين. لفتح مساحة لتسجيل هذه الدفعة، اضغط على الزر أدناه لدمج الدفعات الأقدم في دفعة مجمعة واحدة دون التأثير على إجمالي المبلغ المسدد.'
+              ? 'تم استيفاء الحد الأقصى لسجل حركات هذا الدين (100 حركة). لفتح مساحة لتسجيل هذه الدفعة، اضغط على الزر أدناه لدمج الدفعات الأقدم في دفعة مجمعة واحدة دون التأثير على إجمالي المبلغ المسدد.'
               : 'لفتح مساحة لدفعات مستقبلية، يمكنك دمج الدفعات القديمة في دفعة واحدة دون أي تغيير في إجمالي المبلغ المسدد.'}
           </p>
           <div>
@@ -181,7 +188,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       )}
 
       {/* Debt Info Card */}
-      <div className="p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 flex items-center justify-between">
+      <div className="p-3.5 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 flex items-center justify-between">
         <div>
           <span className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 block">
             {debt.personName}
@@ -198,7 +205,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
               : 'text-red-600 dark:text-red-400'
           )}
         >
-          {formatCurrency(remainingFils)}
+          <FormattedMoney amountFils={remainingFils} />
         </span>
       </div>
 
@@ -207,13 +214,13 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           مبلغ الدفعة
         </label>
-        <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
+        <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
           <input
             type="text"
             inputMode="decimal"
             placeholder={config.decimals === 3 ? '0.000' : '0.00'}
             value={amountStr}
-            onChange={(e) => setAmountStr(e.target.value)}
+            onChange={(e) => setAmountStr(toWesternDigits(e.target.value))}
             className="w-full bg-transparent text-2xl font-black text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
             required
           />
@@ -230,7 +237,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
           onClick={handleFillFullRemaining}
           className="w-full py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold hover:bg-zinc-200/80 dark:hover:bg-zinc-700 transition-colors flex items-center justify-center cursor-pointer"
         >
-          <span>سداد كامل المبلغ المتبقي ({formatCurrency(remainingFils)})</span>
+          <span>{isLent ? 'استرداد كامل المبلغ المتبقي' : 'سداد كامل المبلغ المتبقي'} ({formatCurrency(remainingFils)})</span>
         </button>
       )}
 
@@ -303,6 +310,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   debt,
   onSuccess,
 }) => {
+  const [isDirty, setIsDirty] = useState(false)
+
   if (!debt) return null
 
   const isLent = debt.type === 'lent'
@@ -310,7 +319,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => {
+        setIsDirty(false)
+        onClose()
+      }}
+      closeOnBackdropClick={!isDirty}
       title={isLent ? 'تسجيل دفعة استرداد' : 'تسجيل دفعة سداد'}
     >
       {isOpen && (
@@ -319,6 +332,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           debt={debt}
           onClose={onClose}
           onSuccess={onSuccess}
+          onDirtyChange={setIsDirty}
         />
       )}
     </Modal>

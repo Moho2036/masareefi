@@ -3,11 +3,8 @@ import {
   escapeCsvCell,
   buildCsv,
   exportTransactionsToCsv,
-  exportDebtsToCsv,
-  exportRecurringToCsv,
-  exportCirclesToCsv,
 } from './exportCsv'
-import type { Transaction, Debt, Category, Recurring, MoneyCircle } from '../types'
+import type { Transaction, Category } from '../types'
 
 describe('exportCsv module', () => {
   describe('escapeCsvCell', () => {
@@ -62,7 +59,7 @@ describe('exportCsv module', () => {
     })
   })
 
-  describe('exportTransactionsToCsv and exportDebtsToCsv', () => {
+  describe('exportTransactionsToCsv', () => {
     let clickSpy = vi.fn<() => void>()
     let createdAnchor: HTMLAnchorElement | null = null
 
@@ -113,34 +110,6 @@ describe('exportCsv module', () => {
       expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_transactions_\d{4}-\d{2}-\d{2}\.csv$/)
     })
 
-    it('formats and triggers download for debts', () => {
-      const sampleDebts: Debt[] = [
-        {
-          id: 'd1',
-          personName: 'محمود',
-          type: 'lent',
-          amountFils: 50000,
-          paidFils: 20000,
-          startDate: new Date('2026-05-01T00:00:00Z'),
-          dueDate: new Date('2026-06-01T00:00:00Z'),
-          note: 'قرض',
-          settled: false,
-          payments: [],
-          createdAt: new Date(),
-        },
-      ]
-
-      exportDebtsToCsv(sampleDebts)
-
-      expect(createdAnchor).not.toBeNull()
-      expect(clickSpy).toHaveBeenCalledTimes(1)
-      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_debts_\d{4}-\d{2}-\d{2}\.csv$/)
-
-      // Verify the generated CSV blob contains the new headers and values
-      const blob = (globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as Blob
-      expect(blob).toBeInstanceOf(Blob)
-    })
-
     it('supports custom currency symbol and decimals in transactions export', () => {
       const sampleCategories: Category[] = [
         { id: 'c1', name: 'راتب', type: 'income', icon: '💰', color: '#10B981', archived: false, order: 0 },
@@ -160,76 +129,6 @@ describe('exportCsv module', () => {
 
       exportTransactionsToCsv(sampleTxs, sampleCategories, { symbol: '$', decimals: 2 })
       expect(clickSpy).toHaveBeenCalled()
-    })
-
-    it('supports custom currency symbol and decimals in debts export', () => {
-      const sampleDebts: Debt[] = [
-        {
-          id: 'd1',
-          personName: 'علي',
-          type: 'borrowed',
-          amountFils: 100000,
-          paidFils: 0,
-          startDate: new Date('2026-05-01T00:00:00Z'),
-          note: '',
-          settled: false,
-          payments: [],
-          createdAt: new Date(),
-        },
-      ]
-
-      exportDebtsToCsv(sampleDebts, { symbol: 'ر.س', decimals: 2 })
-      expect(clickSpy).toHaveBeenCalled()
-    })
-
-    it('formats and triggers download for recurring items', () => {
-      const sampleCategories: Category[] = [
-        { id: 'c1', name: 'اشتراكات', type: 'expense', icon: '📱', color: '#10B981', archived: false, order: 0 },
-      ]
-      const sampleRecurring: Recurring[] = [
-        {
-          id: 'r1',
-          type: 'expense',
-          amountFils: 15000,
-          categoryId: 'c1',
-          title: 'إنترنت',
-          note: 'فايبر',
-          frequency: 'monthly',
-          startDate: new Date('2026-01-01T00:00:00Z'),
-          nextDate: new Date('2026-06-01T00:00:00Z'),
-          active: true,
-          createdAt: new Date(),
-        },
-      ]
-
-      exportRecurringToCsv(sampleRecurring, sampleCategories)
-
-      expect(createdAnchor).not.toBeNull()
-      expect(clickSpy).toHaveBeenCalledTimes(1)
-      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_recurring_\d{4}-\d{2}-\d{2}\.csv$/)
-    })
-
-    it('formats and triggers download for money circles', () => {
-      const sampleCircles: MoneyCircle[] = [
-        {
-          id: 'mc1',
-          name: 'جمعية العائلة',
-          monthlyAmountFils: 100000,
-          membersCount: 10,
-          totalAmountFils: 1000000,
-          myTurnMonth: 5,
-          startDate: new Date('2026-01-01T00:00:00Z'),
-          members: [],
-          status: 'active',
-          createdAt: new Date(),
-        },
-      ]
-
-      exportCirclesToCsv(sampleCircles)
-
-      expect(createdAnchor).not.toBeNull()
-      expect(clickSpy).toHaveBeenCalledTimes(1)
-      expect(createdAnchor?.getAttribute('download')).toMatch(/^baseer_circles_\d{4}-\d{2}-\d{2}\.csv$/)
     })
   })
 })

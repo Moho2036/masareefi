@@ -24,6 +24,7 @@ export interface DatePickerInputProps {
   readOnly?: boolean
   required?: boolean
   showQuickButtons?: boolean
+  popoverAlign?: 'start' | 'end'
   className?: string
   error?: string
   'aria-label'?: string
@@ -40,6 +41,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
   readOnly = false,
   required = false,
   showQuickButtons = false,
+  popoverAlign = 'start',
   className,
   error,
   'aria-label': ariaLabel,
@@ -221,7 +223,12 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
 
       {/* Custom Swiss Arabic Calendar Popover */}
       {isOpen && !disabled && !readOnly && (
-        <div className="absolute start-0 top-[calc(100%+0.35rem)] z-50 w-72 sm:w-80 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl p-3.5 space-y-3 select-none animate-slide-down">
+        <div
+          className={cn(
+            'absolute top-[calc(100%+0.35rem)] z-50 w-72 sm:w-80 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none animate-slide-down',
+            popoverAlign === 'end' ? 'end-0' : 'start-0'
+          )}
+        >
           {/* Row 1: Month/Year navigation */}
           <div className="flex items-center justify-between px-1">
             <button
@@ -289,7 +296,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                   className={cn(
                     'h-8 w-full rounded-lg text-xs font-semibold tabular-nums flex items-center justify-center transition-colors cursor-pointer',
                     isSelected
-                      ? 'bg-blue-600 text-white font-black shadow-2xs'
+                      ? 'bg-blue-600 text-white font-black shadow-2xs dark:shadow-none'
                       : isToday
                         ? 'border border-blue-600/50 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-950/40'
                         : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800',
@@ -302,31 +309,33 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
             })}
           </div>
 
-          {/* Row 4: Quick selection bottom bar */}
-          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              disabled={Boolean((min && todayStr < min) || (max && todayStr > max))}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleQuickSelect(0)
-              }}
-              className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-center"
-            >
-              اليوم
-            </button>
-            <button
-              type="button"
-              disabled={Boolean((min && yesterdayStr < min) || (max && yesterdayStr > max))}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleQuickSelect(1)
-              }}
-              className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-center"
-            >
-              أمس
-            </button>
-          </div>
+          {/* Row 4: Quick selection bottom bar (only if not already shown in header) */}
+          {!showQuickButtons && (
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                disabled={Boolean((min && todayStr < min) || (max && todayStr > max))}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleQuickSelect(0)
+                }}
+                className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-center"
+              >
+                اليوم
+              </button>
+              <button
+                type="button"
+                disabled={Boolean((min && yesterdayStr < min) || (max && yesterdayStr > max))}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleQuickSelect(1)
+                }}
+                className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-center"
+              >
+                أمس
+              </button>
+            </div>
+          )}
         </div>
       )}
 

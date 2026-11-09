@@ -18,7 +18,7 @@ export const AppShellSkeleton: React.FC = () => {
       {/* Desktop Sidebar Skeleton (RTL Start / Right side) */}
       <aside
         aria-label="القائمة الجانبية"
-        className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-[#121215] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-hidden"
+        className="hidden lg:flex flex-col w-[280px] shrink-0 bg-white dark:bg-[#121215] border-e border-[#E4E4E7] dark:border-[#27272A] p-6 min-h-screen sticky top-0 h-screen overflow-hidden"
       >
         {/* App Logo */}
         <div className="flex items-center gap-3 px-2 mb-8 animate-pulse">

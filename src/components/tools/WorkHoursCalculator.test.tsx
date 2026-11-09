@@ -199,10 +199,10 @@ describe('WorkHoursCalculator component', () => {
 
     expect(screen.getByText('بصيرة القرار الشرائي على ميزانية هذا الشهر')).toBeInTheDocument()
     expect(screen.getByText('الأثر على حد الصرف اليومي')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /قررت شراءها؟ سجّلها كمصروف الآن/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /تسجيل كمصروف الآن/i })).toBeInTheDocument()
   })
 
-  it('opens transaction modal with "حفظ" (and not "حفظ النسخة") when clicking "قررت شراءها؟ سجّلها كمصروف الآن"', () => {
+  it('opens transaction modal with "حفظ" (and not "حفظ النسخة") when clicking "تسجيل كمصروف الآن"', () => {
     render(
       <ToastProvider>
         <SelectedMonthProvider>
@@ -213,7 +213,7 @@ describe('WorkHoursCalculator component', () => {
       </ToastProvider>
     )
 
-    const recordBtn = screen.getByRole('button', { name: /قررت شراءها؟ سجّلها كمصروف الآن/i })
+    const recordBtn = screen.getByRole('button', { name: /تسجيل كمصروف الآن/i })
     fireEvent.click(recordBtn)
 
     expect(screen.getByText('تسجيل مصروف السلعة')).toBeInTheDocument()

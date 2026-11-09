@@ -2,6 +2,7 @@ import { isBefore, startOfDay, format, differenceInDays } from 'date-fns'
 import type { Debt, MoneyCircle, Recurring, UserSettings, Transaction } from '../types'
 import { formatMoney } from './money'
 import { getCircleCycleIndex } from '../services/moneyCircles'
+import { getFiscalMonthKey } from './dates'
 
 export type NotificationCategory = 'urgent' | 'recurring' | 'debt' | 'circle' | 'budget' | 'system'
 export type NotificationFilter = 'all' | 'urgent' | 'recurring' | 'debt_circle' | 'unread' | 'archived'
@@ -87,13 +88,24 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
       } else if (diffDays <= reminderDays && diffDays >= 0) {
         // Due today or approaching within reminder days
         const isToday = diffDays === 0
+        const dueText =
+          diffDays === 0
+            ? 'اليوم'
+            : diffDays === 1
+              ? 'غداً'
+              : diffDays === 2
+                ? 'خلال يومين'
+                : diffDays <= 10
+                  ? `خلال ${diffDays} أيام`
+                  : `خلال ${diffDays} يوماً`
+
         items.push({
           id: `debt_due_${debt.id}_${dueDateStr}`,
           title: isToday ? `استحقاق دين اليوم: ${debt.personName}` : `موعد استحقاق دين قادم: ${debt.personName}`,
           message:
             debt.type === 'lent'
-              ? `يستحق استرداد مبلغ ${remainingFormatted} من ${debt.personName} ${isToday ? 'اليوم' : `خلال ${diffDays} أيام`}.`
-              : `يستحق سداد مبلغ ${remainingFormatted} لـ ${debt.personName} ${isToday ? 'اليوم' : `خلال ${diffDays} أيام`}.`,
+              ? `يستحق استرداد مبلغ ${remainingFormatted} من ${debt.personName} ${dueText}.`
+              : `يستحق سداد مبلغ ${remainingFormatted} لـ ${debt.personName} ${dueText}.`,
           category: 'debt',
           isUrgent: isToday,
           createdAt: todayMidnight,
@@ -119,11 +131,21 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           (circle.shareType === 'double' && circle.secondTurnMonth === diffMonths)
 
         if (isMyTurn) {
-          const totalFormatted = fmtAmount(circle.totalAmountFils)
+          const userGrossFils =
+            circle.shareType === 'half'
+              ? Math.round(circle.totalAmountFils / 2)
+              : circle.shareType === 'double'
+                ? circle.totalAmountFils
+                : circle.totalAmountFils
+          const totalFormatted = fmtAmount(userGrossFils)
+          const shareLabel =
+            circle.shareType === 'half'
+              ? `لحصتك (${totalFormatted})`
+              : `لمبلغ الجمعية بالكامل (${totalFormatted})`
           items.push({
             id: `circle_turn_${circle.id}_m${diffMonths}`,
             title: `دوري في القبض: جمعية ${circle.name}`,
-            message: `هذا الشهر هو موعد استلامك لمبلغ الجمعية بالكامل (${totalFormatted})!`,
+            message: `هذا الشهر هو موعد استلامك ${shareLabel}!`,
             category: 'circle',
             isUrgent: true,
             createdAt: todayMidnight,
@@ -202,10 +224,19 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
           })
 
           if (unpaidMembers.length > 0) {
+            const count = unpaidMembers.length
+            const countText =
+              count === 1
+                ? 'عضو واحد لم يسدد'
+                : count === 2
+                  ? 'عضوان لم يسددا'
+                  : count <= 10
+                    ? `${count} أعضاء لم يسددوا`
+                    : `${count} عضواً لم يسددوا`
             items.push({
               id: `circle_unpaid_${circle.id}_m${diffMonths}`,
               title: `أقساط معلقة: جمعية ${circle.name}`,
-              message: `يوجد ${unpaidMembers.length} أعضاء لم يسددوا قسط هذا الشهر حتى الآن.`,
+              message: `يوجد ${countText} قسط هذا الشهر حتى الآن.`,
               category: 'circle',
               isUrgent: false,
               createdAt: todayMidnight,
@@ -303,27 +334,28 @@ export function generateNotifications(params: GenerateNotificationsParams): Noti
   // 4. Budget & Spending Warnings
   if (prefs.budgetWarnings !== false) {
     const rolloverEnabled = settings?.rolloverBalance ?? true
+    const monthStartDay = settings?.monthStartDay ?? 1
+    const fiscalMonthKey = getFiscalMonthKey(today, monthStartDay)
     const totalLiquidity = currentMonthIncomeFils + (rolloverEnabled ? priorBalanceFils : 0)
 
-    if (totalLiquidity > 0) {
+    if (currentMonthSpendingFils > 0 && currentMonthSpendingFils > totalLiquidity) {
+      // Deficit: spending exceeds available liquidity (including when totalLiquidity <= 0 or deficit starting state)
+      items.push({
+        id: `budget_deficit_${fiscalMonthKey}`,
+        title: 'تنبيه تجاوز الميزانية (عجز مالي)',
+        message: 'تجاوز إجمالي مصروفاتك الشهرية السيولة المتاحة لشهرك الحالي. يُنصح بمراجعة النفقات غير الأساسية.',
+        category: 'budget',
+        isUrgent: true,
+        createdAt: todayMidnight,
+        actionPath: '/reports',
+        actionLabel: 'تقرير الميزانية',
+      })
+    } else if (totalLiquidity > 0) {
       const spendingRatio = currentMonthSpendingFils / totalLiquidity
-
-      if (currentMonthSpendingFils > totalLiquidity) {
-        // Deficit
-        items.push({
-          id: `budget_deficit_${todayStr.slice(0, 7)}`,
-          title: 'تنبيه تجاوز الميزانية (عجز مالي)',
-          message: 'تجاوز إجمالي مصروفاتك الشهرية السيولة المتاحة لشهرك الحالي. يُنصح بمراجعة النفقات غير الأساسية.',
-          category: 'budget',
-          isUrgent: true,
-          createdAt: todayMidnight,
-          actionPath: '/reports',
-          actionLabel: 'تقرير الميزانية',
-        })
-      } else if (spendingRatio >= 0.8) {
+      if (spendingRatio >= 0.8) {
         const percent = Math.round(spendingRatio * 100)
         items.push({
-          id: `budget_warning_80_${todayStr.slice(0, 7)}`,
+          id: `budget_warning_80_${fiscalMonthKey}`,
           title: `استهلاك ${percent}% من الميزانية المتاحة`,
           message: `لقد استهلكت ${percent}% من إجمالي الميزانية والسيولة المتاحة للشهر الحالي.`,
           category: 'budget',

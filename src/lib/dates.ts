@@ -2,10 +2,14 @@ import { format, isSameDay, subDays } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
 /**
- * Normalizes any Arabic-Indic digits [٠-٩] to Western ASCII digits [0-9].
+ * Normalizes any Arabic-Indic digits [٠-٩] and Eastern Arabic-Indic/Persian/Urdu digits [۰-۹]
+ * to Western ASCII digits [0-9]. Safely handles undefined or null strings.
  */
-export function toWesternDigits(str: string): string {
-  return str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+export function toWesternDigits(str: string | undefined | null): string {
+  if (!str) return ''
+  return str
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
 }
 
 /**
@@ -152,13 +156,16 @@ export function formatFinancialRangeLabel(range: { start: Date; end: Date }): st
  * Formats a transaction day header.
  * - Today: "اليوم - السبت 4 أكتوبر"
  * - Yesterday: "أمس - الجمعة 3 أكتوبر"
- * - Older dates: "الخميس 2 أكتوبر"
+ * - Older dates within the current year: "الخميس 2 أكتوبر" (year omitted as it is default)
+ * - Dates in different years (past or future): "الخميس 2 أكتوبر 2025"
  *
  * All digits in Western format (0-9).
  */
 export function formatDayHeader(date: Date, today: Date): string {
+  const isCurrentYear = date.getFullYear() === today.getFullYear()
+  const pattern = isCurrentYear ? 'EEEE d LLLL' : 'EEEE d LLLL yyyy'
   const formattedDate = toWesternDigits(
-    format(date, 'EEEE d LLLL', { locale: ar }),
+    format(date, pattern, { locale: ar }),
   )
 
   if (isSameDay(date, today)) {

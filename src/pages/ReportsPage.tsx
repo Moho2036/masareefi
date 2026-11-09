@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { subDays, format as formatDate } from 'date-fns'
+import { subDays, format as formatDate, differenceInDays } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
   TrendingUp,
@@ -13,12 +13,10 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  RotateCcw,
   Printer,
   CheckCircle2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
-import { MonthSelector } from '../components/ui/MonthSelector'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
@@ -37,7 +35,6 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useDebts } from '../hooks/useDebts'
 import { useRecurring } from '../hooks/useRecurring'
 import { useMoneyCircles } from '../hooks/useMoneyCircles'
-import { useCurrency } from '../hooks/useCurrency'
 import { subscribePriorBalance } from '../services/transactions'
 import { sumByType } from '../lib/aggregate'
 import {
@@ -74,12 +71,11 @@ export const ReportsPage: React.FC = () => {
   // Monthly data hooks
   const { user } = useAuth()
   const appData = useAppData()
-  const { range, goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
+  const { range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()
   const { data: circles } = useMoneyCircles()
-  const { format } = useCurrency()
   const monthStartDay = settings?.monthStartDay ?? 1
 
   const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
@@ -88,6 +84,9 @@ export const ReportsPage: React.FC = () => {
   const isCurrentFiscalMonth =
     getFiscalMonthKey(range.start, monthStartDay) ===
     getFiscalMonthKey(new Date(), monthStartDay)
+
+  const isEarlyMonth =
+    isCurrentFiscalMonth && differenceInDays(new Date(), range.start) < 4
 
   const parsedRolloverStartDate = useMemo(() => {
     if (!settings?.rolloverStartDate) return null
@@ -200,11 +199,7 @@ export const ReportsPage: React.FC = () => {
           ? (rawCreated as { toDate: () => Date }).toDate()
           : new Date(rawCreated as unknown as string)
       const createdCycleStart = getFinancialMonthRange(createdAtDate, monthStartDay).start
-      if (
-        range.start.getTime() < createdCycleStart.getTime() &&
-        effectiveLocalRollover === 0 &&
-        monthTransactions.length === 0
-      ) {
+      if (range.start.getTime() < createdCycleStart.getTime()) {
         return 0
       }
     }
@@ -218,7 +213,6 @@ export const ReportsPage: React.FC = () => {
     settings,
     monthStartDay,
     effectiveLocalRollover,
-    monthTransactions.length,
   ])
 
   const { data: categories } = useCategories()
@@ -339,7 +333,7 @@ export const ReportsPage: React.FC = () => {
   }, [dailyExpenses])
 
   const monthComparison = useMemo(() => {
-    if (prevMonthSums.expense === 0 || monthSums.expense === 0) return null
+    if (prevMonthSums.expense === 0) return null
     const diff = monthSums.expense - prevMonthSums.expense
     const percent = Math.round((Math.abs(diff) / prevMonthSums.expense) * 1000) / 10
     return {
@@ -350,7 +344,7 @@ export const ReportsPage: React.FC = () => {
   }, [monthSums.expense, prevMonthSums.expense])
 
   const monthIncomeComparison = useMemo(() => {
-    if (prevMonthSums.income === 0 || monthSums.income === 0) return null
+    if (prevMonthSums.income === 0) return null
     const diff = monthSums.income - prevMonthSums.income
     const percent = Math.round((Math.abs(diff) / prevMonthSums.income) * 1000) / 10
     return {
@@ -366,10 +360,15 @@ export const ReportsPage: React.FC = () => {
     () => calculateSavingsRate(yearSums.income, yearSums.expense),
     [yearSums.income, yearSums.expense]
   )
-  const yearlyBreakdown = useMemo(
-    () => calculateYearlyBreakdown(yearTransactions, selectedYear, monthStartDay),
-    [yearTransactions, selectedYear, monthStartDay]
-  )
+  const yearlyBreakdown = useMemo(() => {
+    const rawBreakdown = calculateYearlyBreakdown(yearTransactions, selectedYear, monthStartDay)
+    return rawBreakdown.map((row) => ({
+      ...row,
+      isFutureMonth:
+        selectedYear > currentYear ||
+        (selectedYear === currentYear && row.monthIndex > currentFiscalInfo.monthIndex),
+    }))
+  }, [yearTransactions, selectedYear, monthStartDay, currentYear, currentFiscalInfo.monthIndex])
   const yearCategoryDist = useMemo(
     () => calculateCategoryDistribution(yearTransactions, categories, yearCategoryType),
     [yearTransactions, categories, yearCategoryType]
@@ -404,10 +403,7 @@ export const ReportsPage: React.FC = () => {
     }
 
     const maxYear = Math.max(calendarYear + 1, currentYear, selectedYear)
-    const minYear = Math.max(
-      maxYear - 14,
-      Math.min(calendarYear - 10, createdYear, selectedYear)
-    )
+    const minYear = Math.min(createdYear, selectedYear)
 
     const yearsSet = new Set<number>()
     yearsSet.add(selectedYear)
@@ -443,6 +439,15 @@ export const ReportsPage: React.FC = () => {
                 { value: 'yearly', label: 'تقرير سنوي' },
               ]}
             />
+            {reportPeriod === 'yearly' && (
+              <div className="w-36">
+                <Select
+                  value={String(selectedYear)}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  options={yearOptions}
+                />
+              </div>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -453,34 +458,28 @@ export const ReportsPage: React.FC = () => {
             >
               طباعة / حفظ PDF
             </Button>
-            {reportPeriod === 'monthly' ? (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                {!isCurrentMonth && (
-                  <button
-                    type="button"
-                    onClick={goToCurrentMonth}
-                    className="press-scale inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
-                    title="العودة إلى الشهر الحالي"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span className="hidden sm:inline">الشهر الحالي</span>
-                    <span className="sm:hidden">اليوم</span>
-                  </button>
-                )}
-                <MonthSelector />
-              </div>
-            ) : (
-              <div className="w-36">
-                <Select
-                  value={String(selectedYear)}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  options={yearOptions}
-                />
-              </div>
-            )}
           </div>
         }
       />
+
+      {/* Print-Only Header Banner */}
+      <div className="hidden print:block pb-3 mb-4 border-b border-zinc-200 dark:border-zinc-700">
+        <div className="flex items-center justify-between text-xs">
+          <div>
+            <h1 className="text-lg font-black text-zinc-900">
+              {reportPeriod === 'monthly' ? 'التقرير المالي الشهري' : 'التقرير المالي السنوي'}
+            </h1>
+            <p className="text-zinc-600 font-semibold mt-0.5">
+              {reportPeriod === 'monthly'
+                ? `الدورة المالية: ${toWesternDigits(formatDate(range.start, 'd MMMM yyyy', { locale: ar }))} – ${toWesternDigits(formatDate(new Date(range.end.getTime() - 1), 'd MMMM yyyy', { locale: ar }))}`
+                : `السنة المالية: ${selectedYear} ${monthStartDay > 1 ? `(يوم بداية الدورة: ${monthStartDay})` : ''}`}
+            </p>
+          </div>
+          <div className="text-end text-zinc-500 font-medium">
+            تاريخ الطباعة: {toWesternDigits(formatDate(new Date(), 'yyyy/MM/dd HH:mm'))}
+          </div>
+        </div>
+      </div>
 
       {/* ========================================================= */}
       {/* ==================== MONTHLY REPORT ==================== */}
@@ -496,7 +495,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     إجمالي المداخيل
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -508,9 +507,24 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] leading-relaxed">
-                {monthIncomeComparison ? (
+                {monthSums.income === 0 ? (
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    {forecast.isFutureMonth
+                      ? 'الشهر لم يبدأ بعد'
+                      : isEarlyMonth
+                        ? 'الشهر في بدايته — لم يُسجل دخل بعد'
+                        : prevMonthSums.income > 0 ? (
+                            <span className="font-bold inline-flex items-center gap-0.5 text-red-500 dark:text-red-400">
+                              <ArrowDownRight className="w-3 h-3" />
+                              <span>أقل بـ 100% عن الشهر السابق</span>
+                            </span>
+                          ) : (
+                            'لا توجد مداخيل مسجلة في هذا الشهر'
+                          )}
+                  </span>
+                ) : monthIncomeComparison ? (
                   monthIncomeComparison.diff === 0 ? (
-                    <span className="font-bold text-slate-500 dark:text-slate-400">
+                    <span className="font-bold text-zinc-500 dark:text-zinc-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
                   ) : (
@@ -534,12 +548,10 @@ export const ReportsPage: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-slate-400 dark:text-slate-500">
-                    {monthSums.income === 0
-                      ? 'لا توجد مداخيل مسجلة في هذا الشهر'
-                      : prevMonthSums.income === 0
-                        ? 'لا توجد بيانات في الشهر السابق للمقارنة'
-                        : 'الدخل المحصل في هذا الشهر'}
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    {prevMonthSums.income === 0
+                      ? 'لم يُسجل دخل في الشهر السابق'
+                      : 'الدخل المحصل في هذا الشهر'}
                   </span>
                 )}
               </div>
@@ -549,7 +561,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     إجمالي المصاريف
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -561,9 +573,24 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] leading-relaxed">
-                {monthComparison ? (
+                {monthSums.expense === 0 ? (
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    {forecast.isFutureMonth
+                      ? 'الشهر لم يبدأ بعد'
+                      : isEarlyMonth
+                        ? 'الشهر في بدايته — لم تُسجل مصاريف بعد'
+                        : prevMonthSums.expense > 0 ? (
+                            <span className="font-bold inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400">
+                              <ArrowDownRight className="w-3 h-3" />
+                              <span>أقل بـ 100% عن الشهر السابق</span>
+                            </span>
+                          ) : (
+                            'لا توجد مصاريف مسجلة في هذا الشهر'
+                          )}
+                  </span>
+                ) : monthComparison ? (
                   monthComparison.diff === 0 ? (
-                    <span className="font-bold text-slate-500 dark:text-slate-400">
+                    <span className="font-bold text-zinc-500 dark:text-zinc-400">
                       مساوٍ للشهر السابق (0%)
                     </span>
                   ) : (
@@ -587,12 +614,10 @@ export const ReportsPage: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-slate-400 dark:text-slate-500">
-                    {monthSums.expense === 0
-                      ? 'لا توجد مصاريف مسجلة في هذا الشهر'
-                      : prevMonthSums.expense === 0
-                        ? 'لا توجد بيانات في الشهر السابق للمقارنة'
-                        : 'إجمالي ما تم صرفه'}
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    {prevMonthSums.expense === 0
+                      ? 'لم تُسجل مصاريف في الشهر السابق'
+                      : 'إجمالي ما تم صرفه'}
                   </span>
                 )}
               </div>
@@ -602,7 +627,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     صافي الادخار
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -620,12 +645,18 @@ export const ReportsPage: React.FC = () => {
                   <FormattedMoney amountFils={monthSums.balance} />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) && effectiveRollover !== 0 ? (
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                {(isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0) &&
+                (forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover) !== 0 ? (
                   <>
                     صافي الشهر المستقل (الرصيد المتاح مع المرحّل:{' '}
                     <span dir="ltr" className="inline-block font-semibold">
-                      {format(monthSums.balance + effectiveRollover)}
+                      <FormattedMoney
+                        amountFils={
+                          monthSums.balance +
+                          (forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover)
+                        }
+                      />
                     </span>
                     )
                   </>
@@ -639,7 +670,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     نسبة الادخار
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -649,17 +680,17 @@ export const ReportsPage: React.FC = () => {
                 <div
                   className={cn(
                     'text-lg sm:text-2xl font-black select-none',
-                    monthSums.balance < 0
-                      ? 'text-red-500 dark:text-red-400'
-                      : monthSums.income === 0 && monthSums.expense === 0
-                        ? 'text-slate-400 dark:text-slate-500'
+                    monthSums.income === 0
+                      ? 'text-zinc-400 dark:text-zinc-500'
+                      : monthSums.balance < 0
+                        ? 'text-red-500 dark:text-red-400'
                         : 'text-emerald-600 dark:text-emerald-400'
                   )}
                 >
-                  %{monthSavingsRate}
+                  {monthSums.income === 0 ? '—' : `%${monthSavingsRate}`}
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
                 {monthSums.income === 0 && monthSums.expense > 0
                   ? 'لا يوجد دخل مسجل لحساب النسبة'
                   : 'من إجمالي الدخل المحصل'}
@@ -671,10 +702,10 @@ export const ReportsPage: React.FC = () => {
           <Card className="p-5 print-avoid-break">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                   المصروف اليومي خلال الشهر
                 </h2>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
                   توزيع الإنفاق اليومي لتحديد أيام الذروة والأيام الخالية من المصاريف
                 </p>
               </div>
@@ -687,14 +718,16 @@ export const ReportsPage: React.FC = () => {
                     <span>
                       {toWesternDigits(formatDate(dailyStats.highestDay.date, 'd MMMM', { locale: ar }))}
                     </span>
-                    <span>({format(dailyStats.highestDay.amountFils)})</span>
+                    <span>(<FormattedMoney amountFils={dailyStats.highestDay.amountFils} />)</span>
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-                  <span>أيام بدون مصاريف:</span>
-                  <span>{toWesternDigits(String(dailyStats.zeroSpendDaysCount))} يوم</span>
-                </span>
+                {!forecast.isFutureMonth && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+                    <span>أيام بدون مصاريف:</span>
+                    <span>{toWesternDigits(String(dailyStats.zeroSpendDaysCount))} يوم</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -703,7 +736,7 @@ export const ReportsPage: React.FC = () => {
 
           {/* Category Filter Controls */}
           <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
-            <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+            <h2 className="text-base font-extrabold text-zinc-800 dark:text-zinc-100">
               {monthCategoryType === 'expense' ? 'تحليل المصروفات حسب التصنيف' : 'تحليل المداخيل حسب التصنيف'}
             </h2>
             <SegmentedControl<TxType>
@@ -721,16 +754,17 @@ export const ReportsPage: React.FC = () => {
             {/* Donut Chart */}
             <Card className="p-5 flex flex-col justify-between print-avoid-break">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                   {monthCategoryType === 'expense' ? 'توزيع المصاريف حسب التصنيف' : 'توزيع المداخيل حسب التصنيف'}
                 </h2>
-                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">
                   {monthCategoryDist.length} تصنيفات
                 </span>
               </div>
               <div className="flex-1 flex items-center justify-center">
                 <CategoryPieChart
                   data={monthCategoryDist}
+                  type={monthCategoryType}
                   className="w-full"
                   onSelectCategory={handleSelectMonthPieCategory}
                 />
@@ -739,11 +773,11 @@ export const ReportsPage: React.FC = () => {
 
             {/* Top Categories Progress Bars */}
             <Card className="p-5 print-avoid-break">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-700/60">
+                <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                   {monthCategoryType === 'expense' ? 'أعلى التصنيفات إنفاقاً' : 'أعلى التصنيفات دخلاً'}
                 </h2>
-                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">
                   {monthCategoryType === 'expense' ? 'النسبة المئوية من الإنفاق' : 'النسبة المئوية من الدخل'}
                 </span>
               </div>
@@ -767,7 +801,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
                 </div>
               ) : monthCategoryDist.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
+                <div className="py-12 text-center text-xs text-zinc-400 dark:text-zinc-500">
                   {monthCategoryType === 'expense'
                     ? 'لا توجد مصاريف مسجلة لهذا الشهر'
                     : 'لا توجد مداخيل مسجلة لهذا الشهر'}
@@ -788,28 +822,28 @@ export const ReportsPage: React.FC = () => {
                           setSelectedCategoryModal(item)
                         }
                       }}
-                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition-colors cursor-pointer group"
                       title="اضغط لعرض المعاملات التابعة لهذا التصنيف"
                     >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <span className="font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                            {format(item.amountFils)}
+                          <span className="font-extrabold text-zinc-800 dark:text-zinc-100">
+                            <FormattedMoney amountFils={item.amountFils} />
                           </span>
-                          <span className="font-bold text-slate-400 dark:text-slate-500 min-w-8 text-end">
+                          <span className="font-bold text-zinc-400 dark:text-zinc-500 min-w-8 text-end">
                             {item.percentage}%
                           </span>
                         </div>
                       </div>
 
                       {/* Progress Bar */}
-                      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700/60 rounded-full overflow-hidden">
+                      <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-700/60 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
                           style={{
@@ -822,7 +856,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
 
                   {monthCategoryDist.length > 6 && (
-                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40 print-hide">
+                    <div className="pt-2 text-center border-t border-zinc-100 dark:border-zinc-700/40 print-hide">
                       <button
                         type="button"
                         onClick={() => setShowAllMonthCategories((v) => !v)}
@@ -867,7 +901,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     إجمالي المداخيل السنوية
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -878,8 +912,12 @@ export const ReportsPage: React.FC = () => {
                   <FormattedMoney amountFils={yearSums.income} />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                إجمالي الدخل خلال سنة {selectedYear}
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                {annualSummary.averageMonthlyIncomeFils > 0 ? (
+                  <div>متوسط الدخل: <FormattedMoney amountFils={annualSummary.averageMonthlyIncomeFils} /> / شهر</div>
+                ) : (
+                  <div>إجمالي الدخل المحصل خلال سنة {selectedYear}</div>
+                )}
               </div>
             </Card>
 
@@ -887,7 +925,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     إجمالي المصاريف السنوية
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -898,8 +936,19 @@ export const ReportsPage: React.FC = () => {
                   <FormattedMoney amountFils={yearSums.expense} />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                إجمالي المصاريف خلال سنة {selectedYear}
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                {annualSummary.averageMonthlyExpenseFils > 0 ? (
+                  <>
+                    <div>متوسط الصرف: <FormattedMoney amountFils={monthlyAverage} /> / شهر</div>
+                    {annualSummary.note && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
+                        ({annualSummary.note})
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>إجمالي المصاريف خلال سنة {selectedYear}</div>
+                )}
               </div>
             </Card>
 
@@ -907,7 +956,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     صافي الادخار السنوي
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -925,8 +974,8 @@ export const ReportsPage: React.FC = () => {
                   <FormattedMoney amountFils={yearSums.balance} />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                الفائض المالي السنوي
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                {yearSums.balance < 0 ? 'العجز المالي السنوي' : 'الفائض المالي السنوي'}
               </div>
             </Card>
 
@@ -934,7 +983,7 @@ export const ReportsPage: React.FC = () => {
             <Card className="p-3.5 sm:p-5 border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] flex flex-col justify-between h-full print-avoid-break">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                     نسبة الادخار السنوية
                   </span>
                   <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
@@ -944,27 +993,20 @@ export const ReportsPage: React.FC = () => {
                 <div
                   className={cn(
                     'text-lg sm:text-2xl font-black select-none',
-                    yearSums.balance < 0
-                      ? 'text-red-500 dark:text-red-400'
-                      : yearSums.income === 0 && yearSums.expense === 0
-                        ? 'text-slate-400 dark:text-slate-500'
+                    yearSums.income === 0
+                      ? 'text-zinc-400 dark:text-zinc-500'
+                      : yearSums.balance < 0
+                        ? 'text-red-500 dark:text-red-400'
                         : 'text-emerald-600 dark:text-emerald-400'
                   )}
                 >
-                  %{yearlySavingsRate}
+                  {yearSums.income === 0 ? '—' : `%${yearlySavingsRate}`}
                 </div>
               </div>
-              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                {yearSums.income === 0 && yearSums.expense > 0 ? (
-                  <div>لا يوجد دخل مسجل لحساب النسبة</div>
-                ) : (
-                  <div>متوسط الصرف: <FormattedMoney amountFils={monthlyAverage} /> / شهر</div>
-                )}
-                {annualSummary.note && (
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
-                    ({annualSummary.note})
-                  </div>
-                )}
+              <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                {yearSums.income === 0
+                  ? 'لا يوجد دخل مسجل لحساب النسبة'
+                  : 'من إجمالي الدخل المحصل سنوياً'}
               </div>
             </Card>
           </div>
@@ -974,7 +1016,7 @@ export const ReportsPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                   المداخيل والمصاريف لكل شهر
                 </h2>
               </div>
@@ -984,13 +1026,13 @@ export const ReportsPage: React.FC = () => {
                     يبدأ الشهر المالي يوم {monthStartDay}
                   </span>
                 )}
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500">
                   سنة {selectedYear}
                 </span>
               </div>
             </div>
             {monthStartDay > 1 && (
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-2">
                 الأشهر المعروضة تحتسب وفق يوم بداية الشهر المالي المخصص (من يوم {monthStartDay} في كل شهر).
               </p>
             )}
@@ -1001,14 +1043,14 @@ export const ReportsPage: React.FC = () => {
           <div className="space-y-6">
             {/* Top Categories Annual */}
             <Card className="p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-700/60">
                 <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                     {yearCategoryType === 'expense'
                       ? 'أعلى التصنيفات إنفاقاً في السنة'
                       : 'أعلى التصنيفات دخلاً في السنة'}
                   </h2>
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                  <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">
                     {yearCategoryType === 'expense' ? 'حسب إجمالي المصاريف' : 'حسب إجمالي المداخيل'}
                   </span>
                 </div>
@@ -1041,7 +1083,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
                 </div>
               ) : yearCategoryDist.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400 dark:text-slate-500">
+                <div className="py-12 text-center text-xs text-zinc-400 dark:text-zinc-500">
                   {yearCategoryType === 'expense'
                     ? 'لا توجد مصاريف مسجلة في هذه السنة'
                     : 'لا توجد مداخيل مسجلة في هذه السنة'}
@@ -1062,28 +1104,28 @@ export const ReportsPage: React.FC = () => {
                           setSelectedCategoryModal(item)
                         }
                       }}
-                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                      className="space-y-1.5 p-2 -mx-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition-colors cursor-pointer group"
                       title="اضغط لعرض المعاملات التابعة لهذا التصنيف"
                     >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <CategoryIcon icon={item.icon} color={item.color} size="sm" />
-                          <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <span className="font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {item.name}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                            {format(item.amountFils)}
+                          <span className="font-extrabold text-zinc-800 dark:text-zinc-100">
+                            <FormattedMoney amountFils={item.amountFils} />
                           </span>
-                          <span className="font-bold text-slate-400 dark:text-slate-500 min-w-8 text-end">
+                          <span className="font-bold text-zinc-400 dark:text-zinc-500 min-w-8 text-end">
                             {item.percentage}%
                           </span>
                         </div>
                       </div>
 
                       {/* Progress Bar */}
-                      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700/60 rounded-full overflow-hidden">
+                      <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-700/60 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
                           style={{
@@ -1096,7 +1138,7 @@ export const ReportsPage: React.FC = () => {
                   ))}
 
                   {yearCategoryDist.length > 6 && (
-                    <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-700/40 print-hide">
+                    <div className="pt-2 text-center border-t border-zinc-100 dark:border-zinc-700/40 print-hide">
                       <button
                         type="button"
                         onClick={() => setShowAllYearCategories((v) => !v)}
@@ -1121,18 +1163,18 @@ export const ReportsPage: React.FC = () => {
 
             {/* Monthly Breakdown Table */}
             <Card className="p-5">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-700/60">
                 <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
                     تفاصيل الشهور
                   </h2>
                   {monthStartDay > 1 && (
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
                       الدورة المالية تبدأ يوم {monthStartDay}
                     </span>
                   )}
                 </div>
-                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">
                   12 شهراً
                 </span>
               </div>
@@ -1140,7 +1182,7 @@ export const ReportsPage: React.FC = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-start border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                    <tr className="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400">
                       <th className="p-2.5 text-start font-bold">الشهر</th>
                       <th className="p-2.5 text-start font-bold">المداخيل</th>
                       <th className="p-2.5 text-start font-bold">المصاريف</th>
@@ -1158,34 +1200,40 @@ export const ReportsPage: React.FC = () => {
                           row.monthIndex > currentFiscalInfo.monthIndex)
                       const isUnstartedFuture =
                         isFutureMonth && row.income === 0 && row.expense === 0
-                      const isEmptyPastMonth =
-                        !isCurrentRowMonth && !isFutureMonth && row.income === 0 && row.expense === 0
+                      const isEmptyRecord = row.income === 0 && row.expense === 0
 
                       return (
                         <tr
                           key={row.monthIndex}
                           className={cn(
-                            'border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors',
+                            'border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-50/60 dark:hover:bg-zinc-700/30 transition-colors',
                             isCurrentRowMonth &&
                               'bg-blue-50/70 dark:bg-blue-950/40 font-bold border-s-4 border-blue-600'
                           )}
                         >
-                          <td className="p-2.5 font-bold text-slate-700 dark:text-slate-200">
-                            <span className="inline-flex items-center gap-1.5 flex-wrap">
-                              <span>{row.monthName}</span>
-                              {isCurrentRowMonth && (
-                                <span className="px-1.5 py-0.5 text-[10px] rounded-md bg-blue-600 text-white font-bold">
-                                  الشهر الحالي
+                          <td className="p-2.5 font-bold text-zinc-700 dark:text-zinc-200">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                <span>{row.monthName}</span>
+                                {isCurrentRowMonth && (
+                                  <span className="px-1.5 py-0.5 text-[10px] rounded-md bg-blue-600 text-white font-bold">
+                                    الشهر الحالي
+                                  </span>
+                                )}
+                              </span>
+                              {row.dateRange && (
+                                <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-normal">
+                                  {row.dateRange}
                                 </span>
                               )}
-                            </span>
+                            </div>
                           </td>
                           <td className="p-2.5 font-bold text-emerald-600 dark:text-emerald-400">
                             {isUnstartedFuture ? (
-                              <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
+                              <span className="text-zinc-400 dark:text-zinc-500 italic text-[11px] font-normal">
                                 لم يبدأ بعد
                               </span>
-                            ) : isEmptyPastMonth ? (
+                            ) : isEmptyRecord ? (
                               <span className="text-zinc-400 dark:text-zinc-600 font-normal">—</span>
                             ) : (
                               <FormattedMoney amountFils={row.income} />
@@ -1193,10 +1241,10 @@ export const ReportsPage: React.FC = () => {
                           </td>
                           <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
                             {isUnstartedFuture ? (
-                              <span className="text-slate-400 dark:text-slate-500 italic text-[11px] font-normal">
+                              <span className="text-zinc-400 dark:text-zinc-500 italic text-[11px] font-normal">
                                 لم يبدأ بعد
                               </span>
-                            ) : isEmptyPastMonth ? (
+                            ) : isEmptyRecord ? (
                               <span className="text-zinc-400 dark:text-zinc-600 font-normal">—</span>
                             ) : (
                               <FormattedMoney amountFils={row.expense} />
@@ -1210,7 +1258,11 @@ export const ReportsPage: React.FC = () => {
                                 : 'text-red-500 dark:text-red-400'
                             )}
                           >
-                            {isUnstartedFuture || isEmptyPastMonth ? (
+                            {isUnstartedFuture ? (
+                              <span className="text-zinc-400 dark:text-zinc-500 italic text-[11px] font-normal">
+                                لم يبدأ بعد
+                              </span>
+                            ) : isEmptyRecord ? (
                               <span className="text-zinc-400 dark:text-zinc-600 font-normal">
                                 —
                               </span>
@@ -1223,8 +1275,8 @@ export const ReportsPage: React.FC = () => {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-slate-300 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-800/80 font-black">
-                      <td className="p-2.5 text-slate-800 dark:text-slate-100 font-black">
+                    <tr className="border-t-2 border-zinc-300 dark:border-zinc-600 bg-zinc-50/80 dark:bg-zinc-800/80 font-black">
+                      <td className="p-2.5 text-zinc-800 dark:text-zinc-100 font-black">
                         الإجمالي السنوي
                       </td>
                       <td className="p-2.5 text-emerald-600 dark:text-emerald-400 font-black">
@@ -1260,22 +1312,22 @@ export const ReportsPage: React.FC = () => {
       >
         <div className="space-y-4 pt-1">
           {selectedCategoryModal && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-700/50">
               <div className="flex items-center gap-2.5">
                 <CategoryIcon
                   icon={selectedCategoryModal.icon}
                   color={selectedCategoryModal.color}
                   size="md"
                 />
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
                   {selectedCategoryModal.name}
                 </span>
               </div>
               <div className="text-end">
-                <div className="text-sm font-black text-slate-800 dark:text-slate-100">
-                  {format(selectedCategoryModal.amountFils)}
+                <div className="text-sm font-black text-zinc-800 dark:text-zinc-100">
+                  <FormattedMoney amountFils={selectedCategoryModal.amountFils} />
                 </div>
-                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold">
+                <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-semibold">
                   {selectedCategoryModal.percentage}% من الإجمالي
                 </div>
               </div>
@@ -1283,11 +1335,11 @@ export const ReportsPage: React.FC = () => {
           )}
 
           {modalTransactions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
+            <div className="py-8 text-center text-xs text-zinc-400 dark:text-zinc-500">
               لا توجد معاملات مسجلة في هذا التصنيف خلال هذه الفترة
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[50vh] overflow-y-auto ps-1 pe-2 -me-2">
+            <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-[50vh] overflow-y-auto ps-1 pe-2 -me-2">
               {modalTransactions.map((tx) => {
                 const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
                 return (
@@ -1296,7 +1348,7 @@ export const ReportsPage: React.FC = () => {
                       <div className="font-bold text-zinc-800 dark:text-zinc-100">
                         {tx.title?.trim() || tx.note?.trim() || selectedCategoryModal?.name}
                       </div>
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                         {toWesternDigits(formatDate(txDate, 'd MMMM yyyy', { locale: ar }))}
                       </div>
                     </div>
@@ -1308,7 +1360,7 @@ export const ReportsPage: React.FC = () => {
                           : 'text-red-500 dark:text-red-400'
                       )}
                     >
-                      {format(tx.amountFils)}
+                      <FormattedMoney amountFils={tx.amountFils} />
                     </div>
                   </div>
                 )

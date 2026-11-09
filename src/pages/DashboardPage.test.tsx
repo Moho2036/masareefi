@@ -153,7 +153,7 @@ describe('DashboardPage Component', () => {
 
     expect(screen.getByText('لوحة التحكم')).toBeInTheDocument()
     expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
-    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getByText('صافي الدورة المالية:')).toBeInTheDocument()
     expect(screen.getAllByText('50').length).toBeGreaterThanOrEqual(1)
     const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
     expect(heroCard).toHaveTextContent('50')
@@ -176,7 +176,7 @@ describe('DashboardPage Component', () => {
     )
 
     expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
-    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getByText('صافي الدورة المالية:')).toBeInTheDocument()
     expect(screen.getAllByText('75').length).toBeGreaterThanOrEqual(1)
     const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
     expect(heroCard).toHaveTextContent('75')
@@ -194,7 +194,7 @@ describe('DashboardPage Component', () => {
     )
 
     expect(screen.getByText('الرصيد المتاح')).toBeInTheDocument()
-    expect(screen.getByText('صافي هذا الشهر:')).toBeInTheDocument()
+    expect(screen.getByText('صافي الدورة المالية:')).toBeInTheDocument()
     expect(screen.getAllByText('20').length).toBeGreaterThanOrEqual(1)
     const heroCard = screen.getByText('الرصيد المتاح').closest('div[class*="rounded"]')!
     expect(heroCard).toHaveTextContent('20')

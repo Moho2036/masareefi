@@ -43,12 +43,12 @@ import {
   confirmRecurringOccurrence,
   skipRecurringOccurrence,
 } from '../services/recurring'
-import { isUserTurnMonth, updateMoneyCircle } from '../services/moneyCircles'
+import { isUserTurnMonth, updateMoneyCircle, depositCircleNetPayout } from '../services/moneyCircles'
 import { calculateMonthlyEquivalent, isOccurrenceSkipped } from '../lib/recurring'
 import { toFils, fromFils } from '../lib/money'
 import { toWesternDigits } from '../lib/dates'
 import { cn } from '../lib/cn'
-import type { Recurring, Frequency } from '../types'
+import type { Recurring, Frequency, MoneyCircle } from '../types'
 
 const ParamWatcher: React.FC<{
   recurringItems: Recurring[]
@@ -159,7 +159,7 @@ export const RecurringPage: React.FC = () => {
     return calculateMonthlyEquivalent(recurringItems, new Date())
   }, [recurringItems])
 
-  // Active expense commitments due within 7 days
+  // Active expense commitments due within 7 days (excludes overdue items and skipped circle occurrences)
   const dueWithin7DaysStats = useMemo(() => {
     const todayStart = startOfDay(new Date())
     let totalFils = 0
@@ -168,13 +168,13 @@ export const RecurringPage: React.FC = () => {
       if (!item.active || item.type !== 'expense') continue
       const nextD = startOfDay(item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate))
       const diff = differenceInDays(nextD, todayStart)
-      if (diff <= 7) {
+      if (diff >= 0 && diff <= 7 && !isOccurrenceSkipped(item, nextD, settings?.monthStartDay)) {
         totalFils += item.amountFils
         count += 1
       }
     }
     return { totalFils, count }
-  }, [recurringItems])
+  }, [recurringItems, settings?.monthStartDay])
 
   // Sorted recurring items: active (active !== false) first, paused (active === false) last.
   // Within each group, closest upcoming nextDate ascending first.
@@ -256,6 +256,34 @@ export const RecurringPage: React.FC = () => {
     yearly: 'سنوي',
   }
 
+  const [depositingCircleId, setDepositingCircleId] = useState<string | null>(null)
+
+  const handleDepositCircleDirect = async (circle: MoneyCircle) => {
+    if (!user) return
+    setDepositingCircleId(circle.id)
+    try {
+      const defaultIncomeCat = categories.find((c) => c.type === 'income')
+      await depositCircleNetPayout(user.uid, circle, defaultIncomeCat?.id || 'cat-custom-circle')
+      showToast('تم إيداع صافي الجمعية في الرصيد بنجاح', 'success')
+    } catch (err) {
+      console.error('Failed to deposit circle payout:', err)
+      showToast('تعذر إيداع صافي الجمعية', 'error')
+    } finally {
+      setDepositingCircleId(null)
+    }
+  }
+
+  const historyTxs = useMemo(() => {
+    if (!historyItem) return []
+    return allTransactions
+      .filter((t) => t.recurringId === historyItem.id)
+      .sort((a, b) => {
+        const aDate = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
+        const bDate = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
+        return bDate - aDate
+      })
+  }, [allTransactions, historyItem])
+
   return (
     <div className="space-y-6 animate-slide-up">
       {inRouter && (
@@ -292,48 +320,56 @@ export const RecurringPage: React.FC = () => {
         {/* Income Card */}
         <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
               مداخيل ثابتة شهرياً
             </span>
             <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 select-none">
               <FormattedMoney amountFils={monthlyStats.monthlyIncome} />
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-            <TrendingUp className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0 border border-[#E4E4E7]/60 dark:border-[#27272A]">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Expense Card */}
         <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
               مصاريف ثابتة شهرياً
             </span>
             <span className="text-xl sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
               <FormattedMoney amountFils={monthlyStats.monthlyExpense} />
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-            <TrendingDown className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0 border border-[#E4E4E7]/60 dark:border-[#27272A]">
+            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Due in 7 Days Card */}
         <div className="col-span-2 lg:col-span-1 bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
               مستحق خلال 7 أيام
             </span>
             <div className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 select-none">
               <FormattedMoney amountFils={dueWithin7DaysStats.totalFils} />
             </div>
             <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 block mt-0.5">
-              {dueWithin7DaysStats.count === 0 ? 'لا توجد دفعات قريبة' : `${dueWithin7DaysStats.count} دفعات قادمة`}
+              {dueWithin7DaysStats.count === 0
+                ? 'لا توجد دفعات قريبة'
+                : dueWithin7DaysStats.count === 1
+                  ? 'دفعة واحدة قادمة'
+                  : dueWithin7DaysStats.count === 2
+                    ? 'دفعتان قادمتان'
+                    : dueWithin7DaysStats.count <= 10
+                      ? `${dueWithin7DaysStats.count} دفعات قادمة`
+                      : `${dueWithin7DaysStats.count} دفعة قادمة`}
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-            <Calendar className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0 border border-[#E4E4E7]/60 dark:border-[#27272A]">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
       </div>
@@ -418,10 +454,7 @@ export const RecurringPage: React.FC = () => {
                 {/* Top Row: Category + Frequency Badge */}
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${color}25` }}
-                    >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
                       <CategoryIcon icon={icon} color={color} size="md" />
                     </div>
                     <div className="min-w-0">
@@ -442,21 +475,12 @@ export const RecurringPage: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!item.active && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-750 text-zinc-700 dark:text-zinc-300 font-semibold">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold border border-[#E4E4E7] dark:border-[#27272A]">
                         متوقفة مؤقتاً
                       </span>
                     )}
                     {item.requireConfirmation && (
-                      <span
-                        className={cn(
-                          'text-[10px] px-2 py-0.5 rounded-full font-bold border',
-                          item.active &&
-                            (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
-                              new Date()
-                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
-                        )}
-                      >
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
                         {item.active &&
                         (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
                           new Date()
@@ -487,22 +511,39 @@ export const RecurringPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Circle Skip Month Indicator */}
+                {/* Circle Skip Month Indicator & Direct Deposit */}
                 {isCircleItem && (
-                  <div className="my-1.5">
+                  <div className="my-1.5 space-y-1.5">
                     {isCurrentMonthTurn ? (
-                      <Link
-                        to="/tools?tool=circles"
-                        className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center justify-between hover:bg-zinc-200/60 dark:hover:bg-zinc-750 transition-colors"
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-900/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                           <span>دورك في الاستلام هذا الشهر!</span>
-                        </span>
-                        <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded-full font-bold">
-                          معفى من الخصم
-                        </span>
-                      </Link>
+                          <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded-full font-bold">
+                            معفى من الخصم
+                          </span>
+                        </div>
+                        {linkedCircle && (
+                          <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                            {allTransactions.some((t) => t.id === `circle_payout_${linkedCircle.id}`) ? (
+                              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>تم إيداع الصافي</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={depositingCircleId === linkedCircle.id}
+                                onClick={() => handleDepositCircleDirect(linkedCircle)}
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>إيداع الصافي بالرصيد</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <Link
                         to="/tools?tool=circles"
@@ -529,7 +570,7 @@ export const RecurringPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenConfirm(item)}
-                          className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          className="flex-1 py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>تأكيد وتسجيل الآن</span>
@@ -548,16 +589,28 @@ export const RecurringPage: React.FC = () => {
                     </div>
                   )}
 
-                {/* Bottom Row: Next date, Active toggle, Actions */}
+                {/* Bottom Row: Next date, End date, Active toggle, Actions */}
                 <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 truncate">
-                    <Calendar className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">الموعد القادم: {nextDateFormatted}</span>
+                  <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 truncate flex-wrap">
+                    <div className="flex items-center gap-1 truncate">
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">الموعد القادم: {nextDateFormatted}</span>
+                    </div>
+                    {item.endDate && (
+                      <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                        • ينتهي في:{' '}
+                        {formatDate(
+                          item.endDate instanceof Date ? item.endDate : new Date(item.endDate),
+                          'd MMM yyyy',
+                          { locale: ar }
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
                     {item.active &&
-                      !isCircleItem &&
+                      !isCurrentMonthTurn &&
                       !(
                         item.requireConfirmation &&
                         (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <=
@@ -567,7 +620,7 @@ export const RecurringPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenConfirm(item)}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-zinc-100 dark:hover:text-emerald-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                            className="p-2 min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-zinc-100 dark:hover:text-emerald-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                             aria-label="تسجيل دفعة هذه الدورة الآن"
                             title="تسجيل دفعة هذه الدورة الآن"
                           >
@@ -577,7 +630,7 @@ export const RecurringPage: React.FC = () => {
                             type="button"
                             disabled={skippingId === item.id}
                             onClick={() => handleSkipOccurrence(item)}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:text-amber-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-2 min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:text-amber-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
                             aria-label="تخطي الدورة القادمة"
                             title="تخطي هذه الدورة والانتقال للموعد التالي"
                           >
@@ -590,7 +643,7 @@ export const RecurringPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setHistoryItem(item)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-100 dark:hover:text-blue-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      className="p-2 min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-100 dark:hover:text-blue-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="سجل الدفعات"
                       title="عرض سجل دفعات هذه المعاملة"
                     >
@@ -604,7 +657,7 @@ export const RecurringPage: React.FC = () => {
                         setEditingItem(item)
                         setIsFormOpen(true)
                       }}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      className="p-2 min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="تعديل المعاملة المتكررة"
                       title="تعديل المعاملة المتكررة"
                     >
@@ -615,7 +668,7 @@ export const RecurringPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setItemToDelete(item)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-zinc-100 dark:hover:text-red-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      className="p-2 min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-600 hover:bg-zinc-100 dark:hover:text-red-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                       aria-label="حذف المعاملة المتكررة"
                       title="حذف المعاملة المتكررة"
                     >
@@ -643,7 +696,7 @@ export const RecurringPage: React.FC = () => {
                   {activeItems.map(renderRecurringCard)}
                 </div>
               ) : (
-                <div className="bg-white dark:bg-[#121215] rounded-2xl border border-dashed border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
+                <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-xs">
                   <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                     لا توجد معاملات متكررة نشطة حالياً.
                   </p>
@@ -656,7 +709,7 @@ export const RecurringPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setUserToggledPaused(!isPausedExpanded)}
-                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-900 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
                     aria-expanded={isPausedExpanded}
                   >
                     <div className="flex items-center gap-2">
@@ -696,9 +749,9 @@ export const RecurringPage: React.FC = () => {
         title="تأكيد حذف المعاملة المتكررة"
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <p className="text-sm font-semibold">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-600 dark:text-red-400" />
+            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               هل أنت متأكد من حذف هذه المعاملة المتكررة؟ لن يتم إنشاء أي معاملات مستقبلية منها.
             </p>
           </div>
@@ -731,14 +784,14 @@ export const RecurringPage: React.FC = () => {
       >
         {confirmingItem && (
           <form onSubmit={handleConfirmSubmit} noValidate className="space-y-4">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-              <span className="text-xs text-slate-400 dark:text-slate-500 font-bold block">
+            <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-1">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 font-bold block">
                 المعاملة:
               </span>
-              <span className="text-sm font-black text-slate-800 dark:text-slate-100">
+              <span className="text-sm font-black text-zinc-800 dark:text-zinc-100">
                 {confirmingItem.title || categoryMap.get(confirmingItem.categoryId)?.name || 'معاملة دورية'}
               </span>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                 تاريخ الاستحقاق:{' '}
                 {toWesternDigits(
                   formatDate(
@@ -759,12 +812,12 @@ export const RecurringPage: React.FC = () => {
                 inputMode="decimal"
                 value={confirmAmountStr}
                 onChange={(e) => {
-                  setConfirmAmountStr(e.target.value)
+                  setConfirmAmountStr(toWesternDigits(e.target.value))
                   setConfirmError(null)
                 }}
                 required
               />
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
                 يمكنك تعديل المبلغ الفعلي لهذه الدفعة دون تغيير المبلغ الأساسي للمعاملة.
               </p>
             </div>
@@ -813,26 +866,13 @@ export const RecurringPage: React.FC = () => {
       >
         {historyItem && (
           <div className="space-y-3">
-            {(() => {
-              const historyTxs = allTransactions
-                .filter((t) => t.recurringId === historyItem.id)
-                .sort((a, b) => {
-                  const aDate = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
-                  const bDate = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
-                  return bDate - aDate
-                })
-
-              if (historyTxs.length === 0) {
-                return (
-                  <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
-                    لم يتم تسجيل أي دفعات سابقة لهذه المعاملة المتكررة حتى الآن.
-                  </div>
-                )
-              }
-
-              return (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
-                  {historyTxs.map((tx) => {
+            {historyTxs.length === 0 ? (
+              <div className="py-8 text-center text-zinc-500 dark:text-zinc-400 text-xs">
+                لم يتم تسجيل أي دفعات سابقة لهذه المعاملة المتكررة حتى الآن.
+              </div>
+            ) : (
+              <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] px-3 bg-zinc-50/50 dark:bg-zinc-900/40">
+                {historyTxs.map((tx) => {
                     const txDateFormatted = toWesternDigits(
                       formatDate(
                         tx.date instanceof Date ? tx.date : new Date(tx.date),
@@ -843,16 +883,16 @@ export const RecurringPage: React.FC = () => {
                     return (
                       <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
                         <div>
-                          <div className="font-bold text-slate-800 dark:text-slate-100">
+                          <div className="font-bold text-zinc-800 dark:text-zinc-100">
                             {tx.title || txDateFormatted}
                           </div>
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                             {txDateFormatted}
                           </div>
                         </div>
                         <span
                           className={cn(
-                            'font-black text-sm',
+                            'font-black text-sm select-none',
                             tx.type === 'expense'
                               ? 'text-red-500 dark:text-red-400'
                               : 'text-emerald-600 dark:text-emerald-400'
@@ -864,8 +904,7 @@ export const RecurringPage: React.FC = () => {
                     )
                   })}
                 </div>
-              )
-            })()}
+              )}
 
             <div className="flex justify-end pt-2">
               <Button

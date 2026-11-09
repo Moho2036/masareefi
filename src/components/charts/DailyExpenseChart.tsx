@@ -37,11 +37,11 @@ const CustomDailyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
     )
 
     return (
-      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3 rounded-xl shadow-lg text-xs space-y-1 z-50 text-start min-w-[150px]">
-        <div className="font-semibold text-slate-500 dark:text-slate-400">
+      <div className="bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] p-3 rounded-xl shadow-lg dark:shadow-none text-xs space-y-1 z-50 text-start min-w-[150px]">
+        <div className="font-semibold text-zinc-500 dark:text-zinc-400">
           {dateFormatted}
         </div>
-        <div className="text-red-500 dark:text-red-400 font-black text-sm">
+        <div className="text-red-600 dark:text-red-400 font-black text-sm">
           {formatCurrency(item.amountFils)}
         </div>
       </div>
@@ -55,15 +55,22 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
   className,
   height = 240,
 }) => {
-  const { format: formatCurrency } = useCurrency()
-  const isMasked = formatCurrency(1000).includes('•••••')
+  const { hideBalances } = useCurrency()
+  const isMasked = hideBalances
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
+    let ticking = false
     const dismissTooltip = () => {
-      if (containerRef.current) {
-        containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
+          }
+          ticking = false
+        })
+        ticking = true
       }
     }
     const handleTouchOutside = (e: TouchEvent) => {
@@ -107,7 +114,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-500 min-h-[190px]',
+          'flex flex-col items-center justify-center text-center p-6 text-zinc-400 dark:text-zinc-500 min-h-[190px]',
           className
         )}
       >
@@ -133,8 +140,8 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
         >
           <defs>
             <linearGradient id="expenseTrendGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#EF4444" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#EF4444" stopOpacity={0.0} />
+              <stop offset="5%" stopColor="#DC2626" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#DC2626" stopOpacity={0.0} />
             </linearGradient>
           </defs>
           <CartesianGrid
@@ -148,7 +155,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 10, fill: 'currentColor' }}
-            className="text-slate-400 dark:text-slate-500"
+            className="text-zinc-400 dark:text-zinc-500"
             dy={8}
             interval="preserveStartEnd"
           />
@@ -157,14 +164,14 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 11, fill: 'currentColor' }}
-            className="text-slate-400 dark:text-slate-500"
+            className="text-zinc-400 dark:text-zinc-500"
             tickFormatter={(val: number) => (isMasked ? '•••' : formatCompactNumber(val))}
           />
           <Tooltip content={<CustomDailyTooltip />} />
           <Area
             type="monotone"
             dataKey="jod"
-            stroke="#EF4444"
+            stroke="#DC2626"
             strokeWidth={2.5}
             fillOpacity={1}
             fill="url(#expenseTrendGradient)"

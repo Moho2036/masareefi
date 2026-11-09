@@ -167,4 +167,48 @@ describe('RecurringPage Component', () => {
     expect(screen.getByRole('button', { name: /تأكيد وتسجيل الآن/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /تخطي/i })).toBeInTheDocument()
   })
+
+  it('calculates due within 7 days stats accurately by excluding overdue transactions and skipped circle occurrences', () => {
+    const today = new Date()
+    const in3Days = new Date(today)
+    in3Days.setDate(today.getDate() + 3)
+
+    const overdue20Days = new Date(today)
+    overdue20Days.setDate(today.getDate() - 20)
+
+    const rUpcoming: Recurring = {
+      id: 'rec-upcoming',
+      type: 'expense',
+      amountFils: 25000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: in3Days,
+      active: true,
+      title: 'فاتورة قادمة',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    const rOverdue: Recurring = {
+      id: 'rec-overdue',
+      type: 'expense',
+      amountFils: 50000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: overdue20Days,
+      active: true,
+      title: 'فاتورة متأخرة قديمة',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [rUpcoming, rOverdue]
+    render(<RecurringPage />)
+
+    // Only rUpcoming (25.000 د.أ) should be counted in 7 days, rOverdue should be excluded!
+    expect(screen.getAllByText('25').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('دفعة واحدة قادمة')).toBeInTheDocument()
+  })
 })

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   validateBackup,
   restoreBackup,
-  restoreBackupData,
   downloadBackupFile,
   parseDate,
   type MasareefiBackup,
@@ -875,12 +874,6 @@ describe('backupRestore module', () => {
 
       // existingRef should NOT be deleted because it is used by backup transactions and no category named 'تصنيف هام قديم' is in categories
       expect(mockDelete).not.toHaveBeenCalledWith(existingRef)
-    })
-  })
-
-  describe('restoreBackupData alias', () => {
-    it('exports restoreBackupData as a direct reference to restoreBackup', () => {
-      expect(restoreBackupData).toBe(restoreBackup)
     })
   })
 

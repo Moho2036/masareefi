@@ -24,7 +24,7 @@ export function getCategoryUsageMap(): Record<string, number> {
   }
 }
 
-export function saveCategoryUsageMap(map: Record<string, number>): void {
+function saveCategoryUsageMap(map: Record<string, number>): void {
   try {
     const serialized = JSON.stringify(map)
     if (serialized === cachedRawJson && localStorage.getItem(USAGE_KEY) === serialized) {
@@ -78,9 +78,14 @@ export function mergeUsageMaps(
   txMap: Record<string, number>,
   localMap: Record<string, number> = getCategoryUsageMap()
 ): Record<string, number> {
+  // txMap is the primary source of truth from Firestore.
+  // Categories present only in localMap (e.g. offline-pending records) are preserved,
+  // but existing categories in txMap are never overridden by obsolete local counts.
   const merged: Record<string, number> = { ...txMap }
   for (const [catId, count] of Object.entries(localMap)) {
-    merged[catId] = Math.max(merged[catId] || 0, count)
+    if (merged[catId] === undefined) {
+      merged[catId] = count
+    }
   }
   return merged
 }
@@ -176,30 +181,4 @@ export function getCategoryUsageDetails(
     totalCount,
     isInUse: totalCount > 0,
   }
-}
-
-/**
- * Returns the total usage count of a category across transactions, recurring rules, and money circles.
- */
-export function getCategoryUsageCount(
-  categoryId: string,
-  transactions: Array<{ categoryId?: string }> = [],
-  recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = {},
-  circles: Array<{ expenseCategoryId?: string; incomeCategoryId?: string; categoryId?: string }> = []
-): number {
-  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap, circles).totalCount
-}
-
-/**
- * Returns true if a category is currently linked to any transaction, recurring rule, or money circle.
- */
-export function isCategoryInUse(
-  categoryId: string,
-  transactions: Array<{ categoryId?: string }> = [],
-  recurring: Array<{ categoryId?: string }> = [],
-  localMap: Record<string, number> = {},
-  circles: Array<{ expenseCategoryId?: string; incomeCategoryId?: string; categoryId?: string }> = []
-): boolean {
-  return getCategoryUsageDetails(categoryId, transactions, recurring, localMap, circles).isInUse
 }

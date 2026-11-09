@@ -28,6 +28,8 @@ export interface FilterTransactionsOptions {
   categoryIds?: string[]
   sourceType?: 'all' | 'manual' | 'recurring' | 'debt' | 'circle'
   dateRange?: { from?: Date; to?: Date }
+  circleRecurringIdsSet?: Set<string>
+  debtTransactionIdsSet?: Set<string>
 }
 
 export type CategoryResolver =
@@ -95,8 +97,11 @@ export function filterTransactions(
       const isDebt =
         tx.id.startsWith('debt_init_') ||
         tx.id.startsWith('debt_entry_') ||
-        tx.id.startsWith('debt_pay_')
-      const isCircle = tx.id.startsWith('circle_')
+        tx.id.startsWith('debt_pay_') ||
+        (filters.debtTransactionIdsSet ? filters.debtTransactionIdsSet.has(tx.id) : false)
+      const isCircle =
+        tx.id.startsWith('circle_') ||
+        Boolean(filters.circleRecurringIdsSet && tx.recurringId && filters.circleRecurringIdsSet.has(tx.recurringId))
       const isRecurring = Boolean(tx.recurringId) && !isCircle
 
       if (sourceType === 'debt' && !isDebt) return false
@@ -108,13 +113,14 @@ export function filterTransactions(
     // Custom Date range filtering
     if (fromTime !== null || toTime !== null) {
       const txTime = (tx.date instanceof Date ? tx.date : new Date(tx.date)).getTime()
+      if (Number.isNaN(txTime)) return false
       if (fromTime !== null && txTime < fromTime) return false
       if (toTime !== null && txTime > toTime) return false
     }
 
     if (normalizedQuery) {
       const normalizedTitle = tx.title ? normalizeArabic(toWesternDigits(tx.title)) : ''
-      const normalizedNote = normalizeArabic(toWesternDigits(tx.note))
+      const normalizedNote = tx.note ? normalizeArabic(toWesternDigits(tx.note)) : ''
       let normalizedCatName = ''
       if (categoryResolver && tx.categoryId) {
         const cached = normalizedCatCache.get(tx.categoryId)
@@ -183,10 +189,14 @@ export function sumByType(txs: Transaction[]): SumByTypeResult {
   let income = 0
 
   for (const tx of txs) {
+    if (!tx || typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) {
+      continue
+    }
+    const amount = Math.abs(tx.amountFils)
     if (tx.type === 'expense') {
-      expense += tx.amountFils
+      expense += amount
     } else if (tx.type === 'income') {
-      income += tx.amountFils
+      income += amount
     }
   }
 
@@ -203,11 +213,16 @@ export interface DayGroup {
   transactions: Transaction[]
 }
 
-export function groupByDay(txs: Transaction[]): DayGroup[] {
+export function groupByDay(
+  txs: Transaction[],
+  direction: 'asc' | 'desc' = 'desc'
+): DayGroup[] {
   const groupsMap = new Map<string, { date: Date; transactions: Transaction[] }>()
 
   for (const tx of txs) {
-    const d = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    const rawDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    const rawTime = rawDate.getTime()
+    const d = Number.isNaN(rawTime) ? new Date(0) : rawDate
     const year = d.getFullYear()
     const month = String(d.getMonth() + 1).padStart(2, '0')
     const day = String(d.getDate()).padStart(2, '0')
@@ -224,21 +239,27 @@ export function groupByDay(txs: Transaction[]): DayGroup[] {
     group.transactions.push(tx)
   }
 
-  // Sort groups descending by dateKey
-  const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => b.localeCompare(a))
+  // Sort groups by dateKey according to direction
+  const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) =>
+    direction === 'asc' ? a.localeCompare(b) : b.localeCompare(a)
+  )
 
   return sortedKeys.map((key) => {
     const g = groupsMap.get(key)!
-    // Sort transactions within day descending by time, then createdAt descending
+    // Sort transactions within day by date/time, then createdAt
     g.transactions.sort((a, b) => {
-      const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
-      const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+      const rawA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
+      const rawB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+      const timeA = Number.isNaN(rawA) ? 0 : rawA
+      const timeB = Number.isNaN(rawB) ? 0 : rawB
       if (timeB !== timeA) {
-        return timeB - timeA
+        return direction === 'asc' ? timeA - timeB : timeB - timeA
       }
-      const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
-      const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
-      return createdB - createdA
+      const rawCreatedA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+      const rawCreatedB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+      const createdA = Number.isNaN(rawCreatedA) ? 0 : rawCreatedA
+      const createdB = Number.isNaN(rawCreatedB) ? 0 : rawCreatedB
+      return direction === 'asc' ? createdA - createdB : createdB - createdA
     })
     return {
       dateKey: key,
@@ -248,14 +269,6 @@ export function groupByDay(txs: Transaction[]): DayGroup[] {
   })
 }
 
-export function countByCategory(txs: Transaction[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const tx of txs) {
-    counts[tx.categoryId] = (counts[tx.categoryId] || 0) + 1
-  }
-  return counts
-}
-
 export type TransactionSortOption = 'newest' | 'oldest' | 'highest' | 'lowest'
 
 export function sortTransactions(
@@ -263,37 +276,53 @@ export function sortTransactions(
   sortBy: TransactionSortOption = 'newest'
 ): Transaction[] {
   const copy = [...txs]
+  const getTime = (d: unknown): number => {
+    const t = (d instanceof Date ? d : new Date(d as string | number)).getTime()
+    return Number.isNaN(t) ? 0 : t
+  }
+  const getCreatedTime = (d: unknown): number => {
+    const t = d instanceof Date ? d.getTime() : new Date((d as string | number) || 0).getTime()
+    return Number.isNaN(t) ? 0 : t
+  }
+  const getAmount = (a: number): number => {
+    return typeof a === 'number' && Number.isFinite(a) ? a : 0
+  }
+
   switch (sortBy) {
     case 'newest':
       return copy.sort((a, b) => {
-        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
-        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        const timeA = getTime(a.date)
+        const timeB = getTime(b.date)
         if (timeB !== timeA) return timeB - timeA
-        const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
-        const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+        const createdA = getCreatedTime(a.createdAt)
+        const createdB = getCreatedTime(b.createdAt)
         return createdB - createdA
       })
     case 'oldest':
       return copy.sort((a, b) => {
-        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
-        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        const timeA = getTime(a.date)
+        const timeB = getTime(b.date)
         if (timeA !== timeB) return timeA - timeB
-        const createdA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
-        const createdB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+        const createdA = getCreatedTime(a.createdAt)
+        const createdB = getCreatedTime(b.createdAt)
         return createdA - createdB
       })
     case 'highest':
       return copy.sort((a, b) => {
-        if (b.amountFils !== a.amountFils) return b.amountFils - a.amountFils
-        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
-        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        const amtA = getAmount(a.amountFils)
+        const amtB = getAmount(b.amountFils)
+        if (amtB !== amtA) return amtB - amtA
+        const timeA = getTime(a.date)
+        const timeB = getTime(b.date)
         return timeB - timeA
       })
     case 'lowest':
       return copy.sort((a, b) => {
-        if (a.amountFils !== b.amountFils) return a.amountFils - b.amountFils
-        const timeA = (a.date instanceof Date ? a.date : new Date(a.date)).getTime()
-        const timeB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime()
+        const amtA = getAmount(a.amountFils)
+        const amtB = getAmount(b.amountFils)
+        if (amtA !== amtB) return amtA - amtB
+        const timeA = getTime(a.date)
+        const timeB = getTime(b.date)
         return timeB - timeA
       })
     default:

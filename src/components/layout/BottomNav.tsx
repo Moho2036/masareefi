@@ -298,7 +298,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
         aria-label="شريط التنقل السفلي"
         className="fixed inset-x-0 bottom-0 z-30 lg:hidden px-3.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1 pointer-events-none"
       >
-        <div className="pointer-events-auto bg-white/95 dark:bg-[#121215]/95 backdrop-blur-md border border-[#E4E4E7] dark:border-[#27272A] rounded-3xl shadow-lg px-3 py-1 flex items-center justify-around max-w-md mx-auto">
+        <div className="pointer-events-auto bg-white/95 dark:bg-[#121215]/95 backdrop-blur-md border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-lg dark:shadow-none px-3 py-1 flex items-center justify-around max-w-md mx-auto">
           {/* 1. الرئيسية */}
           <Link
             to="/"

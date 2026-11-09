@@ -118,38 +118,21 @@ describe('ReportsPage month switching and period header', () => {
     }
   })
 
-  it('renders MonthSelector in header when monthly report tab is active', () => {
+  it('renders period switcher in header when monthly report tab is active', () => {
     render(
       <MemoryRouter>
         <ReportsPage />
       </MemoryRouter>
     )
 
-    // MonthSelector group is present
-    expect(screen.getByRole('group', { name: 'اختيار الشهر المالي' })).toBeInTheDocument()
-    expect(screen.getByText('أكتوبر 2026')).toBeInTheDocument()
-
-    // When isCurrentMonth is true, "الشهر الحالي" button is hidden
-    expect(screen.queryByTitle('العودة إلى الشهر الحالي')).not.toBeInTheDocument()
+    // Period switcher is present with monthly active
+    expect(screen.getByRole('radio', { name: 'تقرير شهري' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'تقرير سنوي' })).toBeInTheDocument()
+    // Year select is not shown in monthly mode
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
-  it('shows quick return button "الشهر الحالي" when not on current month and triggers goToCurrentMonth', () => {
-    mockIsCurrentMonth = false
-
-    render(
-      <MemoryRouter>
-        <ReportsPage />
-      </MemoryRouter>
-    )
-
-    const returnBtn = screen.getByTitle('العودة إلى الشهر الحالي')
-    expect(returnBtn).toBeInTheDocument()
-
-    fireEvent.click(returnBtn)
-    expect(mockGoToCurrentMonth).toHaveBeenCalledTimes(1)
-  })
-
-  it('switches to annual report and displays year select instead of MonthSelector', () => {
+  it('switches to annual report and displays year select', () => {
     render(
       <MemoryRouter>
         <ReportsPage />
@@ -159,9 +142,6 @@ describe('ReportsPage month switching and period header', () => {
     // Switch to yearly report
     const yearlyRadio = screen.getByRole('radio', { name: 'تقرير سنوي' })
     fireEvent.click(yearlyRadio)
-
-    // MonthSelector is gone
-    expect(screen.queryByRole('group', { name: 'اختيار الشهر المالي' })).not.toBeInTheDocument()
 
     // Year select dropdown is present
     expect(screen.getByRole('combobox')).toBeInTheDocument()
@@ -180,7 +160,7 @@ describe('ReportsPage month switching and period header', () => {
     expect(screen.getByText('لا توجد مصاريف مسجلة في هذا الشهر')).toBeInTheDocument()
   })
 
-  it('colors 0% savings rate in red when month has deficit (income 0, expense > 0)', () => {
+  it('shows neutral dash for savings rate when income is 0 and month has deficit (income 0, expense > 0)', () => {
     mockTransactions = [
       {
         id: 'tx-1',
@@ -199,13 +179,13 @@ describe('ReportsPage month switching and period header', () => {
       </MemoryRouter>
     )
 
-    // Savings rate is %0, but since balance is -50 JOD, it must be red
-    const rateEl = screen.getByText('%0')
-    expect(rateEl).toHaveClass('text-red-500')
-    expect(rateEl).not.toHaveClass('text-emerald-600')
+    // When income is 0 and expense > 0, savings rate is neutral dash '—' with explanatory subtext
+    const rateEl = screen.getByText('—')
+    expect(rateEl).toHaveClass('text-zinc-400')
+    expect(screen.getByText('لا يوجد دخل مسجل لحساب النسبة')).toBeInTheDocument()
   })
 
-  it('colors 0% savings rate in gray when both income and expense are 0', () => {
+  it('shows neutral dash for savings rate when both income and expense are 0', () => {
     mockTransactions = []
 
     render(
@@ -214,10 +194,43 @@ describe('ReportsPage month switching and period header', () => {
       </MemoryRouter>
     )
 
-    // With 0 income and 0 expense, it should be neutral gray
-    const rateEl = screen.getByText('%0')
-    expect(rateEl).toHaveClass('text-slate-400')
-    expect(rateEl).not.toHaveClass('text-red-500')
+    // With 0 income and 0 expense, it should be neutral gray dash '—'
+    const rateEl = screen.getByText('—')
+    expect(rateEl).toHaveClass('text-zinc-400')
+    expect(screen.getByText('من إجمالي الدخل المحصل')).toBeInTheDocument()
+  })
+
+  it('colors negative savings rate in red when month has deficit and income > 0', () => {
+    mockTransactions = [
+      {
+        id: 'tx-inc',
+        type: 'income',
+        amountFils: 50000,
+        date: new Date('2026-10-05'),
+        categoryId: 'cat-sal',
+        note: '',
+        createdAt: new Date(),
+      },
+      {
+        id: 'tx-exp',
+        type: 'expense',
+        amountFils: 80000,
+        date: new Date('2026-10-15'),
+        categoryId: 'cat-food',
+        note: '',
+        createdAt: new Date(),
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    // Income 50k, expense 80k -> balance -30k, savings rate is %-60, colored in red
+    const rateEl = screen.getByText('%-60')
+    expect(rateEl).toHaveClass('text-red-500')
     expect(rateEl).not.toHaveClass('text-emerald-600')
   })
 
@@ -330,8 +343,34 @@ describe('ReportsPage month switching and period header', () => {
     const select = screen.getByRole('combobox') as HTMLSelectElement
     const options = Array.from(select.querySelectorAll('option')).map((o) => o.value)
 
-    expect(options.length).toBeGreaterThanOrEqual(10)
+    // Based on user creation in 2021 and current year 2026, includes 2027 down to 2021 (7 years)
+    expect(options.length).toBe(7)
     expect(options).toContain('2021')
+    expect(options).toContain('2027')
+  })
+
+  it('does not generate 10+ arbitrary historical years for newly registered users', () => {
+    mockUserSettings = {
+      ...mockUserSettings,
+      createdAt: new Date('2026-05-10'),
+    }
+
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>
+    )
+
+    const yearlyRadio = screen.getByRole('radio', { name: 'تقرير سنوي' })
+    fireEvent.click(yearlyRadio)
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value)
+
+    // For a user created in 2026, options span only [2027, 2026]
+    expect(options.length).toBeLessThan(5)
+    expect(options).toContain('2026')
+    expect(options).toContain('2027')
   })
 
   it('renders print button in header', () => {

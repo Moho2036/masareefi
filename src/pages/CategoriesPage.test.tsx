@@ -8,6 +8,7 @@ vi.mock('../services/categories', () => ({
   archiveCategory: vi.fn().mockResolvedValue(undefined),
   updateCategory: vi.fn().mockResolvedValue(undefined),
   reassignAndDeleteCategory: vi.fn().mockResolvedValue(undefined),
+  reorderCategories: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../hooks/useAuth', () => ({
@@ -109,7 +110,7 @@ describe('CategoriesPage component category management & protection', () => {
       { id: 'rec-1', categoryId: 'cat-used-rec', type: 'expense', amountFils: 25000, active: true },
     ]
     mockTransactions = [
-      { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date('2026-10-05') },
+      { id: 'tx-1', categoryId: 'cat-used-tx', type: 'expense', amountFils: 5000, date: new Date() },
     ]
     mockCircles = []
   })
@@ -218,10 +219,15 @@ describe('CategoriesPage component category management & protection', () => {
     const archiveBtn = await screen.findByLabelText('أرشفة تصنيف اشتراك نت')
     fireEvent.click(archiveBtn)
 
+    // Archive confirmation modal appears
+    expect(screen.getByText('تأكيد أرشفة التصنيف')).toBeInTheDocument()
+    const confirmBtn = screen.getByRole('button', { name: 'أرشفة التصنيف' })
+    fireEvent.click(confirmBtn)
+
     await waitFor(() => {
       expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-used-rec', true)
       expect(mockShowToast).toHaveBeenCalledWith(
-        'تمت الأرشفة، مع العلم أن هذا التصنيف مستخدم في معاملات متكررة نشطة',
+        'تمت أرشفة التصنيف. تنبيه: لا يزال هذا التصنيف مستخدماً في معاملات متكررة نشطة.',
         'info'
       )
     })
@@ -232,6 +238,11 @@ describe('CategoriesPage component category management & protection', () => {
 
     const archiveBtn = await screen.findByLabelText('أرشفة تصنيف تصنيف فارغ')
     fireEvent.click(archiveBtn)
+
+    // Archive confirmation modal appears
+    expect(screen.getByText('تأكيد أرشفة التصنيف')).toBeInTheDocument()
+    const confirmBtn = screen.getByRole('button', { name: 'أرشفة التصنيف' })
+    fireEvent.click(confirmBtn)
 
     await waitFor(() => {
       expect(categoriesService.archiveCategory).toHaveBeenCalledWith('user-123', 'cat-unused', true)
@@ -295,10 +306,13 @@ describe('CategoriesPage component category management & protection', () => {
     fireEvent.click(secondUpBtn)
 
     await waitFor(() => {
-      // Switched sort mode to manual
+      // Switched sort mode to manual and atomically reordered
       expect(mockUpdateSettings).toHaveBeenCalledWith({ categorySortMode: 'manual' })
-      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-rec', { order: 0 })
-      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-used-tx', { order: 1 })
+      expect(categoriesService.reorderCategories).toHaveBeenCalledWith('user-123', [
+        'cat-used-rec',
+        'cat-used-tx',
+        'cat-unused',
+      ])
     })
   })
 
@@ -375,9 +389,58 @@ describe('CategoriesPage component category management & protection', () => {
 
     await waitFor(() => {
       expect(mockUpdateSettings).toHaveBeenCalledWith({ categorySortMode: 'manual' })
-      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-3', { order: 0 })
-      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-1', { order: 1 })
-      expect(categoriesService.updateCategory).toHaveBeenCalledWith('user-123', 'cat-2', { order: 2 })
+      expect(categoriesService.reorderCategories).toHaveBeenCalledWith('user-123', [
+        'cat-3',
+        'cat-1',
+        'cat-2',
+      ])
     })
+  })
+
+  it('renders edit button on archived category cards and allows editing directly', async () => {
+    mockCategories = [
+      { id: 'cat-active', name: 'تصنيف نشط', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-arch', name: 'تصنيف قديم', type: 'expense', icon: '📦', color: '#64748B', archived: true, order: 1 },
+    ]
+
+    render(<CategoriesPage />)
+
+    // Expand archived section
+    const toggleArchivedBtn = screen.getByText(/التصنيفات المؤرشفة/i)
+    fireEvent.click(toggleArchivedBtn)
+
+    // Edit button exists for archived category
+    const editBtn = screen.getByLabelText('تعديل تصنيف تصنيف قديم')
+    expect(editBtn).toBeInTheDocument()
+    fireEvent.click(editBtn)
+
+    // CategoryForm opens in edit mode with category name
+    expect(screen.getByDisplayValue('تصنيف قديم')).toBeInTheDocument()
+  })
+
+  it('directly prompts for record reassignment when deleting an archived category in use without suggesting archive', async () => {
+    mockCategories = [
+      { id: 'cat-active', name: 'تصنيف نشط', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+      { id: 'cat-arch-used', name: 'تصنيف مؤرشف مستخدم', type: 'expense', icon: '📦', color: '#64748B', archived: true, order: 1 },
+    ]
+    mockTransactions = [
+      { id: 'tx-old', categoryId: 'cat-arch-used', type: 'expense', amountFils: 10000, date: new Date('2025-01-01') },
+    ]
+
+    render(<CategoriesPage />)
+
+    const toggleArchivedBtn = screen.getByText(/التصنيفات المؤرشفة/i)
+    fireEvent.click(toggleArchivedBtn)
+
+    const deleteBtn = screen.getByLabelText('حذف تصنيف تصنيف مؤرشف مستخدم نهائياً')
+    fireEvent.click(deleteBtn)
+
+    // Modal opens titled for deleting archived category
+    expect(screen.getByText('تأكيد حذف التصنيف المؤرشف')).toBeInTheDocument()
+    // Does NOT offer "أرشفة التصنيف (مستحسن)" since it is already archived
+    expect(screen.queryByText('أرشفة التصنيف (مستحسن)')).not.toBeInTheDocument()
+    // Explains reassignment
+    expect(screen.getByText(/هذا التصنيف مؤرشف بالفعل ومرتبط بسجلات مالية/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'نقل السجلات وحذف التصنيف نهائياً' })).toBeInTheDocument()
   })
 })

@@ -6,10 +6,10 @@ import {
   isDebtOverdue,
   calculateDebtSummary,
   filterDebts,
-  isDebtSettled,
   findLinkedDebtPayment,
   groupDebtsByPerson,
   formatDebtAccountStatement,
+  formatDebtEntriesCount,
 } from './debts'
 import type { Debt } from '../types'
 
@@ -47,18 +47,6 @@ describe('debts domain logic', () => {
       expect(getDebtProgress(baseDebt)).toBe(30)
       expect(getDebtProgress({ ...baseDebt, paidFils: 100000 })).toBe(100)
       expect(getDebtProgress({ ...baseDebt, paidFils: 0 })).toBe(0)
-    })
-  })
-
-  describe('isDebtSettled', () => {
-    it('returns true when paid equals or exceeds total amount', () => {
-      expect(isDebtSettled(50000, 50000)).toBe(true)
-      expect(isDebtSettled(50000, 60000)).toBe(true)
-    })
-
-    it('returns false when total amount exceeds paid amount', () => {
-      expect(isDebtSettled(50000, 30000)).toBe(false)
-      expect(isDebtSettled(100000, 0)).toBe(false)
     })
   })
 
@@ -142,6 +130,38 @@ describe('debts domain logic', () => {
       const summary = calculateDebtSummary(debts, refDate)
       expect(summary.upcomingCount).toBe(1)
       expect(summary.upcomingFils).toBe(50000)
+    })
+
+    it('treats debt as settled if remaining fils is <= 0 even if settled flag is false', () => {
+      const debts: Debt[] = [
+        {
+          ...baseDebt,
+          id: 'd-fully-paid-unsettled-flag',
+          amountFils: 50000,
+          paidFils: 50000,
+          settled: false,
+        },
+      ]
+      const summary = calculateDebtSummary(debts)
+      expect(summary.settledCount).toBe(1)
+      expect(summary.lentActiveCount).toBe(0)
+      expect(summary.lentFils).toBe(0)
+    })
+
+    it('guards against NaN dueDate without throwing or counting in upcoming', () => {
+      const debts: Debt[] = [
+        {
+          ...baseDebt,
+          id: 'd-nan-due',
+          amountFils: 50000,
+          paidFils: 0,
+          settled: false,
+          dueDate: new Date('invalid-date'),
+        },
+      ]
+      const summary = calculateDebtSummary(debts)
+      expect(summary.upcomingCount).toBe(0)
+      expect(summary.overdueCount).toBe(0)
     })
   })
 
@@ -357,6 +377,94 @@ describe('debts domain logic', () => {
       expect(statement).toContain('100 د.أ')
       expect(statement).toContain('30 د.أ')
       expect(statement).toContain('70 د.أ')
+    })
+
+    it('formats statement with custom decimals (e.g. 2 for SAR)', () => {
+      const debtWithFraction: Debt = {
+        ...baseDebt,
+        amountFils: 50125, // 50.125
+        paidFils: 0,
+        entries: [],
+        payments: [],
+      }
+      const statement = formatDebtAccountStatement(debtWithFraction, 'ر.س', 2)
+      expect(statement).toContain('50.13 ر.س')
+    })
+
+    it('resolves string currency code to appropriate decimals via getCurrencyConfig', () => {
+      const debtWithFraction: Debt = {
+        ...baseDebt,
+        amountFils: 50125, // 50.125
+        paidFils: 0,
+        entries: [],
+        payments: [],
+      }
+      const statement = formatDebtAccountStatement(debtWithFraction, 'ر.س', 'SAR')
+      expect(statement).toContain('50.13 ر.س')
+    })
+
+    it('handles debt with empty or missing personName in groupDebtsByPerson and only allows merging unsettled debts', () => {
+      const unnamedDebts: Debt[] = [
+        {
+          ...baseDebt,
+          id: 'u1',
+          personName: '',
+          amountFils: 50000,
+          paidFils: 0,
+          settled: false,
+          type: 'lent',
+        },
+        {
+          ...baseDebt,
+          id: 'u2',
+          personName: '   ',
+          amountFils: 30000,
+          paidFils: 30000,
+          settled: true,
+          type: 'lent',
+        },
+      ]
+      const groups = groupDebtsByPerson(unnamedDebts)
+      expect(groups).toHaveLength(1)
+      expect(groups[0].canonicalName).toBe('غير مسمى')
+      // Only 1 is unsettled, so canMergeLent should be false
+      expect(groups[0].canMergeLent).toBe(false)
+      expect(groups[0].canMerge).toBe(false)
+    })
+  })
+
+  describe('formatDebtEntriesCount', () => {
+    it('formats Arabic singular, dual, and plural correctly', () => {
+      expect(formatDebtEntriesCount(0)).toBe('')
+      expect(formatDebtEntriesCount(1)).toBe('سلفة واحدة')
+      expect(formatDebtEntriesCount(2)).toBe('سلفتان مجمعتان')
+      expect(formatDebtEntriesCount(3)).toBe('3 سلف مجمعة')
+      expect(formatDebtEntriesCount(10)).toBe('10 سلف مجمعة')
+      expect(formatDebtEntriesCount(11)).toBe('11 سلفة مجمعة')
+    })
+  })
+
+  describe('filterDebts with payment notes', () => {
+    it('matches search query from payment note', () => {
+      const debtWithPaymentNote: Debt = {
+        ...baseDebt,
+        payments: [
+          {
+            id: 'p1',
+            amountFils: 10000,
+            date: new Date('2026-09-02'),
+            note: 'شيك بنكي رقم 4488',
+            createdAt: new Date('2026-09-02'),
+          },
+        ],
+      }
+      const results = filterDebts([debtWithPaymentNote], {
+        type: 'all',
+        status: 'all',
+        search: '4488',
+      })
+      expect(results).toHaveLength(1)
+      expect(results[0].id).toBe('d1')
     })
   })
 })

@@ -646,4 +646,63 @@ describe('RecurringForm component nextDate calculation on edit', () => {
       )
     })
   })
+
+  it('does NOT erode or change circle monthlyAmountFils when saving recurring rule linked to a half-share circle without changing amount', async () => {
+    const halfShareCircle: MoneyCircle = {
+      id: 'circle-half-1',
+      name: 'جمعية نصف سهم',
+      monthlyAmountFils: 100000, // base circle monthly = 100 JOD
+      totalAmountFils: 1000000,
+      status: 'active',
+      startDate: new Date('2026-01-01'),
+      membersCount: 10,
+      myTurnMonth: 4,
+      shareType: 'half',
+      members: [
+        { id: 'm-1', name: 'أنت', turnMonth: 4, paidMonths: [] },
+      ],
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockCirclesData = [halfShareCircle]
+
+    const existingRecurring: Recurring = {
+      id: 'rec-half-1',
+      type: 'expense',
+      amountFils: 50000, // user installment is 50 JOD (half share of 100 JOD)
+      categoryId: 'c-rent',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-02-01'),
+      title: 'قسط جمعية نصف سهم',
+      note: 'ملاحظة',
+      active: true,
+      circleId: 'circle-half-1',
+      skipMonth: 4,
+      skipMonths: [4],
+      createdAt: new Date('2026-01-01'),
+    }
+
+    render(
+      <RecurringForm
+        isOpen={true}
+        onClose={vi.fn()}
+        initialRecurring={existingRecurring}
+      />
+    )
+
+    // Edit only the note field without changing amount
+    const noteInput = screen.getByLabelText(/ملاحظة/i)
+    fireEvent.change(noteInput, { target: { value: 'ملاحظة معدلة' } })
+
+    const submitBtn = screen.getByRole('button', { name: /تعديل المعاملة/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(recurringServices.updateRecurring).toHaveBeenCalled()
+    })
+
+    // updateMoneyCircle must NOT be called because 50 JOD * 2 === 100 JOD (no amount change)
+    expect(circleServices.updateMoneyCircle).not.toHaveBeenCalled()
+  })
 })

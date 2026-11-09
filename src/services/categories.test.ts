@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { deleteCategory, archiveCategory, archiveCategoriesBatch, reassignAndDeleteCategory } from './categories'
+import { deleteCategory, archiveCategory, archiveCategoriesBatch, reassignAndDeleteCategory, reorderCategories } from './categories'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -227,6 +227,21 @@ describe('reassignAndDeleteCategory service', () => {
 
     it('returns early if ids array is empty', async () => {
       await archiveCategoriesBatch('user-1', [])
+      expect(mockWriteBatch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('reorderCategories', () => {
+    it('updates order of all category ids atomically via writeBatch', async () => {
+      await reorderCategories('user-1', ['cat-1', 'cat-2', 'cat-3'])
+
+      expect(mockWriteBatch).toHaveBeenCalled()
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(3)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns early if categoryIds array is empty', async () => {
+      await reorderCategories('user-1', [])
       expect(mockWriteBatch).not.toHaveBeenCalled()
     })
   })

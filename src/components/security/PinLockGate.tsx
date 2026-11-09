@@ -109,7 +109,7 @@ export async function registerBiometricCredential(
   }
 }
 
-export async function verifyBiometricCredential(uid: string): Promise<boolean> {
+async function verifyBiometricCredential(uid: string): Promise<boolean> {
   if (
     typeof window === 'undefined' ||
     !window.PublicKeyCredential ||
@@ -169,6 +169,9 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
     )
   }, [pinStorageKey, legacyPinStorageKey])
 
+  const lockoutSessionKey = uid ? `baseer_pin_lockout_until_${uid}` : 'baseer_pin_lockout_until'
+  const failedAttemptsSessionKey = uid ? `baseer_pin_failed_attempts_${uid}` : 'baseer_pin_failed_attempts'
+
   const [hasPin, setHasPin] = useState<boolean>(() => Boolean(getStoredPinHash()))
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     const hash = getStoredPinHash()
@@ -188,10 +191,22 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
   }
 
   const [inputPin, setInputPin] = useState<string>('')
+  const pinBufferRef = useRef<string>('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [showForgotModal, setShowForgotModal] = useState<boolean>(false)
-  const [failedAttempts, setFailedAttempts] = useState<number>(0)
-  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0)
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return 0
+    const stored = sessionStorage.getItem(failedAttemptsSessionKey)
+    return stored ? parseInt(stored, 10) || 0 : 0
+  })
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(() => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return 0
+    const until = sessionStorage.getItem(lockoutSessionKey)
+    if (!until) return 0
+    const diffMs = parseInt(until, 10) - Date.now()
+    const diffSecs = Math.ceil(diffMs / 1000)
+    return diffSecs > 0 ? diffSecs : 0
+  })
 
   const hiddenAtRef = useRef<number | null>(null)
 
@@ -248,6 +263,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
             sessionStorage.removeItem(unlockSessionKey)
           }
           setIsUnlocked(false)
+          pinBufferRef.current = ''
           setInputPin('')
           setErrorMsg(null)
         }
@@ -266,6 +282,21 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
     if (lockoutSeconds <= 0) return
 
     const timer = setInterval(() => {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const until = sessionStorage.getItem(lockoutSessionKey)
+        if (until) {
+          const diffMs = parseInt(until, 10) - Date.now()
+          const diffSecs = Math.ceil(diffMs / 1000)
+          if (diffSecs <= 0) {
+            sessionStorage.removeItem(lockoutSessionKey)
+            setLockoutSeconds(0)
+            clearInterval(timer)
+            return
+          }
+          setLockoutSeconds(diffSecs)
+          return
+        }
+      }
       setLockoutSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
@@ -276,7 +307,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [lockoutSeconds])
+  }, [lockoutSeconds, lockoutSessionKey])
 
   // Verify PIN against stored hash
   const verifyPin = useCallback(
@@ -290,7 +321,12 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
 
         if (storedHash === computedHash) {
           sessionStorage.setItem(unlockSessionKey, 'true')
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            sessionStorage.removeItem(lockoutSessionKey)
+            sessionStorage.removeItem(failedAttemptsSessionKey)
+          }
           setIsUnlocked(true)
+          pinBufferRef.current = ''
           setInputPin('')
           setErrorMsg(null)
           setFailedAttempts(0)
@@ -298,44 +334,57 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
         } else {
           const nextAttempts = failedAttempts + 1
           if (nextAttempts >= 5) {
+            const until = Date.now() + 30 * 1000
+            if (typeof window !== 'undefined' && window.sessionStorage) {
+              sessionStorage.setItem(lockoutSessionKey, String(until))
+              sessionStorage.setItem(failedAttemptsSessionKey, '0')
+            }
             setLockoutSeconds(30)
             setFailedAttempts(0)
             setErrorMsg('تم إيقاف المحاولات مؤقتاً لمدة 30 ثانية بسبب تكرار الخطأ')
           } else {
+            if (typeof window !== 'undefined' && window.sessionStorage) {
+              sessionStorage.setItem(failedAttemptsSessionKey, String(nextAttempts))
+            }
             setFailedAttempts(nextAttempts)
             setErrorMsg('رمز الدخول غير صحيح، يرجى المحاولة مرة أخرى')
           }
+          pinBufferRef.current = ''
           setInputPin('')
         }
       } catch (err) {
         console.error('PIN verification error:', err)
         setErrorMsg('حدث خطأ أثناء التحقق')
+        pinBufferRef.current = ''
         setInputPin('')
       }
     },
-    [pinStorageKey, legacyPinStorageKey, unlockSessionKey, failedAttempts]
+    [pinStorageKey, legacyPinStorageKey, unlockSessionKey, failedAttempts, lockoutSessionKey, failedAttemptsSessionKey]
   )
 
   // Handle number tap
   const handleDigit = useCallback(
     (digit: string) => {
       if (lockoutSeconds > 0) return
-      if (inputPin.length >= 4) return
+      if (pinBufferRef.current.length >= 4) return
       setErrorMsg(null)
-      const nextPin = inputPin + digit
+      const nextPin = pinBufferRef.current + digit
+      pinBufferRef.current = nextPin
       setInputPin(nextPin)
       if (nextPin.length === 4) {
+        pinBufferRef.current = ''
         void verifyPin(nextPin)
       }
     },
-    [inputPin, lockoutSeconds, verifyPin]
+    [lockoutSeconds, verifyPin]
   )
 
   // Handle backspace
   const handleDelete = useCallback(() => {
     if (lockoutSeconds > 0) return
     setErrorMsg(null)
-    setInputPin((prev) => prev.slice(0, -1))
+    pinBufferRef.current = pinBufferRef.current.slice(0, -1)
+    setInputPin(pinBufferRef.current)
   }, [lockoutSeconds])
 
   // 4. Physical Keyboard Support
@@ -375,6 +424,10 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
       const verified = await verifyBiometricCredential(uid)
       if (verified) {
         sessionStorage.setItem(unlockSessionKey, 'true')
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          sessionStorage.removeItem(lockoutSessionKey)
+          sessionStorage.removeItem(failedAttemptsSessionKey)
+        }
         setIsUnlocked(true)
         setErrorMsg(null)
         setFailedAttempts(0)
@@ -405,6 +458,10 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
     if (unlockSessionKey) {
       sessionStorage.removeItem(unlockSessionKey)
     }
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.removeItem(lockoutSessionKey)
+      sessionStorage.removeItem(failedAttemptsSessionKey)
+    }
     setFailedAttempts(0)
     setLockoutSeconds(0)
     await signOutUser()
@@ -417,16 +474,16 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090B] text-white p-6 select-none" dir="rtl">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-white p-6 select-none" dir="rtl">
       <div className="w-full max-w-xs flex flex-col items-center text-center space-y-6">
         {/* Lock Icon */}
-        <div className="w-16 h-16 rounded-2xl bg-[#121215] border border-[#27272A] flex items-center justify-center text-blue-400 shadow-xl">
+        <div className="w-16 h-16 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-md dark:shadow-none">
           <Lock className="w-8 h-8 stroke-[2.2]" />
         </div>
 
         <div>
-          <h1 className="text-xl font-black text-white">تطبيق بَصير مقفل</h1>
-          <p className="text-xs text-zinc-400 mt-1">أدخل رمز الدخول المكون من 4 أرقام للمتابعة</p>
+          <h1 className="text-xl font-black text-zinc-900 dark:text-white">تطبيق بَصير مقفل</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">أدخل رمز الدخول المكون من 4 أرقام للمتابعة</p>
         </div>
 
         {/* PIN Dots */}
@@ -438,8 +495,8 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
                 key={index}
                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                   isFilled
-                    ? 'bg-blue-500 border-blue-500 scale-110 shadow-sm shadow-blue-500/50'
-                    : 'border-zinc-700 bg-zinc-800/60'
+                    ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500 scale-110 shadow-xs'
+                    : 'border-zinc-300 dark:border-zinc-700 bg-zinc-200/80 dark:bg-zinc-800/60'
                 }`}
               />
             )
@@ -448,7 +505,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
 
         {/* Error message */}
         {errorMsg && (
-          <div className="text-xs font-bold text-red-500 dark:text-red-400 animate-in fade-in duration-150">
+          <div className="text-xs font-bold text-red-600 dark:text-red-400 animate-in fade-in duration-150">
             {errorMsg}
           </div>
         )}
@@ -461,7 +518,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
               type="button"
               disabled={lockoutSeconds > 0}
               onClick={() => handleDigit(digit)}
-              className="h-14 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-xl font-black transition-all cursor-pointer border border-zinc-700/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-14 rounded-2xl bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 active:bg-zinc-200 dark:active:bg-zinc-600 text-zinc-900 dark:text-white text-xl font-black transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700/40 shadow-xs dark:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {digit}
             </button>
@@ -474,7 +531,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
             disabled={!isBiometricsAvailable || lockoutSeconds > 0}
             className={`h-14 rounded-2xl flex items-center justify-center transition-all border ${
               isBiometricsAvailable && lockoutSeconds === 0
-                ? 'bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-blue-400 border-zinc-700/40 cursor-pointer'
+                ? 'bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 active:bg-zinc-200 dark:active:bg-zinc-600 text-blue-600 dark:text-blue-400 border-zinc-200 dark:border-zinc-700/40 shadow-xs dark:shadow-none cursor-pointer'
                 : 'opacity-0 pointer-events-none border-transparent'
             }`}
           >
@@ -486,7 +543,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
             type="button"
             disabled={lockoutSeconds > 0}
             onClick={() => handleDigit('0')}
-            className="h-14 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 text-xl font-black transition-all cursor-pointer border border-zinc-700/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-14 rounded-2xl bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 active:bg-zinc-200 dark:active:bg-zinc-600 text-zinc-900 dark:text-white text-xl font-black transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700/40 shadow-xs dark:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
           >
             0
           </button>
@@ -496,7 +553,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
             type="button"
             disabled={lockoutSeconds > 0}
             onClick={handleDelete}
-            className="h-14 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 flex items-center justify-center text-zinc-400 hover:text-white transition-all cursor-pointer border border-zinc-700/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-14 rounded-2xl bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 active:bg-zinc-200 dark:active:bg-zinc-600 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer border border-zinc-200 dark:border-zinc-700/40 shadow-xs dark:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Delete className="w-6 h-6" />
           </button>
@@ -506,7 +563,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
         <button
           type="button"
           onClick={() => setShowForgotModal(true)}
-          className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors pt-2 cursor-pointer"
+          className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors pt-2 cursor-pointer"
         >
           نسيت رمز الدخول؟
         </button>

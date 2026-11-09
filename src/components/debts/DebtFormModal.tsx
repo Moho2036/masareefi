@@ -12,7 +12,7 @@ import { useDebts } from '../../hooks/useDebts'
 import { addDebt, updateDebt, checkDebtInitialTransactionExists } from '../../services/debts'
 import { AppDataContext, type AppDataContextValue } from '../../context/AppDataContext'
 import { toFils, fromFils, MAX_AMOUNT_FILS } from '../../lib/money'
-import { parseLocalDateInput } from '../../lib/dates'
+import { toWesternDigits, parseLocalDateInput } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
 import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
@@ -201,6 +201,11 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
       if (isEditing && initialDebt) {
         const paidFils = initialDebt.paidFils ?? 0
         const settled = amountFils === paidFils
+        const updatedEntries =
+          initialDebt.entries && initialDebt.entries.length === 1 && amountFils !== initialDebt.amountFils
+            ? [{ ...initialDebt.entries[0], amountFils }]
+            : undefined
+
         await updateDebt(
           user.uid,
           initialDebt.id,
@@ -213,6 +218,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             startDate,
             dueDate,
             note: note.trim(),
+            ...(updatedEntries ? { entries: updatedEntries } : {}),
           },
           { syncTransaction }
         )
@@ -291,32 +297,50 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
         <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           نوع الدين
         </label>
-        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-zinc-850 border border-[#E4E4E7] dark:border-[#27272A] gap-1 w-full">
+        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-[#E4E4E7] dark:border-[#27272A] gap-1 w-full">
           <button
             type="button"
+            disabled={isEditing && (initialDebt?.payments?.length ?? 0) > 0}
             onClick={() => setType('lent')}
             className={cn(
-              'flex-1 py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs rounded-lg transition-all flex items-center justify-center gap-1.5',
               type === 'lent'
                 ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200',
+              isEditing && (initialDebt?.payments?.length ?? 0) > 0
+                ? 'opacity-60 cursor-not-allowed'
+                : 'cursor-pointer'
             )}
           >
-            <span>لي (أنا داينت فلان)</span>
+            <span>مستحق لي (بذمة الآخرين)</span>
           </button>
           <button
             type="button"
+            disabled={isEditing && (initialDebt?.payments?.length ?? 0) > 0}
             onClick={() => setType('borrowed')}
             className={cn(
-              'flex-1 py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs rounded-lg transition-all flex items-center justify-center gap-1.5',
               type === 'borrowed'
                 ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200',
+              isEditing && (initialDebt?.payments?.length ?? 0) > 0
+                ? 'opacity-60 cursor-not-allowed'
+                : 'cursor-pointer'
             )}
           >
-            <span>عليّ (أنا استدنت)</span>
+            <span>التزام عليّ (للآخرين)</span>
           </button>
         </div>
+        {isEditing && (initialDebt?.payments?.length ?? 0) > 0 && (
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1.5 font-medium">
+            لا يمكن تغيير اتجاه الدين بعد تسجيل دفعات سداد عليه حفاظاً على سلامة الحسابات.
+          </p>
+        )}
+        {isEditing && (initialDebt?.payments?.length ?? 0) === 0 && type !== initialDebt?.type && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 font-semibold">
+            تنبيه: تغيير نوع الدين سيقلب طبيعة الحركة المالية في المحفظة (من مصروف إلى دخل أو العكس).
+          </p>
+        )}
       </div>
 
       {/* 2. Person Name */}
@@ -348,23 +372,24 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
       {/* 3. Amount Input in JOD */}
       <div>
-        <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
+        <label htmlFor="debt-total-amount" className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
           المبلغ الكلي
         </label>
         <div
           className={cn(
-            'flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A]',
+            'flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]',
             hasMultipleEntries
-              ? 'opacity-60 bg-zinc-100 dark:bg-zinc-850 cursor-not-allowed'
+              ? 'opacity-60 bg-zinc-100 dark:bg-zinc-800 cursor-not-allowed'
               : 'focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
           )}
         >
           <input
+            id="debt-total-amount"
             type="text"
             inputMode="decimal"
             placeholder={config.decimals === 3 ? '0.000' : '0.00'}
             value={amountStr}
-            onChange={(e) => setAmountStr(e.target.value)}
+            onChange={(e) => setAmountStr(toWesternDigits(e.target.value))}
             disabled={hasMultipleEntries}
             readOnly={hasMultipleEntries}
             className={cn(
@@ -404,14 +429,14 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           <label htmlFor="pre-paid-input" className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
             المبلغ المسدد مسبقاً من هذا الدين (اختياري)
           </label>
-          <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
+          <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20">
             <input
               id="pre-paid-input"
               type="text"
               inputMode="decimal"
               placeholder={config.decimals === 3 ? '0.000' : '0.00'}
               value={initialPaidStr}
-              onChange={(e) => setInitialPaidStr(e.target.value)}
+              onChange={(e) => setInitialPaidStr(toWesternDigits(e.target.value))}
               className="w-full bg-transparent text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
             />
             <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
@@ -436,27 +461,17 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
 
       {/* 5. Due Date Toggle */}
       <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">
-              تحديد موعد استحقاق
-            </span>
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-              تنبيه عند حلول موعد السداد المتفق عليه
-            </span>
-          </div>
-          <input
-            type="checkbox"
-            checked={hasDueDate}
-            onChange={(e) => {
-              setHasDueDate(e.target.checked)
-              if (e.target.checked && !dueDateStr) {
-                setDueDateStr(format(new Date(), 'yyyy-MM-dd'))
-              }
-            }}
-            className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
-          />
-        </div>
+        <Toggle
+          label="تحديد موعد استحقاق"
+          description="تنبيه عند حلول موعد السداد المتفق عليه"
+          checked={hasDueDate}
+          onChange={(val) => {
+            setHasDueDate(val)
+            if (val && !dueDateStr) {
+              setDueDateStr(format(new Date(), 'yyyy-MM-dd'))
+            }
+          }}
+        />
 
         {hasDueDate && (
           <div className="pt-2">

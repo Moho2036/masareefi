@@ -8,12 +8,15 @@ import {
   Pencil,
   Plus,
   Share2,
+  MessageSquare,
   Copy,
   Printer,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { DatePickerInput } from '../ui/DatePickerInput'
+import { Toggle } from '../ui/Toggle'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import {
@@ -184,7 +187,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     }
 
     if (amountFils > maxAllowed) {
-      setEditError(`مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي (${formatCurrency(maxAllowed)})`)
+      setEditError(`مبلغ الدفعة لا يمكن أن يتجاوز الحد الأقصى المتاح للتعديل (${formatCurrency(maxAllowed)})`)
       return
     }
 
@@ -367,7 +370,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   const handleCopyStatement = async () => {
     try {
-      const text = formatDebtAccountStatement(debt, config.symbol)
+      const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
       await navigator.clipboard.writeText(text)
       showToast('تم نسخ كشف الحساب بنجاح', 'success')
     } catch (err) {
@@ -377,7 +380,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   }
 
   const handleWhatsAppShare = () => {
-    const text = formatDebtAccountStatement(debt, config.symbol)
+    const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -387,7 +390,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const handleNativeShare = async () => {
     if (!canShare) return
     try {
-      const text = formatDebtAccountStatement(debt, config.symbol)
+      const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
       await navigator.share({
         title: `كشف حساب — ${debt.personName}`,
         text,
@@ -416,26 +419,26 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           <div>
             <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المبلغ الكلي</span>
             <span className="text-xs sm:text-sm font-black text-zinc-800 dark:text-zinc-200 tabular-nums">
-              {formatCurrency(debt.amountFils)}
+              <FormattedMoney amountFils={debt.amountFils} />
             </span>
           </div>
           <div>
             <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المسدد حتى الآن</span>
+            <span className="text-xs sm:text-sm font-black text-zinc-800 dark:text-zinc-200 tabular-nums">
+              <FormattedMoney amountFils={debt.paidFils || 0} />
+            </span>
+          </div>
+          <div>
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المتبقي</span>
             <span
               className={cn(
                 'text-xs sm:text-sm font-black tabular-nums',
                 isLent
                   ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-amber-600 dark:text-amber-400'
+                  : 'text-red-600 dark:text-red-400'
               )}
             >
-              {formatCurrency(debt.paidFils || 0)}
-            </span>
-          </div>
-          <div>
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-0.5">المتبقي</span>
-            <span className="text-xs sm:text-sm font-black text-zinc-800 dark:text-zinc-100 tabular-nums">
-              {formatCurrency(remainingFils)}
+              <FormattedMoney amountFils={remainingFils} />
             </span>
           </div>
         </div>
@@ -455,7 +458,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             onClick={handleWhatsAppShare}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
           >
-            <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+            <MessageSquare className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
             <span>إرسال عبر واتساب</span>
           </button>
           {canShare && (
@@ -578,15 +581,13 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
-                <input
-                  type="checkbox"
+              <div className="p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A]">
+                <Toggle
+                  label="خصم/إيداع مبلغ السلفة من الرصيد كمعاملة مالية"
                   checked={newEntrySync}
-                  onChange={(e) => setNewEntrySync(e.target.checked)}
-                  className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer"
+                  onChange={setNewEntrySync}
                 />
-                <span>خصم/إيداع مبلغ السلفة من الرصيد كمعاملة مالية</span>
-              </label>
+              </div>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -738,20 +739,24 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleStartEditEntry(e)}
-                          className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
+                          className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
                           title="تعديل السلفة"
+                          aria-label="تعديل السلفة"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteEntryId(e.id)}
-                        className="p-1 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg cursor-pointer"
-                        title="حذف السلفة"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {(debt.entries?.length ?? 0) > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteEntryId(e.id)}
+                          className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg cursor-pointer"
+                          title="حذف السلفة"
+                          aria-label="حذف السلفة"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -859,16 +864,14 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           />
                         </div>
                         <div>
-                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
-                            <input
-                              type="checkbox"
+                          <div className="p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A]">
+                            <Toggle
                               disabled={checkingEditSync || isSavingEdit}
                               checked={editSyncTx}
-                              onChange={(e) => setEditSyncTx(e.target.checked)}
-                              className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              onChange={setEditSyncTx}
+                              label="ربط الدفعة بالرصيد (تأثير مالي في سجل المعاملات)"
                             />
-                            <span>ربط الدفعة بالرصيد (تأثير مالي في سجل المعاملات)</span>
-                          </label>
+                          </div>
                         </div>
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                           <button
@@ -905,8 +908,13 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                 {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
                               </div>
                               {isMerged && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 shrink-0">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
                                   دفعات مدمجة
+                                </span>
+                              )}
+                              {p.transactionId && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
+                                  مرتبط بالرصيد
                                 </span>
                               )}
                             </div>
@@ -923,19 +931,17 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             <span>تأكيد حذف الدفعة؟</span>
                           </div>
 
-                          <label className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200 select-none">
-                            <input
-                              type="checkbox"
+                          <div className="p-2 bg-white dark:bg-zinc-800 rounded-lg border border-[#E4E4E7] dark:border-[#27272A]">
+                            <Toggle
                               checked={deletePaymentTx}
-                              onChange={(e) => setDeletePaymentTx(e.target.checked)}
-                              className="w-4 h-4 rounded-sm text-blue-600 accent-blue-600 cursor-pointer"
+                              onChange={setDeletePaymentTx}
+                              label={
+                                isMerged
+                                  ? 'حذف المعاملات المالية المدمجة المرتبطة من سجل المعاملات أيضاً'
+                                  : 'حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً'
+                              }
                             />
-                            <span>
-                              {isMerged
-                                ? 'حذف المعاملات المالية المدمجة المرتبطة من سجل المعاملات أيضاً'
-                                : 'حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً'}
-                            </span>
-                          </label>
+                          </div>
 
                           <div className="flex items-center justify-end gap-2 pt-1">
                             <button
@@ -975,8 +981,13 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
                             </div>
                             {isMerged && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 shrink-0">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
                                 دفعات مدمجة
+                              </span>
+                            )}
+                            {p.transactionId && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
+                                مرتبط بالرصيد
                               </span>
                             )}
                           </div>
@@ -992,8 +1003,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               type="button"
                               disabled={Boolean(deletingId) || isSavingEdit}
                               onClick={() => handleStartEdit(p)}
-                              className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                               title="تعديل هذه الدفعة"
+                              aria-label="تعديل هذه الدفعة"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
@@ -1006,8 +1018,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               setConfirmDeleteId(p.id)
                               setDeletePaymentTx(true)
                             }}
-                            className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                             title="حذف هذه الدفعة"
+                            aria-label="حذف هذه الدفعة"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

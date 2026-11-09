@@ -1609,6 +1609,74 @@ describe('forecast lib', () => {
     // Rent (300.000) + Due debt (80.000) = 380.000
     expect(res.nextCycleSoonObligationsFils).toBe(380000)
     expect(res.nextCycleSoonCount).toBe(2)
+    expect(res.nextCycleSoonRecurringCount).toBe(1)
+    expect(res.nextCycleSoonDebtCount).toBe(1)
+  })
+
+  it('does not trigger danger status on Day 1 of month when user has cash balance', () => {
+    // Oct 1st: User has 500 JOD salary, spends 40 JOD on groceries
+    const refDate = new Date(2026, 9, 1)
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'sal-1',
+          type: 'income',
+          amountFils: 500000,
+          categoryId: 'cat-sal',
+          date: new Date(2026, 9, 1),
+          note: 'راتب',
+          createdAt: new Date(),
+        },
+        {
+          id: 'exp-day1',
+          type: 'expense',
+          amountFils: 40000,
+          categoryId: 'cat-groceries',
+          date: new Date(2026, 9, 1),
+          note: 'تموين يوم 1',
+          createdAt: new Date(),
+        },
+      ],
+      monthStartDay: 1,
+      referenceDate: refDate,
+    })
+
+    expect(res.isCurrentMonth).toBe(true)
+    expect(res.elapsedDays).toBe(1)
+    expect(res.freeBalance).toBe(460000)
+    expect(res.healthStatus).toBe('warning')
+  })
+
+  it('does not trigger danger status in future months purely due to unrecorded future salary', () => {
+    // Current date is Oct 15, period is Nov 1 - Dec 1
+    const novRange = {
+      start: new Date(2026, 10, 1),
+      end: new Date(2026, 11, 1),
+    }
+    const recurringExpense: Recurring = {
+      id: 'rec-future-rent',
+      type: 'expense',
+      amountFils: 200000,
+      categoryId: 'cat-rent',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 1),
+      nextDate: new Date(2026, 10, 1),
+      active: true,
+      note: 'إيجار نوفمبر',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [recurringExpense],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15),
+      periodRange: novRange,
+      rolloverBalanceFils: 0,
+    })
+
+    expect(res.isFutureMonth).toBe(true)
+    expect(res.healthStatus).not.toBe('danger')
+    expect(res.healthStatus).toBe('warning')
   })
 
   it('does not calculate nextCycleSoonObligationsFils when far from cycle end', () => {
@@ -1636,5 +1704,46 @@ describe('forecast lib', () => {
 
     expect(res.nextCycleSoonObligationsFils).toBe(0)
     expect(res.nextCycleSoonCount).toBe(0)
+  })
+
+  it('smooths early month discretionary projections to prevent false catastrophic deficit spikes on day 1', () => {
+    // Reference date: Day 1 of the month (Oct 1, 2026)
+    const day1Date = new Date(2026, 9, 1, 14, 0, 0)
+    const monthRange = {
+      start: new Date(2026, 9, 1),
+      end: new Date(2026, 10, 1),
+    }
+
+    // User has 500 JOD salary, and made a 60 JOD grocery purchase on day 1
+    const res = calculateForecast({
+      transactions: [
+        {
+          id: 'tx-salary',
+          type: 'income',
+          amountFils: 500000,
+          categoryId: 'cat-sal',
+          date: new Date(2026, 9, 1, 9, 0, 0),
+          note: 'راتب',
+          createdAt: new Date(),
+        },
+        {
+          id: 'tx-groceries',
+          type: 'expense',
+          amountFils: 60000,
+          categoryId: 'cat-food',
+          date: new Date(2026, 9, 1, 11, 0, 0),
+          note: 'مشتريات تموينية لبداية الشهر',
+          createdAt: new Date(),
+        },
+      ],
+      monthStartDay: 1,
+      referenceDate: day1Date,
+      periodRange: monthRange,
+    })
+
+    // Without smoothing, 60 JOD / 1 day * 30 days = 1,800 JOD projected expense, causing a false 1,300 JOD deficit!
+    // With smoothing blended with daily safe allowance, projected expense is damped and doesn't explode into 1,800 JOD.
+    expect(res.projectedExpense).toBeLessThan(1200000)
+    expect(res.actualDailySpendFils).toBe(60000)
   })
 })

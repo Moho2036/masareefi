@@ -127,7 +127,7 @@ describe('PinLockGate Component', () => {
       fireEvent.click(screen.getByRole('button', { name: '9' }))
       fireEvent.click(screen.getByRole('button', { name: '9' }))
       await act(async () => {
-        await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(50)
       })
     }
 
@@ -141,7 +141,7 @@ describe('PinLockGate Component', () => {
     fireEvent.click(screen.getByRole('button', { name: '9' }))
     fireEvent.click(screen.getByRole('button', { name: '9' }))
     await act(async () => {
-      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(50)
     })
 
     expect(
@@ -152,15 +152,16 @@ describe('PinLockGate Component', () => {
     // Trying to click while locked out should not enter digits
     fireEvent.click(buttonOne)
     await act(async () => {
-      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     // Advance 30 seconds
-    act(() => {
-      vi.advanceTimersByTime(30000)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000)
     })
 
     expect(buttonOne).not.toBeDisabled()
+    vi.useRealTimers()
   })
 
   it('supports physical keyboard input (Latin digits, Eastern Arabic digits, Backspace)', async () => {
@@ -270,5 +271,44 @@ describe('PinLockGate Component', () => {
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     expect(screen.getByText('تطبيق بَصير مقفل')).toBeInTheDocument()
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
+  })
+
+  it('persists brute-force lockout in sessionStorage across remount / page reload', async () => {
+    localStorage.setItem(PIN_KEY, PIN_1234_HASH)
+    const LOCKOUT_KEY = `baseer_pin_lockout_until_${mockUser.uid}`
+
+    const { unmount } = render(
+      <PinLockGate>
+        <div data-testid="protected-content">المحتوى المحمي</div>
+      </PinLockGate>
+    )
+
+    // Enter wrong PIN 5 times
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(screen.getByRole('button', { name: '9' }))
+      fireEvent.click(screen.getByRole('button', { name: '9' }))
+      fireEvent.click(screen.getByRole('button', { name: '9' }))
+      fireEvent.click(screen.getByRole('button', { name: '9' }))
+      await waitFor(() => {
+        expect(screen.queryByText(/رمز الدخول غير صحيح|تم إيقاف المحاولات/)).toBeInTheDocument()
+      })
+    }
+
+    // Should be locked out and saved in sessionStorage
+    expect(screen.getByText(/تم إيقاف المحاولات مؤقتاً/)).toBeInTheDocument()
+    expect(sessionStorage.getItem(LOCKOUT_KEY)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '1' })).toBeDisabled()
+
+    // Unmount and remount (simulating F5 page reload)
+    unmount()
+
+    render(
+      <PinLockGate>
+        <div data-testid="protected-content">المحتوى المحمي</div>
+      </PinLockGate>
+    )
+
+    // Keypad should still be disabled because lockout persists in sessionStorage!
+    expect(screen.getByRole('button', { name: '1' })).toBeDisabled()
   })
 })

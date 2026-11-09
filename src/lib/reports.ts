@@ -22,6 +22,8 @@ export interface MonthlyBreakdownItem {
   income: number
   expense: number
   balance: number
+  dateRange?: string
+  isFutureMonth?: boolean
 }
 
 export const ARABIC_MONTH_NAMES = [
@@ -159,8 +161,6 @@ export function generateDailyExpenses(
   return result
 }
 
-export const calculateDailyExpenses = generateDailyExpenses
-
 /**
  * Groups transactions by category, calculates total amounts and percentages (rounded to 1 decimal).
  * Sorts descending by amountFils.
@@ -259,13 +259,20 @@ export function calculateYearlyBreakdown(
     }
   }
 
-  return monthlyData.map((data, index) => ({
-    monthIndex: index,
-    monthName: ARABIC_MONTH_NAMES[index],
-    income: data.income,
-    expense: data.expense,
-    balance: data.income - data.expense,
-  }))
+  return monthlyData.map((data, index) => {
+    let dateRange: string | undefined
+    if (safeStartDay > 1) {
+      dateRange = `${safeStartDay} ${ARABIC_MONTH_NAMES[index]} – ${safeStartDay - 1} ${ARABIC_MONTH_NAMES[(index + 1) % 12]}`
+    }
+    return {
+      monthIndex: index,
+      monthName: ARABIC_MONTH_NAMES[index],
+      income: data.income,
+      expense: data.expense,
+      balance: data.income - data.expense,
+      ...(dateRange ? { dateRange } : {}),
+    }
+  })
 }
 
 /**
@@ -285,6 +292,7 @@ export function calculateSavingsRate(income: number, expense: number): number {
 
 export interface AnnualSummaryResult {
   averageMonthlyExpenseFils: number
+  averageMonthlyIncomeFils: number
   activeMonthsCount: number
   isCurrentMonthOnly: boolean
   note?: string
@@ -317,6 +325,7 @@ export function calculateAnnualSummary(
   if (!breakdown || breakdown.length === 0) {
     return {
       averageMonthlyExpenseFils: 0,
+      averageMonthlyIncomeFils: 0,
       activeMonthsCount: 0,
       isCurrentMonthOnly: false,
     }
@@ -328,14 +337,27 @@ export function calculateAnnualSummary(
     const completedPastExpenseMonths = breakdown.filter(
       (m) => m.monthIndex < currentMonthIndex && m.expense > 0
     )
+    const completedPastIncomeMonths = breakdown.filter(
+      (m) => m.monthIndex < currentMonthIndex && m.income > 0
+    )
     const currentMonthItem = breakdown.find((m) => m.monthIndex === currentMonthIndex)
     const hasCurrentMonthExpense = Boolean(currentMonthItem && currentMonthItem.expense > 0)
+    const hasCurrentMonthIncome = Boolean(currentMonthItem && currentMonthItem.income > 0)
+
+    let averageMonthlyIncomeFils = 0
+    if (completedPastIncomeMonths.length > 0) {
+      const totalIncome = completedPastIncomeMonths.reduce((acc, m) => acc + m.income, 0)
+      averageMonthlyIncomeFils = Math.round(totalIncome / completedPastIncomeMonths.length)
+    } else if (hasCurrentMonthIncome && currentMonthItem) {
+      averageMonthlyIncomeFils = currentMonthItem.income
+    }
 
     if (completedPastExpenseMonths.length > 0) {
       const totalExpense = completedPastExpenseMonths.reduce((acc, m) => acc + m.expense, 0)
       const count = completedPastExpenseMonths.length
       return {
         averageMonthlyExpenseFils: Math.round(totalExpense / count),
+        averageMonthlyIncomeFils,
         activeMonthsCount: count,
         isCurrentMonthOnly: false,
         note: hasCurrentMonthExpense ? 'محسوب للأشهر المكتملة فقط دون الشهر الجاري' : undefined,
@@ -345,6 +367,7 @@ export function calculateAnnualSummary(
     if (hasCurrentMonthExpense && currentMonthItem) {
       return {
         averageMonthlyExpenseFils: currentMonthItem.expense,
+        averageMonthlyIncomeFils,
         activeMonthsCount: 1,
         isCurrentMonthOnly: true,
         note: 'بيانات الشهر الجاري فقط — لم يكتمل شهر كامل بعد',
@@ -353,6 +376,7 @@ export function calculateAnnualSummary(
 
     return {
       averageMonthlyExpenseFils: 0,
+      averageMonthlyIncomeFils,
       activeMonthsCount: 0,
       isCurrentMonthOnly: false,
     }
@@ -360,9 +384,16 @@ export function calculateAnnualSummary(
 
   // Past years or other years
   const activeExpenseMonths = breakdown.filter((m) => m.expense > 0)
+  const activeIncomeMonths = breakdown.filter((m) => m.income > 0)
+  const averageMonthlyIncomeFils =
+    activeIncomeMonths.length > 0
+      ? Math.round(activeIncomeMonths.reduce((acc, m) => acc + m.income, 0) / activeIncomeMonths.length)
+      : 0
+
   if (activeExpenseMonths.length === 0) {
     return {
       averageMonthlyExpenseFils: 0,
+      averageMonthlyIncomeFils,
       activeMonthsCount: 0,
       isCurrentMonthOnly: false,
     }
@@ -372,25 +403,10 @@ export function calculateAnnualSummary(
   const count = activeExpenseMonths.length
   return {
     averageMonthlyExpenseFils: Math.round(totalExpense / count),
+    averageMonthlyIncomeFils,
     activeMonthsCount: count,
     isCurrentMonthOnly: false,
   }
-}
-
-/**
- * Calculates the monthly average expense for a yearly report.
- * Divides yearExpenseFils by activeMonthsCount (minimum 1 when expenses exist).
- */
-export function calculateYearlyMonthlyAverage(
-  yearExpenseFils: number,
-  _selectedYear: number,
-  _currentYear: number,
-  _currentMonthIndex: number,
-  activeMonthsCount: number
-): number {
-  if (yearExpenseFils <= 0 || activeMonthsCount <= 0) return 0
-  const divisor = Math.max(1, activeMonthsCount)
-  return Math.round(yearExpenseFils / divisor)
 }
 
 export interface DailyExpenseStats {

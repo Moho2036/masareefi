@@ -213,7 +213,8 @@ export async function deleteRecurring(uid: string, id: string): Promise<void> {
  */
 export async function processDueRecurring(
   uid: string,
-  today: Date = new Date()
+  today: Date = new Date(),
+  monthStartDay?: number
 ): Promise<number> {
   const endOfToday = new Date(today.getTime())
   endOfToday.setHours(23, 59, 59, 999)
@@ -246,6 +247,8 @@ export async function processDueRecurring(
     )
   )
 
+  const effectiveMonthStartDay = monthStartDay ?? 1
+
   const circleDocs = await Promise.all(
     circleIds.map((cid) =>
       safeGetDoc(doc(db, 'users', uid, 'circles', cid).withConverter(circleConverter))
@@ -253,7 +256,7 @@ export async function processDueRecurring(
   )
   const circleMap = new Map<string, MoneyCircle>()
   for (const cDoc of circleDocs) {
-    if (cDoc.exists()) {
+    if (cDoc?.exists?.()) {
       circleMap.set(cDoc.id, cDoc.data())
     }
   }
@@ -285,7 +288,7 @@ export async function processDueRecurring(
       for (const occDate of dates) {
         if (rec.circleId && circleMap.has(rec.circleId)) {
           const circle = circleMap.get(rec.circleId)!
-          const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+          const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
           const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
           if (
             userMember?.paymentsByMonth?.[String(cycleIndex)] === false ||
@@ -343,7 +346,7 @@ export async function processDueRecurring(
       // If linked to circle, automatically mark user's slot (myTurnMonth) as paid for this cycle
       if (rec.circleId && circleMap.has(rec.circleId)) {
         const circle = circleMap.get(rec.circleId)!
-        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
         const isExemptCycle =
           cycleIndex === circle.myTurnMonth ||
           (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
@@ -411,7 +414,8 @@ export async function processDueRecurring(
 export async function confirmRecurringOccurrence(
   uid: string,
   rec: Recurring,
-  customAmountFils?: number
+  customAmountFils?: number,
+  monthStartDay?: number
 ): Promise<string> {
   const amountToCharge = customAmountFils !== undefined ? customAmountFils : rec.amountFils
   if (!Number.isInteger(amountToCharge) || amountToCharge <= 0) {
@@ -473,7 +477,8 @@ export async function confirmRecurringOccurrence(
       const circleSnap = await safeGetDoc(circleDocRef)
       if (circleSnap.exists()) {
         const circle = circleSnap.data()
-        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate) + 1
+        const effectiveMonthStartDay = monthStartDay ?? 1
+        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
         const isExemptCycle =
           cycleIndex === circle.myTurnMonth ||
           (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)

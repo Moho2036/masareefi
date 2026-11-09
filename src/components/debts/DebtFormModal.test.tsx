@@ -62,7 +62,7 @@ describe('DebtFormModal syncTransaction on edit', () => {
       )
     })
 
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByRole('switch', { name: /خصم المبلغ|إضافة المبلغ|الرصيد/ })
     expect(toggle.getAttribute('aria-checked')).toBe('true')
   })
 
@@ -85,7 +85,7 @@ describe('DebtFormModal syncTransaction on edit', () => {
       )
     })
 
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByRole('switch', { name: /خصم المبلغ|إضافة المبلغ|الرصيد/ })
     expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 
@@ -105,7 +105,7 @@ describe('DebtFormModal syncTransaction on edit', () => {
     })
 
     // Toggle off
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByRole('switch', { name: /خصم المبلغ|إضافة المبلغ|الرصيد/ })
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-checked')).toBe('false')
 

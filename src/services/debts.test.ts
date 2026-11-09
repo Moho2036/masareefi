@@ -13,6 +13,8 @@ import {
   updateDebtEntry,
   deleteDebtEntry,
   mergePersonDebts,
+  findLegacyInitTransactionId,
+  findLegacyPaymentTransactionId,
 } from './debts'
 import type { Debt, DebtPayment, DebtEntry } from '../types'
 
@@ -200,6 +202,60 @@ describe('debts service with accounting link', () => {
         amountFils: 100000,
         categoryId: 'cat-other-inc',
         title: 'اقتراض من: خالد',
+      })
+    })
+
+    it('creates both initial debt transaction and payment transaction when initialPaidFils > 0 with sync', async () => {
+      mockGetDocs
+        .mockResolvedValueOnce({
+          docs: [{ data: () => ({ id: 'cat-debt-exp', name: 'ديون ومستحقات', type: 'expense', archived: false }) }],
+        })
+        .mockResolvedValueOnce({
+          docs: [{ data: () => ({ id: 'cat-debt-inc', name: 'استرداد ديون', type: 'income', archived: false }) }],
+        })
+
+      const debtId = await addDebt(
+        'user-1',
+        {
+          personName: 'خالد',
+          type: 'lent',
+          amountFils: 50000,
+          startDate: new Date('2026-10-01'),
+          dueDate: null,
+          note: 'سلفة أولى',
+        },
+        {
+          syncTransaction: true,
+          initialPaidFils: 20000,
+          initialPaymentNote: 'سداد مسبق',
+        }
+      )
+
+      expect(debtId).toBe('mock-generated-id')
+      // 3 writes in batch: debt document, debt_init_ transaction, debt_pay_ transaction
+      expect(mockBatchSet).toHaveBeenCalledTimes(3)
+
+      // Debt doc
+      expect(mockBatchSet.mock.calls[0][1]).toMatchObject({
+        personName: 'خالد',
+        amountFils: 50000,
+        paidFils: 20000,
+        settled: false,
+      })
+
+      // Initial lent transaction (expense 50000)
+      expect(mockBatchSet.mock.calls[1][1]).toMatchObject({
+        type: 'expense',
+        amountFils: 50000,
+        title: 'إقراض: خالد',
+      })
+
+      // Initial repayment transaction (income 20000)
+      expect(mockBatchSet.mock.calls[2][1]).toMatchObject({
+        type: 'income',
+        amountFils: 20000,
+        title: 'سداد دين: خالد',
+        note: 'سداد مسبق',
       })
     })
   })
@@ -708,6 +764,7 @@ describe('debts service with accounting link', () => {
           {
             id: 'legacy-init-tx-999',
             data: () => ({
+              type: 'expense',
               amountFils: 50000,
               date: new Date('2026-10-01'),
               title: 'إقراض أبو أحمد',
@@ -722,6 +779,7 @@ describe('debts service with accounting link', () => {
           {
             id: 'legacy-pay-tx-888',
             data: () => ({
+              type: 'income',
               amountFils: 10000,
               date: new Date('2026-10-05'),
               title: 'سداد من أبو أحمد',
@@ -772,6 +830,38 @@ describe('debts service with accounting link', () => {
         amountFils: 75000,
         title: 'إقراض: سامي الجديد',
       })
+    })
+
+    it('synchronizes single entry amount when total debt amount is updated without passing entries', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          personName: 'سامي',
+          type: 'lent',
+          amountFils: 30000,
+          paidFils: 0,
+          entries: [
+            {
+              id: 'e1',
+              amountFils: 30000,
+              date: new Date('2026-09-01'),
+              title: 'أصل الدين',
+              note: '',
+              createdAt: new Date('2026-09-01'),
+            },
+          ],
+        }),
+      })
+
+      await updateDebt('user-1', 'debt-999', {
+        amountFils: 50000,
+      })
+
+      const debtUpdate = mockBatchUpdate.mock.calls[0][1]
+      expect(debtUpdate.amountFils).toBe(50000)
+      expect(debtUpdate.entries).toBeDefined()
+      expect(debtUpdate.entries).toHaveLength(1)
+      expect(debtUpdate.entries[0].amountFils).toBe(50000)
     })
 
     it('preserves init transaction note if debt note was not modified', async () => {
@@ -1833,6 +1923,56 @@ describe('debts service with accounting link', () => {
         })
       ).rejects.toThrow('تم الوصول للحد الأقصى لعدد السلف (100 سلفة) لهذا السجل')
     })
+
+    it('updates startDate of debt when adding an entry with an older date and appends personName to title', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{ data: () => ({ id: 'cat-debt-exp', name: 'ديون ومستحقات', type: 'expense', archived: false }) }],
+      })
+
+      const debt: Debt = {
+        id: 'debt-older-entry',
+        personName: 'محمد سمير',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 0,
+        settled: false,
+        note: '',
+        entries: [
+          {
+            id: 'e1',
+            amountFils: 50000,
+            date: new Date('2026-10-15'),
+            title: 'سلفة أولى',
+            note: '',
+            createdAt: new Date('2026-10-15'),
+          },
+        ],
+        startDate: new Date('2026-10-15'),
+        payments: [],
+        createdAt: new Date('2026-10-15'),
+      }
+
+      await addDebtEntry(
+        'user-1',
+        debt,
+        {
+          amountFils: 20000,
+          date: new Date('2026-10-01'), // Older than debt.startDate (15th)
+          title: 'شراء هاتف محمول',
+        },
+        { syncTransaction: true }
+      )
+
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+      const updateData = mockBatchUpdate.mock.calls[0][1]
+      expect(updateData.amountFils).toBe(70000)
+      expect(updateData.startDate).toBeDefined()
+
+      // Transaction title includes both custom title and person name
+      expect(mockBatchSet).toHaveBeenCalledTimes(1)
+      const txData = mockBatchSet.mock.calls[0][1]
+      expect(txData.title).toBe('شراء هاتف محمول - محمد سمير')
+    })
   })
 
   describe('compactDebtEntries', () => {
@@ -1945,6 +2085,519 @@ describe('debts service with accounting link', () => {
         'debt_entry_e-4',
         'debt_entry_e-5',
       ])
+    })
+  })
+
+  describe('surgical verification tests', () => {
+    it('findLegacyInitTransactionId excludes debt_entry_ and requires matching tx.type', async () => {
+      const debt: Debt = {
+        id: 'debt-legacy-1',
+        personName: 'خالد',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 0,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-10-01'),
+      }
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          // 1. Has debt_entry_ ID -> excluded
+          {
+            id: 'debt_entry_abc',
+            data: () => ({
+              amountFils: 50000,
+              type: 'expense',
+              date: new Date('2026-10-01'),
+              title: 'إقراض: خالد',
+            }),
+          },
+          // 2. Wrong type (income instead of expense for lent) -> excluded
+          {
+            id: 'manual-wrong-type',
+            data: () => ({
+              amountFils: 50000,
+              type: 'income',
+              date: new Date('2026-10-01'),
+              title: 'إقراض: خالد',
+            }),
+          },
+          // 3. Valid legacy match
+          {
+            id: 'legacy-valid-tx',
+            data: () => ({
+              amountFils: 50000,
+              type: 'expense',
+              date: new Date('2026-10-01'),
+              title: 'إقراض: خالد',
+            }),
+          },
+        ],
+      })
+
+      const matchId = await findLegacyInitTransactionId('user-1', 'debt-legacy-1', debt)
+      expect(matchId).toBe('legacy-valid-tx')
+    })
+
+    it('findLegacyPaymentTransactionId excludes debt_entry_, requires matching tx.type, and requires titleMatches even when rawNoteMatches is true', async () => {
+      const debt: Debt = {
+        id: 'debt-legacy-pay-1',
+        personName: 'سعيد',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 20000,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-10-01'),
+      }
+      const payment: DebtPayment = {
+        id: 'pay-leg-1',
+        amountFils: 20000,
+        date: new Date('2026-10-05'),
+        note: 'سداد جزئي كاش',
+        createdAt: new Date('2026-10-05'),
+      }
+
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          // 1. Has debt_entry_ ID -> excluded
+          {
+            id: 'debt_entry_xyz',
+            data: () => ({
+              amountFils: 20000,
+              type: 'income',
+              date: new Date('2026-10-05'),
+              title: 'سداد دين: سعيد',
+              note: 'سداد جزئي كاش',
+            }),
+          },
+          // 2. Wrong type (expense instead of income for lent debt payment) -> excluded
+          {
+            id: 'wrong-type-pay',
+            data: () => ({
+              amountFils: 20000,
+              type: 'expense',
+              date: new Date('2026-10-05'),
+              title: 'سداد دين: سعيد',
+              note: 'سداد جزئي كاش',
+            }),
+          },
+          // 3. Arbitrary manual transaction with same note and amount on same day but unrelated title -> must NOT match
+          {
+            id: 'arbitrary-manual-tx',
+            data: () => ({
+              amountFils: 20000,
+              type: 'income',
+              date: new Date('2026-10-05'),
+              title: 'بيع بضاعة قديمة',
+              note: 'سداد جزئي كاش',
+            }),
+          },
+          // 4. Genuine legacy payment transaction with titleMatches
+          {
+            id: 'genuine-legacy-pay-tx',
+            data: () => ({
+              amountFils: 20000,
+              type: 'income',
+              date: new Date('2026-10-05'),
+              title: 'استرداد دفعة دين: سعيد',
+              note: 'سداد جزئي كاش',
+            }),
+          },
+        ],
+      })
+
+      const matchId = await findLegacyPaymentTransactionId('user-1', payment, debt)
+      expect(matchId).toBe('genuine-legacy-pay-tx')
+    })
+
+    it('rejects invalid or NaN dates in addDebtPayment and updateDebtPayment', async () => {
+      const debt: Debt = {
+        id: 'debt-date-guard',
+        personName: 'طارق',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 0,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'p-existing',
+            amountFils: 10000,
+            date: new Date('2026-10-02'),
+            createdAt: new Date('2026-10-02'),
+          },
+        ],
+        createdAt: new Date('2026-10-01'),
+      }
+
+      await expect(
+        addDebtPayment('user-1', debt, {
+          amountFils: 10000,
+          date: new Date('invalid-date'),
+        })
+      ).rejects.toThrow('تاريخ غير صالح')
+
+      await expect(
+        updateDebtPayment('user-1', debt, 'p-existing', {
+          amountFils: 10000,
+          date: new Date('invalid-date'),
+        })
+      ).rejects.toThrow('تاريخ غير صالح')
+    })
+
+    it('deleteDebtPayment returns early without writing to Firestore if payment not found', async () => {
+      const debt: Debt = {
+        id: 'debt-del-early',
+        personName: 'طارق',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 0,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-10-01'),
+      }
+
+      await deleteDebtPayment('user-1', debt, 'non-existent-pay-id')
+      expect(mockBatchUpdate).not.toHaveBeenCalled()
+      expect(mockBatchCommit).not.toHaveBeenCalled()
+    })
+
+    it('updateDebtPayment clears dangling transactionId when syncTxOption is undefined and transaction does not exist in Firestore', async () => {
+      const debt: Debt = {
+        id: 'debt-dangling-tx',
+        personName: 'رامي',
+        type: 'lent',
+        amountFils: 50000,
+        paidFils: 10000,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [
+          {
+            id: 'p-dangling',
+            amountFils: 10000,
+            date: new Date('2026-10-02'),
+            createdAt: new Date('2026-10-02'),
+            transactionId: 'dangling-non-existent-tx',
+          },
+        ],
+        createdAt: new Date('2026-10-01'),
+      }
+
+      // safeGetDoc returns does not exist
+      mockGetDoc.mockResolvedValue({
+        exists: () => false,
+      })
+      mockGetDocs.mockResolvedValue({ docs: [] })
+
+      await updateDebtPayment('user-1', debt, 'p-dangling', {
+        amountFils: 12000,
+        date: new Date('2026-10-03'),
+      })
+
+      const updateCall = mockBatchUpdate.mock.calls.find((c) => c[0].path.includes('debts/debt-dangling-tx'))
+      expect(updateCall).toBeDefined()
+      // Payment transactionId must be cleared (undefined / not present)
+      expect(updateCall![1].payments[0].transactionId).toBeUndefined()
+    })
+
+    it('updateDebt with multi-entries sets debt_init_${id} to entries[0].amountFils, NOT effectiveAmountFils', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts/debt-multi-entry')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              id: 'debt-multi-entry',
+              personName: 'زياد',
+              type: 'lent',
+              amountFils: 70000, // Total = 50k + 20k
+              paidFils: 0,
+              startDate: new Date('2026-10-01'),
+              settled: false,
+              entries: [
+                {
+                  id: 'entry_base',
+                  amountFils: 50000,
+                  date: new Date('2026-10-01'),
+                  transactionId: 'debt_init_debt-multi-entry',
+                },
+                {
+                  id: 'entry_second',
+                  amountFils: 20000,
+                  date: new Date('2026-10-05'),
+                  transactionId: 'debt_entry_second',
+                },
+              ],
+            }),
+          }
+        }
+        if (ref.path.includes('transactions/debt_init_debt-multi-entry')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              amountFils: 50000,
+              type: 'expense',
+            }),
+          }
+        }
+        return { exists: () => false }
+      })
+
+      // Update debt amount to 80000 (e.g. entry 2 became 30k)
+      await updateDebt('user-1', 'debt-multi-entry', {
+        amountFils: 80000,
+        entries: [
+          {
+            id: 'entry_base',
+            amountFils: 50000,
+            date: new Date('2026-10-01'),
+            note: '',
+            transactionId: 'debt_init_debt-multi-entry',
+            createdAt: new Date('2026-10-01'),
+          },
+          {
+            id: 'entry_second',
+            amountFils: 30000,
+            date: new Date('2026-10-05'),
+            note: '',
+            transactionId: 'debt_entry_second',
+            createdAt: new Date('2026-10-05'),
+          },
+        ],
+      })
+
+      // debt_init_ must be updated with entries[0].amountFils (50000), NOT 80000!
+      const initTxUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/debt_init_debt-multi-entry'
+      )
+      expect(initTxUpdateCall).toBeDefined()
+      expect(initTxUpdateCall![1].amountFils).toBe(50000)
+    })
+
+    it('updateDebt creates debt_init_${id} with entries[0].amountFils when syncTransaction is true and sets entries[0].transactionId', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts/debt-sync-create')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              id: 'debt-sync-create',
+              personName: 'كريم',
+              type: 'lent',
+              amountFils: 60000,
+              paidFils: 0,
+              startDate: new Date('2026-10-01'),
+              settled: false,
+              entries: [
+                {
+                  id: 'entry_1',
+                  amountFils: 40000,
+                  date: new Date('2026-10-01'),
+                },
+                {
+                  id: 'entry_2',
+                  amountFils: 20000,
+                  date: new Date('2026-10-05'),
+                },
+              ],
+            }),
+          }
+        }
+        return { exists: () => false }
+      })
+      mockGetDocs.mockResolvedValue({ docs: [] })
+
+      await updateDebt(
+        'user-1',
+        'debt-sync-create',
+        {},
+        { syncTransaction: true }
+      )
+
+      // debt_init_ setCall should have amountFils = 40000 (entries[0].amountFils)
+      const initTxSetCall = mockBatchSet.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/debt_init_debt-sync-create'
+      )
+      expect(initTxSetCall).toBeDefined()
+      expect(initTxSetCall![1].amountFils).toBe(40000)
+
+      // debt doc update should synchronize entries[0].transactionId
+      const debtUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path.includes('debts/debt-sync-create')
+      )
+      expect(debtUpdateCall).toBeDefined()
+      expect(debtUpdateCall![1].entries[0].transactionId).toBe('debt_init_debt-sync-create')
+    })
+
+    it('updateDebt clears entries[0].transactionId when syncTransaction is false', async () => {
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debts/debt-sync-false')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              id: 'debt-sync-false',
+              personName: 'كريم',
+              type: 'lent',
+              amountFils: 40000,
+              paidFils: 0,
+              startDate: new Date('2026-10-01'),
+              settled: false,
+              entries: [
+                {
+                  id: 'entry_1',
+                  amountFils: 40000,
+                  date: new Date('2026-10-01'),
+                  transactionId: 'debt_init_debt-sync-false',
+                },
+              ],
+            }),
+          }
+        }
+        if (ref.path.includes('transactions/debt_init_debt-sync-false')) {
+          return { exists: () => true }
+        }
+        return { exists: () => false }
+      })
+
+      await updateDebt(
+        'user-1',
+        'debt-sync-false',
+        {},
+        { syncTransaction: false }
+      )
+
+      // debt_init_ must be deleted
+      const deleteInitCall = mockBatchDelete.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/debt_init_debt-sync-false'
+      )
+      expect(deleteInitCall).toBeDefined()
+
+      // entries[0].transactionId must be cleared
+      const debtUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path.includes('debts/debt-sync-false')
+      )
+      expect(debtUpdateCall).toBeDefined()
+      expect(debtUpdateCall![1].entries[0].transactionId).toBeUndefined()
+    })
+
+    it('updateDebtEntry updates base entry transaction debt_init_${id} and synchronizes debt.startDate to earliest entry', async () => {
+      const debt: Debt = {
+        id: 'debt-entry-base-upd',
+        personName: 'هاني',
+        type: 'lent',
+        amountFils: 70000,
+        paidFils: 0,
+        startDate: new Date('2026-10-01'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-10-01'),
+        entries: [
+          {
+            id: 'e_base',
+            amountFils: 40000,
+            date: new Date('2026-10-01'),
+            title: 'أصل الدين',
+            note: '',
+            createdAt: new Date('2026-10-01'),
+            // transactionId omitted to verify fallback to debt_init_
+          },
+          {
+            id: 'e_add',
+            amountFils: 30000,
+            date: new Date('2026-10-10'),
+            title: 'سلفة 2',
+            note: '',
+            createdAt: new Date('2026-10-10'),
+          },
+        ],
+      }
+
+      mockGetDoc.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.includes('debt_init_debt-entry-base-upd')) {
+          return { exists: () => true }
+        }
+        return { exists: () => false }
+      })
+
+      // Update base entry date to 2026-09-20 (earlier) and amount to 45000
+      await updateDebtEntry('user-1', debt, 'e_base', {
+        amountFils: 45000,
+        date: new Date('2026-09-20'),
+        title: 'أصل الدين المعدل',
+      })
+
+      // Should update debt_init_
+      const initTxUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path === 'users/user-1/transactions/debt_init_debt-entry-base-upd'
+      )
+      expect(initTxUpdateCall).toBeDefined()
+      expect(initTxUpdateCall![1].amountFils).toBe(45000)
+      expect(initTxUpdateCall![1].title).toBe('أصل الدين المعدل - هاني')
+
+      // Should update debt.startDate because earliest entry date became 2026-09-20
+      const debtUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path.includes('debts/debt-entry-base-upd')
+      )
+      expect(debtUpdateCall).toBeDefined()
+      expect(debtUpdateCall![1].startDate).toEqual(
+        expect.objectContaining({
+          seconds: Math.floor(new Date('2026-09-20').getTime() / 1000),
+        })
+      )
+    })
+
+    it('deleteDebtEntry recalculates earliestEntryDate and updates debt.startDate when deleting oldest entry', async () => {
+      const debt: Debt = {
+        id: 'debt-del-oldest',
+        personName: 'مازن',
+        type: 'lent',
+        amountFils: 60000,
+        paidFils: 0,
+        startDate: new Date('2026-08-01'), // Oldest entry date
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-08-01'),
+        entries: [
+          {
+            id: 'e_oldest',
+            amountFils: 20000,
+            date: new Date('2026-08-01'),
+            note: '',
+            createdAt: new Date('2026-08-01'),
+          },
+          {
+            id: 'e_newer',
+            amountFils: 40000,
+            date: new Date('2026-09-01'),
+            note: '',
+            createdAt: new Date('2026-09-01'),
+          },
+        ],
+      }
+
+      await deleteDebtEntry('user-1', debt, 'e_oldest')
+
+      const debtUpdateCall = mockBatchUpdate.mock.calls.find(
+        (c) => c[0].path.includes('debts/debt-del-oldest')
+      )
+      expect(debtUpdateCall).toBeDefined()
+      expect(debtUpdateCall![1].amountFils).toBe(40000)
+      // debt.startDate must be updated to the remaining earliest date (2026-09-01)
+      expect(debtUpdateCall![1].startDate).toEqual(
+        expect.objectContaining({
+          seconds: Math.floor(new Date('2026-09-01').getTime() / 1000),
+        })
+      )
     })
   })
 })

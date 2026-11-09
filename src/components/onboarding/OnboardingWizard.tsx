@@ -203,7 +203,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
           if (salaryCat) {
             const today = new Date()
             const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0)
-            const startDate = new Date(today.getFullYear(), today.getMonth(), safeMonthStartDay, 12, 0, 0, 0)
+            const startDate = new Date(today.getFullYear(), today.getMonth(), safeMonthStartDay, 0, 0, 0, 0)
             if (startDate < todayStart) {
               startDate.setMonth(startDate.getMonth() + 1)
             }
@@ -304,7 +304,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
       enableHistoryBack={false}
       hideCloseButton
       title=""
-      className="max-w-xl p-0 overflow-hidden rounded-3xl"
+      className="max-w-xl p-0 overflow-hidden rounded-2xl"
     >
       <div className="p-2 sm:p-3 space-y-5 text-start">
         {/* Header with step progress and Skip button */}
@@ -768,7 +768,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
                 variant="primary"
                 size="sm"
                 onClick={() => setStep((s) => Math.min(4, s + 1))}
-                disabled={submitting}
+                disabled={submitting || (step === 1 && isCustomCurrency && !currency.trim())}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
               >
                 <span>التالي</span>

@@ -72,6 +72,10 @@ export interface BackupValidationResult {
  * Exports all user data across all collections into a structured JSON backup.
  */
 export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('لا يمكن إنشاء نسخة احتياطية أثناء عدم الاتصال بالإنترنت')
+  }
+
   const [
     settingsSnap,
     categoriesSnap,
@@ -132,7 +136,7 @@ export async function createFullBackup(uid: string): Promise<MasareefiBackup> {
  * Triggers a browser download of the full JSON backup.
  */
 export function downloadBackupFile(backup: MasareefiBackup): void {
-  const jsonStr = JSON.stringify(backup, null, 2)
+  const jsonStr = JSON.stringify(backup)
   const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const dateStr = formatDateInput(new Date())
@@ -184,7 +188,7 @@ export function parseDate(val: unknown): Date {
  * If a categoryId is missing or points to a non-existent category, a fallback category
  * is generated and added to the categories list so no orphan transactions are created.
  */
-export function resolveOrphanCategories(
+function resolveOrphanCategories(
   categories: Category[],
   transactions: Transaction[],
   recurring: Recurring[],
@@ -427,10 +431,10 @@ export function validateBackup(jsonText: string): BackupValidationResult {
       },
       data: backup,
     }
-  } catch (err) {
+  } catch {
     return {
       valid: false,
-      error: err instanceof Error ? err.message : 'تعذر قراءة ملف النسخة الاحتياطية',
+      error: 'ملف النسخة الاحتياطية غير صالح أو تالف (تعذر قراءة أو تحليل محتوى JSON)',
     }
   }
 }
@@ -992,6 +996,4 @@ export async function restoreBackup(
   }
 }
 }
-
-export const restoreBackupData = restoreBackup
 

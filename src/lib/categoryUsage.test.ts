@@ -8,8 +8,6 @@ import {
   syncCategoryUsageCache,
   mergeAndSaveUsage,
   getCategoryUsageDetails,
-  getCategoryUsageCount,
-  isCategoryInUse,
 } from './categoryUsage'
 
 describe('categoryUsage utilities', () => {
@@ -94,8 +92,6 @@ describe('categoryUsage utilities', () => {
     expect(rentDetails.recurringCount).toBe(1)
     expect(rentDetails.totalCount).toBe(3)
     expect(rentDetails.isInUse).toBe(true)
-    expect(getCategoryUsageCount('cat-rent', txs, recurring, {})).toBe(3)
-    expect(isCategoryInUse('cat-rent', txs, recurring, {})).toBe(true)
 
     // cat-gym: 0 txs + 1 recurring = 1 total
     const gymDetails = getCategoryUsageDetails('cat-gym', txs, recurring, {})
@@ -103,8 +99,6 @@ describe('categoryUsage utilities', () => {
     expect(gymDetails.recurringCount).toBe(1)
     expect(gymDetails.totalCount).toBe(1)
     expect(gymDetails.isInUse).toBe(true)
-    expect(getCategoryUsageCount('cat-gym', txs, recurring, {})).toBe(1)
-    expect(isCategoryInUse('cat-gym', txs, recurring, {})).toBe(true)
 
     // cat-unused: 0 txs + 0 recurring = 0 total
     const unusedDetails = getCategoryUsageDetails('cat-unused', txs, recurring, {})
@@ -113,7 +107,6 @@ describe('categoryUsage utilities', () => {
     expect(unusedDetails.circlesCount).toBe(0)
     expect(unusedDetails.totalCount).toBe(0)
     expect(unusedDetails.isInUse).toBe(false)
-    expect(isCategoryInUse('cat-unused', txs, recurring, {})).toBe(false)
   })
 
   it('calculates category usage details taking money circles into account', () => {
@@ -127,8 +120,6 @@ describe('categoryUsage utilities', () => {
     expect(expDetails.circlesCount).toBe(1)
     expect(expDetails.totalCount).toBe(1)
     expect(expDetails.isInUse).toBe(true)
-    expect(getCategoryUsageCount('cat-circle-exp', [], [], {}, circles)).toBe(1)
-    expect(isCategoryInUse('cat-circle-exp', [], [], {}, circles)).toBe(true)
 
     // income category linked to circle 1
     const incDetails = getCategoryUsageDetails('cat-circle-inc', [], [], {}, circles)
@@ -147,7 +138,6 @@ describe('categoryUsage utilities', () => {
     expect(unlinkedDetails.circlesCount).toBe(0)
     expect(unlinkedDetails.totalCount).toBe(0)
     expect(unlinkedDetails.isInUse).toBe(false)
-    expect(isCategoryInUse('cat-unlinked', [], [], {}, circles)).toBe(false)
   })
 
   it('relies on active transactions as single source of truth and ignores residual local storage', () => {

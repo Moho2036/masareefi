@@ -16,6 +16,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
+import { Toggle } from '../components/ui/Toggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { DebtCard } from '../components/debts/DebtCard'
 import { DebtFormModal } from '../components/debts/DebtFormModal'
@@ -147,7 +148,7 @@ export const DebtsPage: React.FC = () => {
   }
 
   const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null)
-  const [deleteTransactions, setDeleteTransactions] = useState(false)
+  const [deleteTransactions, setDeleteTransactions] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
   const [hasInitTxOnDelete, setHasInitTxOnDelete] = useState(false)
 
@@ -190,7 +191,7 @@ export const DebtsPage: React.FC = () => {
 
   const handleDelete = useCallback((debt: Debt) => {
     setDebtToDelete(debt)
-    setDeleteTransactions(false)
+    setDeleteTransactions(true)
     setHasInitTxOnDelete(false)
     if (user?.uid) {
       checkDebtInitialTransactionExists(user.uid, debt.id, debt)
@@ -235,88 +236,132 @@ export const DebtsPage: React.FC = () => {
       />
 
       {/* 2. Top Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {/* Card: مستحقات لي */}
-        <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
-                مستحقات لي على الآخرين
-              </span>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-            </div>
-            <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums block mt-1">
-              {format(summary.lentFils)}
-            </span>
-          </div>
-          <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-            {summary.lentActiveCount === 0
-              ? 'لا توجد مستحقات نشطة'
-              : `متبقية من ${summary.lentActiveCount} ${summary.lentActiveCount === 1 ? 'شخص' : 'أشخاص'}`}
-          </div>
-        </div>
-
-        {/* Card: التزامات عليّ */}
-        <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
-                التزامات عليّ للآخرين
-              </span>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-                <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-            </div>
-            <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 tabular-nums block mt-1">
-              {format(summary.borrowedFils)}
-            </span>
-          </div>
-          <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-            {summary.borrowedActiveCount === 0
-              ? 'لا توجد التزامات نشطة'
-              : `واجبة لـ ${summary.borrowedActiveCount} ${summary.borrowedActiveCount === 1 ? 'شخص' : 'أشخاص'}`}
-          </div>
-        </div>
-
-        {/* Card 3: الديون المتأخرة والمستحقة قريباً */}
-        <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full sm:col-span-2 lg:col-span-1">
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
-                {summary.overdueCount > 0 ? 'ديون متأخرة السداد' : 'استحقاقات خلال 7 أيام'}
-              </span>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
-                <Scale className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-            </div>
-            <span
-              className={cn(
-                'text-xl sm:text-2xl font-black tabular-nums block mt-1',
-                summary.overdueCount > 0
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : summary.upcomingCount > 0
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-zinc-700 dark:text-zinc-300'
-              )}
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-32 animate-pulse"
             >
-              {summary.overdueCount > 0
-                ? format(summary.overdueFils)
-                : summary.upcomingCount > 0
-                  ? format(summary.upcomingFils)
-                  : format(0)}
-            </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="h-3.5 bg-zinc-200 dark:bg-zinc-800 rounded w-28" />
+                <div className="w-8 h-8 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+              <div className="h-7 bg-zinc-200 dark:bg-zinc-800 rounded w-24 my-2" />
+              <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80">
+                <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-32" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {/* Card: مستحقات لي */}
+          <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  مستحقات لي على الآخرين
+                </span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums block mt-1">
+                {format(summary.lentFils)}
+              </span>
+            </div>
+            <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              {summary.lentActiveCount === 0
+                ? 'لا توجد مستحقات نشطة'
+                : summary.lentActiveCount === 1
+                  ? 'متبقية من شخص واحد'
+                  : summary.lentActiveCount === 2
+                    ? 'متبقية من شخصين'
+                    : summary.lentActiveCount <= 10
+                      ? `متبقية من ${summary.lentActiveCount} أشخاص`
+                      : `متبقية من ${summary.lentActiveCount} شخصاً`}
+            </div>
           </div>
-          <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-            {summary.overdueCount > 0
-              ? `${summary.overdueCount} ديون تجاوزت موعد الاستحقاق`
-              : summary.upcomingCount > 0
-                ? `${summary.upcomingCount} ديون يحل موعدها قريباً`
-                : 'لا توجد ديون متأخرة'}
+
+          {/* Card: التزامات عليّ */}
+          <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  التزامات عليّ للآخرين
+                </span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 tabular-nums block mt-1">
+                {format(summary.borrowedFils)}
+              </span>
+            </div>
+            <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              {summary.borrowedActiveCount === 0
+                ? 'لا توجد التزامات نشطة'
+                : summary.borrowedActiveCount === 1
+                  ? 'واجبة لشخص واحد'
+                  : summary.borrowedActiveCount === 2
+                    ? 'واجبة لشخصين'
+                    : summary.borrowedActiveCount <= 10
+                      ? `واجبة لـ ${summary.borrowedActiveCount} أشخاص`
+                      : `واجبة لـ ${summary.borrowedActiveCount} شخصاً`}
+            </div>
+          </div>
+
+          {/* Card 3: الديون المتأخرة والمستحقة قريباً */}
+          <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full sm:col-span-2 lg:col-span-1">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  {summary.overdueCount > 0 ? 'ديون متأخرة السداد' : 'استحقاقات خلال 7 أيام'}
+                </span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <Scale className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span
+                className={cn(
+                  'text-xl sm:text-2xl font-black tabular-nums block mt-1',
+                  summary.overdueCount > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : summary.upcomingCount > 0
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-zinc-700 dark:text-zinc-300'
+                )}
+              >
+                {summary.overdueCount > 0
+                  ? format(summary.overdueFils)
+                  : summary.upcomingCount > 0
+                    ? format(summary.upcomingFils)
+                    : format(0)}
+              </span>
+            </div>
+            <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              {summary.overdueCount > 0
+                ? summary.overdueCount === 1
+                  ? 'دين واحد تجاوز موعد الاستحقاق'
+                  : summary.overdueCount === 2
+                    ? 'دينان تجاوزا موعد الاستحقاق'
+                    : summary.overdueCount <= 10
+                      ? `${summary.overdueCount} ديون تجاوزت موعد الاستحقاق`
+                      : `${summary.overdueCount} ديناً تجاوز موعد الاستحقاق`
+                : summary.upcomingCount > 0
+                  ? summary.upcomingCount === 1
+                    ? 'دين واحد يحل موعده قريباً'
+                    : summary.upcomingCount === 2
+                      ? 'دينان يحل موعدهما قريباً'
+                      : summary.upcomingCount <= 10
+                        ? `${summary.upcomingCount} ديون يحل موعدها قريباً`
+                        : `${summary.upcomingCount} ديناً يحل موعده قريباً`
+                  : 'لا توجد ديون متأخرة'}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white dark:bg-[#121215] p-3.5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs">
@@ -329,8 +374,8 @@ export const DebtsPage: React.FC = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="ابحث باسم الشخص أو الملاحظة..."
-            className="w-full ps-10 pe-10 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50/80 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all font-medium"
+            placeholder="ابحث باسم الشخص أو الملاحظة أو المبلغ..."
+            className="w-full ps-10 pe-10 h-11 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50/80 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all font-medium"
           />
           {search && (
             <button
@@ -345,14 +390,14 @@ export const DebtsPage: React.FC = () => {
         </div>
 
         {/* Type Filter Buttons */}
-        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-zinc-850 border border-[#E4E4E7] dark:border-[#27272A] gap-1 shrink-0">
+        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-[#18181B] border border-[#E4E4E7] dark:border-[#27272A] gap-1 shrink-0">
           <button
             type="button"
             onClick={() => setTypeFilter('all')}
             className={cn(
               'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
               typeFilter === 'all'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
@@ -364,7 +409,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
               typeFilter === 'lent'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
@@ -376,7 +421,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
               typeFilter === 'borrowed'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-2xs'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
@@ -387,14 +432,14 @@ export const DebtsPage: React.FC = () => {
 
       {/* 4. Secondary Status Pills */}
       <div className="relative">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold no-scrollbar">
           <button
             type="button"
             onClick={() => setStatusFilter('all')}
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'all'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-transparent'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 border-transparent shadow-2xs dark:shadow-none'
                 : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
             )}
           >
@@ -406,7 +451,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'active'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-transparent'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 border-transparent shadow-2xs dark:shadow-none'
                 : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
             )}
           >
@@ -418,7 +463,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'overdue'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-transparent'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 border-transparent shadow-2xs dark:shadow-none'
                 : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
             )}
           >
@@ -430,7 +475,7 @@ export const DebtsPage: React.FC = () => {
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'settled'
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-transparent'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 border-transparent shadow-2xs dark:shadow-none'
                 : 'bg-white dark:bg-[#121215] border-[#E4E4E7] dark:border-[#27272A] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
             )}
           >
@@ -485,7 +530,7 @@ export const DebtsPage: React.FC = () => {
                 </div>
                 <div className="w-16 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800" />
               </div>
-              <div className="h-16 rounded-xl bg-zinc-50 dark:bg-zinc-850" />
+              <div className="h-16 rounded-xl bg-zinc-50 dark:bg-zinc-800/80" />
               <div className="flex items-center justify-between pt-2">
                 <div className="w-20 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
                 <div className="w-16 h-8 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
@@ -545,7 +590,7 @@ export const DebtsPage: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-dashed border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
+            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
               <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                 لا توجد ديون أو التزامات نشطة حالياً.
               </p>
@@ -558,7 +603,7 @@ export const DebtsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setUserToggledSettled(!isSettledExpanded)}
-                className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-850 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
                 aria-expanded={isSettledExpanded}
               >
                 <div className="flex items-center gap-2">
@@ -632,7 +677,7 @@ export const DebtsPage: React.FC = () => {
         isOpen={Boolean(debtToDelete)}
         onClose={() => {
           setDebtToDelete(null)
-          setDeleteTransactions(false)
+          setDeleteTransactions(true)
           setHasInitTxOnDelete(false)
         }}
         title="تأكيد حذف الدين"
@@ -646,19 +691,12 @@ export const DebtsPage: React.FC = () => {
           </div>
 
           {hasLinkedTransactions && (
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between gap-3">
-              <label
-                htmlFor="delete-debt-txs"
-                className="text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-200 cursor-pointer select-none"
-              >
-                حذف المعاملات المالية المرتبطة بهذا الدين (أصل الدين والدفعات) من المحفظة أيضاً
-              </label>
-              <input
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
+              <Toggle
                 id="delete-debt-txs"
-                type="checkbox"
+                label="حذف المعاملات المالية المرتبطة بهذا الدين (أصل الدين والدفعات) من المحفظة أيضاً"
                 checked={deleteTransactions}
-                onChange={(e) => setDeleteTransactions(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded-sm border-zinc-300 focus:ring-blue-600 cursor-pointer"
+                onChange={setDeleteTransactions}
               />
             </div>
           )}
@@ -669,7 +707,7 @@ export const DebtsPage: React.FC = () => {
               size="md"
               onClick={() => {
                 setDebtToDelete(null)
-                setDeleteTransactions(false)
+                setDeleteTransactions(true)
                 setHasInitTxOnDelete(false)
               }}
               disabled={isDeleting}
@@ -698,7 +736,9 @@ export const DebtsPage: React.FC = () => {
           <div className="flex items-center gap-3 text-zinc-800 dark:text-zinc-200">
             <GitMerge className="w-5 h-5 text-blue-600 shrink-0" />
             <p className="text-sm font-semibold">
-              هل ترغب في دمج {mergeTarget?.debts.length} سجلات ديون لـ &quot;{mergeTarget?.personName}&quot; في سجل دين موحد؟
+              {mergeTarget?.debts.length === 2
+                ? `هل ترغب في دمج سجلي دين لـ "${mergeTarget?.personName}" في سجل دين موحد؟`
+                : `هل ترغب في دمج ${mergeTarget?.debts.length} سجلات ديون لـ "${mergeTarget?.personName}" في سجل دين موحد؟`}
             </p>
           </div>
 

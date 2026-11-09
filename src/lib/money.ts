@@ -63,15 +63,6 @@ export function getCurrencyConfig(currencyCode?: string, customDecimals?: number
   return baseConfig
 }
 
-/**
- * Returns a suitable input placeholder according to currency decimal places.
- * e.g. 0 decimals -> '0', 3 decimals -> '0.000', 2 decimals -> '0.00'
- */
-export function getCurrencyPlaceholder(decimals: number): string {
-  if (decimals === 0) return '0'
-  return decimals === 3 ? '0.000' : '0.00'
-}
-
 export interface FormatOptions {
   showCurrency?: boolean
   currency?: string
@@ -79,8 +70,6 @@ export interface FormatOptions {
   maskAmount?: boolean
   customDecimals?: number | null
 }
-
-export type FormatJODOptions = FormatOptions
 
 const formattersCache = new Map<number, Intl.NumberFormat>()
 
@@ -113,21 +102,30 @@ export function toFils(
     decimals = getCurrencyConfig(decimalsOrCurrency, customDecimals).decimals
   }
 
+  const clampSafe = (val: number): number => {
+    if (isNaN(val) || !isFinite(val)) return 0
+    if (val > Number.MAX_SAFE_INTEGER) return Number.MAX_SAFE_INTEGER
+    if (val < -Number.MAX_SAFE_INTEGER) return -Number.MAX_SAFE_INTEGER
+    return val
+  }
+
   if (typeof input === 'number') {
     if (isNaN(input) || !isFinite(input)) return 0
     if (decimals === 0) {
-      return Math.round(input) * 1000
+      return clampSafe(Math.round(input) * 1000)
     }
     if (decimals === 2) {
-      return Math.round(input * 100) * 10
+      return clampSafe(Math.round(input * 100) * 10)
     }
-    return Math.round(input * 1000)
+    return clampSafe(Math.round(input * 1000))
   }
 
   if (typeof input !== 'string') return 0
 
   // Normalize Eastern Arabic / Persian numerals to Latin and Arabic commas to Western
+  // and strip invisible bidirectional/formatting characters
   const normalized = input
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, '')
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
     .replace(/\u066B/g, '.')
@@ -191,12 +189,12 @@ export function toFils(
   const num = parseFloat(clean)
   if (isNaN(num) || !isFinite(num)) return 0
   if (decimals === 0) {
-    return Math.round(num) * 1000
+    return clampSafe(Math.round(num) * 1000)
   }
   if (decimals === 2) {
-    return Math.round(num * 100) * 10
+    return clampSafe(Math.round(num * 100) * 10)
   }
-  return Math.round(num * 1000)
+  return clampSafe(Math.round(num * 1000))
 }
 
 /**
@@ -225,9 +223,29 @@ export function formatMoney(
     return `••••• ${config.symbol}`
   }
 
-  const amount = fromFils(fils)
-  const factor = Math.pow(10, config.decimals)
-  const roundedAmount = Math.round(amount * factor) / factor
+  const safeFils = typeof fils === 'number' && Number.isFinite(fils) ? fils : 0
+  const sign = safeFils < 0 ? -1 : 1
+  const absFils = Math.abs(safeFils)
+
+  let roundedAmount: number
+  if (config.decimals === 0) {
+    roundedAmount = sign * Math.round(absFils / 1000)
+  } else if (config.decimals === 2) {
+    roundedAmount = sign * (Math.round(absFils / 10) / 100)
+  } else if (config.decimals === 3) {
+    roundedAmount = sign * (Math.round(absFils) / 1000)
+  } else {
+    const shift = 3 - config.decimals
+    if (shift > 0) {
+      const div = Math.pow(10, shift)
+      const scale = Math.pow(10, config.decimals)
+      roundedAmount = sign * (Math.round(absFils / div) / scale)
+    } else {
+      const mul = Math.pow(10, -shift)
+      roundedAmount = sign * (Math.round(absFils * mul) / 1000)
+    }
+  }
+
   const isExactInteger = Math.abs(roundedAmount) % 1 === 0
   const decimalsToUse =
     opts.hideZeroDecimals && isExactInteger ? 0 : config.decimals
@@ -239,13 +257,6 @@ export function formatMoney(
     return formattedNumber
   }
   return `${formattedNumber} ${config.symbol}`
-}
-
-/**
- * Formats fils as currency representation (defaults to JOD for backward compatibility).
- */
-export function formatJOD(fils: number, opts: FormatOptions = {}): string {
-  return formatMoney(fils, opts.currency, opts)
 }
 
 /**

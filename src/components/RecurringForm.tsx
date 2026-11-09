@@ -20,7 +20,7 @@ import { addRecurring, updateRecurring, processDueRecurring } from '../services/
 import { updateMoneyCircle } from '../services/moneyCircles'
 import { toFils, fromFils, MAX_AMOUNT_FILS } from '../lib/money'
 import { useCurrency } from '../hooks/useCurrency'
-import { parseLocalDateInput } from '../lib/dates'
+import { parseLocalDateInput, toWesternDigits } from '../lib/dates'
 import { calculateNextDateOnEdit, advanceDateWithTargetDay, getNextCircleDueDate } from '../lib/recurring'
 import { getCategoryUsageMap, sortCategoriesUnified } from '../lib/categoryUsage'
 import { triggerHaptic } from '../lib/haptics'
@@ -333,7 +333,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         if (initialRecurring.circleId && initialRecurring.circleId !== circleId) {
           await updateMoneyCircle(user.uid, initialRecurring.circleId, { recurringId: '' }).catch(() => {})
         }
-        if (circleId) {
+        if (circleId && initialRecurring.circleId !== circleId) {
           await updateMoneyCircle(user.uid, circleId, { recurringId: initialRecurring.id }).catch(() => {})
         }
 
@@ -341,11 +341,19 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
         const effectiveCircleId = circleId || initialRecurring.circleId
         if (effectiveCircleId) {
           const linked = circles.find((c) => c.id === effectiveCircleId)
-          if (linked && linked.monthlyAmountFils !== amountFils) {
-            await updateMoneyCircle(user.uid, linked.id, {
-              monthlyAmountFils: amountFils,
-              totalAmountFils: amountFils * linked.membersCount,
-            }).catch(() => {})
+          if (linked) {
+            const expectedCircleMonthly =
+              linked.shareType === 'half'
+                ? amountFils * 2
+                : linked.shareType === 'double'
+                  ? Math.round(amountFils / 2)
+                  : amountFils
+            if (linked.monthlyAmountFils !== expectedCircleMonthly) {
+              await updateMoneyCircle(user.uid, linked.id, {
+                monthlyAmountFils: expectedCircleMonthly,
+                totalAmountFils: expectedCircleMonthly * linked.membersCount,
+              }).catch(() => {})
+            }
           }
         }
 
@@ -398,11 +406,19 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           await updateMoneyCircle(user.uid, circleId, { recurringId: recId }).catch(() => {})
 
           // Synchronize circle amounts if recurring installment amount changed
-          if (linkedCircle && linkedCircle.monthlyAmountFils !== amountFils) {
-            await updateMoneyCircle(user.uid, linkedCircle.id, {
-              monthlyAmountFils: amountFils,
-              totalAmountFils: amountFils * linkedCircle.membersCount,
-            }).catch(() => {})
+          if (linkedCircle) {
+            const expectedCircleMonthly =
+              linkedCircle.shareType === 'half'
+                ? amountFils * 2
+                : linkedCircle.shareType === 'double'
+                  ? Math.round(amountFils / 2)
+                  : amountFils
+            if (linkedCircle.monthlyAmountFils !== expectedCircleMonthly) {
+              await updateMoneyCircle(user.uid, linkedCircle.id, {
+                monthlyAmountFils: expectedCircleMonthly,
+                totalAmountFils: expectedCircleMonthly * linkedCircle.membersCount,
+              }).catch(() => {})
+            }
           }
         }
 
@@ -461,16 +477,16 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       <div>
         <label
           htmlFor="rec-amount"
-          className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1"
+          className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1"
         >
           المبلغ
         </label>
         <div
           className={cn(
-            'flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border transition-all',
+            'flex items-center justify-between px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border transition-all',
             error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
               ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-slate-200 dark:border-slate-700 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
+              : 'border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20'
           )}
         >
           <input
@@ -479,14 +495,14 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             inputMode="decimal"
             value={amountStr}
             onChange={(e) => {
-              setAmountStr(e.target.value)
+              setAmountStr(toWesternDigits(e.target.value))
               setError(null)
             }}
             placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
-            className="w-full bg-transparent text-2xl lg:text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none"
+            className="w-full bg-transparent text-2xl lg:text-3xl font-black text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none"
             autoFocus={!isEditing && !isTouchDevice}
           />
-          <span className="text-base font-bold text-slate-400 dark:text-slate-500 select-none pe-1">
+          <span className="text-base font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
             {currencyConfig.symbol}
           </span>
         </div>
@@ -495,7 +511,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       {/* Category Chips Grid */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+          <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
             التصنيف
           </label>
           <button
@@ -512,7 +528,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-750 flex items-center gap-2 p-2"
+                className="h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700 flex items-center gap-2 p-2"
               >
                 <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
                 <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-700" />
@@ -520,7 +536,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             ))}
           </div>
         ) : availableCategories.length === 0 ? (
-          <div className="py-2.5 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
+          <div className="py-2.5 text-center text-xs text-zinc-400 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
             لا توجد تصنيفات متاحة لهذا النوع
           </div>
         ) : (
@@ -548,10 +564,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                         : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                     )}
                   >
-                    <span
-                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${cat.color}25` }}
-                    >
+                    <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
                       <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
                     </span>
                     <span className="truncate flex-1">
@@ -602,10 +615,10 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
       {/* Frequency selector: 4 options [ أسبوعي | شهري | سنوي | أخرى ▾ ] */}
       <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+        <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1.5">
           التكرار
         </label>
-        <div role="radiogroup" className="grid grid-cols-4 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+        <div role="radiogroup" className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
           <button
             type="button"
             role="radio"
@@ -618,8 +631,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'weekly'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
             )}
           >
             أسبوعي
@@ -636,8 +649,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'monthly'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
             )}
           >
             شهري
@@ -654,8 +667,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 text-xs font-bold rounded-lg transition-all',
               frequency === 'yearly'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
             )}
           >
             سنوي
@@ -669,8 +682,8 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
             className={cn(
               'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
               ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(frequency)
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
             )}
           >
             <span className="truncate">
@@ -690,7 +703,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
 
         {/* Dropdown menu for extra frequencies */}
         {showExtraDropdown && !hasSelectedCircle && (
-          <div className="mt-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg grid grid-cols-2 gap-1.5">
+          <div className="mt-2 p-1.5 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-lg grid grid-cols-2 gap-1.5">
             {[
               { value: 'daily' as Frequency, label: 'يومي' },
               { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
@@ -708,7 +721,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
                   'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
                   frequency === f.value
                     ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                    : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                 )}
               >
                 <span>{f.label}</span>
@@ -805,16 +818,12 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
       {!isEditing &&
         !hasSelectedCircle &&
         parseLocalDateInput(startDateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
-          <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 flex items-center justify-between gap-2">
-            <span>
-              تاريخ البداية في الماضي؛ سيتم جدولة الاستحقاق القادم من تاريخ اليوم فصاعداً دون تسجيل
-              دفعات سابقة بأثر رجعي.
-            </span>
-            <input
-              type="checkbox"
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A]">
+            <Toggle
               checked={scheduleNextIfPast}
-              onChange={(e) => setScheduleNextIfPast(e.target.checked)}
-              className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              onChange={setScheduleNextIfPast}
+              label="تاريخ البداية في الماضي"
+              description="جدولة الاستحقاق القادم من تاريخ اليوم فصاعداً دون تسجيل دفعات سابقة بأثر رجعي"
             />
           </div>
         )}

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   toFils,
   fromFils,
-  formatJOD,
   formatSigned,
   formatMoney,
   formatCompactNumber,
@@ -81,6 +80,21 @@ describe('money lib', () => {
       expect(toFils('..5')).toBe(0)
     })
 
+    it('strips invisible bidirectional and formatting characters during normalization', () => {
+      // \u200E (LRM), \u200F (RLM), \u202A-\u202E, \u2066-\u2069
+      expect(toFils('\u200E12.5\u200F')).toBe(12500)
+      expect(toFils('\u202A50\u202C')).toBe(50000)
+      expect(toFils('\u2066١٢.٥\u2069')).toBe(12500)
+      expect(toFils('\u200B100\u200C')).toBe(100000)
+    })
+
+    it('guards against unsafe integers exceeding Number.MAX_SAFE_INTEGER by clamping', () => {
+      expect(toFils('9999999999999999999999999999')).toBe(Number.MAX_SAFE_INTEGER)
+      expect(toFils('-9999999999999999999999999999')).toBe(-Number.MAX_SAFE_INTEGER)
+      expect(toFils(Number.MAX_SAFE_INTEGER * 2)).toBe(Number.MAX_SAFE_INTEGER)
+      expect(toFils(-Number.MAX_SAFE_INTEGER * 2)).toBe(-Number.MAX_SAFE_INTEGER)
+    })
+
     it('returns 0 for empty or invalid input', () => {
       expect(toFils('')).toBe(0)
       expect(toFils('   ')).toBe(0)
@@ -132,23 +146,6 @@ describe('money lib', () => {
     })
   })
 
-  describe('formatJOD', () => {
-    it('formats fils with Arabic currency symbol and 3 decimals', () => {
-      expect(formatJOD(12500)).toBe('12.500 د.أ')
-      expect(formatJOD(0)).toBe('0.000 د.أ')
-      expect(formatJOD(337250)).toBe('337.250 د.أ')
-    })
-
-    it('formats thousands with grouping separators', () => {
-      expect(formatJOD(1000000)).toBe('1,000.000 د.أ')
-    })
-
-    it('supports omitting currency symbol when requested', () => {
-      expect(formatJOD(12500, { showCurrency: false })).toBe('12.500')
-      expect(formatJOD(1000000, { showCurrency: false })).toBe('1,000.000')
-    })
-  })
-
   describe('formatSigned', () => {
     it('formats positive amount for income', () => {
       expect(formatSigned(12500, 'income')).toBe('+ 12.500 د.أ')
@@ -170,6 +167,13 @@ describe('money lib', () => {
     it('formats SAR with 2 decimal places and ر.س symbol', () => {
       expect(formatMoney(12500, 'SAR')).toBe('12.50 ر.س')
       expect(formatMoney(350000, 'SAR')).toBe('350.00 ر.س')
+    })
+
+    it('avoids IEEE-754 floating point rounding drift by rounding on integer fils directly (e.g. 35855 fils in SAR)', () => {
+      // 35855 fils in 2-decimal currency corresponds to 35.855 -> must round to 35.86, NOT down to 35.85
+      expect(formatMoney(35855, 'SAR')).toBe('35.86 ر.س')
+      expect(formatMoney(35855, 'USD')).toBe('35.86 $')
+      expect(formatMoney(-35855, 'SAR')).toBe('-35.86 ر.س')
     })
 
     it('formats USD with 2 decimal places and $ symbol', () => {

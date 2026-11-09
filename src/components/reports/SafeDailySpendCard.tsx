@@ -78,7 +78,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               )}
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
+              <h3 className="text-base font-black text-zinc-800 dark:text-zinc-100">
                 ميزانية وأداء الشهر المالي
               </h3>
             </div>
@@ -96,7 +96,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           {/* Net Result (Saved or Deficit) */}
           <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
             <div>
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+              <div className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
                 {rolloverBalance !== 0
                   ? isSurplus
                     ? 'الرصيد الختامي المتبقي (شامل المرحّل)'
@@ -116,11 +116,11 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               </div>
             </div>
             {rolloverBalance !== 0 ? (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 font-medium">
                 صافي عمليات الشهر وحده: {monthNet >= 0 ? '+' : '-'}{format(Math.abs(monthNet))} | المرحّل السابق: {rolloverBalance >= 0 ? '+' : '-'}{format(Math.abs(rolloverBalance))}
               </p>
             ) : (
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2">
                 {isSurplus
                   ? 'تم إنهاء هذا الشهر بنجاح مع تحقيق فائض مالي إيجابي.'
                   : 'تجاوزت المصاريف إجمالي المداخيل المحصلة لهذا الشهر.'}
@@ -132,21 +132,21 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">متوسط صرفك اليومي</div>
-                <div className="text-lg font-black text-slate-700 dark:text-slate-200">
+                <div className="text-xs font-bold text-zinc-400 mb-1">متوسط صرفك اليومي</div>
+                <div className="text-lg font-black text-zinc-700 dark:text-zinc-200">
                   {format(actualDailySpendFils)}{' '}
-                  <span className="text-[10px] text-slate-400 font-normal">/ اليوم</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">/ اليوم</span>
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">إجمالي المصاريف</div>
+                <div className="text-xs font-bold text-zinc-400 mb-1">إجمالي المصاريف</div>
                 <div className="text-lg font-black text-red-500 dark:text-red-400">
                   {format(currentExpense)}
                 </div>
               </div>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
               <span>إجمالي المداخيل المحصلة:</span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 {format(currentIncome)}
@@ -157,10 +157,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
         {/* Conclusion Banner */}
         {isSurplus ? (
-          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5 text-xs">
+          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
             <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
             <div>
-              <span className="font-bold">أداء مالي ناجح!</span>{' '}
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">أداء مالي ناجح!</span>{' '}
               {rolloverBalance !== 0 ? (
                 <>
                   اكتمل هذا الشهر برصيد ختامي متبقي قدره{' '}
@@ -181,10 +181,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
+          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
             <div>
-              <span className="font-bold">تنبيه مالي:</span>{' '}
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">تنبيه مالي:</span>{' '}
               {rolloverBalance !== 0 ? (
                 <>
                   انتهى هذا الشهر بعجز ختامي كلي قدره{' '}
@@ -238,7 +238,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               {healthStatus === 'danger' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
+              <h3 className="text-base font-black text-zinc-800 dark:text-zinc-100">
                 ميزانية وتوقّع الشهر القادم
               </h3>
             </div>
@@ -284,17 +284,17 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           {/* Daily Safe Spend */}
           <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
             <div>
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+              <div className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
                 حد الصرف اليومي المقترح
               </div>
               <div
                 className={cn(
                   'text-2xl sm:text-3xl font-black select-none tracking-tight',
-                  dailySafeFils > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                  dailySafeFils > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400'
                 )}
               >
                 {format(dailySafeFils)}{' '}
-                <span className="text-xs font-semibold text-slate-400">/ اليوم</span>
+                <span className="text-xs font-semibold text-zinc-400">/ اليوم</span>
               </div>
             </div>
           </div>
@@ -303,15 +303,15 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">الرصيد الحر المتوقع</div>
+                <div className="text-xs font-bold text-zinc-400 mb-1">الرصيد الحر المتوقع</div>
                 <div
                   className={cn(
                     'text-lg font-black',
                     freeBalance > 0
-                      ? 'text-slate-800 dark:text-slate-200'
+                      ? 'text-zinc-800 dark:text-zinc-200'
                       : freeBalance < 0
                         ? 'text-red-500 dark:text-red-400'
-                        : 'text-slate-500 dark:text-slate-400'
+                        : 'text-zinc-500 dark:text-zinc-400'
                   )}
                   dir="ltr"
                 >
@@ -319,14 +319,14 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">
+                <div className="text-xs font-bold text-zinc-400 mb-1">
                   {rolloverBalance >= 0 ? 'الرصيد المرحّل المتوقع' : 'العجز المرحّل المتوقع'}
                 </div>
                 <div
                   className={cn(
                     'text-lg font-black',
                     rolloverBalance >= 0
-                      ? 'text-slate-700 dark:text-slate-200'
+                      ? 'text-zinc-700 dark:text-zinc-200'
                       : 'text-red-500 dark:text-red-400'
                   )}
                   dir="ltr"
@@ -339,7 +339,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
 
             {totalUpcomingObligations > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
                 <span>التزامات محجوزة (فواتير + ديون):</span>
                 <span className="font-bold text-amber-600 dark:text-amber-400">
                   {format(totalUpcomingObligations)}
@@ -351,10 +351,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
         {/* Forecast / Deficit Banner */}
         {isDeficitProjected ? (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
+          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
             <div>
-              <span className="font-bold">تحذير من عجز متوقع:</span> الالتزامات المجدولة تفوق الدخل والرصيد المتوقع بعجز قدره{' '}
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">تحذير من عجز متوقع:</span> الالتزامات المجدولة تفوق الدخل والرصيد المتوقع بعجز قدره{' '}
               <strong className="font-black text-red-600 dark:text-red-400">
                 {format(deficitAmount)}
               </strong>
@@ -362,10 +362,10 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-200 flex items-center gap-2.5 text-xs">
+          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
             <ShieldCheck className="w-5 h-5 text-blue-500 shrink-0" />
             <div>
-              <span className="font-bold">تخطيط استباقي:</span> تم احتساب ميزانية هذا الشهر بناءً على الفواتير المتكررة والديون المستحقة خلال كامل الدورة ({totalDays} يوماً).
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">تخطيط استباقي:</span> تم احتساب ميزانية هذا الشهر بناءً على الفواتير المتكررة والديون المستحقة خلال كامل الدورة ({totalDays} يوماً).
             </div>
           </div>
         )}
@@ -412,7 +412,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
             {healthStatus === 'danger' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
           </div>
           <div>
-            <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
+            <h3 className="text-base font-black text-zinc-800 dark:text-zinc-100">
               ميزانية الأمان اليومي وتوقّع الشهر
             </h3>
           </div>
@@ -459,7 +459,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
         {/* Daily Safe Spend */}
         <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
           <div>
-            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+            <div className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
               حد الصرف اليومي الآمن
             </div>
             <div
@@ -469,7 +469,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
               )}
             >
               {format(dailySafeFils)}{' '}
-              <span className="text-xs font-semibold text-slate-400">/ اليوم</span>
+              <span className="text-xs font-semibold text-zinc-400">/ اليوم</span>
             </div>
           </div>
         </div>
@@ -478,26 +478,26 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
         <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-xs font-bold text-slate-400 mb-1">معدل صرفك الفعلي</div>
+              <div className="text-xs font-bold text-zinc-400 mb-1">معدل صرفك الفعلي</div>
               <div
                 className={cn(
                   'text-lg font-black',
                   actualDailySpendFils > dailySafeFils && dailySafeFils > 0
                     ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-slate-700 dark:text-slate-200'
+                    : 'text-zinc-700 dark:text-zinc-200'
                 )}
               >
                 {format(actualDailySpendFils)}{' '}
-                <span className="text-[10px] text-slate-400 font-normal">/ اليوم</span>
+                <span className="text-[10px] text-zinc-400 font-normal">/ اليوم</span>
               </div>
             </div>
             <div>
-              <div className="text-xs font-bold text-slate-400 mb-1">الرصيد الحر المتبقي</div>
+              <div className="text-xs font-bold text-zinc-400 mb-1">الرصيد الحر المتبقي</div>
               <div
                 className={cn(
                   'text-lg font-black',
                   freeBalance > 0
-                    ? 'text-slate-800 dark:text-slate-200'
+                    ? 'text-zinc-800 dark:text-zinc-200'
                     : 'text-red-500 dark:text-red-400'
                 )}
                 dir="ltr"
@@ -510,7 +510,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           {/* Rollover & Available Liquidity Pool if rollover exists */}
           {rolloverBalance !== 0 && (
             <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px]">
-              <span className="text-slate-500 dark:text-slate-400">
+              <span className="text-zinc-500 dark:text-zinc-400">
                 {rolloverBalance > 0 ? 'فائض مرحّل متاح:' : 'عجز مرحّل من الشهر السابق:'}
               </span>
               <span
@@ -530,7 +530,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           )}
 
           {totalUpcomingObligations > 0 && (
-            <div className="mt-2.5 pt-2 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 pt-2 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
               <span>التزامات محجوزة (فواتير + ديون):</span>
               <span className="font-bold text-amber-600 dark:text-amber-400">
                 {format(totalUpcomingObligations)}
@@ -542,7 +542,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
       {/* Early Deficit Warning / Positive Forecast Banner */}
       {isDeficitProjected ? (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200">
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed space-y-1">
@@ -557,17 +557,17 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 {estimatedDeficitDay ? `بحلول يوم ${estimatedDeficitDay} من الشهر تقريباً!` : 'قبل نهاية الشهر!'}
               </p>
               {rolloverBalance < 0 && (
-                <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+                <p className="text-zinc-600 dark:text-zinc-400 text-[11px]">
                   ملاحظة: يتأثر رصيدك المتاح بوجود عجز مرحّل قدره{' '}
                   <strong className="text-red-600 dark:text-red-400">
                     {format(Math.abs(rolloverBalance))}
                   </strong>
                   ، مما يجعل إجمالي السيولة المتاحة للشهر{' '}
-                  <strong>{format(availablePool)}</strong>.
+                  <strong className="text-zinc-900 dark:text-zinc-100">{format(availablePool)}</strong>.
                 </p>
               )}
               {recommendedDailyReductionFils > 0 && (
-                <div className="flex items-center gap-1.5 pt-1 text-slate-700 dark:text-slate-300 font-medium">
+                <div className="flex items-center gap-1.5 pt-1 text-zinc-700 dark:text-zinc-300 font-medium">
                   <ArrowDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>
                     الحل الموصى به: خفّض إنفاقك اليومي بمقدار{' '}
@@ -582,11 +582,11 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
           </div>
         </div>
       ) : availableBalance < 0 && freeBalance > 0 && upcomingRecurringIncome > 0 ? (
-        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200">
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
           <div className="flex items-start gap-2.5 text-xs">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="leading-relaxed space-y-1">
-              <div className="font-bold text-amber-800 dark:text-amber-300">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">
                 تنبيه سيولة مؤقتة
               </div>
               <p>
@@ -600,7 +600,7 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
                 </strong>
                 ).
               </p>
-              <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+              <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">
                 المسار المستقبلي آمن باحتساب الدخل القادم، لكن هناك عجز مؤقت في السيولة النقدية حتى وصول ذلك الدخل.
               </p>
             </div>
@@ -610,29 +610,29 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
         <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
           <Info className="w-5 h-5 text-zinc-500 shrink-0" />
           <div>
-            <span className="font-bold">بانتظار تسجيل المعاملات:</span> ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي.
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">بانتظار تسجيل المعاملات:</span> ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي.
           </div>
         </div>
       ) : freeBalance <= 0 ? (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 flex items-center gap-2.5 text-xs">
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
           <div>
-            <span className="font-bold">استنفاد الرصيد الحر المتاح:</span> لقد استهلكت كامل الرصيد المتاح للصرف اليومي أو تم حجزه بالكامل للالتزامات المتبقية. يرجى التوقف عن الصرف غير الضروري لتجنب العجز.
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">استنفاد الرصيد الحر المتاح:</span> لقد استهلكت كامل الرصيد المتاح للصرف اليومي أو تم حجزه بالكامل للالتزامات المتبقية. يرجى التوقف عن الصرف غير الضروري لتجنب العجز.
           </div>
         </div>
       ) : healthStatus === 'warning' && actualDailySpendFils > dailySafeFils ? (
-        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 flex items-center gap-2.5 text-xs">
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
           <div>
-            <span className="font-bold">تنبيه وتيرة الإنفاق:</span> معدل صرفك اليومي الحالي ({format(actualDailySpendFils)}) يتجاوز حد الأمان ({format(dailySafeFils)}). ننصح بضبط مصاريف الأيام القادمة لحماية ميزانيتك.
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">تنبيه وتيرة الإنفاق:</span> معدل صرفك اليومي الحالي ({format(actualDailySpendFils)}) يتجاوز حد الأمان ({format(dailySafeFils)}). ننصح بضبط مصاريف الأيام القادمة لحماية ميزانيتك.
           </div>
         </div>
       ) : (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200">
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
           <div className="flex items-center gap-2.5 text-xs">
             <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
             <div>
-              <span className="font-bold">مسارك المالي ممتاز!</span> وتيرة إنفاقك الحالية ضمن
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">مسارك المالي ممتاز!</span> وتيرة إنفاقك الحالية ضمن
               الحدود الآمنة، ويتوقع إنهاء الشهر بفائض ادخار يقارب{' '}
               <strong className="font-black text-emerald-600 dark:text-emerald-400">
                 {format(surplusAmount)}
@@ -645,11 +645,11 @@ export const SafeDailySpendCard: React.FC<SafeDailySpendCardProps> = ({
 
       {/* Next Cycle Soon Obligations Proactive Alert */}
       {isCurrentMonth && (nextCycleSoonObligationsFils ?? 0) > 0 && (
-        <div className="mt-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200">
+        <div className="mt-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
           <div className="flex items-start gap-2.5 text-xs">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="leading-relaxed">
-              <span className="font-bold">تنبيه مطلع الدورة القادمة:</span>{' '}
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">تنبيه مطلع الدورة القادمة:</span>{' '}
               لديك{' '}
               {nextCycleSoonCount && nextCycleSoonCount > 1
                 ? `${nextCycleSoonCount} التزامات تستحق`

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { SelectedMonthProvider, useSelectedMonth } from './useSelectedMonth'
 import { getFiscalMonthInfo } from '../lib/dates'
@@ -13,6 +13,15 @@ vi.mock('./useUserSettings', () => ({
 }))
 
 describe('useSelectedMonth hook', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 28, 12, 0, 0)) // May 28, 2026
+    mockMonthStartDay = 1
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('formats monthLabel based on range with both financial months when monthStartDay = 25', () => {
     mockMonthStartDay = 25
 

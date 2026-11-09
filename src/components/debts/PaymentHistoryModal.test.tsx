@@ -190,15 +190,15 @@ describe('PaymentHistoryModal', () => {
     const editBtn = screen.getByTitle('تعديل هذه الدفعة')
     fireEvent.click(editBtn)
 
-    const syncCheckbox = screen.getByRole('checkbox', {
+    const syncToggle = screen.getByRole('switch', {
       name: /ربط الدفعة بالرصيد \(تأثير مالي في سجل المعاملات\)/i,
-    }) as HTMLInputElement
-    expect(syncCheckbox).toBeInTheDocument()
-    expect(syncCheckbox.checked).toBe(true)
+    })
+    expect(syncToggle).toBeInTheDocument()
+    expect(syncToggle.getAttribute('aria-checked')).toBe('true')
 
     // Uncheck it
-    fireEvent.click(syncCheckbox)
-    expect(syncCheckbox.checked).toBe(false)
+    fireEvent.click(syncToggle)
+    expect(syncToggle.getAttribute('aria-checked')).toBe('false')
 
     // Save edit
     const saveBtn = await screen.findByRole('button', { name: 'حفظ التعديل' })
@@ -296,11 +296,11 @@ describe('PaymentHistoryModal', () => {
 
     // Confirmation UI should appear
     expect(screen.getByText('تأكيد حذف الدفعة؟')).toBeInTheDocument()
-    const checkbox = screen.getByRole('checkbox', {
+    const toggle = screen.getByRole('switch', {
       name: /حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً/i,
-    }) as HTMLInputElement
-    expect(checkbox).toBeInTheDocument()
-    expect(checkbox.checked).toBe(true)
+    })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
 
     // Click confirm delete
     const confirmBtn = screen.getByRole('button', { name: 'تأكيد الحذف' })
@@ -350,11 +350,11 @@ describe('PaymentHistoryModal', () => {
     const deleteBtn = screen.getByTitle('حذف هذه الدفعة')
     fireEvent.click(deleteBtn)
 
-    const checkbox = screen.getByRole('checkbox', {
+    const toggle = screen.getByRole('switch', {
       name: /حذف المعاملة المالية المرتبطة من سجل المعاملات أيضاً/i,
     })
     // Uncheck it
-    fireEvent.click(checkbox)
+    fireEvent.click(toggle)
 
     // Click confirm delete
     const confirmBtn = screen.getByRole('button', { name: 'تأكيد الحذف' })

@@ -3,20 +3,13 @@ import type { Debt, DebtType } from '../types'
 export { normalizeArabic } from './aggregate'
 import { normalizeArabic } from './aggregate'
 import { toWesternDigits } from './dates'
-import { fromFils } from './money'
+import { fromFils, getCurrencyConfig } from './money'
 
 /**
  * Calculates remaining fils to be paid for a debt.
  */
 export function getDebtRemainingFils(debt: Debt): number {
   return Math.max(0, Math.round(debt.amountFils - (debt.paidFils || 0)))
-}
-
-/**
- * Determines if a debt is settled based on whether new total amount is covered by paid amount.
- */
-export function isDebtSettled(amountFils: number, paidFils: number): boolean {
-  return amountFils <= paidFils
 }
 
 /**
@@ -80,7 +73,7 @@ export function calculateDebtSummary(debts: Debt[], referenceDate = new Date()):
   ).getTime()
 
   for (const debt of debts) {
-    if (debt.settled) {
+    if (debt.settled || getDebtRemainingFils(debt) <= 0) {
       settledCount++
       continue
     }
@@ -100,7 +93,7 @@ export function calculateDebtSummary(debts: Debt[], referenceDate = new Date()):
       overdueFils += remaining
     } else if (debt.dueDate) {
       const dueTime = new Date(debt.dueDate).getTime()
-      if (dueTime <= sevenDaysEnd) {
+      if (!Number.isNaN(dueTime) && dueTime <= sevenDaysEnd) {
         upcomingCount++
         upcomingFils += remaining
       }
@@ -170,6 +163,9 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
         const entriesNorm = (debt.entries || [])
           .map((e) => normalizeArabic(toWesternDigits(`${e.title || ''} ${e.note || ''}`)))
           .join(' ')
+        const paymentsNorm = (debt.payments || [])
+          .map((p) => normalizeArabic(toWesternDigits(p.note || '')))
+          .join(' ')
 
         const rawSearch = search.trim()
         const westernQuery = toWesternDigits(rawSearch).replace(/,/g, '')
@@ -197,6 +193,7 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
           !nameNorm.includes(normalizedQuery) &&
           !noteNorm.includes(normalizedQuery) &&
           !entriesNorm.includes(normalizedQuery) &&
+          !paymentsNorm.includes(normalizedQuery) &&
           !matchesAmount
         ) {
           return false
@@ -268,7 +265,7 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
     if (existing) {
       existing.debts.push(debt)
     } else {
-      map.set(key, { canonicalName: debt.personName.trim() || 'غير مسمى', debts: [debt] })
+      map.set(key, { canonicalName: (debt.personName || '').trim() || 'غير مسمى', debts: [debt] })
     }
   }
 
@@ -278,7 +275,7 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
     let totalBorrowed = 0
 
     for (const d of pDebts) {
-      if (!d.settled) {
+      if (!d.settled && getDebtRemainingFils(d) > 0) {
         const rem = getDebtRemainingFils(d)
         if (d.type === 'lent') {
           totalLent += rem
@@ -288,8 +285,10 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
       }
     }
 
-    const canMergeLent = pDebts.filter((d) => d.type === 'lent').length >= 2
-    const canMergeBorrowed = pDebts.filter((d) => d.type === 'borrowed').length >= 2
+    const canMergeLent =
+      pDebts.filter((d) => d.type === 'lent' && !d.settled && getDebtRemainingFils(d) > 0).length >= 2
+    const canMergeBorrowed =
+      pDebts.filter((d) => d.type === 'borrowed' && !d.settled && getDebtRemainingFils(d) > 0).length >= 2
 
     groups.push({
       personKey,
@@ -312,8 +311,25 @@ export function groupDebtsByPerson(debts: Debt[]): PersonDebtsGroup[] {
   })
 }
 
-export function formatDebtAccountStatement(debt: Debt, currencySymbol = 'د.أ'): string {
-  const formatAmount = (fils: number): number => Math.round(fromFils(fils) * 1000) / 1000
+export function formatDebtEntriesCount(count: number): string {
+  if (count <= 0) return ''
+  if (count === 1) return 'سلفة واحدة'
+  if (count === 2) return 'سلفتان مجمعتان'
+  if (count <= 10) return `${count} سلف مجمعة`
+  return `${count} سلفة مجمعة`
+}
+
+export function formatDebtAccountStatement(
+  debt: Debt,
+  currencySymbol = 'د.أ',
+  currencyCodeOrDecimals?: string | number
+): string {
+  const decimals =
+    typeof currencyCodeOrDecimals === 'number'
+      ? currencyCodeOrDecimals
+      : getCurrencyConfig(currencyCodeOrDecimals).decimals
+  const factor = Math.pow(10, decimals)
+  const formatAmount = (fils: number): number => Math.round(fromFils(fils) * factor) / factor
 
   const isLent = debt.type === 'lent'
   const typeText = isLent ? 'مستحقات لك (سلف / إقراض)' : 'التزامات عليك (اقتراض)'

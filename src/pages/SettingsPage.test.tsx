@@ -728,4 +728,109 @@ describe('SettingsPage Extended Features', () => {
     expect(mockUpdateSettings).not.toHaveBeenCalled()
     expect(mockAddTransaction).not.toHaveBeenCalled()
   })
+
+  it('normalizes Eastern Arabic digits to Western digits when setting up PIN', async () => {
+    render(<SettingsPage />)
+
+    const setPinBtn = screen.getByRole('button', { name: 'تعيين رمز PIN (4 أرقام)' })
+    fireEvent.click(setPinBtn)
+
+    const inputs = screen.getAllByPlaceholderText('••••')
+    expect(inputs).toHaveLength(2)
+
+    // Type Eastern Arabic digits: ١٢٣٤
+    fireEvent.change(inputs[0], { target: { value: '١٢٣٤' } })
+    fireEvent.change(inputs[1], { target: { value: '١٢٣٤' } })
+
+    expect(inputs[0]).toHaveValue('1234')
+    expect(inputs[1]).toHaveValue('1234')
+  })
+
+  it('requires confirmation modal before removing application PIN', async () => {
+    localStorage.setItem('baseer_pin_hash_user-123', 'fake-hash')
+    render(<SettingsPage />)
+
+    const removeBtn = screen.getByRole('button', { name: 'إلغاء القفل' })
+    fireEvent.click(removeBtn)
+
+    // Modal should appear
+    expect(screen.getByText('تأكيد إلغاء قفل التطبيق')).toBeInTheDocument()
+    expect(
+      screen.getByText(/هل أنت متأكد من رغبتك في إلغاء قفل التطبيق؟/i)
+    ).toBeInTheDocument()
+
+    // PIN should not be removed yet
+    expect(localStorage.getItem('baseer_pin_hash_user-123')).toBe('fake-hash')
+
+    // Confirm removal inside modal
+    const confirmBtn = screen.getByRole('button', { name: 'تأكيد إلغاء القفل' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(localStorage.getItem('baseer_pin_hash_user-123')).toBeNull()
+      expect(mockShowToast).toHaveBeenCalledWith('تم إلغاء قفل التطبيق', 'info')
+    })
+  })
+
+  it('guards full JSON backup when device is offline', async () => {
+    const originalOnLine = navigator.onLine
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+    render(<SettingsPage />)
+
+    const backupBtn = screen.getByRole('button', { name: /تنزيل نسخة احتياطية شاملة \(JSON\)/i })
+    fireEvent.click(backupBtn)
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'يجب الاتصال بالإنترنت لإتمام تنزيل النسخة الاحتياطية',
+        'error'
+      )
+    })
+
+    Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true })
+  })
+
+  it('excludes future-dated transactions from wallet reconciliation calculations', async () => {
+    const today = new Date()
+    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+
+    mockGetAllTransactions.mockResolvedValueOnce([
+      {
+        id: 'tx-past',
+        date: yesterday,
+        type: 'expense',
+        amountFils: 20000,
+        title: 'مصروف أمس',
+      },
+      {
+        id: 'tx-future',
+        date: tomorrow,
+        type: 'expense',
+        amountFils: 50000,
+        title: 'مصروف غداً',
+      },
+    ])
+
+    render(<SettingsPage />)
+
+    const openBtn = screen.getByRole('button', { name: 'تسوية وتعديل الرصيد' })
+    fireEvent.click(openBtn)
+
+    // User counts 100.000 JOD in wallet
+    const amountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(amountInput, { target: { value: '100' } })
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ وتسوية الرصيد' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      // Net past txs = -20000 fils (tomorrow's -50000 must NOT be included).
+      // Required opening = 100000 - (-20000) = 120000 fils.
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        openingBalanceFils: 120000,
+      })
+    })
+  })
 })

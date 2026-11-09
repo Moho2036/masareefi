@@ -48,7 +48,7 @@ describe('SpotlightTour Component', () => {
     // Step 5
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
     expect(screen.getByText('5 / 6')).toBeInTheDocument()
-    expect(screen.getByText('التقارير والأدوات المالية')).toBeInTheDocument()
+    expect(screen.getByText('التقارير والتحليلات المالية')).toBeInTheDocument()
 
     // Step 6
     fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
@@ -60,7 +60,7 @@ describe('SpotlightTour Component', () => {
     // Previous button back to Step 5
     fireEvent.click(screen.getByRole('button', { name: 'السابق' }))
     expect(screen.getByText('5 / 6')).toBeInTheDocument()
-    expect(screen.getByText('التقارير والأدوات المالية')).toBeInTheDocument()
+    expect(screen.getByText('التقارير والتحليلات المالية')).toBeInTheDocument()
   })
 
   it('completes tour on step 6, saves flag in localStorage, and calls onFinish', () => {

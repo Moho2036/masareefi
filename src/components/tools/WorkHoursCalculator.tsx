@@ -19,6 +19,7 @@ import { useCurrency } from '../../hooks/useCurrency'
 import { useRecurring } from '../../hooks/useRecurring'
 import { useTransactions } from '../../hooks/useTransactions'
 import { useDebts } from '../../hooks/useDebts'
+import { useMoneyCircles } from '../../hooks/useMoneyCircles'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { AppDataContext } from '../../context/AppDataContext'
 import { toFils, fromFils } from '../../lib/money'
@@ -191,6 +192,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
   const appData = useContext(AppDataContext)
   const { data: recurringItems } = useRecurring()
   const { data: debts } = useDebts()
+  const { data: circles } = useMoneyCircles()
   const monthRange = useMemo(() => {
     return getFinancialMonthRange(new Date(), settings?.monthStartDay ?? 1)
   }, [settings?.monthStartDay])
@@ -245,6 +247,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
       transactions: currentMonthTransactions,
       recurring: recurringItems,
       debts,
+      circles,
       monthStartDay: settings?.monthStartDay ?? 1,
       rolloverBalanceFils: hasRolloverOrOpening ? (appData?.rolloverBalanceFils ?? openingFils) : undefined,
       referenceDate: new Date(),
@@ -253,6 +256,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
     currentMonthTransactions,
     recurringItems,
     debts,
+    circles,
     settings?.monthStartDay,
     settings?.rolloverBalance,
     settings?.openingBalanceFils,
@@ -719,11 +723,11 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
               </div>
             )}
 
-            {/* Metrics Grid: 3 columns even on mobile */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* Metrics Grid: responsive on mobile to prevent truncation */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
                 <div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                     نسبة الاستهلاك من الرصيد الحر
                   </span>
                   <span className="text-base sm:text-xl font-black text-zinc-900 dark:text-white">
@@ -734,24 +738,28 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                         : `${((toFils(itemPrice, config.decimals) / forecast.freeBalance) * 100).toFixed(1)}%`}
                   </span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1">
                   الرصيد الحر الحالي: <FormattedMoney amountFils={forecast.freeBalance} />
                 </span>
               </div>
 
               <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
                 <div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                     الأثر على حد الصرف اليومي
                   </span>
                   <span className="text-base sm:text-xl font-black text-rose-600 dark:text-rose-400">
                     - <FormattedMoney amountFils={forecast.dailySafeFils > 0 && newFreeBalance >= 0 ? dailySafeDropFils : itemDailyBurdenFils} maskAmount={false} /> / يوم
                   </span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
-                  {forecast.dailySafeFils > 0 ? (
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1">
+                  {forecast.dailySafeFils > 0 && newFreeBalance >= 0 ? (
                     <>
                       ينخفض من <FormattedMoney amountFils={forecast.dailySafeFils} /> إلى <FormattedMoney amountFils={newDailySafeFils} />
+                    </>
+                  ) : forecast.dailySafeFils > 0 ? (
+                    <>
+                      ينخفض للصفر (<FormattedMoney amountFils={0} />) مع عجز يومي بقيمة <FormattedMoney amountFils={itemDailyBurdenFils - forecast.dailySafeFils} maskAmount={false} />
                     </>
                   ) : (
                     <>
@@ -763,14 +771,14 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
 
               <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
                 <div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1 truncate">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                     الأيام المتبقية في الشهر المالي
                   </span>
                   <span className="text-base sm:text-xl font-black text-zinc-900 dark:text-white">
                     {forecast.remainingDays} يوم
                   </span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1 truncate">
+                <span className="text-[9px] sm:text-[10px] text-zinc-400 block mt-1">
                   حتى موعد تجدد الدورة المالية
                 </span>
               </div>
@@ -788,7 +796,7 @@ export const WorkHoursCalculator: React.FC<WorkHoursCalculatorProps> = ({
                 onClick={() => setIsTxModalOpen(true)}
                 icon={<ShoppingBag className="w-4 h-4" />}
               >
-                قررت شراءها؟ سجّلها كمصروف الآن
+                تسجيل كمصروف الآن
               </Button>
             </div>
           </div>

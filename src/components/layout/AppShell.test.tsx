@@ -160,6 +160,23 @@ describe('AppShell displayName resolution', () => {
     expect(mockGoToCurrentMonth).toHaveBeenCalledTimes(1)
   })
 
+  it('renders MonthSelector in header when navigating to /reports', () => {
+    mockUseAuth.mockReturnValue({
+      user: { displayName: 'محمد', photoURL: null },
+    })
+    mockUseUserSettings.mockReturnValue({
+      data: { displayName: 'محمد', hideBalances: false },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <AppShell />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByRole('group', { name: 'اختيار الشهر المالي' })).toBeInTheDocument()
+  })
+
   it('toggles privacy mode (hideBalances) when clicking the privacy button in header', () => {
     mockUseAuth.mockReturnValue({
       user: { displayName: 'محمد', photoURL: null },
