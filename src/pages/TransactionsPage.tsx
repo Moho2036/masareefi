@@ -1356,9 +1356,9 @@ export const TransactionsPage: React.FC = () => {
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-xs border-t border-zinc-200 pt-2 font-medium">
-              <div>إجمالي المداخيل: <strong className="text-emerald-700"><FormattedMoney amountFils={totals.income} /></strong></div>
-              <div>إجمالي المصاريف: <strong className="text-red-700"><FormattedMoney amountFils={totals.expense} /></strong></div>
-              <div>صافي الرصيد: <strong><FormattedMoney amountFils={totals.balance} withSign="auto" /></strong></div>
+              <div>إجمالي المداخيل: <strong className="text-emerald-600"><FormattedMoney amountFils={totals.income} /></strong></div>
+              <div>إجمالي المصاريف: <strong className="text-red-600"><FormattedMoney amountFils={totals.expense} /></strong></div>
+              <div>صافي الرصيد: <strong className={totals.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}><FormattedMoney amountFils={totals.balance} withSign="auto" /></strong></div>
             </div>
           </div>
 

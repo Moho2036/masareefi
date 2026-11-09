@@ -86,4 +86,32 @@ describe('useTheme hook', () => {
     expect(result.current.resolvedTheme).toBe('dark')
     expect(localStorage.getItem('masareefi_theme')).toBe('dark')
   })
+
+  it('temporarily removes dark class from html on beforeprint and restores it on afterprint', () => {
+    vi.spyOn(useUserSettingsModule, 'useUserSettings').mockReturnValue({
+      data: null,
+      loading: false,
+      error: null,
+      updateSettings: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useTheme())
+    act(() => {
+      result.current.setTheme('dark')
+    })
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    // Trigger beforeprint
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'))
+    })
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+
+    // Trigger afterprint
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'))
+    })
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
 })
