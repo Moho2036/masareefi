@@ -490,7 +490,7 @@ describe('PaymentHistoryModal', () => {
     )
 
     expect(screen.getByText(/تفاصيل السلف وأصل الديون المسجلة/)).toBeInTheDocument()
-    expect(screen.getByText('سلفة أولى')).toBeInTheDocument()
+    expect(screen.getAllByText('سلفة أولى')[0]).toBeInTheDocument()
 
     // Open add entry form
     const addEntryBtn = screen.getByText('إضافة سلفة جديدة على هذا الحساب')

@@ -125,6 +125,8 @@ export interface CircleMember {
   paymentsByMonth?: Record<string, boolean>
 }
 
+export type CircleShareType = 'full' | 'half' | 'double'
+
 export interface MoneyCircle {
   id: string
   name: string
@@ -141,7 +143,7 @@ export interface MoneyCircle {
   expenseCategoryId?: string
   incomeCategoryId?: string
   categoryId?: string
-  shareType?: 'full' | 'half' | 'double'
+  shareType?: CircleShareType
   secondTurnMonth?: number
 }
 

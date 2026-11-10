@@ -171,11 +171,10 @@ export function getCategoryUsageDetails(
     }
   }
 
-  const effectiveTxCount = txCount
-  const totalCount = effectiveTxCount + recurringCount + circlesCount
+  const totalCount = txCount + recurringCount + circlesCount
 
   return {
-    txCount: effectiveTxCount,
+    txCount,
     recurringCount,
     circlesCount,
     totalCount,

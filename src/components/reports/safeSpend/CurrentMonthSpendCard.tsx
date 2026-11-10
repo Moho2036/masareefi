@@ -1,0 +1,340 @@
+import React, { useState } from 'react'
+import {
+  ShieldCheck,
+  AlertTriangle,
+  AlertCircle,
+  Calendar,
+  ArrowDownRight,
+  Info,
+} from 'lucide-react'
+import { Card } from '../../ui/Card'
+import { useCurrency } from '../../../hooks/useCurrency'
+import type { ForecastResult } from '../../../lib/forecast'
+import { cn } from '../../../lib/cn'
+
+export interface CurrentMonthSpendCardProps {
+  forecast: ForecastResult
+  className?: string
+}
+
+export const CurrentMonthSpendCard: React.FC<CurrentMonthSpendCardProps> = ({
+  forecast,
+  className,
+}) => {
+  const { format } = useCurrency()
+  const [showInfo, setShowInfo] = useState(false)
+
+  const {
+    dailySafeFils,
+    actualDailySpendFils,
+    healthStatus,
+    remainingDays,
+    freeBalance,
+    currentIncome,
+    currentExpense,
+    rolloverBalance,
+    availableBalance,
+    availablePool,
+    upcomingRecurringExpenses,
+    upcomingRecurringIncome,
+    upcomingDebtObligations,
+    isDeficitProjected,
+    deficitAmount,
+    surplusAmount,
+    estimatedDeficitDay,
+    recommendedDailyReductionFils,
+    isCurrentMonth,
+    nextCycleSoonObligationsFils,
+    nextCycleSoonCount,
+  } = forecast
+
+  const totalUpcomingObligations = upcomingRecurringExpenses + upcomingDebtObligations
+
+  const isEmptyMonth =
+    currentIncome === 0 &&
+    currentExpense === 0 &&
+    rolloverBalance === 0 &&
+    upcomingRecurringIncome === 0 &&
+    totalUpcomingObligations === 0
+
+  return (
+    <Card
+      className={cn(
+        'relative overflow-hidden border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs dark:shadow-none transition-all print-avoid-break',
+        className
+      )}
+    >
+      <div
+        className={cn(
+          'h-1 w-full absolute top-0 inset-x-0',
+          healthStatus === 'safe'
+            ? 'bg-emerald-500'
+            : healthStatus === 'warning'
+              ? 'bg-amber-500'
+              : 'bg-red-500'
+        )}
+      />
+
+      {/* Header bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-[#E4E4E7] dark:border-[#27272A]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+            {healthStatus === 'safe' && <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+            {healthStatus === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
+            {healthStatus === 'danger' && <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />}
+          </div>
+          <div>
+            <h3 className="text-base font-black text-zinc-800 dark:text-zinc-100">
+              ميزانية الأمان اليومي وتوقّع الشهر
+            </h3>
+          </div>
+        </div>
+
+        {/* Days remaining badge & Info toggle */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowInfo((prev) => !prev)}
+            className="p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 transition-colors cursor-pointer"
+            aria-label="شرح معادلة الحساب"
+            title="كيف يُحسب حد الصرف اليومي الآمن؟"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800/90 text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+            <span>متبقي {remainingDays} يوماً في الدورة</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Mathematical Explanation Box */}
+      {showInfo && (
+        <div className="mt-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/70 border border-[#E4E4E7] dark:border-[#27272A] text-xs text-zinc-700 dark:text-zinc-300 space-y-1.5 animate-fade-in">
+          <div className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100">
+            <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <span>كيف يُحسب حد الصرف اليومي الآمن؟</span>
+          </div>
+          <p className="leading-relaxed font-semibold">
+            المعادلة المحاسبية: حد الصرف اليومي الآمن = (الرصيد الحر المتبقي) ÷ (الأيام المتبقية: {remainingDays} يوماً).
+          </p>
+          <div className="text-[11px] text-zinc-600 dark:text-zinc-400 space-y-0.5 pt-1">
+            <div>• الرصيد الحر المتبقي = (السيولة المتاحة حالياً) + (الدخل المتكرر القادم المجدول) - (الالتزامات المحجوزة من فواتير دورية قادمة + ديون مستحقة السداد).</div>
+            <div>• الأيام المتبقية = {remainingDays} يوماً حتى نهاية الشهر المالي الحالي.</div>
+            <div>• الهدف: حماية مدخراتك والتزاماتك من النفاذ المبكر بتوزيع المتاح بذكاء على الأيام المتبقية.</div>
+          </div>
+        </div>
+      )}
+
+      {/* Main highlight numbers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] py-4">
+        {/* Daily Safe Spend */}
+        <div className="pb-4 md:pb-0 md:pe-5 flex flex-col justify-between">
+          <div>
+            <div className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+              حد الصرف اليومي الآمن
+            </div>
+            <div
+              className={cn(
+                'text-2xl sm:text-3xl font-black select-none tracking-tight',
+                dailySafeFils > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
+              )}
+            >
+              {format(dailySafeFils)}{' '}
+              <span className="text-xs font-semibold text-zinc-400">/ اليوم</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Actual Spend Pace vs Free Balance */}
+        <div className="pt-4 md:pt-0 md:ps-5 flex flex-col justify-between">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs font-bold text-zinc-400 mb-1">معدل صرفك الفعلي</div>
+              <div
+                className={cn(
+                  'text-lg font-black',
+                  actualDailySpendFils > dailySafeFils && dailySafeFils > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-zinc-700 dark:text-zinc-200'
+                )}
+              >
+                {format(actualDailySpendFils)}{' '}
+                <span className="text-[10px] text-zinc-400 font-normal">/ اليوم</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-zinc-400 mb-1">الرصيد الحر المتبقي</div>
+              <div
+                className={cn(
+                  'text-lg font-black',
+                  freeBalance > 0
+                    ? 'text-zinc-800 dark:text-zinc-200'
+                    : 'text-red-500 dark:text-red-400'
+                )}
+                dir="ltr"
+              >
+                {format(freeBalance)}
+              </div>
+            </div>
+          </div>
+
+          {/* Rollover & Available Liquidity Pool if rollover exists */}
+          {rolloverBalance !== 0 && (
+            <div className="mt-3 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px]">
+              <span className="text-zinc-500 dark:text-zinc-400">
+                {rolloverBalance > 0 ? 'فائض مرحّل متاح:' : 'عجز مرحّل من الشهر السابق:'}
+              </span>
+              <span
+                className={cn(
+                  'font-bold',
+                  rolloverBalance > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-500 dark:text-red-400'
+                )}
+                dir="ltr"
+              >
+                {rolloverBalance > 0
+                  ? `+ ${format(rolloverBalance)}`
+                  : `- ${format(Math.abs(rolloverBalance))}`}
+              </span>
+            </div>
+          )}
+
+          {totalUpcomingObligations > 0 && (
+            <div className="mt-2.5 pt-2 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span>التزامات محجوزة (فواتير + ديون):</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">
+                {format(totalUpcomingObligations)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Early Deficit Warning / Positive Forecast Banner */}
+      {isDeficitProjected ? (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed space-y-1">
+              <div className="font-bold text-red-600 dark:text-red-400">
+                تنبيه مبكر من خطر العجز المالي
+              </div>
+              <p>
+                إذا استمر إنفاقك بهذه الوتيرة، ستواجه عجزاً قدره{' '}
+                <span className="font-black text-red-600 dark:text-red-400 underline decoration-red-400">
+                  {format(deficitAmount)}
+                </span>{' '}
+                {estimatedDeficitDay ? `بحلول يوم ${estimatedDeficitDay} من الشهر تقريباً!` : 'قبل نهاية الشهر!'}
+              </p>
+              {rolloverBalance < 0 && (
+                <p className="text-zinc-600 dark:text-zinc-400 text-[11px]">
+                  ملاحظة: يتأثر رصيدك المتاح بوجود عجز مرحّل قدره{' '}
+                  <strong className="text-red-600 dark:text-red-400">
+                    {format(Math.abs(rolloverBalance))}
+                  </strong>
+                  ، مما يجعل إجمالي السيولة المتاحة للشهر{' '}
+                  <strong className="text-zinc-900 dark:text-zinc-100" dir="ltr">{format(availablePool)}</strong>.
+                </p>
+              )}
+              {recommendedDailyReductionFils > 0 && (
+                <div className="flex items-center gap-1.5 pt-1 text-zinc-700 dark:text-zinc-300 font-medium">
+                  <ArrowDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    الحل الموصى به: خفّض إنفاقك اليومي بمقدار{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {format(recommendedDailyReductionFils)}
+                    </strong>{' '}
+                    لتجنب الوقوع في العجز.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : availableBalance < 0 && freeBalance > 0 && upcomingRecurringIncome > 0 ? (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-start gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="leading-relaxed space-y-1">
+              <div className="font-bold text-zinc-900 dark:text-zinc-100">
+                تنبيه سيولة مؤقتة
+              </div>
+              <p>
+                رصيدك النقدي الحالي قبل نزول الدخل المتكرر القادم هو (
+                <strong className="font-black text-amber-700 dark:text-amber-400" dir="ltr">
+                  {format(availableBalance)}
+                </strong>
+                )، وتعتمد ميزانية الصرف الآمن على الدخل المتكرر المجدول بقيمة (
+                <strong className="font-black text-emerald-600 dark:text-emerald-400">
+                  {format(upcomingRecurringIncome)}
+                </strong>
+                ).
+              </p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">
+                المسار المستقبلي آمن باحتساب الدخل القادم، لكن هناك عجز مؤقت في السيولة النقدية حتى وصول ذلك الدخل.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : isEmptyMonth ? (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
+          <Info className="w-5 h-5 text-zinc-500 shrink-0" />
+          <div>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">بانتظار تسجيل المعاملات:</span> ابدأ بتسجيل مداخيلك ومصاريفك لهذا الشهر لتفعيل حسابات حد الصرف اليومي الآمن ومتابعة مسارك المالي.
+          </div>
+        </div>
+      ) : freeBalance <= 0 ? (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <div>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">استنفاد الرصيد الحر المتاح:</span> لقد استهلكت كامل الرصيد المتاح للصرف اليومي أو تم حجزه بالكامل للالتزامات المتبقية. يرجى التوقف عن الصرف غير الضروري لتجنب العجز.
+          </div>
+        </div>
+      ) : healthStatus === 'warning' && actualDailySpendFils > dailySafeFils ? (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 flex items-center gap-2.5 text-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          <div>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">تنبيه وتيرة الإنفاق:</span> معدل صرفك اليومي الحالي ({format(actualDailySpendFils)}) يتجاوز حد الأمان ({format(dailySafeFils)}). ننصح بضبط مصاريف الأيام القادمة لحماية ميزانيتك.
+          </div>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-center gap-2.5 text-xs">
+            <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+            <div>
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">مسارك المالي ممتاز!</span> وتيرة إنفاقك الحالية ضمن
+              الحدود الآمنة، ويتوقع إنهاء الشهر بفائض ادخار يقارب{' '}
+              <strong className="font-black text-emerald-600 dark:text-emerald-400">
+                {format(surplusAmount)}
+              </strong>
+              .
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Next Cycle Soon Obligations Proactive Alert */}
+      {isCurrentMonth && (nextCycleSoonObligationsFils ?? 0) > 0 && (
+        <div className="mt-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-start gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">تنبيه مطلع الدورة القادمة:</span>{' '}
+              لديك{' '}
+              {nextCycleSoonCount && nextCycleSoonCount > 1
+                ? `${nextCycleSoonCount} التزامات تستحق`
+                : 'التزامات تستحق'}{' '}
+              خلال أقل من 3 أيام (مع بداية الشهر المالي الجديد) بقيمة{' '}
+              <strong className="font-black text-amber-700 dark:text-amber-400">
+                {format(nextCycleSoonObligationsFils!)}
+              </strong>
+              . احرص على إبقاء سيولة نقدية كافية لتغطيتها فور بدء الشهر.
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}

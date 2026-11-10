@@ -130,7 +130,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
     <div
       ref={containerRef}
       onTouchEnd={handleTouchEnd}
-      className={cn('w-full relative', className)}
+      className={cn('w-full relative min-w-0 max-w-full overflow-hidden', className)}
       style={{ height }}
     >
       <ResponsiveContainer width="100%" height="100%">

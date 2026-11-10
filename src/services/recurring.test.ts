@@ -386,8 +386,6 @@ describe('recurring service - processDueRecurring', () => {
     // startDate is Jan 10, 2026. Occurrence being confirmed is Jan 10 (Month 1).
     // skipMonth is 2 (Feb 2026).
     // When confirmed/skipped, nextDate should jump directly to March 10, 2026 (Month 3).
-    mockGetDoc.mockResolvedValueOnce({ exists: () => false })
-
     const rec = {
       id: 'rec-circle-jump',
       type: 'expense' as const,
@@ -436,5 +434,52 @@ describe('recurring service - processDueRecurring', () => {
     expect(skippedNextDate.getFullYear()).toBe(2026)
     expect(skippedNextDate.getMonth()).toBe(2) // Month index 2 = March!
     expect(skippedNextDate.getDate()).toBe(10)
+  })
+
+  it('skips auto-generating transaction in processDueRecurring if manual circle installment exists', async () => {
+    const today = new Date(2026, 9, 5)
+    mockGetDocs.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          data: () => ({
+            id: 'rec-c1',
+            type: 'expense' as const,
+            amountFils: 50000,
+            categoryId: 'cat-circle',
+            startDate: new Date(2026, 9, 1),
+            nextDate: new Date(2026, 9, 1),
+            frequency: 'monthly' as const,
+            active: true,
+            circleId: 'circle-c1',
+          }),
+        },
+      ],
+    })
+
+    // Mock circle doc
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      id: 'circle-c1',
+      data: () => ({
+        id: 'circle-c1',
+        name: 'جمعية تجريبية',
+        monthlyAmountFils: 50000,
+        membersCount: 4,
+        myTurnMonth: 3,
+        startDate: new Date(2026, 9, 1),
+        members: [{ id: 'm-me', name: 'أنا', turnMonth: 3, paidMonths: [] }],
+        status: 'active',
+      }),
+    })
+
+    // Mock txRef (recurring tx does NOT exist)
+    mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+    // Mock circleManualTxRef (manual tx DOES exist!)
+    mockGetDoc.mockResolvedValueOnce({ exists: () => true })
+
+    const count = await processDueRecurring('uid-1', today)
+    expect(count).toBe(0)
+    expect(mockBatchSet).not.toHaveBeenCalled()
   })
 })

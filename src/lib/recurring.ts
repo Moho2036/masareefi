@@ -349,6 +349,54 @@ export function getNextCircleDueDate(
   return addMonths(start, membersCount)
 }
 
+/**
+ * Calculates which monthly cycle index has elapsed between startDate and refDate.
+ * E.g., if startDate is 2026-01-01 and refDate is 2026-01-15 -> returns 0 (first cycle).
+ * If refDate is 2026-02-01 -> returns 1 (second cycle).
+ * When monthStartDay > 1 and circle starts near month boundary, safely aligns with financial month.
+ */
+export function getCircleCycleIndex(
+  startDate: Date,
+  refDate: Date = new Date(),
+  monthStartDay?: number
+): number {
+  const rawStart = startDate instanceof Date ? startDate : new Date(startDate)
+  const target = refDate instanceof Date ? refDate : new Date(refDate)
+
+  let start = rawStart
+  const isNearMonthBoundary = rawStart.getDate() === 1 || rawStart.getDate() >= 28
+  if (monthStartDay !== undefined && monthStartDay > 1 && isNearMonthBoundary) {
+    const candidateStart = new Date(
+      rawStart.getFullYear(),
+      rawStart.getMonth(),
+      Math.min(28, Math.max(1, Math.round(monthStartDay)))
+    )
+    if (candidateStart <= target || rawStart > target) {
+      start = candidateStart
+    }
+  }
+
+  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0)
+  const t = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 12, 0, 0)
+
+  const anchorDay = start.getDate()
+  const addMonthsWithAnchor = (base: Date, count: number) => {
+    const d = new Date(base.getFullYear(), base.getMonth() + count, 1, 12, 0, 0)
+    const daysInM = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+    d.setDate(Math.min(anchorDay, daysInM))
+    return d
+  }
+
+  let approxMonths = (t.getFullYear() - s.getFullYear()) * 12 + (t.getMonth() - s.getMonth())
+  while (addMonthsWithAnchor(s, approxMonths) > t) {
+    approxMonths--
+  }
+  while (addMonthsWithAnchor(s, approxMonths + 1) <= t) {
+    approxMonths++
+  }
+  return approxMonths
+}
+
 export interface MonthlyEquivalentResult {
   monthlyIncome: number
   monthlyExpense: number

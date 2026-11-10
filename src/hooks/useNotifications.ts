@@ -11,6 +11,7 @@ import {
   type NotificationFilter,
 } from '../lib/notifications'
 import { getFinancialMonthRange } from '../lib/dates'
+import { sumByType } from '../lib/aggregate'
 import { useTransactions } from './useTransactions'
 
 export const MAX_STORED_NOTIFICATION_IDS = 400
@@ -182,18 +183,10 @@ export function useNotifications() {
   }
 
   // Calculate current month income and spending
-  const { incomeFils, spendingFils } = useMemo(() => {
-    let income = 0
-    let expense = 0
-    for (const tx of currentMonthTransactions) {
-      if (tx.type === 'income') {
-        income += tx.amountFils || 0
-      } else if (tx.type === 'expense') {
-        expense += tx.amountFils || 0
-      }
-    }
-    return { incomeFils: income, spendingFils: expense }
-  }, [currentMonthTransactions])
+  const { income: incomeFils, expense: spendingFils } = useMemo(
+    () => sumByType(currentMonthTransactions || []),
+    [currentMonthTransactions]
+  )
 
   // Save readIds helper
   const persistReadIds = useCallback(
@@ -314,7 +307,7 @@ export function useNotifications() {
 
   // Sync combined history to localStorage (external system synchronization)
   useEffect(() => {
-    if (!uid || combinedHistory.length === 0 || !historyStorageKey || typeof window === 'undefined' || !window.localStorage) {
+    if (!uid || !historyStorageKey || typeof window === 'undefined' || !window.localStorage) {
       return
     }
     try {
@@ -431,24 +424,44 @@ export function useNotifications() {
 
   const deleteFromArchive = useCallback(
     (id: string) => {
+      const nextHistory = storedHistory.filter((item) => item.id !== id)
+      setStoredHistory(nextHistory)
+      if (historyStorageKey && typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const payload = JSON.stringify(
+            nextHistory.map((i) => ({ ...i, createdAt: i.createdAt.toISOString() }))
+          )
+          lastSavedHistoryRef.current = payload
+          window.localStorage.setItem(historyStorageKey, payload)
+        } catch {
+          // ignore
+        }
+      }
+
       const nextDeleted = new Set(permanentlyDeletedIds)
       nextDeleted.add(id)
       persistDeletedIds(nextDeleted)
-
-      setStoredHistory((prev) => prev.filter((item) => item.id !== id))
     },
-    [permanentlyDeletedIds, persistDeletedIds]
+    [storedHistory, historyStorageKey, permanentlyDeletedIds, persistDeletedIds]
   )
 
   const clearArchive = useCallback(() => {
+    setStoredHistory([])
+    if (historyStorageKey && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        lastSavedHistoryRef.current = '[]'
+        window.localStorage.setItem(historyStorageKey, '[]')
+      } catch {
+        // ignore
+      }
+    }
+
     const nextDeleted = new Set(permanentlyDeletedIds)
     for (const item of archivedNotifications) {
       nextDeleted.add(item.id)
     }
     persistDeletedIds(nextDeleted)
-
-    setStoredHistory([])
-  }, [archivedNotifications, permanentlyDeletedIds, persistDeletedIds])
+  }, [archivedNotifications, historyStorageKey, permanentlyDeletedIds, persistDeletedIds])
 
   const filterNotifications = useCallback(
     (filter: NotificationFilter): NotificationItem[] => {

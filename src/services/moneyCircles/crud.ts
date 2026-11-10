@@ -24,6 +24,39 @@ import {
   getCircleCycleIndex,
 } from './helpers'
 
+interface BuildCircleRecurringRuleDataParams {
+  userInstallmentAmount: number
+  categoryId: string
+  effectiveName: string
+  effectiveTurn: number
+  effectiveStartDate: Date
+  nextDate: Date
+  effectiveMembersCount: number
+  circleId: string
+  exemptMonths: number[]
+}
+
+function buildCircleRecurringRuleData(
+  params: BuildCircleRecurringRuleDataParams
+): Record<string, unknown> {
+  return {
+    type: 'expense',
+    amountFils: params.userInstallmentAmount,
+    categoryId: params.categoryId,
+    title: `قسط ${params.effectiveName}`.slice(0, 100),
+    note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${params.effectiveTurn})`.slice(0, 500),
+    frequency: 'monthly',
+    startDate: Timestamp.fromDate(params.effectiveStartDate),
+    nextDate: Timestamp.fromDate(params.nextDate),
+    endDate: Timestamp.fromDate(addMonths(params.effectiveStartDate, params.effectiveMembersCount - 1)),
+    active: true,
+    circleId: params.circleId,
+    skipMonth: params.effectiveTurn,
+    skipMonths: params.exemptMonths,
+    createdAt: serverTimestamp(),
+  }
+}
+
 export function subscribeMoneyCircles(
   uid: string,
   cb: (items: MoneyCircle[]) => void,
@@ -74,6 +107,18 @@ export async function addMoneyCircle(
     throw new Error('دورك في الاستلام يجب أن يكون بين 1 وعدد الأعضاء')
   }
 
+  let secondTurnMonthVal: number | undefined
+  if (circle.shareType === 'double') {
+    const secondTurn = Math.round(Number(circle.secondTurnMonth))
+    if (!Number.isFinite(secondTurn) || secondTurn < 1 || secondTurn > membersCount) {
+      throw new Error('دور الاستلام الثاني يجب أن يكون بين 1 وعدد الأعضاء')
+    }
+    if (secondTurn === myTurn) {
+      throw new Error('دور الاستلام الثاني لا يمكن أن يكون نفس الدور الأول')
+    }
+    secondTurnMonthVal = secondTurn
+  }
+
   const colRef = collection(db, 'users', uid, 'circles').withConverter(circleConverter)
   const docRef = doc(colRef)
 
@@ -93,9 +138,7 @@ export async function addMoneyCircle(
     ...(circle.incomeCategoryId ? { incomeCategoryId: circle.incomeCategoryId } : {}),
     ...(circle.categoryId ? { categoryId: circle.categoryId } : {}),
     ...(circle.shareType ? { shareType: circle.shareType } : {}),
-    ...(circle.secondTurnMonth !== undefined && circle.secondTurnMonth !== null
-      ? { secondTurnMonth: Math.round(Number(circle.secondTurnMonth)) }
-      : {}),
+    ...(secondTurnMonthVal !== undefined ? { secondTurnMonth: secondTurnMonthVal } : {}),
     createdAt: new Date(),
   }
 
@@ -144,7 +187,6 @@ export async function updateMoneyCircle(
     }
     updates.totalAmountFils = total
   }
-  if (partial.myTurnMonth !== undefined) updates.myTurnMonth = Math.round(partial.myTurnMonth)
   if (partial.isManager !== undefined) updates.isManager = Boolean(partial.isManager)
   if (partial.status !== undefined) updates.status = partial.status
   if (partial.expenseCategoryId !== undefined) {
@@ -159,15 +201,9 @@ export async function updateMoneyCircle(
     const trimmed = partial.categoryId.trim().slice(0, 128)
     updates.categoryId = trimmed ? trimmed : deleteField()
   }
-  if (partial.shareType !== undefined) updates.shareType = partial.shareType
-  if (partial.secondTurnMonth !== undefined) {
-    if (
-      partial.secondTurnMonth !== null &&
-      Number.isFinite(Number(partial.secondTurnMonth)) &&
-      Number(partial.secondTurnMonth) >= 1
-    ) {
-      updates.secondTurnMonth = Math.round(Number(partial.secondTurnMonth))
-    } else {
+  if (partial.shareType !== undefined) {
+    updates.shareType = partial.shareType
+    if (partial.shareType !== 'double') {
       updates.secondTurnMonth = deleteField()
     }
   }
@@ -208,10 +244,20 @@ export async function updateMoneyCircle(
   if (effectiveMonthly > MAX_AMOUNT_FILS || effectiveTotal > MAX_AMOUNT_FILS) {
     throw new Error('المبلغ يتجاوز الحد الأقصى المسموح به')
   }
+
+  // Validate or clamp myTurnMonth against effectiveMembersCount
+  if (partial.myTurnMonth !== undefined) {
+    const turn = Math.round(partial.myTurnMonth)
+    if (!Number.isFinite(turn) || turn < 1 || turn > effectiveMembersCount) {
+      throw new Error('دورك في الاستلام يجب أن يكون بين 1 وعدد الأعضاء')
+    }
+    updates.myTurnMonth = turn
+  } else if (currentCircle.myTurnMonth > effectiveMembersCount) {
+    updates.myTurnMonth = effectiveMembersCount
+  }
   const effectiveTurn =
-    partial.myTurnMonth !== undefined
-      ? Math.round(partial.myTurnMonth)
-      : currentCircle.myTurnMonth
+    (updates.myTurnMonth as number | undefined) ?? currentCircle.myTurnMonth
+
   const effectiveStartDate =
     partial.startDate instanceof Date
       ? partial.startDate
@@ -219,8 +265,36 @@ export async function updateMoneyCircle(
 
   const effectiveShareType =
     partial.shareType !== undefined ? partial.shareType : currentCircle.shareType
+
+  if (effectiveShareType === 'double') {
+    if (partial.secondTurnMonth !== undefined) {
+      if (
+        partial.secondTurnMonth !== null &&
+        Number.isFinite(Number(partial.secondTurnMonth)) &&
+        Number(partial.secondTurnMonth) >= 1
+      ) {
+        const secondTurn = Math.round(Number(partial.secondTurnMonth))
+        if (secondTurn < 1 || secondTurn > effectiveMembersCount) {
+          throw new Error('دور الاستلام الثاني يجب أن يكون بين 1 وعدد الأعضاء')
+        }
+        if (secondTurn === effectiveTurn) {
+          throw new Error('دور الاستلام الثاني لا يمكن أن يكون نفس الدور الأول')
+        }
+        updates.secondTurnMonth = secondTurn
+      } else {
+        updates.secondTurnMonth = deleteField()
+      }
+    } else if (currentCircle.secondTurnMonth && currentCircle.secondTurnMonth > effectiveMembersCount) {
+      let clampedSecondTurn = effectiveMembersCount
+      if (clampedSecondTurn === effectiveTurn) {
+        clampedSecondTurn = Math.max(1, effectiveMembersCount - 1)
+      }
+      updates.secondTurnMonth = clampedSecondTurn
+    }
+  }
+
   const effectiveSecondTurn =
-    partial.secondTurnMonth !== undefined ? partial.secondTurnMonth : currentCircle.secondTurnMonth
+    (updates.secondTurnMonth as number | undefined) ?? currentCircle.secondTurnMonth
 
   const userInstallmentAmount =
     effectiveShareType === 'half'
@@ -353,22 +427,20 @@ export async function updateMoneyCircle(
           currentCircle.categoryId ||
           'cat-custom-circle'
 
-        batch.set(newRecRef, {
-          type: 'expense',
-          amountFils: userInstallmentAmount,
-          categoryId,
-          title: `قسط ${effectiveName}`.slice(0, 100),
-          note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
-          frequency: 'monthly',
-          startDate: Timestamp.fromDate(effectiveStartDate),
-          nextDate: Timestamp.fromDate(nextDate),
-          endDate: Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1)),
-          active: true,
-          circleId: id,
-          skipMonth: effectiveTurn,
-          skipMonths: exemptMonths,
-          createdAt: serverTimestamp(),
-        })
+        batch.set(
+          newRecRef,
+          buildCircleRecurringRuleData({
+            userInstallmentAmount,
+            categoryId,
+            effectiveName,
+            effectiveTurn,
+            effectiveStartDate,
+            nextDate,
+            effectiveMembersCount,
+            circleId: id,
+            exemptMonths,
+          })
+        )
         updates.recurringId = newRecRef.id
       } else {
         updates.recurringId = deleteField()
@@ -393,22 +465,20 @@ export async function updateMoneyCircle(
       currentCircle.categoryId ||
       'cat-custom-circle'
 
-    batch.set(newRecRef, {
-      type: 'expense',
-      amountFils: userInstallmentAmount,
-      categoryId,
-      title: `قسط ${effectiveName}`.slice(0, 100),
-      note: `قسط شهري للجمعية - معفى من الخصم في شهر الاستلام (${effectiveTurn})`.slice(0, 500),
-      frequency: 'monthly',
-      startDate: Timestamp.fromDate(effectiveStartDate),
-      nextDate: Timestamp.fromDate(nextDate),
-      endDate: Timestamp.fromDate(addMonths(effectiveStartDate, effectiveMembersCount - 1)),
-      active: true,
-      circleId: id,
-      skipMonth: effectiveTurn,
-      skipMonths: exemptMonths,
-      createdAt: serverTimestamp(),
-    })
+    batch.set(
+      newRecRef,
+      buildCircleRecurringRuleData({
+        userInstallmentAmount,
+        categoryId,
+        effectiveName,
+        effectiveTurn,
+        effectiveStartDate,
+        nextDate,
+        effectiveMembersCount,
+        circleId: id,
+        exemptMonths,
+      })
+    )
     updates.recurringId = newRecRef.id
   }
 
@@ -544,6 +614,8 @@ export async function updateMoneyCircle(
 
             batch.update(payoutRef2, payoutUpdates2)
           }
+        } else {
+          batch.delete(payoutRef2)
         }
       }
     } catch (err) {
@@ -564,6 +636,9 @@ export async function updateMoneyCircle(
   const nameChanged = partial.name !== undefined && partial.name.trim() !== currentCircle.name.trim()
 
   if (amountChanged || nameChanged) {
+    const now = new Date()
+    const { start: currentFinancialStart } = getFinancialMonthRange(now, monthStartDay ?? 1)
+
     const allRecIds = new Set<string>()
     if (currentCircle.recurringId) allRecIds.add(currentCircle.recurringId)
     if (candidateRecId) allRecIds.add(candidateRecId)
@@ -586,7 +661,7 @@ export async function updateMoneyCircle(
             typeof txDoc.data === 'function' && typeof txDoc.exists === 'function'
               ? txDoc
               : await safeGetDoc(txDoc.ref)
-          if (verifiedTx.exists()) {
+          if (verifiedTx && typeof verifiedTx.exists === 'function' && verifiedTx.exists()) {
             const txData = typeof verifiedTx.data === 'function' ? verifiedTx.data() : undefined
             const rawDate = txData?.date
             const txDate =
@@ -595,8 +670,6 @@ export async function updateMoneyCircle(
                 : rawDate instanceof Date
                   ? rawDate
                   : null
-            const now = new Date()
-            const { start: currentFinancialStart } = getFinancialMonthRange(now, monthStartDay ?? 1)
             const isPastMonthTx = txDate !== null && txDate < currentFinancialStart
 
             const txUpdates: Record<string, unknown> = {}
@@ -609,6 +682,41 @@ export async function updateMoneyCircle(
             if (Object.keys(txUpdates).length > 0) {
               batch.update(txDoc.ref, txUpdates)
             }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Also update manual installment transactions (circle_${id}_m1 through circle_${id}_m${effectiveMembersCount})
+    for (let m = 1; m <= effectiveMembersCount; m++) {
+      const manualTxRef = doc(db, 'users', uid, 'transactions', `circle_${id}_m${m}`)
+      try {
+        const manualSnap = await safeGetDoc(manualTxRef)
+        if (manualSnap && typeof manualSnap.exists === 'function' && manualSnap.exists()) {
+          const txData =
+            typeof manualSnap.data === 'function'
+              ? (manualSnap.data() as Record<string, unknown> | undefined)
+              : undefined
+          const rawDate = txData?.date
+          const txDate =
+            rawDate && typeof (rawDate as { toDate?: () => Date }).toDate === 'function'
+              ? (rawDate as { toDate: () => Date }).toDate()
+              : rawDate instanceof Date
+                ? rawDate
+                : null
+          const isPastMonthTx = txDate !== null && txDate < currentFinancialStart
+
+          const txUpdates: Record<string, unknown> = {}
+          if (amountChanged && !isPastMonthTx) {
+            txUpdates.amountFils = userInstallmentAmount
+          }
+          if (nameChanged) {
+            txUpdates.title = `قسط ${effectiveName} (شهر ${m})`.slice(0, 100)
+          }
+          if (Object.keys(txUpdates).length > 0) {
+            batch.update(manualTxRef, txUpdates)
           }
         }
       } catch {
@@ -664,13 +772,11 @@ export async function deleteMoneyCircle(
 
   // 3. Clean up associated transactions ONLY IF deleteWalletTransactions is true
   if (deleteWalletTransactions) {
-    // Delete payout transaction if exists
+    // Delete payout transactions if exist
     const payoutTxRef = doc(db, 'users', uid, 'transactions', `circle_payout_${id}`)
     addRefToDelete(payoutTxRef)
-    if (circleData?.shareType === 'double') {
-      const payoutTxRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
-      addRefToDelete(payoutTxRef2)
-    }
+    const payoutTxRef2 = doc(db, 'users', uid, 'transactions', `circle_payout_${id}_t2`)
+    addRefToDelete(payoutTxRef2)
 
     // Delete manual installment transactions (circle_${id}_m1 through circle_${id}_m${membersCount})
     const totalMembers = circleData?.membersCount || 0
@@ -729,13 +835,10 @@ export async function swapMemberTurns(
 
   if (turn1 === turn2) return
 
-  const isUser1 = turn1 === circle.myTurnMonth || m1.name === 'أنت'
-  const isUser2 = turn2 === circle.myTurnMonth || m2.name === 'أنت'
-
   let newMyTurn = circle.myTurnMonth
-  if (isUser1) {
+  if (turn1 === circle.myTurnMonth) {
     newMyTurn = turn2
-  } else if (isUser2) {
+  } else if (turn2 === circle.myTurnMonth) {
     newMyTurn = turn1
   }
 

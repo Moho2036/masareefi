@@ -281,6 +281,71 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(result[1].percentage).toBe(33.3)
       expect(result[2].percentage).toBe(33.3)
     })
+
+    it('clamps top category to at most 99.9% when multiple positive categories exist and remainder is applied', () => {
+      const txs: Transaction[] = [
+        {
+          id: '1',
+          type: 'expense',
+          amountFils: 99950, // 99.95% -> rounds to 100.0 or 99.9
+          categoryId: 'cat-rent',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: '2',
+          type: 'expense',
+          amountFils: 50, // 0.05% -> rounds to 0.1% or 0.0%
+          categoryId: 'cat-food',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const result = calculateCategoryDistribution(txs, mockCategories)
+
+      expect(result).toHaveLength(2)
+      // Top category must NOT be 100% while second category has positive amount
+      expect(result[0].percentage).toBeLessThanOrEqual(99.9)
+    })
+
+    it('defensively skips transactions with non-finite amounts or NaN dates', () => {
+      const txs: Transaction[] = [
+        {
+          id: '1',
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'cat-rent',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'bad-1',
+          type: 'expense',
+          amountFils: NaN,
+          categoryId: 'cat-food',
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+        },
+        {
+          id: 'bad-2',
+          type: 'expense',
+          amountFils: 30000,
+          categoryId: 'cat-food',
+          date: new Date('invalid-date'),
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const result = calculateCategoryDistribution(txs, mockCategories)
+      expect(result).toHaveLength(1)
+      expect(result[0].amountFils).toBe(50000)
+    })
   })
 
   describe('calculateYearlyBreakdown', () => {
@@ -551,6 +616,24 @@ describe('Reporting Logic (src/lib/reports.ts)', () => {
       expect(res.activeMonthsCount).toBe(0)
       expect(res.averageMonthlyExpenseFils).toBe(0)
       expect(res.isCurrentMonthOnly).toBe(false)
+    })
+
+    it('in current year with completed past expense months, does not fall back to current month income', () => {
+      const breakdown = createEmptyBreakdown()
+      // Past months (Jan & Feb): have expenses, but 0 income
+      breakdown[0].expense = 100000
+      breakdown[1].expense = 200000
+      // Current month (March index 2): has income of 1,000 JOD
+      breakdown[2].income = 1000000
+      breakdown[2].expense = 50000
+
+      const res = calculateAnnualSummary(breakdown, 2026, 2026, 2)
+
+      // Must be based strictly on completed past months: past income avg is 0, not 1,000,000
+      expect(res.activeMonthsCount).toBe(2)
+      expect(res.averageMonthlyExpenseFils).toBe(150000)
+      expect(res.averageMonthlyIncomeFils).toBe(0)
+      expect(res.note).toBe('محسوب للأشهر المكتملة فقط دون الشهر الجاري')
     })
   })
 

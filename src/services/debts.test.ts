@@ -1864,6 +1864,88 @@ describe('debts service with accounting link', () => {
       expect(sumCompactedEntries).toBe(160000)
     })
 
+    it('ignores stale dueDate on settled primaryDebt and uses fallbackDueDate from active unsettled debt', async () => {
+      const settledPrimaryDebt: Debt = {
+        id: 'debt-settled-1',
+        personName: 'سمير',
+        type: 'borrowed',
+        amountFils: 50000,
+        paidFils: 50000,
+        startDate: new Date('2025-01-01'),
+        dueDate: new Date('2025-06-01'), // Stale due date on settled debt!
+        note: '',
+        settled: true,
+        payments: [],
+        createdAt: new Date('2025-01-01'),
+      }
+
+      const expectedActiveDueDate = new Date('2026-11-20')
+      const activeSecondaryDebt: Debt = {
+        id: 'debt-active-2',
+        personName: 'سمير',
+        type: 'borrowed',
+        amountFils: 40000,
+        paidFils: 0,
+        startDate: new Date('2026-02-01'),
+        dueDate: expectedActiveDueDate, // Active upcoming due date!
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date('2026-02-01'),
+      }
+
+      await mergePersonDebts('user-1', [settledPrimaryDebt, activeSecondaryDebt])
+
+      const primaryUpdateCall = mockBatchUpdate.mock.calls.find((c) =>
+        c[0].path.includes('debts/debt-settled-1')
+      )
+      expect(primaryUpdateCall).toBeDefined()
+      expect(primaryUpdateCall![1].dueDate).toBeDefined()
+      expect(primaryUpdateCall![1].dueDate.seconds).toBe(
+        Math.floor(expectedActiveDueDate.getTime() / 1000)
+      )
+    })
+
+    it('resolves base entry to debt_init_${debtId} instead of fabricating debt_entry_entry_${debtId} during entry compaction', async () => {
+      const debtId = 'debt-base-entry-check'
+      const baseEntry: DebtEntry = {
+        id: `entry_${debtId}`,
+        amountFils: 10000,
+        date: new Date('2026-01-01'),
+        title: 'أصل الدين',
+        note: '',
+        createdAt: new Date('2026-01-01'),
+      }
+      const regularEntries: DebtEntry[] = Array.from({ length: 11 }, (_, i) => ({
+        id: `e_${i}`,
+        amountFils: 1000,
+        date: new Date(`2026-02-${String(i + 1).padStart(2, '0')}`),
+        title: `سلفة ${i + 1}`,
+        note: '',
+        createdAt: new Date('2026-02-01'),
+      }))
+
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          id: debtId,
+          amountFils: 21000,
+          paidFils: 0,
+          entries: [baseEntry, ...regularEntries],
+          payments: [],
+        }),
+      })
+
+      await compactDebtEntries('user-1', debtId)
+
+      const updateCall = mockBatchUpdate.mock.calls.find((c) => c[0].path.includes(`debts/${debtId}`))
+      expect(updateCall).toBeDefined()
+      const mergedEntry = updateCall![1].entries[0]
+      expect(mergedEntry.isMerged).toBe(true)
+      expect(mergedEntry.mergedTransactionIds).toContain(`debt_init_${debtId}`)
+      expect(mergedEntry.mergedTransactionIds).not.toContain(`debt_entry_entry_${debtId}`)
+    })
+
     it('does not assign transactionId to entry_base if initial transaction does not exist', async () => {
       mockGetDoc.mockResolvedValueOnce({ exists: () => false })
       mockGetDocs.mockResolvedValueOnce({ docs: [] })

@@ -1,5 +1,4 @@
 import { format } from 'date-fns'
-import { fromFils } from './money'
 import type { Transaction, Debt, Category, Recurring, MoneyCircle } from '../types'
 
 /**
@@ -35,6 +34,39 @@ export function buildCsv(
   const rowLines = rows.map((row) => row.map(escapeCsvCell).join(','))
   const prefix = includeSepDirective ? '\uFEFFsep=,\r\n' : '\uFEFF'
   return prefix + [headerLine, ...rowLines].join('\r\n')
+}
+
+/**
+ * Formats integer fils directly into decimal string without floating point drift.
+ */
+export function formatFilsForCsv(fils: number, decimals = 3): string {
+  if (!Number.isFinite(fils)) return (0).toFixed(decimals)
+  if (decimals === 0) return Math.round(fils / 1000).toFixed(0)
+  if (decimals === 2) return (Math.round(fils / 10) / 100).toFixed(2)
+  if (decimals === 3) return (Math.round(fils) / 1000).toFixed(3)
+  const factor = Math.pow(10, decimals)
+  return (Math.round((fils / 1000) * factor) / factor).toFixed(decimals)
+}
+
+/**
+ * Maps transactions into standardized CSV row format.
+ */
+export function buildTransactionCsvRows(
+  transactions: Transaction[],
+  categoryMap: Map<string, string>,
+  symbol: string,
+  decimals: number
+): (string | number)[][] {
+  return transactions.map((tx) => {
+    const d = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    const dateStr = format(d, 'yyyy-MM-dd')
+    const typeStr = tx.type === 'expense' ? 'مصروف' : 'دخل'
+    const categoryStr = categoryMap.get(tx.categoryId) || 'غير محدد'
+    const titleStr = tx.title || ''
+    const noteStr = tx.note || ''
+    const amountStr = formatFilsForCsv(tx.amountFils, decimals)
+    return [dateStr, typeStr, categoryStr, titleStr, noteStr, amountStr, symbol]
+  })
 }
 
 /**
@@ -75,17 +107,7 @@ export function exportTransactionsToCsv(
   const decimals = options?.decimals ?? 3
 
   const headers = ['التاريخ', 'النوع', 'التصنيف', 'العنوان', 'الملاحظة', `المبلغ (${symbol})`, 'العملة']
-
-  const rows = transactions.map((tx) => {
-    const dateStr = format(tx.date, 'yyyy-MM-dd')
-    const typeStr = tx.type === 'expense' ? 'مصروف' : 'دخل'
-    const categoryStr = categoryMap.get(tx.categoryId) || 'غير محدد'
-    const titleStr = tx.title || ''
-    const noteStr = tx.note || ''
-    const amountStr = fromFils(tx.amountFils).toFixed(decimals)
-
-    return [dateStr, typeStr, categoryStr, titleStr, noteStr, amountStr, symbol]
-  })
+  const rows = buildTransactionCsvRows(transactions, categoryMap, symbol, decimals)
 
   const csv = buildCsv(headers, rows)
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -115,15 +137,7 @@ export function exportAllFinancialDataToCsv(
 
   // 1. Transactions
   const txHeaders = ['التاريخ', 'النوع', 'التصنيف', 'العنوان', 'الملاحظة', `المبلغ (${symbol})`, 'العملة']
-  const txRows = data.transactions.map((tx) => {
-    const dateStr = format(tx.date, 'yyyy-MM-dd')
-    const typeStr = tx.type === 'expense' ? 'مصروف' : 'دخل'
-    const categoryStr = categoryMap.get(tx.categoryId) || 'غير محدد'
-    const titleStr = tx.title || ''
-    const noteStr = tx.note || ''
-    const amountStr = fromFils(tx.amountFils).toFixed(decimals)
-    return [dateStr, typeStr, categoryStr, titleStr, noteStr, amountStr, symbol]
-  })
+  const txRows = buildTransactionCsvRows(data.transactions, categoryMap, symbol, decimals)
 
   // 2. Debts
   const debtHeaders = [
@@ -142,13 +156,16 @@ export function exportAllFinancialDataToCsv(
   const debtRows = data.debts.map((d) => {
     const personName = d.personName
     const typeStr = d.type === 'lent' ? 'لي (أطلبهم)' : 'عليّ (يطلبوني)'
-    const originalAmount = fromFils(d.amountFils).toFixed(decimals)
-    const paidAmount = fromFils(d.paidFils).toFixed(decimals)
-    const remainingAmount = fromFils(Math.max(0, d.amountFils - d.paidFils)).toFixed(decimals)
+    const originalAmount = formatFilsForCsv(d.amountFils, decimals)
+    const paidAmount = formatFilsForCsv(d.paidFils, decimals)
+    const remainingAmount = formatFilsForCsv(Math.max(0, d.amountFils - d.paidFils), decimals)
     const statusStr = d.settled ? 'مسدد بالكامل' : 'مفتوح'
     const paymentsCount = String((d.payments || []).length)
-    const startDateStr = format(d.startDate, 'yyyy-MM-dd')
-    const dueDateStr = d.dueDate ? format(d.dueDate, 'yyyy-MM-dd') : 'غير محدد'
+    const startD = d.startDate instanceof Date ? d.startDate : new Date(d.startDate)
+    const startDateStr = format(startD, 'yyyy-MM-dd')
+    const dueDateStr = d.dueDate
+      ? format(d.dueDate instanceof Date ? d.dueDate : new Date(d.dueDate), 'yyyy-MM-dd')
+      : 'غير محدد'
     const noteStr = d.note || ''
     return [
       personName,
@@ -192,12 +209,16 @@ export function exportAllFinancialDataToCsv(
     const titleStr = r.title || ''
     const typeStr = r.type === 'expense' ? 'مصروف' : 'دخل'
     const categoryStr = categoryMap.get(r.categoryId) || 'غير محدد'
-    const amountStr = fromFils(r.amountFils).toFixed(decimals)
+    const amountStr = formatFilsForCsv(r.amountFils, decimals)
     const freqStr = frequencyMap[r.frequency] || r.frequency
     const statusStr = r.active ? 'نشط' : 'متوقف'
-    const startDateStr = format(r.startDate, 'yyyy-MM-dd')
-    const nextDateStr = format(r.nextDate, 'yyyy-MM-dd')
-    const endDateStr = r.endDate ? format(r.endDate, 'yyyy-MM-dd') : 'مستمر'
+    const startD = r.startDate instanceof Date ? r.startDate : new Date(r.startDate)
+    const nextD = r.nextDate instanceof Date ? r.nextDate : new Date(r.nextDate)
+    const startDateStr = format(startD, 'yyyy-MM-dd')
+    const nextDateStr = format(nextD, 'yyyy-MM-dd')
+    const endDateStr = r.endDate
+      ? format(r.endDate instanceof Date ? r.endDate : new Date(r.endDate), 'yyyy-MM-dd')
+      : 'مستمر'
     const noteStr = r.note || ''
     return [
       titleStr,
@@ -236,14 +257,20 @@ export function exportAllFinancialDataToCsv(
     const userTotalPayoutFils =
       c.shareType === 'half'
         ? Math.round(c.totalAmountFils / 2)
-        : c.totalAmountFils
+        : c.shareType === 'double' && c.secondTurnMonth
+          ? c.totalAmountFils * 2
+          : c.totalAmountFils
 
-    const monthlyStr = fromFils(userMonthlyFils).toFixed(decimals)
+    const monthlyStr = formatFilsForCsv(userMonthlyFils, decimals)
     const membersCountStr = String(c.membersCount)
-    const totalStr = fromFils(userTotalPayoutFils).toFixed(decimals)
-    const myTurnStr = String(c.myTurnMonth)
+    const totalStr = formatFilsForCsv(userTotalPayoutFils, decimals)
+    const myTurnStr =
+      c.shareType === 'double' && c.secondTurnMonth
+        ? `${c.myTurnMonth} ، ${c.secondTurnMonth}`
+        : String(c.myTurnMonth)
     const statusStr = c.status === 'active' ? 'نشطة' : 'مكتملة'
-    const startDateStr = format(c.startDate, 'yyyy-MM-dd')
+    const startD = c.startDate instanceof Date ? c.startDate : new Date(c.startDate)
+    const startDateStr = format(startD, 'yyyy-MM-dd')
     return [
       nameStr,
       monthlyStr,

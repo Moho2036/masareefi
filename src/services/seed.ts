@@ -2,11 +2,11 @@ import {
   writeBatch,
   collection,
   doc,
-  getDocs,
   type WriteBatch,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { TxType } from '../types'
+import { safeGetDocs, commitFirestoreWrite } from '../lib/firestoreOffline'
 
 export interface SeedCategory {
   name: string
@@ -65,7 +65,7 @@ export function addDefaultCategoriesToBatch(batch: WriteBatch, uid: string): voi
 async function seedDefaultCategories(uid: string): Promise<void> {
   const batch = writeBatch(db)
   addDefaultCategoriesToBatch(batch, uid)
-  await batch.commit()
+  await commitFirestoreWrite(batch.commit())
 }
 
 const SEED_V2_STORAGE_KEY_PREFIX = 'baseer_categories_seed_v2_'
@@ -93,7 +93,7 @@ function isCategoriesSeedUpgraded(uid: string): boolean {
   return false
 }
 
-function markCategoriesSeedUpgraded(uid: string): void {
+export function markCategoriesSeedUpgraded(uid: string): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(getCategoriesSeedV2Key(uid), 'true')
@@ -104,97 +104,104 @@ function markCategoriesSeedUpgraded(uid: string): void {
   }
 }
 
+const inFlightSeedUids = new Set<string>()
+
 /**
  * Syncs any renamed or newly added default categories to existing user accounts.
  * Executes once per user account using localStorage tracking and Firestore seed ID checks
  * so user deletions or custom renames are strictly respected on subsequent app opens.
  */
 export async function syncCategoriesForUser(uid: string): Promise<void> {
-  // If this user account has already been upgraded on this device, skip immediately
-  if (isCategoriesSeedUpgraded(uid)) {
+  // If this user account has already been upgraded or is currently syncing, skip immediately
+  if (!uid || inFlightSeedUids.has(uid) || isCategoriesSeedUpgraded(uid)) {
     return
   }
 
-  const categoriesRef = collection(db, 'users', uid, 'categories')
-  const snap = await getDocs(categoriesRef)
+  inFlightSeedUids.add(uid)
+  try {
+    const categoriesRef = collection(db, 'users', uid, 'categories')
+    const snap = await safeGetDocs(categoriesRef)
 
-  if (snap.empty) {
-    await seedDefaultCategories(uid)
-    markCategoriesSeedUpgraded(uid)
-    return
-  }
-
-  const existingDocs = snap.docs.map(
-    (d) =>
-      ({ id: d.id, ...d.data() } as {
-        id: string
-        name: string
-        type: TxType
-        order?: number
-      })
-  )
-
-  // Check if the account already has deterministic seed IDs or v2 category markers
-  const hasV2Markers = existingDocs.some(
-    (d) =>
-      d.id.startsWith('seed_') ||
-      d.name === 'سداد الديون والأقساط' ||
-      d.name === 'العطاء الخيري' ||
-      d.name === 'المصاريف المصرفية'
-  )
-
-  if (hasV2Markers) {
-    markCategoriesSeedUpgraded(uid)
-    return
-  }
-
-  const existingKeys = new Set(existingDocs.map((c) => `${c.type}:${c.name}`))
-  const batch = writeBatch(db)
-  let changed = false
-
-  // Handle renames
-  for (const docItem of existingDocs) {
-    if (docItem.name === 'تسوق وملابس') {
-      const ref = doc(categoriesRef, docItem.id)
-      batch.update(ref, { name: 'ملابس وإكسسوارات' })
-      existingKeys.delete(`${docItem.type}:تسوق وملابس`)
-      existingKeys.add(`${docItem.type}:ملابس وإكسسوارات`)
-      changed = true
-    } else if (docItem.name === 'عائلة وهدايا') {
-      const ref = doc(categoriesRef, docItem.id)
-      batch.update(ref, { name: 'الهدايا والمناسبات' })
-      existingKeys.delete(`${docItem.type}:عائلة وهدايا`)
-      existingKeys.add(`${docItem.type}:الهدايا والمناسبات`)
-      changed = true
+    if (snap.empty) {
+      await seedDefaultCategories(uid)
+      markCategoriesSeedUpgraded(uid)
+      return
     }
-  }
 
-  // Handle missing new categories for legacy pre-v2 accounts
-  let maxOrder = existingDocs.reduce((acc, c) => Math.max(acc, c.order ?? 0), 0)
+    const existingDocs = snap.docs.map(
+      (d) =>
+        ({ id: d.id, ...d.data() } as {
+          id: string
+          name: string
+          type: TxType
+          order?: number
+        })
+    )
 
-  for (const defaultCat of DEFAULT_CATEGORIES) {
-    const key = `${defaultCat.type}:${defaultCat.name}`
-    const seedId = `seed_${defaultCat.type}_${defaultCat.order}`
-    const hasDocWithSeedId = existingDocs.some((d) => d.id === seedId)
-    if (!existingKeys.has(key) && !hasDocWithSeedId) {
-      maxOrder++
-      const newDocRef = doc(categoriesRef, seedId)
-      batch.set(newDocRef, {
-        name: defaultCat.name,
-        type: defaultCat.type,
-        icon: defaultCat.icon,
-        color: defaultCat.color,
-        archived: false,
-        order: maxOrder,
-      })
-      existingKeys.add(key)
-      changed = true
+    // Check if the account already has deterministic seed IDs or v2 category markers
+    const hasV2Markers = existingDocs.some(
+      (d) =>
+        d.id.startsWith('seed_') ||
+        d.name === 'سداد الديون والأقساط' ||
+        d.name === 'العطاء الخيري' ||
+        d.name === 'المصاريف المصرفية'
+    )
+
+    if (hasV2Markers) {
+      markCategoriesSeedUpgraded(uid)
+      return
     }
-  }
 
-  if (changed) {
-    await batch.commit()
-  }
+    const existingKeys = new Set(existingDocs.map((c) => `${c.type}:${c.name}`))
+    const batch = writeBatch(db)
+    let changed = false
 
-  markCategoriesSeedUpgraded(uid)
+    // Handle renames
+    for (const docItem of existingDocs) {
+      if (docItem.name === 'تسوق وملابس') {
+        const ref = doc(categoriesRef, docItem.id)
+        batch.update(ref, { name: 'ملابس وإكسسوارات' })
+        existingKeys.delete(`${docItem.type}:تسوق وملابس`)
+        existingKeys.add(`${docItem.type}:ملابس وإكسسوارات`)
+        changed = true
+      } else if (docItem.name === 'عائلة وهدايا') {
+        const ref = doc(categoriesRef, docItem.id)
+        batch.update(ref, { name: 'الهدايا والمناسبات' })
+        existingKeys.delete(`${docItem.type}:عائلة وهدايا`)
+        existingKeys.add(`${docItem.type}:الهدايا والمناسبات`)
+        changed = true
+      }
+    }
+
+    // Handle missing new categories for legacy pre-v2 accounts
+    let maxOrder = existingDocs.reduce((acc, c) => Math.max(acc, c.order ?? 0), 0)
+
+    for (const defaultCat of DEFAULT_CATEGORIES) {
+      const key = `${defaultCat.type}:${defaultCat.name}`
+      const seedId = `seed_${defaultCat.type}_${defaultCat.order}`
+      const hasDocWithSeedId = existingDocs.some((d) => d.id === seedId)
+      if (!existingKeys.has(key) && !hasDocWithSeedId) {
+        maxOrder++
+        const newDocRef = doc(categoriesRef, seedId)
+        batch.set(newDocRef, {
+          name: defaultCat.name,
+          type: defaultCat.type,
+          icon: defaultCat.icon,
+          color: defaultCat.color,
+          archived: false,
+          order: maxOrder,
+        })
+        existingKeys.add(key)
+        changed = true
+      }
+    }
+
+    if (changed) {
+      await commitFirestoreWrite(batch.commit())
+    }
+
+    markCategoriesSeedUpgraded(uid)
+  } finally {
+    inFlightSeedUids.delete(uid)
+  }
 }

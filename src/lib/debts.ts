@@ -1,9 +1,31 @@
-import { format } from 'date-fns'
 import type { Debt, DebtType } from '../types'
 export { normalizeArabic } from './aggregate'
 import { normalizeArabic } from './aggregate'
 import { toWesternDigits } from './dates'
-import { fromFils, getCurrencyConfig } from './money'
+import { fromFils } from './money'
+
+/**
+ * Snaps payment amount in fils to remainingFils if input exceeds remainingFils
+ * within the acceptable currency rounding tolerance (e.g. 5 fils for 2-decimals, 500 fils for 0-decimals),
+ * or if the formatted string values match, so paidFils === amountFils.
+ */
+export function resolvePaymentAmountWithTolerance(
+  inputFils: number,
+  remainingFils: number,
+  decimals: number
+): number {
+  if (inputFils <= remainingFils) return inputFils
+  const maxTolerance = decimals === 0 ? 500 : decimals === 2 ? 5 : 0
+  if (maxTolerance > 0) {
+    const diff = inputFils - remainingFils
+    const roundedRemainingStr = fromFils(remainingFils).toFixed(decimals)
+    const inputStr = fromFils(inputFils).toFixed(decimals)
+    if (diff <= maxTolerance || inputStr === roundedRemainingStr) {
+      return remainingFils
+    }
+  }
+  return inputFils
+}
 
 /**
  * Calculates remaining fils to be paid for a debt.
@@ -169,25 +191,13 @@ export function filterDebts(debts: Debt[], options: DebtFilterOptions = {}): Deb
 
         const rawSearch = search.trim()
         const westernQuery = toWesternDigits(rawSearch).replace(/,/g, '')
-        const remainingFils = getDebtRemainingFils(debt)
-
-        const isPureDigits = /^\d+$/.test(westernQuery)
-        const matchesAmount = Boolean(
-          westernQuery &&
-            (isPureDigits
-              ? String(fromFils(debt.amountFils)).includes(westernQuery) ||
-                String(fromFils(debt.paidFils)).includes(westernQuery) ||
-                String(fromFils(remainingFils)).includes(westernQuery)
-              : fromFils(debt.amountFils).toString().includes(westernQuery) ||
-                fromFils(debt.paidFils).toString().includes(westernQuery) ||
-                fromFils(remainingFils).toString().includes(westernQuery) ||
-                fromFils(debt.amountFils).toFixed(2).includes(westernQuery) ||
-                fromFils(debt.paidFils).toFixed(2).includes(westernQuery) ||
-                fromFils(remainingFils).toFixed(2).includes(westernQuery) ||
-                fromFils(debt.amountFils).toFixed(3).includes(westernQuery) ||
-                fromFils(debt.paidFils).toFixed(3).includes(westernQuery) ||
-                fromFils(remainingFils).toFixed(3).includes(westernQuery))
-        )
+        const remFils = getDebtRemainingFils(debt)
+        const amtStrs = [debt.amountFils, debt.paidFils, remFils].flatMap((f) => [
+          fromFils(f).toString(),
+          fromFils(f).toFixed(2),
+          fromFils(f).toFixed(3),
+        ])
+        const matchesAmount = Boolean(westernQuery && amtStrs.some((s) => s.includes(westernQuery)))
 
         if (
           !nameNorm.includes(normalizedQuery) &&
@@ -319,59 +329,4 @@ export function formatDebtEntriesCount(count: number): string {
   return `${count} سلفة مجمعة`
 }
 
-export function formatDebtAccountStatement(
-  debt: Debt,
-  currencySymbol = 'د.أ',
-  currencyCodeOrDecimals?: string | number
-): string {
-  const decimals =
-    typeof currencyCodeOrDecimals === 'number'
-      ? currencyCodeOrDecimals
-      : getCurrencyConfig(currencyCodeOrDecimals).decimals
-  const factor = Math.pow(10, decimals)
-  const formatAmount = (fils: number): number => Math.round(fromFils(fils) * factor) / factor
-
-  const isLent = debt.type === 'lent'
-  const typeText = isLent ? 'مستحقات لك (سلف / إقراض)' : 'التزامات عليك (اقتراض)'
-  const statusText = debt.settled ? 'مسدد بالكامل' : 'قيد السداد'
-  const remaining = getDebtRemainingFils(debt)
-
-  const entriesText =
-    debt.entries && debt.entries.length > 0
-      ? debt.entries
-          .map(
-            (e, idx) =>
-              `${idx + 1}. ${format(new Date(e.date), 'yyyy/MM/dd')}: ${formatAmount(e.amountFils)} ${currencySymbol}${e.title ? ` (${e.title})` : ''}${e.note ? ` - ${e.note}` : ''}`
-          )
-          .join('\n')
-      : `1. ${format(new Date(debt.startDate), 'yyyy/MM/dd')}: ${formatAmount(debt.amountFils)} ${currencySymbol}${debt.note ? ` - ${debt.note}` : ''}`
-
-  let paymentsText = 'لا توجد دفعات مسجلة بعد.'
-  if (debt.payments && debt.payments.length > 0) {
-    paymentsText = debt.payments
-      .map(
-        (p, idx) =>
-          `${idx + 1}. ${format(new Date(p.date), 'yyyy/MM/dd')}: ${formatAmount(p.amountFils)} ${currencySymbol}${p.note ? ` (${p.note})` : ''}`
-      )
-      .join('\n')
-  }
-
-  return `*كشف حساب مالي - تطبيق بَصير*
-────────────────
-*الطرف:* ${debt.personName}
-*نوع المعاملة:* ${typeText}
-*الحالة:* ${statusText}
-
-*تفاصيل السلف وأصل الدين:*
-${entriesText}
-
-*سجل الدفعات المسددة:*
-${paymentsText}
-
-────────────────
-*إجمالي المبلغ:* ${formatAmount(debt.amountFils)} ${currencySymbol}
-*المسدد:* ${formatAmount(debt.paidFils || 0)} ${currencySymbol}
-*المتبقي:* ${formatAmount(remaining)} ${currencySymbol}
-────────────────
-تم إنشاء كشف الحساب في ${format(new Date(), 'yyyy/MM/dd')}`
-}
+export { formatDebtAccountStatement } from './debtStatement'

@@ -98,6 +98,26 @@ describe('userProfile service', () => {
       )
     })
 
+    it('calls updateDoc with deleteField() when avatarColor or lastBackupAt is empty or whitespace', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ displayName: 'سعيد' }),
+      })
+
+      await updateUserSettings('uid-del-avatar', {
+        avatarColor: '   ',
+        lastBackupAt: '',
+      })
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          avatarColor: { _method: 'deleteField' },
+          lastBackupAt: { _method: 'deleteField' },
+        })
+      )
+    })
+
     it('calls updateDoc with deleteField() when rolloverStartDate is null and customCurrencyDecimals is undefined', async () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
@@ -261,7 +281,7 @@ describe('userProfile service', () => {
   })
 
   describe('resetUserData and deleteUserFirestoreData', () => {
-    it('resetUserData deletes docs from 4 subcollections and sets openingBalanceFils to 0', async () => {
+    it('resetUserData deletes docs from 4 subcollections, clears localStorage caches, and resets balances', async () => {
       const mockDocRef = { id: 'd1', ref: { path: 'doc/1' } }
       mockGetDocs.mockResolvedValue({
         empty: false,
@@ -272,14 +292,22 @@ describe('userProfile service', () => {
         data: () => ({ displayName: 'سارة' }),
       })
 
+      localStorage.setItem('baseer_category_usage', '{"1":2}')
+      localStorage.setItem('baseer_notifications_history_u-reset', '[]')
+
       await resetUserData('u-reset')
 
       expect(mockBatchDelete).toHaveBeenCalled()
       expect(mockBatchCommit).toHaveBeenCalled()
       expect(mockUpdateDoc).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ openingBalanceFils: 0 })
+        expect.objectContaining({
+          openingBalanceFils: 0,
+          rolloverStartDate: { _method: 'deleteField' },
+        })
       )
+      expect(localStorage.getItem('baseer_category_usage')).toBeNull()
+      expect(localStorage.getItem('baseer_notifications_history_u-reset')).toBeNull()
     })
 
     it('deleteUserFirestoreData deletes docs from 5 subcollections and user document', async () => {

@@ -1,20 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, Outlet } from 'react-router'
 import {
-  Home,
-  ArrowLeftRight,
-  RefreshCw,
-  BarChart3,
-  LayoutGrid,
-  Settings,
-  Plus,
-  WifiOff,
-  HandCoins,
-  RotateCcw,
-  Calculator,
-  Bell,
-  Eye,
-  EyeOff,
+  Home, ArrowLeftRight, RefreshCw, BarChart3, LayoutGrid, Settings,
+  Plus, WifiOff, HandCoins, RotateCcw, Calculator, Bell, Eye, EyeOff,
 } from 'lucide-react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
@@ -184,7 +172,7 @@ export const AppShell: React.FC = () => {
   }, [])
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 antialiased font-sans">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-zinc-100 antialiased font-sans overflow-x-clip max-w-full">
       {/* Desktop Sidebar (start side / right side in RTL) */}
       <aside
         aria-label="القائمة الجانبية"
@@ -312,9 +300,9 @@ export const AppShell: React.FC = () => {
         )}
 
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#09090B]/90 backdrop-blur-md border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all">
+        <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#09090B]/90 backdrop-blur-md border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all min-w-0 max-w-full">
           {/* Mobile brand logo & User avatar shortcut */}
-          <div className="flex items-center gap-2.5 lg:hidden shrink-0 min-w-0">
+          <div className="flex items-center gap-2.5 lg:hidden shrink min-w-0">
             <Link to="/settings" className="press-scale flex items-center gap-2 shrink-0" title="الإعدادات">
               {user?.photoURL ? (
                 <img
@@ -340,7 +328,7 @@ export const AppShell: React.FC = () => {
             </span>
             {pathname !== '/' && (
               <>
-                <span className="text-zinc-300 dark:text-zinc-700 font-light">/</span>
+                <span className="text-zinc-300 dark:text-zinc-700 font-light shrink-0">/</span>
                 <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 truncate">
                   {currentPageTitle}
                 </span>
@@ -423,7 +411,7 @@ export const AppShell: React.FC = () => {
         </header>
 
         {/* Page View Slot */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 min-w-0 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto overflow-x-clip">
           <React.Suspense fallback={<PageSkeleton />}>
             <Outlet />
           </React.Suspense>

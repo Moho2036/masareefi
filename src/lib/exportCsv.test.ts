@@ -3,8 +3,11 @@ import {
   escapeCsvCell,
   buildCsv,
   exportTransactionsToCsv,
+  exportAllFinancialDataToCsv,
+  formatFilsForCsv,
+  buildTransactionCsvRows,
 } from './exportCsv'
-import type { Transaction, Category } from '../types'
+import type { Transaction, Category, MoneyCircle } from '../types'
 
 describe('exportCsv module', () => {
   describe('escapeCsvCell', () => {
@@ -129,6 +132,93 @@ describe('exportCsv module', () => {
 
       exportTransactionsToCsv(sampleTxs, sampleCategories, { symbol: '$', decimals: 2 })
       expect(clickSpy).toHaveBeenCalled()
+    })
+  })
+
+  describe('formatFilsForCsv helper', () => {
+    it('rounds integer fils without floating point drift across decimals', () => {
+      expect(formatFilsForCsv(12500, 3)).toBe('12.500')
+      expect(formatFilsForCsv(1005, 2)).toBe('1.01')
+      expect(formatFilsForCsv(1004, 2)).toBe('1.00')
+      expect(formatFilsForCsv(1500, 0)).toBe('2')
+      expect(formatFilsForCsv(1400, 0)).toBe('1')
+      expect(formatFilsForCsv(NaN, 2)).toBe('0.00')
+    })
+  })
+
+  describe('buildTransactionCsvRows helper', () => {
+    it('normalizes string dates and builds valid rows', () => {
+      const catMap = new Map([['c1', 'طعام']])
+      const txs = [
+        {
+          id: 't-str-date',
+          type: 'expense' as const,
+          amountFils: 5000,
+          categoryId: 'c1',
+          date: '2026-05-10T12:00:00Z' as unknown as Date,
+          title: 'غداء',
+          note: '',
+          createdAt: new Date(),
+        },
+      ]
+
+      const rows = buildTransactionCsvRows(txs, catMap, 'د.أ', 3)
+      expect(rows).toHaveLength(1)
+      expect(rows[0][0]).toBe('2026-05-10')
+      expect(rows[0][1]).toBe('مصروف')
+      expect(rows[0][2]).toBe('طعام')
+      expect(rows[0][3]).toBe('غداء')
+      expect(rows[0][5]).toBe('5.000')
+    })
+  })
+
+  describe('exportAllFinancialDataToCsv', () => {
+    let capturedBlobText = ''
+    beforeEach(() => {
+      capturedBlobText = ''
+      globalThis.Blob = class MockBlob {
+        content: string[]
+        constructor(parts: string[]) {
+          this.content = parts
+          capturedBlobText = parts.join('')
+        }
+      } as unknown as typeof Blob
+      globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-all')
+      globalThis.URL.revokeObjectURL = vi.fn()
+    })
+
+    it('formats double share money circles with dual turns and doubled payout in unified export', () => {
+      const circles: MoneyCircle[] = [
+        {
+          id: 'c-double',
+          name: 'جمعية مزدوجة',
+          monthlyAmountFils: 50000,
+          membersCount: 10,
+          totalAmountFils: 500000,
+          myTurnMonth: 2,
+          secondTurnMonth: 7,
+          shareType: 'double',
+          startDate: new Date('2026-01-01'),
+          members: [],
+          status: 'active',
+          createdAt: new Date(),
+        },
+      ]
+
+      exportAllFinancialDataToCsv({
+        transactions: [],
+        categories: [],
+        debts: [],
+        recurring: [],
+        circles,
+      })
+
+      // Dual turn: "2 ، 7"
+      expect(capturedBlobText).toContain('2 ، 7')
+      // Doubled monthly contribution: 50000 * 2 = 100.000 JOD
+      expect(capturedBlobText).toContain('100.000')
+      // Doubled total payout: 500000 * 2 = 1000.000 JOD
+      expect(capturedBlobText).toContain('1000.000')
     })
   })
 })

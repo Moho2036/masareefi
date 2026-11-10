@@ -6,6 +6,8 @@ import {
   recurringConverter,
   userSettingsConverter,
   debtConverter,
+  circleConverter,
+  parseFirestoreDate,
 } from './converters'
 import type { Category, Transaction, Recurring, UserSettings, Debt } from '../types'
 
@@ -182,7 +184,7 @@ describe('converters', () => {
       const data = recurringConverter.toFirestore(rec) as Record<string, unknown>
 
       expect(data.id).toBeUndefined()
-      expect(data.createdAt).toBeUndefined()
+      expect(data.createdAt).toBeDefined() // defaults to serverTimestamp() when undefined
       expect(data.type).toBe('expense')
       expect(data.amountFils).toBe(10000)
       expect(data.categoryId).toBe('cat-rent')
@@ -665,6 +667,109 @@ describe('converters', () => {
       expect(fromFs.entries![0].title).toBe('دفعة أولى')
       expect(fromFs.entries![0].transactionId).toBe('tx-1')
       expect(fromFs.entries![1].id).toBe('entry-2')
+    })
+
+    it('slices payments to 100 in debtConverter.toFirestore', () => {
+      const payments = Array.from({ length: 120 }, (_, i) => ({
+        id: `p-${i}`,
+        amountFils: 1000,
+        date: new Date('2026-01-01'),
+        createdAt: new Date('2026-01-01'),
+        note: `دفعة ${i}`,
+      }))
+
+      const debt: Debt = {
+        id: 'debt-many-payments',
+        personName: 'سعيد',
+        type: 'lent',
+        amountFils: 150000,
+        paidFils: 120000,
+        startDate: new Date('2026-01-01'),
+        note: '',
+        settled: false,
+        payments,
+        createdAt: new Date('2026-01-01'),
+      }
+
+      const firestoreData = debtConverter.toFirestore(debt)
+      expect(firestoreData.payments).toHaveLength(100)
+    })
+  })
+
+  describe('parseFirestoreDate and timestamp robustness across converters', () => {
+    it('handles plain { seconds: number } and { toDate: () => Date } objects safely', () => {
+      const fixedDate = new Date('2026-05-15T12:00:00Z')
+      const plainSecondsObj = { seconds: Math.floor(fixedDate.getTime() / 1000) }
+      const toDateObj = { toDate: () => fixedDate }
+
+      expect(parseFirestoreDate(plainSecondsObj).getTime()).toBe(fixedDate.getTime())
+      expect(parseFirestoreDate(toDateObj).getTime()).toBe(fixedDate.getTime())
+      expect(parseFirestoreDate(null, null)).toBeNull()
+      expect(parseFirestoreDate(undefined, undefined)).toBeUndefined()
+    })
+
+    it('converts cached/restored plain objects in transaction, recurring, settings, and debt without Invalid Date', () => {
+      const targetTime = 1770000000000
+      const secondsVal = Math.floor(targetTime / 1000)
+      const plainTs = { seconds: secondsVal }
+
+      const txSnap = makeMockSnapshot('tx-plain', {
+        type: 'income',
+        amountFils: 5000,
+        categoryId: 'cat-1',
+        date: plainTs,
+        createdAt: plainTs,
+      })
+      const tx = transactionConverter.fromFirestore(txSnap)
+      expect(isNaN(tx.date.getTime())).toBe(false)
+      expect(isNaN(tx.createdAt.getTime())).toBe(false)
+
+      const recSnap = makeMockSnapshot('rec-plain', {
+        type: 'expense',
+        amountFils: 10000,
+        categoryId: 'cat-1',
+        frequency: 'monthly',
+        startDate: plainTs,
+        nextDate: plainTs,
+        endDate: plainTs,
+        createdAt: plainTs,
+        active: true,
+      })
+      const rec = recurringConverter.fromFirestore(recSnap)
+      expect(isNaN(rec.startDate.getTime())).toBe(false)
+      expect(isNaN(rec.nextDate.getTime())).toBe(false)
+      expect(isNaN(rec.endDate!.getTime())).toBe(false)
+
+      const settingsSnap = makeMockSnapshot('u-plain', {
+        rolloverStartDate: plainTs,
+        createdAt: plainTs,
+      })
+      const settings = userSettingsConverter.fromFirestore(settingsSnap)
+      expect(isNaN((settings.rolloverStartDate as Date).getTime())).toBe(false)
+      expect(isNaN((settings.createdAt as Date).getTime())).toBe(false)
+
+      const debtSnap = makeMockSnapshot('debt-plain', {
+        personName: 'كريم',
+        type: 'lent',
+        amountFils: 10000,
+        paidFils: 5000,
+        startDate: plainTs,
+        dueDate: plainTs,
+        createdAt: plainTs,
+        payments: [{ id: 'p1', amountFils: 5000, date: plainTs, createdAt: plainTs }],
+        entries: [{ id: 'e1', amountFils: 10000, date: plainTs, createdAt: plainTs }],
+      })
+      const debt = debtConverter.fromFirestore(debtSnap)
+      expect(isNaN(debt.startDate.getTime())).toBe(false)
+      expect(isNaN(debt.dueDate!.getTime())).toBe(false)
+      expect(isNaN(debt.payments[0].date.getTime())).toBe(false)
+      expect(isNaN(debt.entries![0].date.getTime())).toBe(false)
+    })
+
+    it('re-exports circleConverter', () => {
+      expect(circleConverter).toBeDefined()
+      expect(typeof circleConverter.toFirestore).toBe('function')
+      expect(typeof circleConverter.fromFirestore).toBe('function')
     })
   })
 })

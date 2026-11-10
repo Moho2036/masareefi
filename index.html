@@ -19,6 +19,22 @@
     <script>
       (function() {
         try {
+          var h = window.location.hostname;
+          if (h === 'masareefi-81676.web.app' || h === 'masareefi-81676.firebaseapp.com') {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+              });
+            }
+            window.location.replace('https://baseer-finance.web.app' + window.location.pathname + window.location.search + window.location.hash);
+            return;
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      (function() {
+        try {
           var saved = localStorage.getItem('baseer_theme') || localStorage.getItem('baseer-theme') || localStorage.getItem('masareefi_theme') || localStorage.getItem('masareefi-theme');
           var isDark = saved === 'dark' || ((!saved || saved === 'system') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (isDark) {

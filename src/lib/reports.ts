@@ -87,7 +87,9 @@ export function generateDailyExpenses(
 
   for (const tx of txs) {
     if (tx.type !== 'expense') continue
+    if (typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) continue
     const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    if (Number.isNaN(txDate.getTime())) continue
     const txDay = new Date(txDate.getFullYear(), txDate.getMonth(), txDate.getDate(), 0, 0, 0, 0)
     if (txDay.getTime() >= rangeStartDay.getTime() && txDay.getTime() < rangeEndDay.getTime()) {
       const y = txDay.getFullYear()
@@ -180,6 +182,9 @@ export function calculateCategoryDistribution(
 
   for (const tx of txs) {
     if (tx.type !== type) continue
+    if (typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) continue
+    const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    if (Number.isNaN(txDate.getTime())) continue
     totals.set(tx.categoryId, (totals.get(tx.categoryId) || 0) + tx.amountFils)
     totalFils += tx.amountFils
   }
@@ -209,10 +214,16 @@ export function calculateCategoryDistribution(
   items.sort((a, b) => b.amountFils - a.amountFils)
 
   if (items.length > 1) {
+    if (items[0].percentage >= 100) {
+      items[0].percentage = 99.9
+    }
+    const otherItemsHaveZero = items.slice(1).some((item) => item.percentage === 0)
     const totalPercentage = items.reduce((sum, item) => sum + item.percentage, 0)
     const remainder = Math.round((100 - totalPercentage) * 10) / 10
     if (remainder !== 0 && items[0].percentage + remainder > 0) {
-      items[0].percentage = Math.round((items[0].percentage + remainder) * 10) / 10
+      const adjusted = Math.round((items[0].percentage + remainder) * 10) / 10
+      items[0].percentage =
+        adjusted >= 100 || (otherItemsHaveZero && adjusted > 99.9) ? 99.9 : adjusted
     }
   }
 
@@ -237,7 +248,9 @@ export function calculateYearlyBreakdown(
   )
 
   for (const tx of txs) {
+    if (typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) continue
     const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
+    if (Number.isNaN(txDate.getTime())) continue
 
     let txYear = txDate.getFullYear()
     let monthIndex = txDate.getMonth()
@@ -344,20 +357,20 @@ export function calculateAnnualSummary(
     const hasCurrentMonthExpense = Boolean(currentMonthItem && currentMonthItem.expense > 0)
     const hasCurrentMonthIncome = Boolean(currentMonthItem && currentMonthItem.income > 0)
 
-    let averageMonthlyIncomeFils = 0
-    if (completedPastIncomeMonths.length > 0) {
-      const totalIncome = completedPastIncomeMonths.reduce((acc, m) => acc + m.income, 0)
-      averageMonthlyIncomeFils = Math.round(totalIncome / completedPastIncomeMonths.length)
-    } else if (hasCurrentMonthIncome && currentMonthItem) {
-      averageMonthlyIncomeFils = currentMonthItem.income
-    }
-
     if (completedPastExpenseMonths.length > 0) {
       const totalExpense = completedPastExpenseMonths.reduce((acc, m) => acc + m.expense, 0)
       const count = completedPastExpenseMonths.length
+      const pastIncomeAvg =
+        completedPastIncomeMonths.length > 0
+          ? Math.round(
+              completedPastIncomeMonths.reduce((acc, m) => acc + m.income, 0) /
+                completedPastIncomeMonths.length
+            )
+          : 0
+
       return {
         averageMonthlyExpenseFils: Math.round(totalExpense / count),
-        averageMonthlyIncomeFils,
+        averageMonthlyIncomeFils: pastIncomeAvg,
         activeMonthsCount: count,
         isCurrentMonthOnly: false,
         note: hasCurrentMonthExpense ? 'محسوب للأشهر المكتملة فقط دون الشهر الجاري' : undefined,
@@ -365,9 +378,19 @@ export function calculateAnnualSummary(
     }
 
     if (hasCurrentMonthExpense && currentMonthItem) {
+      let currentMonthIncomeAvg = 0
+      if (completedPastIncomeMonths.length > 0) {
+        currentMonthIncomeAvg = Math.round(
+          completedPastIncomeMonths.reduce((acc, m) => acc + m.income, 0) /
+            completedPastIncomeMonths.length
+        )
+      } else if (hasCurrentMonthIncome) {
+        currentMonthIncomeAvg = currentMonthItem.income
+      }
+
       return {
         averageMonthlyExpenseFils: currentMonthItem.expense,
-        averageMonthlyIncomeFils,
+        averageMonthlyIncomeFils: currentMonthIncomeAvg,
         activeMonthsCount: 1,
         isCurrentMonthOnly: true,
         note: 'بيانات الشهر الجاري فقط — لم يكتمل شهر كامل بعد',
@@ -376,7 +399,7 @@ export function calculateAnnualSummary(
 
     return {
       averageMonthlyExpenseFils: 0,
-      averageMonthlyIncomeFils,
+      averageMonthlyIncomeFils: 0,
       activeMonthsCount: 0,
       isCurrentMonthOnly: false,
     }
@@ -393,7 +416,7 @@ export function calculateAnnualSummary(
   if (activeExpenseMonths.length === 0) {
     return {
       averageMonthlyExpenseFils: 0,
-      averageMonthlyIncomeFils,
+      averageMonthlyIncomeFils: 0,
       activeMonthsCount: 0,
       isCurrentMonthOnly: false,
     }

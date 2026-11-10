@@ -4,8 +4,10 @@ import {
   restoreBackup,
   downloadBackupFile,
   parseDate,
+  resolveOrphanCategories,
   type MasareefiBackup,
 } from './backupRestore'
+import type { MoneyCircle } from '../types'
 import { formatDateInput } from './dates'
 
 // Mock Firestore
@@ -47,6 +49,7 @@ vi.mock('firebase/firestore', () => {
       fromDate: (d: Date) => ({ toDate: () => d }),
     },
     serverTimestamp: () => ({}),
+    deleteField: () => ({ _method: 'deleteField' }),
   }
 })
 
@@ -453,8 +456,10 @@ describe('backupRestore module', () => {
       const updateCall = mockUpdate.mock.calls.find((call) => call[0].path === 'users/user-replace-uid')
       expect(updateCall).toBeDefined()
       expect(updateCall![1].openingBalanceFils).toBe(0)
-      expect(updateCall![1].rolloverStartDate).toBeNull()
-      expect(updateCall![1].customCurrencyDecimals).toBeNull()
+      expect(updateCall![1].rolloverStartDate).toEqual({ _method: 'deleteField' })
+      expect(updateCall![1].customCurrencyDecimals).toEqual({ _method: 'deleteField' })
+      expect(updateCall![1].lastBackupAt).toEqual({ _method: 'deleteField' })
+      expect(updateCall![1].notificationPrefs).toEqual({ _method: 'deleteField' })
       expect(updateCall![1].avatarColor).toBe('123456789012345678901234567890')
       expect(updateCall![1].avatarColor?.length).toBe(30)
     })
@@ -1259,7 +1264,7 @@ describe('backupRestore module', () => {
         (call) => (call[0] as { path?: string })?.path === 'users/u1/circles/circle_with_pbm'
       )
       expect(circleCall).toBeDefined()
-      expect(circleCall![1].members[0].paymentsByMonth).toEqual({ '1': true })
+      expect(circleCall![1].members[0].paymentsByMonth).toEqual({ '1': true, '2': false })
       expect(circleCall![1].members[1].paymentsByMonth).toEqual({ '1': true, '2': true })
     })
 
@@ -1421,6 +1426,136 @@ describe('backupRestore module', () => {
       expect(circleCall).toBeDefined()
       expect(circleCall![1].shareType).toBe('double')
       expect(circleCall![1].secondTurnMonth).toBe(5)
+    })
+
+    it('preserves isMerged and mergedTransactionIds on debt entries and clamps amount to MAX_AMOUNT_FILS', async () => {
+      mockSet.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+
+      const backupWithMergedEntries = {
+        app: 'baseer',
+        version: 1,
+        exportedAt: '2026-11-01T12:00:00Z',
+        data: {
+          categories: [],
+          transactions: [],
+          debts: [
+            {
+              id: 'debt_entries_merged',
+              personName: 'طارق',
+              amountFils: 50000,
+              paidFils: 0,
+              startDate: new Date('2026-11-01'),
+              settled: false,
+              payments: [],
+              entries: [
+                {
+                  id: 'entry_m1',
+                  amountFils: 2000000000000,
+                  date: new Date('2026-11-01'),
+                  title: 'سلفة مدمجة',
+                  note: 'ملاحظة',
+                  isMerged: true,
+                  mergedTransactionIds: ['tx_e1', 'tx_e2'],
+                },
+              ],
+            },
+          ],
+          recurring: [],
+          circles: [],
+        },
+      }
+
+      const valRes = validateBackup(JSON.stringify(backupWithMergedEntries))
+      expect(valRes.valid).toBe(true)
+      const validatedEntry = valRes.data?.data.debts[0].entries?.[0]
+      expect(validatedEntry?.isMerged).toBe(true)
+      expect(validatedEntry?.mergedTransactionIds).toEqual(['tx_e1', 'tx_e2'])
+      expect(validatedEntry?.amountFils).toBe(1_000_000_000_000)
+
+      await restoreBackup('user-test-uid', valRes.data!)
+      const debtCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/user-test-uid/debts/debt_entries_merged'
+      )
+      expect(debtCall).toBeDefined()
+      const restoredEntry = debtCall![1].entries[0]
+      expect(restoredEntry.isMerged).toBe(true)
+      expect(restoredEntry.mergedTransactionIds).toEqual(['tx_e1', 'tx_e2'])
+      expect(restoredEntry.amountFils).toBe(1_000_000_000_000)
+    })
+
+    it('matches category names in merge mode using normalizeArabic', async () => {
+      mockSet.mockClear()
+      mockGetDoc.mockResolvedValue({ exists: () => false })
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'cat_bakala_existing',
+            ref: { path: 'users/u1/categories/cat_bakala_existing' },
+            data: () => ({ id: 'cat_bakala_existing', name: 'بقالة', type: 'expense' }),
+          },
+        ],
+      })
+
+      const backup: MasareefiBackup = {
+        app: 'baseer',
+        version: 1,
+        exportedAt: '2026-11-01T12:00:00Z',
+        data: {
+          categories: [
+            { id: 'cat_bakala_incoming', name: 'بقاله', type: 'expense', icon: '🛒', color: '#10B981', archived: false, order: 0 },
+          ],
+          transactions: [
+            {
+              id: 'tx_bakala',
+              type: 'expense',
+              amountFils: 3000,
+              categoryId: 'cat_bakala_incoming',
+              date: new Date('2026-11-01'),
+              note: '',
+              createdAt: new Date('2026-11-01'),
+            },
+          ],
+          debts: [],
+          recurring: [],
+          circles: [],
+        },
+      }
+
+      await restoreBackup('u1', backup, 'merge')
+
+      const txCall = mockSet.mock.calls.find(
+        (call) => (call[0] as { path?: string })?.path === 'users/u1/transactions/tx_bakala'
+      )
+      expect(txCall).toBeDefined()
+      expect(txCall![1].categoryId).toBe('cat_bakala_existing')
+    })
+
+    it('trims circle category IDs before check and avoids creating empty string category id', () => {
+      const circleData: Partial<MoneyCircle> & { id: string } = {
+        id: 'c1',
+        name: 'جمعية',
+        monthlyAmountFils: 1000,
+        membersCount: 2,
+        totalAmountFils: 2000,
+        myTurnMonth: 1,
+        startDate: new Date(),
+        members: [],
+        status: 'active',
+        expenseCategoryId: '   ',
+        incomeCategoryId: '  cat_inc_valid  ',
+        categoryId: '',
+      }
+
+      const cats = resolveOrphanCategories(
+        [],
+        [],
+        [],
+        [circleData as unknown as MoneyCircle]
+      )
+
+      expect(cats.some((c) => c.id === '')).toBe(false)
+      expect(cats.some((c) => c.id === 'cat_inc_valid')).toBe(true)
     })
   })
 

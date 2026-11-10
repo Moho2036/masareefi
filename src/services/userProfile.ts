@@ -12,12 +12,13 @@ import {
   deleteField,
   Timestamp,
   type Unsubscribe,
+  type DocumentReference,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
 import { db, auth } from '../lib/firebase'
 import type { UserSettings } from '../types'
 import { userSettingsConverter } from './converters'
-import { addDefaultCategoriesToBatch } from './seed'
+import { addDefaultCategoriesToBatch, markCategoriesSeedUpgraded } from './seed'
 import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
 import { MAX_AMOUNT_FILS } from '../lib/money'
 
@@ -29,27 +30,30 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'uid' | 'createdAt'> = {
   rolloverBalance: true,
 }
 
+async function selfHealDisplayName(
+  uid: string,
+  existingData: UserSettings,
+  candidateName: string
+): Promise<UserSettings> {
+  if (
+    (!existingData.displayName || existingData.displayName === 'مستخدم') &&
+    candidateName &&
+    candidateName !== 'مستخدم'
+  ) {
+    const realName = candidateName.slice(0, 100)
+    await commitFirestoreWrite(updateDoc(doc(db, 'users', uid), { displayName: realName }))
+    return { ...existingData, displayName: realName }
+  }
+  return existingData
+}
+
 export async function ensureUserProfile(user: User): Promise<UserSettings> {
   const userRef = doc(db, 'users', user.uid).withConverter(userSettingsConverter)
   const snap = await safeGetDoc(userRef)
-
   const candidateName = (user.displayName || auth?.currentUser?.displayName || '').trim()
 
   if (snap.exists()) {
-    const data = snap.data()
-    // Self-healing race condition fix:
-    // If users/{uid} document already exists and has default placeholder name 'مستخدم' (or empty),
-    // but the incoming user has a real non-empty displayName, update Firestore to reflect it.
-    if (
-      (!data.displayName || data.displayName === 'مستخدم') &&
-      candidateName &&
-      candidateName !== 'مستخدم'
-    ) {
-      const realName = candidateName.slice(0, 100)
-      await commitFirestoreWrite(updateDoc(doc(db, 'users', user.uid), { displayName: realName }))
-      return { ...data, displayName: realName }
-    }
-    return data
+    return selfHealDisplayName(user.uid, snap.data(), candidateName)
   }
 
   const rawUserDoc = doc(db, 'users', user.uid)
@@ -57,17 +61,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
   // Re-verify before batch creation in case a concurrent call created the doc
   const reCheckSnap = await safeGetDoc(userRef)
   if (reCheckSnap.exists()) {
-    const existingData = reCheckSnap.data()
-    if (
-      (!existingData.displayName || existingData.displayName === 'مستخدم') &&
-      candidateName &&
-      candidateName !== 'مستخدم'
-    ) {
-      const realName = candidateName.slice(0, 100)
-      await commitFirestoreWrite(updateDoc(rawUserDoc, { displayName: realName }))
-      return { ...existingData, displayName: realName }
-    }
-    return existingData
+    return selfHealDisplayName(user.uid, reCheckSnap.data(), candidateName)
   }
 
   const effectiveDisplayName = (candidateName || DEFAULT_SETTINGS.displayName).slice(0, 100)
@@ -93,6 +87,7 @@ export async function ensureUserProfile(user: User): Promise<UserSettings> {
   })
   addDefaultCategoriesToBatch(batch, user.uid)
   await commitFirestoreWrite(batch.commit())
+  markCategoriesSeedUpgraded(user.uid)
 
   return initialSettings
 }
@@ -185,10 +180,22 @@ export async function updateUserSettings(
     }
   }
   if (partial.lastBackupAt !== undefined) {
-    cleanUpdates.lastBackupAt = String(partial.lastBackupAt).slice(0, 50)
+    const val = typeof partial.lastBackupAt === 'string' ? partial.lastBackupAt.trim().slice(0, 50) : ''
+    if (val) {
+      cleanUpdates.lastBackupAt = val
+    } else {
+      cleanUpdates.lastBackupAt = deleteField()
+      deletedFields.add('lastBackupAt')
+    }
   }
   if (partial.avatarColor !== undefined) {
-    cleanUpdates.avatarColor = String(partial.avatarColor).slice(0, 30)
+    const val = typeof partial.avatarColor === 'string' ? partial.avatarColor.trim().slice(0, 30) : ''
+    if (val) {
+      cleanUpdates.avatarColor = val
+    } else {
+      cleanUpdates.avatarColor = deleteField()
+      deletedFields.add('avatarColor')
+    }
   }
   if (partial.notificationPrefs !== undefined) {
     if (partial.notificationPrefs && typeof partial.notificationPrefs === 'object') {
@@ -245,64 +252,51 @@ export async function updateUserSettings(
 
 export async function hasExistingUserData(uid: string): Promise<boolean> {
   try {
-    const txCol = collection(db, 'users', uid, 'transactions')
-    const debtCol = collection(db, 'users', uid, 'debts')
-    const recCol = collection(db, 'users', uid, 'recurring')
-    const circleCol = collection(db, 'users', uid, 'circles')
-
-    const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
-      safeGetDocs(query(txCol, limit(1))),
-      safeGetDocs(query(debtCol, limit(1))),
-      safeGetDocs(query(recCol, limit(1))),
-      safeGetDocs(query(circleCol, limit(1))),
-    ])
-
-    return !txSnap.empty || !debtSnap.empty || !recSnap.empty || !circleSnap.empty
+    const snaps = await Promise.all(
+      ['transactions', 'debts', 'recurring', 'circles'].map((col) =>
+        safeGetDocs(query(collection(db, 'users', uid, col), limit(1)))
+      )
+    )
+    return snaps.some((s) => !s.empty)
   } catch (err) {
     console.error('hasExistingUserData error:', err)
     return false
   }
 }
 
+async function deleteCollectionDocsInChunks(refs: DocumentReference[]): Promise<void> {
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = writeBatch(db)
+    refs.slice(i, i + 400).forEach((ref) => batch.delete(ref))
+    await commitFirestoreWrite(batch.commit())
+  }
+}
+
+const getSubcollectionDocs = (uid: string, cols: string[]) =>
+  Promise.all(cols.map((c) => safeGetDocs(collection(db, 'users', uid, c))))
+
 /**
  * Deletes all transactions, debts, recurring items, and circles in chunks <= 400,
- * and resets openingBalanceFils to 0, preserving categories and user settings.
+ * and resets openingBalanceFils to 0 and rolloverStartDate to null, preserving categories and user settings.
  */
 export async function resetUserData(uid: string): Promise<void> {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('baseer-bulk-op-start'))
   }
   try {
-    const txCol = collection(db, 'users', uid, 'transactions')
-    const debtCol = collection(db, 'users', uid, 'debts')
-    const recCol = collection(db, 'users', uid, 'recurring')
-    const circleCol = collection(db, 'users', uid, 'circles')
+    const snaps = await getSubcollectionDocs(uid, ['transactions', 'debts', 'recurring', 'circles'])
+    await deleteCollectionDocsInChunks(snaps.flatMap((s) => s.docs.map((d) => d.ref)))
 
-    const [txSnap, debtSnap, recSnap, circleSnap] = await Promise.all([
-      safeGetDocs(txCol),
-      safeGetDocs(debtCol),
-      safeGetDocs(recCol),
-      safeGetDocs(circleCol),
-    ])
+    await updateUserSettings(uid, { openingBalanceFils: 0, rolloverStartDate: null })
 
-    const docsToDelete = [
-      ...txSnap.docs.map((d) => d.ref),
-      ...debtSnap.docs.map((d) => d.ref),
-      ...recSnap.docs.map((d) => d.ref),
-      ...circleSnap.docs.map((d) => d.ref),
-    ]
-
-    const CHUNK_SIZE = 400
-    for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
-      const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
-      const batch = writeBatch(db)
-      for (const ref of chunk) {
-        batch.delete(ref)
-      }
-      await commitFirestoreWrite(batch.commit())
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      ;['baseer_category_usage', 'masareefi_category_usage'].forEach((k) => localStorage.removeItem(k))
+      ;['history', 'read', 'dismissed', 'deleted'].forEach((s) => {
+        localStorage.removeItem(`baseer_notifications_${s}_${uid}`)
+        localStorage.removeItem(`masareefi_notifications_${s}_${uid}`)
+      })
+      window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
     }
-
-    await updateUserSettings(uid, { openingBalanceFils: 0 })
   } finally {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('baseer-bulk-op-end'))
@@ -315,37 +309,16 @@ export async function resetUserData(uid: string): Promise<void> {
  * and the user profile document users/{uid}.
  */
 export async function deleteUserFirestoreData(uid: string): Promise<void> {
-  const txCol = collection(db, 'users', uid, 'transactions')
-  const debtCol = collection(db, 'users', uid, 'debts')
-  const recCol = collection(db, 'users', uid, 'recurring')
-  const circleCol = collection(db, 'users', uid, 'circles')
-  const catCol = collection(db, 'users', uid, 'categories')
-
-  const [txSnap, debtSnap, recSnap, circleSnap, catSnap] = await Promise.all([
-    safeGetDocs(txCol),
-    safeGetDocs(debtCol),
-    safeGetDocs(recCol),
-    safeGetDocs(circleCol),
-    safeGetDocs(catCol),
-  ])
-
-  const docsToDelete = [
-    ...txSnap.docs.map((d) => d.ref),
-    ...debtSnap.docs.map((d) => d.ref),
-    ...recSnap.docs.map((d) => d.ref),
-    ...circleSnap.docs.map((d) => d.ref),
-    ...catSnap.docs.map((d) => d.ref),
-  ]
-
-  const CHUNK_SIZE = 400
-  for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
-    const chunk = docsToDelete.slice(i, i + CHUNK_SIZE)
-    const batch = writeBatch(db)
-    for (const ref of chunk) {
-      batch.delete(ref)
-    }
-    await commitFirestoreWrite(batch.commit())
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('baseer-bulk-op-start'))
   }
-
-  await commitFirestoreWrite(deleteDoc(doc(db, 'users', uid)))
+  try {
+    const snaps = await getSubcollectionDocs(uid, ['transactions', 'debts', 'recurring', 'circles', 'categories'])
+    await deleteCollectionDocsInChunks(snaps.flatMap((s) => s.docs.map((d) => d.ref)))
+    await commitFirestoreWrite(deleteDoc(doc(db, 'users', uid)))
+  } finally {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('baseer-bulk-op-end'))
+    }
+  }
 }

@@ -105,33 +105,5 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener?.('change', handleChange)
   }, [])
 
-  // Temporarily switch DOM to light theme during printing to ensure printed colors match website exactly
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    let wasDarkBeforePrint = false
-
-    const handleBeforePrint = () => {
-      if (document.documentElement.classList.contains('dark')) {
-        wasDarkBeforePrint = true
-        document.documentElement.classList.remove('dark')
-      }
-    }
-
-    const handleAfterPrint = () => {
-      if (wasDarkBeforePrint) {
-        document.documentElement.classList.add('dark')
-        wasDarkBeforePrint = false
-      }
-    }
-
-    window.addEventListener('beforeprint', handleBeforePrint)
-    window.addEventListener('afterprint', handleAfterPrint)
-    return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint)
-      window.removeEventListener('afterprint', handleAfterPrint)
-    }
-  }, [])
-
   return { theme, setTheme, resolvedTheme }
 }

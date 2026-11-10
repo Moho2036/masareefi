@@ -10,6 +10,7 @@ import {
   groupDebtsByPerson,
   formatDebtAccountStatement,
   formatDebtEntriesCount,
+  resolvePaymentAmountWithTolerance,
 } from './debts'
 import type { Debt } from '../types'
 
@@ -466,5 +467,34 @@ describe('debts domain logic', () => {
       expect(results).toHaveLength(1)
       expect(results[0].id).toBe('d1')
     })
+  describe('resolvePaymentAmountWithTolerance', () => {
+    it('returns input amount unchanged when less than or equal to remaining', () => {
+      expect(resolvePaymentAmountWithTolerance(50000, 70000, 2)).toBe(50000)
+      expect(resolvePaymentAmountWithTolerance(70000, 70000, 2)).toBe(70000)
+    })
+
+    it('snaps to remainingFils for 2-decimal currencies when diff <= 5 fils', () => {
+      // remaining = 10.548 JOD = 10548 fils, rounded display is 10.55 = 10550 fils (diff = 2 fils)
+      expect(resolvePaymentAmountWithTolerance(10550, 10548, 2)).toBe(10548)
+      // diff = 5 fils
+      expect(resolvePaymentAmountWithTolerance(10553, 10548, 2)).toBe(10548)
+      // input 10.56 = 10560 fils (diff = 12 fils > 5 fils tolerance and string does not match)
+      expect(resolvePaymentAmountWithTolerance(10560, 10548, 2)).toBe(10560)
+    })
+
+    it('snaps to remainingFils for 0-decimal currencies when diff <= 500 fils', () => {
+      // remaining = 4600 fils (displays as 5), input 5000 fils (diff = 400 fils)
+      expect(resolvePaymentAmountWithTolerance(5000, 4600, 0)).toBe(4600)
+      // diff = 500 fils
+      expect(resolvePaymentAmountWithTolerance(5000, 4500, 0)).toBe(4500)
+      // input 6000 fils (displays as 6 != 5, diff = 1500 > 500)
+      expect(resolvePaymentAmountWithTolerance(6000, 4500, 0)).toBe(6000)
+    })
+
+    it('does not snap for 3-decimal currencies where tolerance is 0', () => {
+      expect(resolvePaymentAmountWithTolerance(10501, 10500, 3)).toBe(10501)
+    })
   })
+})
+
 })

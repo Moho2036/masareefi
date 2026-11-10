@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { useToast } from './useToast'
+import { useUserSettings } from './useUserSettings'
 import { processDueRecurring } from '../services/recurring'
 import { formatDateInput } from '../lib/dates'
 
 export function useRecurringProcessor(): void {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const { data: userSettings } = useUserSettings()
+  const monthStartDay = userSettings?.monthStartDay
   const lastProcessedKey = useRef<string | null>(null)
   const isProcessing = useRef(false)
   const userId = user?.uid
@@ -27,7 +30,7 @@ export function useRecurringProcessor(): void {
 
       isProcessing.current = true
       try {
-        const count = await processDueRecurring(userId)
+        const count = await processDueRecurring(userId, new Date(), monthStartDay)
         lastProcessedKey.current = todayKey
         if (count > 0) {
           const countLabel =
@@ -67,5 +70,5 @@ export function useRecurringProcessor(): void {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [userId, showToast])
+  }, [userId, showToast, monthStartDay])
 }

@@ -1476,7 +1476,6 @@ describe('forecast lib', () => {
           name: 'أنا',
           turnMonth: 4,
           paidMonths: [],
-          paymentsByMonth: { '1': false }, // unchecked
         },
       ],
       status: 'active',
@@ -1508,6 +1507,40 @@ describe('forecast lib', () => {
     // Because recurring rule has nextDate in Nov, the recurring loop did not book it for Oct.
     // But the circles logic detects unpaid month 1 and reserves 50.000 in upcomingRecurringExpenses!
     expect(res.upcomingRecurringExpenses).toBe(50000)
+  })
+
+  it('skips circle installment when explicitly cancelled (paymentsByMonth === false)', () => {
+    const circleId = 'circle-explicitly-cancelled'
+    const circle: MoneyCircle = {
+      id: circleId,
+      name: 'جمعية تجريبية',
+      monthlyAmountFils: 50000,
+      membersCount: 4,
+      totalAmountFils: 200000,
+      myTurnMonth: 4,
+      startDate: new Date(2026, 9, 1),
+      members: [
+        {
+          id: 'm-me',
+          name: 'أنا',
+          turnMonth: 4,
+          paidMonths: [],
+          paymentsByMonth: { '1': false }, // explicitly cancelled
+        },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15),
+    })
+
+    expect(res.upcomingRecurringExpenses).toBe(0)
   })
 
   it('does not double count circle installment when recurring rule already booked it in current cycle', () => {
@@ -1550,6 +1583,112 @@ describe('forecast lib', () => {
 
     // It should only be counted once (70.000, not 140.000)
     expect(res.upcomingRecurringExpenses).toBe(70000)
+  })
+
+  it('uses circleIdByRecurringId lookup map to prevent double-counting when rec.circleId is omitted', () => {
+    const circleId = 'circle-map-lookup'
+    const recurringId = 'rec-linked-rule'
+    const circle: MoneyCircle = {
+      id: circleId,
+      name: 'جمعية مربوطة',
+      monthlyAmountFils: 60000,
+      membersCount: 4,
+      totalAmountFils: 240000,
+      myTurnMonth: 3,
+      recurringId, // linked via recurringId
+      startDate: new Date(2026, 9, 1),
+      members: [
+        { id: 'm-me', name: 'أنا', turnMonth: 3, paidMonths: [] },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    const activeRecurringRule: Recurring = {
+      id: recurringId,
+      // circleId omitted on recurring rule itself, but circle has recurringId: rec-linked-rule
+      type: 'expense',
+      amountFils: 60000,
+      categoryId: 'cat-circle',
+      frequency: 'monthly',
+      startDate: new Date(2026, 9, 1),
+      nextDate: new Date(2026, 9, 20),
+      active: true,
+      note: 'قسط جمعية',
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [activeRecurringRule],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 10),
+    })
+
+    // Must be booked once as 60,000, not double-booked as 120,000
+    expect(res.upcomingRecurringExpenses).toBe(60000)
+  })
+
+  it('supports double-share circles in Section 2b reserving double installment', () => {
+    const circleId = 'circle-double-share'
+    const circle: MoneyCircle = {
+      id: circleId,
+      name: 'جمعية سهمين',
+      monthlyAmountFils: 50000,
+      membersCount: 6,
+      totalAmountFils: 300000,
+      shareType: 'double',
+      myTurnMonth: 2,
+      secondTurnMonth: 5,
+      startDate: new Date(2026, 9, 1),
+      members: [
+        { id: 'm-me-1', name: 'أنا (1)', turnMonth: 2, paidMonths: [] },
+        { id: 'm-me-2', name: 'أنا (2)', turnMonth: 5, paidMonths: [] },
+      ],
+      status: 'active',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [],
+      recurring: [],
+      circles: [circle],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 10), // Month 1 (not exempt)
+    })
+
+    // Double share: 50,000 * 2 = 100,000 fils
+    expect(res.upcomingRecurringExpenses).toBe(100000)
+  })
+
+  it('safely skips non-finite transaction amounts in step 1 without corrupting totals', () => {
+    const incomeTx: Transaction = {
+      id: 'tx-inc-good',
+      type: 'income',
+      amountFils: 500000,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 9, 1),
+      note: 'راتب',
+      createdAt: new Date(),
+    }
+    const badTx: Transaction = {
+      id: 'tx-bad',
+      type: 'income',
+      amountFils: NaN,
+      categoryId: 'cat-inc',
+      date: new Date(2026, 9, 1),
+      note: 'معاملة تالفة',
+      createdAt: new Date(),
+    }
+
+    const res = calculateForecast({
+      transactions: [incomeTx, badTx],
+      monthStartDay: 1,
+      referenceDate: new Date(2026, 9, 15),
+    })
+
+    expect(Number.isNaN(res.currentIncome)).toBe(false)
+    expect(res.currentIncome).toBe(500000)
   })
 
   it('calculates nextCycleSoonObligationsFils and count when within 3 days of cycle end', () => {

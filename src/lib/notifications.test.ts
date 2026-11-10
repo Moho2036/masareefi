@@ -607,4 +607,129 @@ describe('notifications engine', () => {
     const budgetWarningFeb5 = itemsFeb5.find((i) => i.id.startsWith('budget_warning_80_'))
     expect(budgetWarningFeb5?.id).toBe('budget_warning_80_2026-01')
   })
+
+  it('skips debt notifications if remainingFils is 0 or dueDate is invalid', () => {
+    const debts: Debt[] = [
+      {
+        id: 'd-zero-remaining',
+        personName: 'خالد',
+        type: 'borrowed',
+        amountFils: 50000,
+        paidFils: 50000,
+        startDate: new Date('2026-04-01'),
+        dueDate: new Date('2026-05-10'),
+        note: '',
+        settled: false, // not flagged settled, but remaining is 0
+        payments: [],
+        createdAt: new Date(),
+      },
+      {
+        id: 'd-invalid-date',
+        personName: 'سامي',
+        type: 'lent',
+        amountFils: 30000,
+        paidFils: 0,
+        startDate: new Date('2026-05-01'),
+        dueDate: new Date('invalid-date'),
+        note: '',
+        settled: false,
+        payments: [],
+        createdAt: new Date(),
+      },
+    ]
+
+    const items = generateNotifications({
+      debts,
+      settings: baseSettings,
+      today,
+    })
+
+    expect(items.some((i) => i.id.includes('d-zero-remaining'))).toBe(false)
+    expect(items.some((i) => i.id.includes('d-invalid-date'))).toBe(false)
+  })
+
+  it('skips circle unpaid alert if corresponding transaction exists in transactions', () => {
+    const circles: MoneyCircle[] = [
+      {
+        id: 'c-tx-check',
+        name: 'جمعية العمل',
+        monthlyAmountFils: 50000,
+        membersCount: 5,
+        totalAmountFils: 250000,
+        myTurnMonth: 3,
+        startDate: new Date('2026-05-01T00:00:00Z'),
+        members: [
+          { id: 'm1', name: 'أنا', turnMonth: 3, paidMonths: [] },
+        ],
+        status: 'active',
+        createdAt: new Date(),
+      },
+    ]
+
+    // Without tx: alert is generated
+    const itemsWithoutTx = generateNotifications({
+      circles,
+      settings: baseSettings,
+      today: new Date('2026-05-10T12:00:00Z'),
+      transactions: [],
+    })
+    expect(itemsWithoutTx.some((i) => i.id === 'circle_my_unpaid_c-tx-check_m1')).toBe(true)
+
+    // With transaction circle_c-tx-check_m1: alert is skipped
+    const itemsWithTx = generateNotifications({
+      circles,
+      settings: baseSettings,
+      today: new Date('2026-05-10T12:00:00Z'),
+      transactions: [
+        {
+          id: 'circle_c-tx-check_m1',
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'cat-1',
+          date: new Date('2026-05-02'),
+          note: '',
+          createdAt: new Date('2026-05-02'),
+        },
+      ],
+    })
+    expect(itemsWithTx.some((i) => i.id === 'circle_my_unpaid_c-tx-check_m1')).toBe(false)
+  })
+
+  it('skips recurring notifications when occurrence is skipped or past endDate', () => {
+    const recList: Recurring[] = [
+      {
+        id: 'rec-skipped',
+        type: 'expense',
+        amountFils: 25000,
+        categoryId: 'cat-1',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-05-15'), // today
+        skipMonth: 5, // skipped this month
+        active: true,
+        note: '',
+      },
+      {
+        id: 'rec-past-end',
+        type: 'expense',
+        amountFils: 15000,
+        categoryId: 'cat-1',
+        frequency: 'monthly',
+        startDate: new Date('2026-01-01'),
+        nextDate: new Date('2026-05-15'),
+        endDate: new Date('2026-05-01'), // ended before nextDate
+        active: true,
+        note: '',
+      },
+    ]
+
+    const items = generateNotifications({
+      recurring: recList,
+      settings: baseSettings,
+      today: new Date('2026-05-15T12:00:00Z'),
+    })
+
+    expect(items.some((i) => i.id.includes('rec-skipped'))).toBe(false)
+    expect(items.some((i) => i.id.includes('rec-past-end'))).toBe(false)
+  })
 })

@@ -98,7 +98,7 @@
 | **9. الشارات والوسوم المصغرة (`Micro Badge`)** | `text-[10px]` (`10px`) | `text-[11px]` (`11px`) | `font-semibold` أو `font-bold` | `leading-tight` | `text-zinc-600 dark:text-zinc-300` |
 
 ### 2.3 القواعد الصارمة لعرض الأرقام والمبالغ المالية (`FormattedMoney`)
-1. **الأرقام المدنية الغربية حصراً (`0-9`):** يُمنع عرض الأرقام المشرقية (`٠-٩`) في الواجهة؛ يتم تنسيق جميع الأرقام عبر `Intl.NumberFormat('ar-JO', { numberingSystem: 'latn' })` وتحويل أي مدخلات عبر `toWesternDigits`.
+1. **الأرقام المدنية الغربية حصراً (`0-9`) ومنع استدعاء `Intl.NumberFormat` مباشرة:** يُمنع عرض الأرقام المشرقية (`٠-٩`) في الواجهة، ويُحظر تماماً إنشاء أو استدعاء `new Intl.NumberFormat` مباشرة داخل المكونات أو الصفحات؛ يتم تنسيق المبالغ والأرقام المالية حصرياً عبر دوال `formatMoney` أو `getFormatter` من `src/lib/money.ts` أو عبر المكون القياسي `<FormattedMoney />`، مع تحويل أي مدخلات عبر `toWesternDigits`.
 2. **التشريح البصري للمبلغ (`FormattedMoney Anatomy`):**
    - **الجزء الصحيح والإشارة (`Integer & Sign`):** يُلف داخل `<span dir="ltr" className="inline-flex items-baseline">` لضمان بقاء إشارة (`+ ` أو `- `) على يسار الرقم دائماً دون انقلاب في سياق `RTL`، وبوزن `font-bold`.
    - **الجزء العشري (`Decimal Part`):** يُصغّر بنسبة **`72%`** من حجم الرقم الصحيح (`text-[0.72em] opacity-80 font-medium`).

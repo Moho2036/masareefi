@@ -183,7 +183,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       <div
         ref={containerRef}
         onTouchEnd={handleTouchEnd}
-        className="w-full relative"
+        className="w-full relative min-w-0 max-w-full overflow-hidden"
         style={{ height }}
       >
         <ResponsiveContainer width="100%" height="100%">

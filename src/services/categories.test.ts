@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { deleteCategory, archiveCategory, archiveCategoriesBatch, reassignAndDeleteCategory, reorderCategories } from './categories'
+import {
+  deleteCategory,
+  archiveCategory,
+  archiveCategoriesBatch,
+  reassignAndDeleteCategory,
+  reorderCategories,
+  updateCategory,
+} from './categories'
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -217,7 +224,27 @@ describe('reassignAndDeleteCategory service', () => {
   })
 
   describe('archiveCategoriesBatch', () => {
+    it('prevents batch archiving all active categories of a type', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ type: 'expense', archived: false }),
+      })
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{ id: 'cat-1' }, { id: 'cat-2' }],
+        empty: false,
+      })
+
+      await expect(archiveCategoriesBatch('user-1', ['cat-1', 'cat-2'], true)).rejects.toThrow(
+        'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.'
+      )
+      expect(mockWriteBatch).not.toHaveBeenCalled()
+    })
+
     it('updates all provided category ids in a single writeBatch and commits', async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ type: 'expense', archived: true }),
+      })
       await archiveCategoriesBatch('user-1', ['cat-1', 'cat-2', ''], true)
 
       expect(mockWriteBatch).toHaveBeenCalled()
@@ -228,6 +255,48 @@ describe('reassignAndDeleteCategory service', () => {
     it('returns early if ids array is empty', async () => {
       await archiveCategoriesBatch('user-1', [])
       expect(mockWriteBatch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('updateCategory service', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ type: 'expense', archived: false }),
+      })
+    })
+
+    it('throws error when name is empty or whitespace only', async () => {
+      await expect(updateCategory('user-1', 'cat-1', { name: '   ' })).rejects.toThrow(
+        'اسم التصنيف لا يمكن أن يكون فارغاً.'
+      )
+      expect(mockUpdateDoc).not.toHaveBeenCalled()
+    })
+
+    it('prevents setting archived = true when it is the last active category', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{ id: 'cat-1' }],
+        empty: false,
+      })
+
+      await expect(updateCategory('user-1', 'cat-1', { archived: true })).rejects.toThrow(
+        'لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.'
+      )
+      expect(mockUpdateDoc).not.toHaveBeenCalled()
+    })
+
+    it('updates category successfully when valid', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{ id: 'cat-1' }, { id: 'cat-2' }],
+        empty: false,
+      })
+
+      await updateCategory('user-1', 'cat-1', { name: '  طعام جديد  ', archived: true })
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ name: 'طعام جديد', archived: true })
+      )
     })
   })
 

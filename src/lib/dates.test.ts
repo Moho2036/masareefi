@@ -191,6 +191,33 @@ describe('dates lib', () => {
       expect(lastDay.getDate()).toBe(31)
       expect(lastDay.getHours()).toBe(12)
     })
+
+    it('defensively handles malformed strings and invalid dates', () => {
+      // Empty or non-date string returns valid fallback Date
+      const empty = parseLocalDateInput('')
+      expect(empty).toBeInstanceOf(Date)
+      expect(Number.isNaN(empty.getTime())).toBe(false)
+
+      const dashes = parseLocalDateInput('--')
+      expect(dashes).toBeInstanceOf(Date)
+      expect(Number.isNaN(dashes.getTime())).toBe(false)
+
+      const partial = parseLocalDateInput('-1-')
+      expect(partial).toBeInstanceOf(Date)
+      expect(Number.isNaN(partial.getTime())).toBe(false)
+
+      const invalidMonth = parseLocalDateInput('2026-13-10')
+      expect(invalidMonth).toBeInstanceOf(Date)
+      expect(Number.isNaN(invalidMonth.getTime())).toBe(false)
+
+      const invalidDay = parseLocalDateInput('2026-10-35')
+      expect(invalidDay).toBeInstanceOf(Date)
+      expect(Number.isNaN(invalidDay.getTime())).toBe(false)
+
+      const yearTooLow = parseLocalDateInput('1900-01-01')
+      expect(yearTooLow).toBeInstanceOf(Date)
+      expect(Number.isNaN(yearTooLow.getTime())).toBe(false)
+    })
   })
 
   describe('getMonthRange', () => {

@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast'
 import { addDebtPayment, compactDebtPayments } from '../../services/debts'
 import { toFils, fromFils } from '../../lib/money'
 import { useCurrency } from '../../hooks/useCurrency'
-import { getDebtRemainingFils } from '../../lib/debts'
+import { getDebtRemainingFils, resolvePaymentAmountWithTolerance } from '../../lib/debts'
 import { parseLocalDateInput, toWesternDigits } from '../../lib/dates'
 import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
@@ -99,15 +99,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
       return
     }
 
-    const maxTolerance = config.decimals === 0 ? 500 : config.decimals === 2 ? 5 : 0
-    const roundedRemainingStr = fromFils(remainingFils).toFixed(config.decimals)
-    const inputStr = toWesternDigits(amountStr.trim())
-    if (maxTolerance > 0 && amountFils > remainingFils) {
-      const diff = amountFils - remainingFils
-      if (diff <= maxTolerance || inputStr === roundedRemainingStr) {
-        amountFils = remainingFils
-      }
-    }
+    amountFils = resolvePaymentAmountWithTolerance(amountFils, remainingFils, config.decimals)
 
     if (amountFils > remainingFils) {
       setError(`مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي (${formatCurrency(remainingFils)})`)

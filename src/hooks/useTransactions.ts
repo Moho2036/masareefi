@@ -24,10 +24,66 @@ interface SharedSubscription {
   unsubscribe: () => void
   subscribers: Set<SubscriptionListener>
   cleanupTimer?: ReturnType<typeof setTimeout> | null
+  unsubscribeFirestore?: (() => void) | null
+  retrigger?: () => void
 }
 
 // Module-level Shared Subscription Pool keyed by: `${uid}_${hasRange ? `${startTime}_${endTime}` : 'all'}`
 const subscriptionPool = new Map<string, SharedSubscription>()
+
+export function _clearSubscriptionPoolForTest() {
+  subscriptionPool.forEach((entry) => entry.unsubscribe())
+  subscriptionPool.clear()
+}
+
+function startSubscription(
+  entry: SharedSubscription,
+  key: string,
+  uid: string,
+  range?: { start: Date; end: Date }
+) {
+  if (entry.unsubscribeFirestore) {
+    entry.unsubscribeFirestore()
+    entry.unsubscribeFirestore = null
+  }
+
+  entry.loading = true
+  entry.error = null
+
+  // Notify active subscribers of retrying/loading
+  entry.subscribers.forEach((notify) => {
+    notify(entry.data, true, null)
+  })
+
+  const onNext = (transactions: Transaction[]) => {
+    const currentEntry = subscriptionPool.get(key)
+    if (!currentEntry) return
+    currentEntry.data = transactions
+    currentEntry.loading = false
+    currentEntry.error = null
+    currentEntry.initialized = true
+    currentEntry.subscribers.forEach((notify) => {
+      notify(transactions, false, null)
+    })
+  }
+
+  const onError = (err: Error) => {
+    const currentEntry = subscriptionPool.get(key)
+    if (!currentEntry) return
+    currentEntry.loading = false
+    currentEntry.error = err
+    currentEntry.initialized = true
+    currentEntry.subscribers.forEach((notify) => {
+      notify(currentEntry.data, false, err)
+    })
+  }
+
+  if (range) {
+    entry.unsubscribeFirestore = subscribeTransactions(uid, range, onNext, onError)
+  } else {
+    entry.unsubscribeFirestore = subscribeAllTransactions(uid, onNext, onError)
+  }
+}
 
 function subscribeToPool(
   key: string,
@@ -39,61 +95,45 @@ function subscribeToPool(
 
   if (!entry) {
     const subscribers = new Set<SubscriptionListener>()
-    let unsubscribeFirestore: (() => void) | null = null
 
     entry = {
       data: [],
       loading: true,
       error: null,
       initialized: false,
+      unsubscribeFirestore: null,
       unsubscribe: () => {
-        if (unsubscribeFirestore) {
-          unsubscribeFirestore()
-          unsubscribeFirestore = null
+        if (entry?.unsubscribeFirestore) {
+          entry.unsubscribeFirestore()
+          entry.unsubscribeFirestore = null
         }
       },
       subscribers,
     }
 
+    entry.retrigger = () => {
+      startSubscription(entry!, key, uid, range)
+    }
+
     subscriptionPool.set(key, entry)
-
-    const onNext = (transactions: Transaction[]) => {
-      const currentEntry = subscriptionPool.get(key)
-      if (!currentEntry) return
-      currentEntry.data = transactions
-      currentEntry.loading = false
-      currentEntry.error = null
-      currentEntry.initialized = true
-      currentEntry.subscribers.forEach((notify) => {
-        notify(transactions, false, null)
-      })
-    }
-
-    const onError = (err: Error) => {
-      const currentEntry = subscriptionPool.get(key)
-      if (!currentEntry) return
-      currentEntry.loading = false
-      currentEntry.error = err
-      currentEntry.initialized = true
-      currentEntry.subscribers.forEach((notify) => {
-        notify(currentEntry.data, false, err)
-      })
-    }
-
     entry.subscribers.add(listener)
-
-    if (range) {
-      unsubscribeFirestore = subscribeTransactions(uid, range, onNext, onError)
-    } else {
-      unsubscribeFirestore = subscribeAllTransactions(uid, onNext, onError)
-    }
+    startSubscription(entry, key, uid, range)
   } else {
     if (entry.cleanupTimer) {
       clearTimeout(entry.cleanupTimer)
       entry.cleanupTimer = null
     }
+
+    entry.retrigger = () => {
+      startSubscription(entry!, key, uid, range)
+    }
+
     entry.subscribers.add(listener)
-    if (entry.initialized) {
+
+    if (entry.error) {
+      // Re-establish subscription if existing entry is in an error state
+      startSubscription(entry, key, uid, range)
+    } else if (entry.initialized) {
       listener(entry.data, false, entry.error)
     }
   }
@@ -178,8 +218,12 @@ export function useTransactions(
   }
 
   const refresh = useCallback(() => {
-    // Real-time onSnapshot maintains instant synchronization
-  }, [])
+    if (!key) return
+    const pooled = subscriptionPool.get(key)
+    if (pooled && pooled.error && pooled.retrigger) {
+      pooled.retrigger()
+    }
+  }, [key])
 
   useEffect(() => {
     if (!isEnabled || !user || !key) {

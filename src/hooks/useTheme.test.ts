@@ -87,7 +87,7 @@ describe('useTheme hook', () => {
     expect(localStorage.getItem('masareefi_theme')).toBe('dark')
   })
 
-  it('temporarily removes dark class from html on beforeprint and restores it on afterprint', () => {
+  it('preserves dark class on html during print without flashing or flipping live screen theme', () => {
     vi.spyOn(useUserSettingsModule, 'useUserSettings').mockReturnValue({
       data: null,
       loading: false,
@@ -102,13 +102,13 @@ describe('useTheme hook', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true)
 
-    // Trigger beforeprint
+    // Trigger beforeprint — live screen DOM must remain dark
     act(() => {
       window.dispatchEvent(new Event('beforeprint'))
     })
-    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
 
-    // Trigger afterprint
+    // Trigger afterprint — still dark
     act(() => {
       window.dispatchEvent(new Event('afterprint'))
     })

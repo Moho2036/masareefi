@@ -1,8 +1,36 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
 import {
+  useNotifications,
   pruneNotificationIds,
   MAX_STORED_NOTIFICATION_IDS,
 } from './useNotifications'
+
+vi.mock('./useAuth', () => ({
+  useAuth: () => ({ user: { uid: 'test-user-1' } }),
+}))
+vi.mock('./useDebts', () => ({
+  useDebts: () => ({ debts: [] }),
+}))
+vi.mock('./useRecurring', () => ({
+  useRecurring: () => ({ recurring: [] }),
+}))
+vi.mock('./useMoneyCircles', () => ({
+  useMoneyCircles: () => ({ moneyCircles: [] }),
+}))
+vi.mock('./useUserSettings', () => ({
+  useUserSettings: () => ({
+    data: {
+      displayName: 'مستخدم',
+      currency: 'JOD',
+      monthStartDay: 1,
+      notificationPrefs: {},
+    },
+  }),
+}))
+vi.mock('./useTransactions', () => ({
+  useTransactions: () => ({ data: [] }),
+}))
 
 describe('useNotifications - pruneNotificationIds', () => {
   it('exports MAX_STORED_NOTIFICATION_IDS equal to 400', () => {
@@ -76,5 +104,89 @@ describe('useNotifications - pruneNotificationIds', () => {
   it('handles empty iterable cleanly', () => {
     const result = pruneNotificationIds([])
     expect(result.size).toBe(0)
+  })
+})
+
+describe('useNotifications hook archive persistence', () => {
+  const historyKey = 'baseer_notifications_history_test-user-1'
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  it('persists empty array to localStorage on clearArchive and prevents resurrection on sync event', () => {
+    const historicalItems = [
+      {
+        id: 'hist-1',
+        title: 'تنبيه قديم',
+        message: 'رسالة سابقة',
+        category: 'system' as const,
+        isUrgent: false,
+        createdAt: new Date().toISOString(),
+      },
+    ]
+    localStorage.setItem(historyKey, JSON.stringify(historicalItems))
+
+    const { result } = renderHook(() => useNotifications())
+
+    expect(result.current.archivedNotifications.some((n) => n.id === 'hist-1')).toBe(true)
+
+    // Clear archive
+    act(() => {
+      result.current.clearArchive()
+    })
+
+    expect(result.current.archivedNotifications).toHaveLength(0)
+    expect(localStorage.getItem(historyKey)).toBe('[]')
+
+    // Simulate cross-tab or synchronous sync event
+    act(() => {
+      window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
+    })
+
+    // Must NOT resurrect!
+    expect(result.current.archivedNotifications).toHaveLength(0)
+    expect(localStorage.getItem(historyKey)).toBe('[]')
+  })
+
+  it('updates localStorage before dispatching sync in deleteFromArchive', () => {
+    const historicalItems = [
+      {
+        id: 'hist-a',
+        title: 'تنبيه أ',
+        message: 'رسالة أ',
+        category: 'system' as const,
+        isUrgent: false,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'hist-b',
+        title: 'تنبيه ب',
+        message: 'رسالة ب',
+        category: 'system' as const,
+        isUrgent: false,
+        createdAt: new Date().toISOString(),
+      },
+    ]
+    localStorage.setItem(historyKey, JSON.stringify(historicalItems))
+
+    const { result } = renderHook(() => useNotifications())
+    expect(result.current.archivedNotifications).toHaveLength(2)
+
+    act(() => {
+      result.current.deleteFromArchive('hist-a')
+    })
+
+    expect(result.current.archivedNotifications.some((n) => n.id === 'hist-a')).toBe(false)
+    const stored = JSON.parse(localStorage.getItem(historyKey) || '[]')
+    expect(stored.some((item: { id: string }) => item.id === 'hist-a')).toBe(false)
+    expect(stored.some((item: { id: string }) => item.id === 'hist-b')).toBe(true)
+
+    // Trigger sync event - hist-a must not resurrect
+    act(() => {
+      window.dispatchEvent(new CustomEvent('baseer-notifications-sync'))
+    })
+    expect(result.current.archivedNotifications.some((n) => n.id === 'hist-a')).toBe(false)
   })
 })

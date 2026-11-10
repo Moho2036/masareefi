@@ -1,977 +1,86 @@
-import React, { useState, useRef, useMemo, useContext, useEffect } from 'react'
-import {
-  Check,
-  Trash2,
-  AlertCircle,
-  AlertTriangle,
-  ArrowLeft,
-  Copy,
-  Users,
-  Calendar,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-} from 'lucide-react'
-import { Link } from 'react-router'
-import { SegmentedControl } from './ui/SegmentedControl'
-import { Button } from './ui/Button'
-import { Input } from './ui/Input'
-import { DatePickerInput } from './ui/DatePickerInput'
-import { Toggle } from './ui/Toggle'
-import { CategoryIcon } from './ui/CategoryIcon'
-import { FormattedMoney } from './ui/FormattedMoney'
+import React from 'react'
+import { AlertCircle } from 'lucide-react'
 import { CategoryForm } from './CategoryForm'
-import { useAuth } from '../hooks/useAuth'
-import { useCategories } from '../hooks/useCategories'
-import { useDebts } from '../hooks/useDebts'
-import { useMoneyCircles } from '../hooks/useMoneyCircles'
-import { useSelectedMonth } from '../hooks/useSelectedMonth'
-import { useToast } from '../hooks/useToast'
-import { useCurrency } from '../hooks/useCurrency'
-import { useUserSettings } from '../hooks/useUserSettings'
-import { useRecurring } from '../hooks/useRecurring'
-import { useTransactions } from '../hooks/useTransactions'
-import { AppDataContext } from '../context/AppDataContext'
-import {
-  addTransaction,
-  updateTransaction,
-  deleteTransaction,
-} from '../services/transactions'
-import { addRecurring, processDueRecurring } from '../services/recurring'
-import { updateDebtPayment, removeDebtPayment } from '../services/debts'
-import { removeCircleInstallmentPayment } from '../services/moneyCircles'
-import { toFils, fromFils, MAX_AMOUNT_FILS } from '../lib/money'
-import { parseLocalDateInput, formatDateInput, toWesternDigits } from '../lib/dates'
-import { normalizeArabic } from '../lib/aggregate'
-import { findLinkedDebtPayment } from '../lib/debts'
-import {
-  getCategoryUsageMap,
-  recordCategoryUsage,
-  sortCategoriesUnified,
-  buildUsageFromTransactions,
-  mergeUsageMaps,
-} from '../lib/categoryUsage'
-import { calculateForecast } from '../lib/forecast'
-import { calculateNextDateOnEdit, getOccurrenceMonthIndex } from '../lib/recurring'
-import { triggerHaptic } from '../lib/haptics'
-import { cn } from '../lib/cn'
-import type { Transaction, TxType, Frequency } from '../types'
-
-function hasMathOperator(expr: string): boolean {
-  if (!expr) return false
-  const normalized = expr
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
-    .replace(/\s+/g, '')
-  const withoutLeadingSign = normalized.replace(/^[+-]/, '')
-  return /[+\-*/]/.test(withoutLeadingSign)
-}
-
-function cleanNumberToken(raw: string): number {
-  if (!raw) return NaN
-  if ((raw.match(/\./g) || []).length > 1) return NaN
-  if (raw.includes(',')) {
-    if (raw.includes('.')) {
-      if (raw.lastIndexOf(',') < raw.lastIndexOf('.')) {
-        raw = raw.replace(/,/g, '')
-      } else {
-        raw = raw.replace(/\./g, '').replace(/,/g, '.')
-      }
-    } else {
-      const parts = raw.split(',')
-      if (parts.length > 2) {
-        raw = raw.replace(/,/g, '')
-      } else if (parts[1].length === 3 && parts[0].length >= 1) {
-        raw = raw.replace(/,/g, '')
-      } else {
-        raw = parts[0] + '.' + parts[1]
-      }
-    }
-  }
-  return Number(raw)
-}
-
-function evaluateMathExpression(expr: string): number | null {
-  if (!expr) return null
-  let normalized = expr
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
-    .replace(/\u066B/g, '.')
-    .replace(/\u060C/g, ',')
-    .replace(/\s+/g, '')
-
-  normalized = normalized.replace(/[^\d.,+\-*/]/g, '')
-  normalized = normalized.replace(/[+\-*/.,]+$/, '')
-  if (!normalized) return null
-
-  try {
-    const tokens: string[] = []
-    let currentNum = ''
-    let i = 0
-
-    if (normalized[0] === '+' || normalized[0] === '-') {
-      currentNum += normalized[0]
-      i = 1
-    }
-
-    for (; i < normalized.length; i++) {
-      const ch = normalized[i]
-      if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
-        if (currentNum) {
-          tokens.push(currentNum)
-          currentNum = ''
-        }
-        tokens.push(ch)
-      } else {
-        currentNum += ch
-      }
-    }
-    if (currentNum) {
-      tokens.push(currentNum)
-    }
-
-    if (tokens.length === 0) return null
-
-    const firstPass: (number | string)[] = []
-    let idx = 0
-    while (idx < tokens.length) {
-      const tok = tokens[idx]
-      if (tok === '*' || tok === '/') {
-        const prevTok = firstPass.pop()
-        const prev = typeof prevTok === 'number' ? prevTok : cleanNumberToken(String(prevTok))
-        const nextRaw = tokens[++idx]
-        const next = cleanNumberToken(nextRaw)
-        if (isNaN(prev) || isNaN(next)) return null
-        if (tok === '/' && next === 0) return null
-        firstPass.push(tok === '*' ? prev * next : prev / next)
-      } else if (tok === '+' || tok === '-') {
-        firstPass.push(tok)
-      } else {
-        const num = cleanNumberToken(tok)
-        if (isNaN(num)) return null
-        firstPass.push(num)
-      }
-      idx++
-    }
-
-    if (firstPass.length === 0) return null
-    let result = typeof firstPass[0] === 'number' ? firstPass[0] : cleanNumberToken(String(firstPass[0]))
-    if (isNaN(result)) return null
-
-    let j = 1
-    while (j < firstPass.length) {
-      const op = firstPass[j]
-      const nextTok = firstPass[j + 1]
-      const nextVal = typeof nextTok === 'number' ? nextTok : cleanNumberToken(String(nextTok))
-      if (isNaN(nextVal)) return null
-      if (op === '+') result += nextVal
-      else if (op === '-') result -= nextVal
-      else return null
-      j += 2
-    }
-
-    return isFinite(result) ? result : null
-  } catch {
-    return null
-  }
-}
+import { TransactionLockBanners } from './transactions/TransactionLockBanners'
+import { TransactionAmountSection } from './transactions/TransactionAmountSection'
+import { TransactionCategoryGrid } from './transactions/TransactionCategoryGrid'
+import { TransactionDetailsSection } from './transactions/TransactionDetailsSection'
+import { TransactionActionsBar } from './transactions/TransactionActionsBar'
+import { useTransactionFormState } from './transactions/useTransactionFormState'
+import { formatDateInput } from '../lib/dates'
+import type { Transaction, TxType } from '../types'
 
 export interface TransactionFormProps {
   initialTransaction?: Transaction | null
   duplicateFrom?: Transaction | null
   initialType?: TxType
+  isSourceDeleted?: boolean
   onClose: () => void
   onSuccess?: () => void
   onDuplicate?: (tx: Transaction) => void
-  isSourceDeleted?: boolean
   onDirtyChange?: (isDirty: boolean) => void
 }
 
-export const TransactionForm: React.FC<TransactionFormProps> = ({
-  initialTransaction,
-  duplicateFrom,
-  initialType = 'expense',
-  onClose,
-  onSuccess,
-  onDuplicate,
-  isSourceDeleted,
-  onDirtyChange,
-}) => {
-  const { user } = useAuth()
-  const appData = useContext(AppDataContext)
-  const { data: userSettings } = useUserSettings()
-  const { data: categories, loading: categoriesLoading } = useCategories()
-  const { data: debts } = useDebts()
-  const { data: circles } = useMoneyCircles()
-  const { data: recurringList } = useRecurring()
-  const { setSelectedDate, range } = useSelectedMonth()
-  const { data: monthTransactions } = useTransactions(range)
-  const { showToast } = useToast()
-  const { config: currencyConfig } = useCurrency()
-
-  const isEditing = Boolean(initialTransaction)
-
-  // Find linked debt payment if editing a debt payment transaction
-  const linkedDebtPayment = findLinkedDebtPayment(initialTransaction?.id, debts)
-
-  const isLinkedToDebtInit = Boolean(
-    initialTransaction?.id && initialTransaction.id.startsWith('debt_init_')
-  )
-  const debtId = isLinkedToDebtInit && initialTransaction ? initialTransaction.id.replace('debt_init_', '') : null
-  const isDebtExists = Boolean(
-    (debtId && debts.some((d) => d.id === debtId)) ||
-      debts.some((d) => (d.entries || []).some((e) => e.transactionId === initialTransaction?.id))
-  )
-
-  const isLinkedToDebtEntry = Boolean(
-    initialTransaction?.id && initialTransaction.id.startsWith('debt_entry_')
-  )
-  const isDebtEntryExists = Boolean(
-    isLinkedToDebtEntry &&
-      initialTransaction &&
-      debts.some((d) =>
-        (d.entries || []).some(
-          (e) => e.transactionId === initialTransaction.id || `debt_entry_${e.id}` === initialTransaction.id
-        )
-      )
-  )
-
-  const isLinkedToDebtPayment = Boolean(
-    linkedDebtPayment ||
-      (initialTransaction?.id &&
-        initialTransaction.id.startsWith('debt_pay_') &&
-        debts.some((d) =>
-          (d.payments || []).some(
-            (p) => p.id === initialTransaction.id.replace('debt_pay_', '') || p.transactionId === initialTransaction.id
-          )
-        ))
-  )
-
-  const isLinkedToCircle = Boolean(
-    initialTransaction?.id && initialTransaction.id.startsWith('circle_payout_')
-  )
-  const isCircleExists = Boolean(
-    isLinkedToCircle &&
-      initialTransaction &&
-      circles.some(
-        (c) =>
-          initialTransaction.id === `circle_payout_${c.id}` ||
-          initialTransaction.id === `circle_payout_${c.id}_t2`
-      )
-  )
-
-  const circleInstallmentMatch = initialTransaction?.id.match(/^circle_(.+)_m(\d+)$/)
-  const recurringLinkedCircle =
-    !circleInstallmentMatch && initialTransaction?.recurringId
-      ? circles.find((c) => c.recurringId === initialTransaction.recurringId)
-      : null
-  const recurringCircleMonth =
-    recurringLinkedCircle && initialTransaction
-      ? getOccurrenceMonthIndex(recurringLinkedCircle.startDate, initialTransaction.date)
-      : null
-  const isValidRecurringCircleInstallment = Boolean(
-    recurringLinkedCircle &&
-      recurringCircleMonth !== null &&
-      recurringCircleMonth >= 1 &&
-      recurringCircleMonth <= recurringLinkedCircle.membersCount
-  )
-  const isLinkedToCircleInstallment = Boolean(
-    circleInstallmentMatch || isValidRecurringCircleInstallment
-  )
-  const circleInstallmentId = circleInstallmentMatch
-    ? circleInstallmentMatch[1]
-    : (recurringLinkedCircle?.id ?? null)
-  const circleInstallmentMonth = circleInstallmentMatch
-    ? parseInt(circleInstallmentMatch[2], 10)
-    : recurringCircleMonth
-  const linkedCircleInstallment = circleInstallmentId
-    ? circles.find((c) => c.id === circleInstallmentId)
-    : null
-  const isCircleInstallmentExists = Boolean(linkedCircleInstallment)
-
-  const isMergedPaymentTx = Boolean(linkedDebtPayment?.payment?.isMerged)
-
-  const isSourceMissing =
-    isSourceDeleted ??
-    ((isLinkedToDebtInit && !isDebtExists) ||
-      (isLinkedToDebtEntry && !isDebtEntryExists) ||
-      (isLinkedToCircle && !isCircleExists))
-
-  // Only completely lock amount & date for debt_init_ and circle_payout_ if their source still exists!
-  // Also completely lock merged debt payment transactions.
-  // If the source debt/circle was deleted, the orphaned transaction is unlocked.
-  const isLockedTransaction =
-    !isSourceMissing &&
-    (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle || isMergedPaymentTx)
-  const [duplicateCleared, setDuplicateCleared] = useState(false)
-  const activeDuplicateFrom = duplicateCleared ? null : duplicateFrom
-  const isActualDuplicate = Boolean(
-    activeDuplicateFrom &&
-    typeof activeDuplicateFrom.id === 'string' &&
-    activeDuplicateFrom.id.trim().length > 0
-  )
-  const amountInputRef = useRef<HTMLInputElement>(null)
-
-  const [type, setType] = useState<TxType>(() => {
-    if (initialTransaction) return initialTransaction.type
-    if (duplicateFrom) return duplicateFrom.type
-    return initialType
-  })
-
-  const [amountStr, setAmountStr] = useState<string>(() => {
-    if (initialTransaction) return String(fromFils(initialTransaction.amountFils))
-    if (duplicateFrom) return String(fromFils(duplicateFrom.amountFils))
-    return ''
-  })
-
-  const [categoryId, setCategoryId] = useState<string>(() => {
-    if (initialTransaction) return initialTransaction.categoryId
-    if (duplicateFrom) return duplicateFrom.categoryId
-    return ''
-  })
-
-  const isBrowsingDifferentMonth = useMemo(() => {
-    if (initialTransaction) return false
-    const now = new Date()
-    return now < range.start || now >= range.end
-  }, [initialTransaction, range])
-
-  const [dateStr, setDateStr] = useState<string>(() => {
-    if (initialTransaction?.date) {
-      const d =
-        initialTransaction.date instanceof Date
-          ? initialTransaction.date
-          : new Date(initialTransaction.date)
-      return formatDateInput(d)
-    }
-    const now = new Date()
-    const isWithinRange = now >= range.start && now < range.end
-    return formatDateInput(isWithinRange ? now : range.start)
-  })
-
-  const [title, setTitle] = useState<string>(
-    initialTransaction?.title ?? duplicateFrom?.title ?? ''
-  )
-  const [note, setNote] = useState<string>(
-    initialTransaction?.note ?? duplicateFrom?.note ?? ''
-  )
-  const [showNoteField, setShowNoteField] = useState<boolean>(() =>
-    Boolean(initialTransaction?.note || duplicateFrom?.note)
-  )
-  const [isRecurring, setIsRecurring] = useState(false)
-  const [recurringFrequency, setRecurringFrequency] = useState<Frequency>('monthly')
-  const [showExtraFrequencyDropdown, setShowExtraFrequencyDropdown] = useState(false)
-  const [hasEndDate, setHasEndDate] = useState(false)
-  const [endDateStr, setEndDateStr] = useState('')
-  const [scheduleNextIfPast, setScheduleNextIfPast] = useState(false)
-  const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(false)
-  const [isCreateCatOpen, setIsCreateCatOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-
-  const lastDirtyRef = useRef<boolean | null>(null)
-
-  useEffect(() => {
-    const isDirty = Boolean(
-      initialTransaction ||
-        duplicateFrom ||
-        amountStr.trim() ||
-        title.trim() ||
-        note.trim()
-    )
-    if (lastDirtyRef.current !== isDirty) {
-      lastDirtyRef.current = isDirty
-      onDirtyChange?.(isDirty)
-    }
-  }, [onDirtyChange, initialTransaction, duplicateFrom, amountStr, title, note])
-  const [deleting, setDeleting] = useState(false)
-
-  // Track category usage frequencies from loaded transactions & synchronized cache
-  const usageMap = useMemo(() => {
-    if (monthTransactions && monthTransactions.length > 0) {
-      return mergeUsageMaps(buildUsageFromTransactions(monthTransactions))
-    }
-    return getCategoryUsageMap()
-  }, [monthTransactions])
-
-  // Filter & sort available categories for current transaction type
-  // Preserve current transaction's category even if archived or legacy
-  const originalCatId = initialTransaction?.categoryId || duplicateFrom?.categoryId
-  const availableCategories = useMemo(() => {
-    const filtered = categories.filter(
-      (c) => (c.type === type && !c.archived) || c.id === originalCatId
-    )
-    return sortCategoriesUnified(
-      filtered,
-      usageMap,
-      userSettings?.categorySortMode || 'usage'
-    )
-  }, [categories, type, usageMap, originalCatId, userSettings?.categorySortMode])
-
-  // Compute the effectively selected category ID:
-  // Preserve original/selected categoryId even if missing, never silently overwrite it.
-  // Only default to first available category if categoryId was never set.
-  const activeCategoryId = categoryId || (availableCategories[0]?.id ?? '')
-  const isSelectedCategoryMissing =
-    Boolean(activeCategoryId) &&
-    !categories.some((c) => c.id === activeCategoryId)
-
-  // Foldable categories grid: first 6 (ensuring selected category is visible if chosen) or all
-  const displayedCategories = useMemo(() => {
-    if (isCategoriesExpanded || availableCategories.length <= 6) {
-      return availableCategories
-    }
-    const top6 = availableCategories.slice(0, 6)
-    if (activeCategoryId && !top6.some((c) => c.id === activeCategoryId)) {
-      const selected = availableCategories.find((c) => c.id === activeCategoryId)
-      if (selected) {
-        return [...availableCategories.slice(0, 5), selected]
-      }
-    }
-    return top6
-  }, [availableCategories, isCategoriesExpanded, activeCategoryId])
-
-  // Guidance metrics for expense in current month
-  const forecast = useMemo(() => {
-    if (type !== 'expense') return null
-    const isRolloverEnabled = userSettings?.rolloverBalance ?? true
-    const openingFils = userSettings?.openingBalanceFils ?? 0
-    const effectiveRollover =
-      isRolloverEnabled || openingFils > 0
-        ? (appData?.rolloverBalanceFils ?? openingFils)
-        : undefined
-
-    return calculateForecast({
-      transactions: monthTransactions || [],
-      recurring: recurringList || [],
-      debts: debts || [],
-      monthStartDay: userSettings?.monthStartDay ?? 1,
-      periodRange: range,
-      rolloverBalanceFils: effectiveRollover,
-    })
-  }, [
+export const TransactionForm: React.FC<TransactionFormProps> = (props) => {
+  const {
+    isEditing,
+    lockStatus,
+    isLockedTransaction,
+    isLinkedToDebtPayment,
+    circleInstallmentMonth,
+    linkedCircleInstallment,
+    isActualDuplicate,
+    amountInputRef,
     type,
-    monthTransactions,
-    recurringList,
-    debts,
-    userSettings?.monthStartDay,
-    userSettings?.rolloverBalance,
-    userSettings?.openingBalanceFils,
+    setType,
+    amountStr,
+    setAmountStr,
+    setCategoryId,
+    isBrowsingDifferentMonth,
     range,
-    appData?.rolloverBalanceFils,
-  ])
-
-  // Auto-suggest for description/title matching current month's transactions
-  const titleSuggestions = useMemo(() => {
-    if (!monthTransactions || monthTransactions.length === 0) return []
-    const sample = monthTransactions.slice(0, 50)
-    const matching = sample.filter(
-      (t) =>
-        t.type === type &&
-        t.title &&
-        t.title.trim() &&
-        !t.id.startsWith('debt_') &&
-        !t.id.startsWith('circle_')
-    )
-    const uniqueMap = new Map<string, { title: string; categoryId: string }>()
-    const cleanCurrentTitle = normalizeArabic(toWesternDigits(title.trim()))
-
-    for (const t of matching) {
-      const tTitle = t.title!.trim()
-      const cleanTTitle = normalizeArabic(toWesternDigits(tTitle))
-      if (cleanCurrentTitle) {
-        if (cleanTTitle.includes(cleanCurrentTitle) && cleanTTitle !== cleanCurrentTitle) {
-          if (!uniqueMap.has(tTitle)) {
-            uniqueMap.set(tTitle, { title: tTitle, categoryId: t.categoryId })
-          }
-        }
-      } else {
-        if (!uniqueMap.has(tTitle)) {
-          uniqueMap.set(tTitle, { title: tTitle, categoryId: t.categoryId })
-        }
-      }
-      if (uniqueMap.size >= 4) break
-    }
-    return Array.from(uniqueMap.values())
-  }, [monthTransactions, type, title])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    if (!user) {
-      setError('يجب تسجيل الدخول أولاً')
-      return
-    }
-
-    let parsedAmountStr = amountStr
-    if (hasMathOperator(amountStr)) {
-      const evaluated = evaluateMathExpression(amountStr)
-      if (evaluated === null || evaluated <= 0) {
-        setError('يرجى إدخال مبلغ أو عملية حسابية صحيحة')
-        return
-      }
-      parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
-      setAmountStr(parsedAmountStr)
-    }
-
-    const amountFils = isLockedTransaction && initialTransaction
-      ? initialTransaction.amountFils
-      : toFils(parsedAmountStr, currencyConfig.decimals)
-
-    if (amountFils <= 0) {
-      setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
-      return
-    }
-
-    if (amountFils > MAX_AMOUNT_FILS) {
-      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
-      return
-    }
-
-    if (!activeCategoryId) {
-      setError('يرجى اختيار التصنيف')
-      return
-    }
-
-    const parsedDate = parseLocalDateInput(dateStr)
-    if (isNaN(parsedDate.getTime())) {
-      setError('يرجى اختيار تاريخ صالح')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const trimmedTitle = title.trim().slice(0, 100)
-      const isOutsideMonth = parsedDate < range.start || parsedDate >= range.end
-
-      if (isEditing && initialTransaction) {
-        if (isLinkedToDebtPayment && linkedDebtPayment) {
-          if (linkedDebtPayment.payment.isMerged) {
-            const catOrNoteChanged =
-              activeCategoryId !== initialTransaction.categoryId ||
-              note.trim() !== (initialTransaction.note || '').trim()
-            if (!catOrNoteChanged) {
-              setError('لا يمكن تعديل دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
-              setSubmitting(false)
-              return
-            }
-          } else {
-            const debtStartDate =
-              linkedDebtPayment.debt.startDate instanceof Date
-                ? linkedDebtPayment.debt.startDate
-                : new Date(linkedDebtPayment.debt.startDate)
-            const debtStartDay = new Date(
-              debtStartDate.getFullYear(),
-              debtStartDate.getMonth(),
-              debtStartDate.getDate(),
-              0, 0, 0, 0
-            )
-            const paymentDay = new Date(
-              parsedDate.getFullYear(),
-              parsedDate.getMonth(),
-              parsedDate.getDate(),
-              0, 0, 0, 0
-            )
-            if (paymentDay < debtStartDay) {
-              setError('تاريخ الدفعة لا يمكن أن يسبق تاريخ بداية الدين')
-              setSubmitting(false)
-              return
-            }
-            const previousPaymentsSum = (linkedDebtPayment.debt.payments || []).reduce(
-              (acc, p) => acc + p.amountFils,
-              0
-            )
-            const untrackedPaidFils = Math.max(
-              0,
-              (linkedDebtPayment.debt.paidFils || 0) - previousPaymentsSum
-            )
-            const otherPaymentsTotal = (linkedDebtPayment.debt.payments || [])
-              .filter((p) => p.id !== linkedDebtPayment.payment.id)
-              .reduce((sum, p) => sum + p.amountFils, 0)
-            const remainingAllowed = Math.max(
-              0,
-              linkedDebtPayment.debt.amountFils - (otherPaymentsTotal + untrackedPaidFils)
-            )
-            if (amountFils > remainingAllowed) {
-              setError('مبلغ الدفعة لا يمكن أن يتجاوز المبلغ المتبقي من الدين')
-              setSubmitting(false)
-              return
-            }
-
-            await updateDebtPayment(
-              user.uid,
-              linkedDebtPayment.debt,
-              linkedDebtPayment.payment.id,
-              {
-                amountFils,
-                date: parsedDate,
-                note: note.trim().slice(0, 500),
-                categoryId: activeCategoryId,
-                title: trimmedTitle,
-              }
-            )
-            recordCategoryUsage(activeCategoryId)
-            showToast('تم تعديل دفعة الدين وتحديث سجل الدين بنجاح', 'success')
-            if (isOutsideMonth) {
-              setSelectedDate(parsedDate)
-            }
-            onSuccess?.()
-            onClose()
-            return
-          }
-        }
-
-        const finalType = isLockedTransaction ? initialTransaction.type : type
-        const finalAmountFils = isLockedTransaction ? initialTransaction.amountFils : amountFils
-        const finalDate = isLockedTransaction
-          ? (initialTransaction.date instanceof Date ? initialTransaction.date : new Date(initialTransaction.date))
-          : parsedDate
-        const finalTitle = isLockedTransaction ? initialTransaction.title : trimmedTitle
-
-        await updateTransaction(user.uid, initialTransaction.id, {
-          type: finalType,
-          amountFils: finalAmountFils,
-          categoryId: activeCategoryId,
-          date: finalDate,
-          title: finalTitle ?? '',
-          note: note.trim().slice(0, 500),
-        })
-        recordCategoryUsage(activeCategoryId)
-        showToast(
-          isOutsideMonth && !isLockedTransaction
-            ? 'تم تعديل المعاملة والانتقال إلى شهر المعاملة'
-            : 'تم تعديل المعاملة بنجاح',
-          'success'
-        )
-      } else if (isRecurring) {
-        const endOfToday = new Date()
-        endOfToday.setHours(23, 59, 59, 999)
-        const isFuture = parsedDate > endOfToday
-
-        const startOfToday = new Date()
-        startOfToday.setHours(0, 0, 0, 0)
-        let nextDate = parsedDate
-        if (scheduleNextIfPast && parsedDate < startOfToday) {
-          nextDate = calculateNextDateOnEdit(parsedDate, recurringFrequency)
-        }
-
-        await addRecurring(user.uid, {
-          type,
-          amountFils,
-          categoryId: activeCategoryId,
-          ...(trimmedTitle ? { title: trimmedTitle } : {}),
-          note: note.trim().slice(0, 500),
-          frequency: recurringFrequency,
-          startDate: parsedDate,
-          nextDate,
-          endDate: hasEndDate && endDateStr ? parseLocalDateInput(endDateStr) : null,
-          active: true,
-        })
-
-        let processedCount = 0
-        if (!isFuture) {
-          processedCount = await processDueRecurring(user.uid)
-        }
-
-        recordCategoryUsage(activeCategoryId)
-
-        let recurringToastMessage: string
-        if (isFuture) {
-          recurringToastMessage = isOutsideMonth
-            ? 'تمت جدولة المعاملة المتكررة والانتقال إلى شهر المعاملة'
-            : 'تمت جدولة المعاملة المتكررة بنجاح'
-        } else if (processedCount > 1) {
-          recurringToastMessage = isOutsideMonth
-            ? `تمت إضافة ${processedCount} معاملات متكررة مستحقة وتفعيل التكرار والانتقال إلى شهر المعاملة`
-            : `تمت إضافة ${processedCount} معاملات متكررة مستحقة وتفعيل التكرار بنجاح`
-        } else {
-          recurringToastMessage = isOutsideMonth
-            ? 'تمت إضافة المعاملة وتفعيل التكرار والانتقال إلى شهر المعاملة'
-            : 'تمت إضافة المعاملة وتفعيل التكرار بنجاح'
-        }
-
-        showToast(recurringToastMessage, 'success')
-      } else {
-        await addTransaction(user.uid, {
-          type,
-          amountFils,
-          categoryId: activeCategoryId,
-          date: parsedDate,
-          ...(trimmedTitle ? { title: trimmedTitle } : {}),
-          note: note.trim().slice(0, 500),
-        })
-
-        recordCategoryUsage(activeCategoryId)
-
-        showToast(
-          isActualDuplicate
-            ? (isOutsideMonth
-                ? 'تم حفظ المعاملة المكررة والانتقال إلى شهر المعاملة'
-                : 'تم حفظ المعاملة المكررة بنجاح')
-            : (isOutsideMonth
-                ? 'تم حفظ المعاملة والانتقال إلى شهر المعاملة'
-                : 'تمت إضافة المعاملة بنجاح'),
-          'success'
-        )
-      }
-
-      triggerHaptic('light')
-
-      if (isOutsideMonth) {
-        setSelectedDate(parsedDate)
-      }
-
-      onSuccess?.()
-      onClose()
-    } catch (err: unknown) {
-      console.error('Failed to save transaction:', err)
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : 'تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.'
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleSaveAndAddAnother = async () => {
-    setError(null)
-
-    if (!user) {
-      setError('يجب تسجيل الدخول أولاً')
-      return
-    }
-
-    let parsedAmountStr = amountStr
-    if (hasMathOperator(amountStr)) {
-      const evaluated = evaluateMathExpression(amountStr)
-      if (evaluated === null || evaluated <= 0) {
-        setError('يرجى إدخال مبلغ أو عملية حسابية صحيحة')
-        return
-      }
-      parsedAmountStr = String(Number(evaluated.toFixed(currencyConfig.decimals)))
-      setAmountStr(parsedAmountStr)
-    }
-
-    const amountFils = toFils(parsedAmountStr, currencyConfig.decimals)
-    if (amountFils <= 0) {
-      setError('يرجى إدخال مبلغ صحيح أكبر من الصفر')
-      return
-    }
-
-    if (amountFils > MAX_AMOUNT_FILS) {
-      setError('المبلغ يتجاوز الحد الأقصى المسموح به')
-      return
-    }
-
-    if (!activeCategoryId) {
-      setError('يرجى اختيار التصنيف')
-      return
-    }
-
-    const parsedDate = parseLocalDateInput(dateStr)
-    if (isNaN(parsedDate.getTime())) {
-      setError('يرجى اختيار تاريخ صالح')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const trimmedTitle = title.trim().slice(0, 100)
-      if (isRecurring) {
-        const endOfToday = new Date()
-        endOfToday.setHours(23, 59, 59, 999)
-        const isFuture = parsedDate > endOfToday
-
-        const startOfToday = new Date()
-        startOfToday.setHours(0, 0, 0, 0)
-        let nextDate = parsedDate
-        if (scheduleNextIfPast && parsedDate < startOfToday) {
-          nextDate = calculateNextDateOnEdit(parsedDate, recurringFrequency)
-        }
-
-        await addRecurring(user.uid, {
-          type,
-          amountFils,
-          categoryId: activeCategoryId,
-          ...(trimmedTitle ? { title: trimmedTitle } : {}),
-          note: note.trim().slice(0, 500),
-          frequency: recurringFrequency,
-          startDate: parsedDate,
-          nextDate,
-          endDate: hasEndDate && endDateStr ? parseLocalDateInput(endDateStr) : null,
-          active: true,
-        })
-
-        if (!isFuture) {
-          await processDueRecurring(user.uid)
-        }
-      } else {
-        await addTransaction(user.uid, {
-          type,
-          amountFils,
-          categoryId: activeCategoryId,
-          date: parsedDate,
-          ...(trimmedTitle ? { title: trimmedTitle } : {}),
-          note: note.trim().slice(0, 500),
-        })
-      }
-
-      const isOutsideMonth = parsedDate < range.start || parsedDate >= range.end
-      recordCategoryUsage(activeCategoryId)
-
-      showToast(
-        isOutsideMonth
-          ? 'تم حفظ المعاملة والانتقال إلى شهر المعاملة، وجاهز للمعاملة التالية'
-          : 'تم حفظ المعاملة بنجاح، وجاهز للمعاملة التالية',
-        'success'
-      )
-
-      triggerHaptic('light')
-
-      if (isOutsideMonth) {
-        setSelectedDate(parsedDate)
-      }
-
-      onSuccess?.()
-
-      // Reset fields for consecutive rapid entries
-      setAmountStr('')
-      setTitle('')
-      setNote('')
-      setIsRecurring(false)
-      setDuplicateCleared(true)
-
-      setTimeout(() => {
-        amountInputRef.current?.focus()
-      }, 50)
-    } catch (err: unknown) {
-      console.error('Failed to save transaction:', err)
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : 'تعذر حفظ المعاملة. يرجى التحقق من البيانات والمحاولة مجدداً.'
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!user || !initialTransaction) return
-    if (isLinkedToDebtPayment && linkedDebtPayment) {
-      if (linkedDebtPayment.payment.isMerged) {
-        setError('لا يمكن حذف دفعة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
-        return
-      }
-      setDeleting(true)
-      try {
-        await removeDebtPayment(user.uid, linkedDebtPayment.debt, linkedDebtPayment.payment.id)
-        showToast(
-          `تم حذف دفعة السداد لـ (${linkedDebtPayment.debt.personName}) وإعادة فتح المبلغ المستحق في سجل الدين بنجاح`,
-          'info'
-        )
-        onSuccess?.()
-        onClose()
-      } catch (err) {
-        console.error('Failed to remove linked debt payment:', err)
-        setError('تعذر حذف دفعة الدين المرتبطة')
-      } finally {
-        setDeleting(false)
-      }
-      return
-    }
-    if (isLinkedToDebtInit && isDebtExists && !isSourceDeleted) {
-      setError('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
-      return
-    }
-    if (isLinkedToDebtEntry && isDebtEntryExists && !isSourceDeleted) {
-      setError('لا يمكن حذف معاملة السلفة الإضافية من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.')
-      return
-    }
-    if (isLinkedToCircle && isCircleExists && !isSourceDeleted) {
-      setError('لا يمكن حذف معاملات إيداع الجمعيات من هنا، يرجى إدارتها من صفحة الجمعيات.')
-      return
-    }
-    if (isLinkedToCircleInstallment && circleInstallmentId && circleInstallmentMonth && user) {
-      setDeleting(true)
-      try {
-        await removeCircleInstallmentPayment(user.uid, circleInstallmentId, circleInstallmentMonth)
-        showToast('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
-        onSuccess?.()
-        onClose()
-      } catch (err) {
-        console.error('Failed to remove circle installment:', err)
-        setError('تعذر حذف قسط الجمعية')
-      } finally {
-        setDeleting(false)
-      }
-      return
-    }
-    setDeleting(true)
-    try {
-      await deleteTransaction(user.uid, initialTransaction.id)
-      showToast('تم حذف المعاملة', 'info')
-      onSuccess?.()
-      onClose()
-    } catch (err) {
-      console.error('Failed to delete transaction:', err)
-      setError('تعذر حذف المعاملة')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const handleDuplicateCurrent = async () => {
-    if (!initialTransaction) return
-    const evaluated = evaluateMathExpression(amountStr)
-    const cleanAmountStr = evaluated !== null ? String(evaluated) : amountStr
-    const parsedFils = toFils(cleanAmountStr, currencyConfig.decimals)
-    const finalFils = parsedFils > 0 ? parsedFils : initialTransaction.amountFils
-
-    const currentData: Transaction = {
-      ...initialTransaction,
-      type,
-      amountFils: finalFils,
-      categoryId: activeCategoryId,
-      title: title.trim() || undefined,
-      note: note.trim().slice(0, 500),
-      date: new Date(),
-    }
-
-    if (onDuplicate) {
-      onDuplicate(currentData)
-      return
-    }
-    if (!user) return
-    setSubmitting(true)
-    try {
-      await addTransaction(user.uid, {
-        type: currentData.type,
-        amountFils: currentData.amountFils,
-        categoryId: currentData.categoryId,
-        date: currentData.date,
-        title: currentData.title,
-        note: currentData.note,
-      })
-      showToast('تم تكرار المعاملة بنجاح', 'success')
-      onSuccess?.()
-      onClose()
-    } catch (err) {
-      console.error('Failed to duplicate transaction:', err)
-      showToast('تعذر تكرار المعاملة', 'error')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const typeOptions: { value: TxType; label: string }[] = [
-    { value: 'expense', label: 'مصروف' },
-    { value: 'income', label: 'دخل' },
-  ]
+    dateStr,
+    setDateStr,
+    title,
+    setTitle,
+    note,
+    setNote,
+    showNoteField,
+    setShowNoteField,
+    isRecurring,
+    setIsRecurring,
+    recurringFrequency,
+    setRecurringFrequency,
+    showExtraFrequencyDropdown,
+    setShowExtraFrequencyDropdown,
+    hasEndDate,
+    setHasEndDate,
+    endDateStr,
+    setEndDateStr,
+    scheduleNextIfPast,
+    setScheduleNextIfPast,
+    isCategoriesExpanded,
+    setIsCategoriesExpanded,
+    isCreateCatOpen,
+    setIsCreateCatOpen,
+    error,
+    setError,
+    submitting,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    deleting,
+    categoriesLoading,
+    availableCategories,
+    displayedCategories,
+    activeCategoryId,
+    isSelectedCategoryMissing,
+    forecast,
+    titleSuggestions,
+    currencyConfig,
+    handleSubmit,
+    handleSaveAndAddAnother,
+    handleDelete,
+    handleDuplicateCurrent,
+  } = useTransactionFormState(props)
 
   const isTouchDevice =
     typeof window !== 'undefined' &&
@@ -979,606 +88,83 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
-      {/* Linked Debt Init or Entry Warning Banner */}
-      {((isLinkedToDebtInit && isDebtExists) || (isLinkedToDebtEntry && isDebtEntryExists)) &&
-        !isSourceDeleted && (
-          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-amber-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
-              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>
-                {isLinkedToDebtEntry
-                  ? 'معاملة سلفة إضافية متزامنة مع سجل الديون'
-                  : 'معاملة أصل الدين متزامنة مع سجل الديون'}
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
-              {isLinkedToDebtEntry
-                ? 'هذه المعاملة تمثل سلفة إضافية مرتبطة بالدين. لتعديل المبلغ أو حذف السلفة، يرجى إدارتها من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'
-                : 'هذه المعاملة تمثل نشوء الدين الأصلي. لتعديل المبلغ أو حذف الدين، يرجى إدارته من صفحة الديون. يمكنك تغيير التصنيف والملاحظة هنا.'}
-            </p>
-            <Link
-              to="/debts"
-              onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
-            >
-              <span>الانتقال إلى سجل الديون</span>
-              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-            </Link>
-          </div>
-        )}
+      <TransactionLockBanners
+        lockStatus={lockStatus}
+        isSourceDeleted={props.isSourceDeleted}
+        linkedCircleInstallment={linkedCircleInstallment}
+        circleInstallmentMonth={circleInstallmentMonth}
+        onClose={props.onClose}
+      />
 
-      {/* Linked Debt Payment Warning Banner */}
-      {isLinkedToDebtPayment && (
-        linkedDebtPayment?.payment?.isMerged ? (
-          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-amber-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
-              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>معاملة مرتبطة بدفعة دين مدمجة لـ ({linkedDebtPayment.debt.personName})</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
-              هذه المعاملة تمثل رصيد دفعات سابقة تم دمجها في سجل الدين. لا يمكن تعديل مبلغها أو حذفها من هنا، يرجى إدارتها من صفحة الديون.
-            </p>
-            <Link
-              to="/debts"
-              onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
-            >
-              <span>الانتقال إلى سجل الديون</span>
-              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-            </Link>
-          </div>
-        ) : (
-          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
-              <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>
-                {linkedDebtPayment
-                  ? `معاملة مرتبطة بدفعة سداد دين لـ (${linkedDebtPayment.debt.personName})`
-                  : 'معاملة مرتبطة بدفعة سداد دين'}
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
-              عند تعديل المبلغ أو حذف هذه المعاملة، سيتم تلقائياً تحديث دفعة السداد في سجل الدين وإعادة احتساب رصيد الدين وحالة الإغلاق.
-            </p>
-          </div>
-        )
-      )}
+      <TransactionAmountSection
+        type={type}
+        onTypeChange={(newType) => {
+          setType(newType)
+          setCategoryId('')
+          setError(null)
+        }}
+        typeDisabled={isLockedTransaction || isLinkedToDebtPayment}
+        amountStr={amountStr}
+        onAmountChange={setAmountStr}
+        amountInputRef={amountInputRef}
+        isLockedTransaction={isLockedTransaction}
+        isEditing={isEditing}
+        isTouchDevice={isTouchDevice}
+        currencyConfig={currencyConfig}
+        error={error}
+        forecast={forecast}
+        onClearError={() => setError(null)}
+      />
 
-      {/* Linked Circle Payout Warning Banner */}
-      {isLinkedToCircle && isCircleExists && !isSourceDeleted && (
-        <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
-            <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>معاملة مرتبطة بإيداع جمعية مالية</span>
-          </div>
-          <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
-            هذه المعاملة تم إنشاؤها تلقائياً عند إيداع صافي استلام الجمعية. لتعديل المبلغ أو حذفها يرجى الانتقال إلى صفحة الجمعيات، أو يمكنك تغيير التصنيف والملاحظة وحفظ التعديل هنا.
-          </p>
-          <Link
-            to="/tools?tool=circles"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
-          >
-            <span>الانتقال إلى صفحة الجمعيات</span>
-            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-          </Link>
-        </div>
-      )}
+      <TransactionCategoryGrid
+        categoriesLoading={categoriesLoading}
+        availableCategories={availableCategories}
+        displayedCategories={displayedCategories}
+        activeCategoryId={activeCategoryId}
+        onSelectCategory={setCategoryId}
+        isSelectedCategoryMissing={isSelectedCategoryMissing}
+        isCategoriesExpanded={isCategoriesExpanded}
+        onToggleExpand={() => setIsCategoriesExpanded((prev) => !prev)}
+        onOpenCreateCategory={() => setIsCreateCatOpen(true)}
+        onClearError={() => setError(null)}
+      />
 
-      {/* Linked Circle Installment Warning Banner */}
-      {isLinkedToCircleInstallment && isCircleInstallmentExists && (
-        <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border-s-2 border-blue-500 text-zinc-700 dark:text-zinc-300 text-xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
-            <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>معاملة مرتبطة بقسط جمعية ({linkedCircleInstallment?.name || 'جمعية'}) - شهر {circleInstallmentMonth}</span>
-          </div>
-          <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 pe-1">
-            عند حذف هذه المعاملة، سيتم تلقائياً تحديث حالة القسط في جدول الجمعية وإلغاء تسجيل الدفع.
-          </p>
-        </div>
-      )}
+      <TransactionDetailsSection
+        dateStr={dateStr}
+        onDateChange={setDateStr}
+        isLockedTransaction={isLockedTransaction}
+        isBrowsingDifferentMonth={isBrowsingDifferentMonth}
+        rangeStartFormatted={formatDateInput(range.start)}
+        title={title}
+        onTitleChange={setTitle}
+        titleSuggestions={titleSuggestions}
+        onSelectTitleSuggestion={(s) => {
+          setTitle(s.title)
+          if (s.categoryId && availableCategories.some((c) => c.id === s.categoryId)) {
+            setCategoryId(s.categoryId)
+          }
+        }}
+        showNoteField={showNoteField}
+        onShowNoteField={() => setShowNoteField(true)}
+        onHideNoteField={() => setShowNoteField(false)}
+        note={note}
+        onNoteChange={setNote}
+        isEditing={isEditing}
+        isRecurring={isRecurring}
+        onRecurringChange={setIsRecurring}
+        recurringFrequency={recurringFrequency}
+        onRecurringFrequencyChange={setRecurringFrequency}
+        showExtraFrequencyDropdown={showExtraFrequencyDropdown}
+        onToggleExtraFrequencyDropdown={() => setShowExtraFrequencyDropdown((prev) => !prev)}
+        onCloseExtraFrequencyDropdown={() => setShowExtraFrequencyDropdown(false)}
+        hasEndDate={hasEndDate}
+        onHasEndDateChange={setHasEndDate}
+        endDateStr={endDateStr}
+        onEndDateChange={setEndDateStr}
+        scheduleNextIfPast={scheduleNextIfPast}
+        onScheduleNextIfPastChange={setScheduleNextIfPast}
+      />
 
-      {/* Orphaned Unlocked Banner */}
-      {isSourceMissing &&
-        (isLinkedToDebtInit || isLinkedToDebtEntry || isLinkedToCircle) && (
-          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-300 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-zinc-500 shrink-0" />
-            <span>تم فك قفل هذه المعاملة نظراً لحذف السجل الأصلي المرتبط بها. يمكنك تعديلها أو حذفها بحرية.</span>
-          </div>
-        )}
-
-      {/* Type Toggle: مصروف / دخل */}
-      <div>
-        <SegmentedControl<TxType>
-          value={type}
-          disabled={isLockedTransaction || isLinkedToDebtPayment}
-          onChange={(newType) => {
-            setType(newType)
-            setCategoryId('')
-            setError(null)
-          }}
-          options={typeOptions}
-          className="w-full"
-        />
-      </div>
-
-      {/* Big Amount Input */}
-      <div>
-        <div
-          className={cn(
-            'flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-zinc-900/70 rounded-xl border transition-all',
-            error && amountStr && toFils(amountStr, currencyConfig.decimals) <= 0
-              ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-[#E4E4E7] dark:border-[#27272A] focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-600/20',
-            isLockedTransaction && 'opacity-70 bg-zinc-100 dark:bg-zinc-800/80 cursor-not-allowed'
-          )}
-        >
-          <input
-            ref={amountInputRef}
-            id="tx-amount"
-            aria-label="المبلغ"
-            type="text"
-            inputMode="decimal"
-            readOnly={isLockedTransaction}
-            disabled={isLockedTransaction}
-            value={amountStr}
-            onChange={(e) => {
-              if (isLockedTransaction) return
-              setAmountStr(e.target.value)
-              setError(null)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === '=') {
-                e.preventDefault()
-                if (hasMathOperator(amountStr)) {
-                  const evaluated = evaluateMathExpression(amountStr)
-                  if (evaluated !== null && evaluated >= 0) {
-                    setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
-                  }
-                }
-              }
-            }}
-            onBlur={() => {
-              if (hasMathOperator(amountStr)) {
-                const evaluated = evaluateMathExpression(amountStr)
-                if (evaluated !== null && evaluated >= 0) {
-                  setAmountStr(String(Number(evaluated.toFixed(currencyConfig.decimals))))
-                }
-              }
-            }}
-            placeholder={currencyConfig.decimals === 3 ? '0.000' : '0.00'}
-            className={cn(
-              'w-full bg-transparent text-2xl lg:text-3xl font-black text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none',
-              isLockedTransaction && 'cursor-not-allowed'
-            )}
-            autoFocus={!isEditing && !isLockedTransaction && !isTouchDevice}
-          />
-          <span className="text-base lg:text-lg font-bold text-zinc-400 dark:text-zinc-500 select-none pe-1">
-            {currencyConfig.symbol}
-          </span>
-        </div>
-
-        {/* Guidance Subline for Expense in Current Month */}
-        {type === 'expense' && forecast && forecast.isCurrentMonth && (
-          <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 mt-1.5 px-1 font-medium">
-            <span>
-              الرصيد المتاح الحر:{' '}
-              <strong
-                className={cn(
-                  forecast.freeBalance < 0
-                    ? 'text-red-500 dark:text-red-400 font-bold'
-                    : 'text-zinc-700 dark:text-zinc-200'
-                )}
-              >
-                <FormattedMoney amountFils={forecast.freeBalance} />
-              </strong>
-            </span>
-            <span>
-              حد الصرف اليومي الآمن:{' '}
-              <strong
-                className={cn(
-                  forecast.dailySafeFils > 0
-                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                    : forecast.dailySafeFils < 0
-                      ? 'text-red-600 dark:text-red-400 font-bold'
-                      : 'text-zinc-500 dark:text-zinc-400 font-bold'
-                )}
-              >
-                <FormattedMoney amountFils={forecast.dailySafeFils} />
-              </strong>
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Category Chips Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
-            التصنيف
-          </label>
-          <button
-            type="button"
-            onClick={() => setIsCreateCatOpen(true)}
-            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>تصنيف جديد</span>
-          </button>
-        </div>
-        {categoriesLoading ? (
-          <div className="grid grid-cols-3 gap-1.5 p-0.5 animate-pulse">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 flex items-center gap-1.5 p-2"
-              >
-                <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-700 shrink-0" />
-                <div className="w-12 h-2.5 rounded bg-zinc-200 dark:bg-zinc-700" />
-              </div>
-            ))}
-          </div>
-        ) : availableCategories.length === 0 ? (
-          <div className="py-3 text-center text-xs text-zinc-400 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
-            لا توجد تصنيفات متاحة لهذا النوع
-          </div>
-        ) : (
-          <div>
-            {isSelectedCategoryMissing && (
-              <div className="mb-2 p-2.5 rounded-xl border-s-2 border-amber-500 bg-zinc-50 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300 text-xs flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="font-semibold">
-                    التصنيف الأصلي لهذه المعاملة غير متوفر أو محذوف. تم الاحتفاظ به، ويمكنك اختيار تصنيف بديل من القائمة أدناه.
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
-                  تصنيف مفقود
-                </span>
-              </div>
-            )}
-            <div className="grid grid-cols-3 gap-1.5 p-0.5">
-              {displayedCategories.map((cat) => {
-                const isSelected = activeCategoryId === cat.id
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      setCategoryId(cat.id)
-                      setError(null)
-                    }}
-                    className={cn(
-                      'flex items-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all text-start cursor-pointer select-none min-w-0',
-                      isSelected
-                        ? 'border-blue-600 bg-blue-50/70 text-blue-950 dark:bg-blue-950/50 dark:text-blue-100 ring-2 ring-blue-600/20 shadow-xs dark:shadow-none'
-                        : 'border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
-                    )}
-                  >
-                    <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0">
-                      <CategoryIcon icon={cat.icon} color={cat.color} size="sm" />
-                    </span>
-                    <span className="truncate flex-1 text-xs font-semibold">
-                      {cat.name}
-                      {cat.archived ? ' (مؤرشف)' : ''}
-                    </span>
-                    {isSelected && (
-                      <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            {availableCategories.length > 6 && (
-              <button
-                type="button"
-                onClick={() => setIsCategoriesExpanded((prev) => !prev)}
-                className="mt-1.5 w-full py-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1 transition-colors cursor-pointer"
-              >
-                {isCategoriesExpanded ? (
-                  <>
-                    <span>طي التصنيفات</span>
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  </>
-                ) : (
-                  <>
-                    <span>عرض كل التصنيفات ({availableCategories.length})</span>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Date Picker */}
-      <div>
-        <DatePickerInput
-          id="tx-date"
-          label="التاريخ"
-          value={dateStr}
-          onChange={(val) => {
-            if (isLockedTransaction) return
-            setDateStr(val)
-          }}
-          required
-          disabled={isLockedTransaction}
-          readOnly={isLockedTransaction}
-          showQuickButtons
-        />
-        {isBrowsingDifferentMonth && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1.5 font-medium">
-            <Calendar className="w-3.5 h-3.5 shrink-0" />
-            <span>
-              تم ضبط التاريخ تلقائياً على بداية الشهر المالي المتصفح حالياً ({formatDateInput(range.start)})
-            </span>
-          </p>
-        )}
-      </div>
-
-      {/* Description / Title Input */}
-      <div>
-        <Input
-          type="text"
-          label="الوصف / العنوان (اختياري)"
-          placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
-          value={title}
-          onChange={(e) => {
-            if (isLockedTransaction) return
-            setTitle(e.target.value)
-          }}
-          maxLength={100}
-          disabled={isLockedTransaction}
-          readOnly={isLockedTransaction}
-        />
-        {titleSuggestions.length > 0 && !isLockedTransaction && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-1.5 px-0.5">
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium select-none">
-              اقتراحات سريعة:
-            </span>
-            {titleSuggestions.map((s) => (
-              <button
-                key={s.title}
-                type="button"
-                onClick={() => {
-                  setTitle(s.title)
-                  if (s.categoryId && availableCategories.some((c) => c.id === s.categoryId)) {
-                    setCategoryId(s.categoryId)
-                  }
-                }}
-                className="text-[11px] px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-[#E4E4E7] dark:border-[#27272A] transition-colors cursor-pointer"
-              >
-                {s.title}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Note and Recurring Section */}
-      {!showNoteField && !isLockedTransaction ? (
-        !isEditing ? (
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => setShowNoteField(true)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-            >
-              <span>+ إضافة ملاحظة تفصيلية</span>
-            </button>
-            <Toggle
-              checked={isRecurring}
-              onChange={setIsRecurring}
-              label="جعلها معاملة متكررة"
-              className="gap-2.5"
-            />
-          </div>
-        ) : (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setShowNoteField(true)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-            >
-              <span>+ إضافة ملاحظة تفصيلية</span>
-            </button>
-          </div>
-        )
-      ) : (
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                ملاحظة تفصيلية (اختياري)
-              </label>
-              {!note.trim() && (
-                <button
-                  type="button"
-                  onClick={() => setShowNoteField(false)}
-                  className="text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors cursor-pointer"
-                >
-                  طي
-                </button>
-              )}
-            </div>
-            <Input
-              type="text"
-              placeholder="مثال: غداء مع الأصدقاء"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={500}
-            />
-          </div>
-          {!isEditing && (
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <Toggle
-                checked={isRecurring}
-                onChange={setIsRecurring}
-                label="جعلها معاملة متكررة"
-                className="gap-2.5"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Recurring Options (only for new transactions when isRecurring is true) */}
-      {!isEditing && isRecurring && (
-        <div className="space-y-3 pe-1">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
-              دورية التكرار
-            </label>
-            <div
-              role="radiogroup"
-              className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]"
-            >
-              <button
-                type="button"
-                role="radio"
-                aria-checked={recurringFrequency === 'weekly'}
-                onClick={() => {
-                  setRecurringFrequency('weekly')
-                  setShowExtraFrequencyDropdown(false)
-                }}
-                className={cn(
-                  'py-1.5 text-xs font-bold rounded-lg transition-all',
-                  recurringFrequency === 'weekly'
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
-                )}
-              >
-                أسبوعي
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={recurringFrequency === 'monthly'}
-                onClick={() => {
-                  setRecurringFrequency('monthly')
-                  setShowExtraFrequencyDropdown(false)
-                }}
-                className={cn(
-                  'py-1.5 text-xs font-bold rounded-lg transition-all',
-                  recurringFrequency === 'monthly'
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
-                )}
-              >
-                شهري
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={recurringFrequency === 'yearly'}
-                onClick={() => {
-                  setRecurringFrequency('yearly')
-                  setShowExtraFrequencyDropdown(false)
-                }}
-                className={cn(
-                  'py-1.5 text-xs font-bold rounded-lg transition-all',
-                  recurringFrequency === 'yearly'
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
-                )}
-              >
-                سنوي
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={['daily', 'biweekly', 'quarterly', 'semiannual'].includes(
-                  recurringFrequency
-                )}
-                onClick={() => setShowExtraFrequencyDropdown((prev) => !prev)}
-                className={cn(
-                  'py-1.5 px-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-0.5',
-                  ['daily', 'biweekly', 'quarterly', 'semiannual'].includes(recurringFrequency)
-                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
-                )}
-              >
-                <span className="truncate">
-                  {recurringFrequency === 'daily'
-                    ? 'يومي'
-                    : recurringFrequency === 'biweekly'
-                      ? 'أسبوعين'
-                      : recurringFrequency === 'quarterly'
-                        ? 'ربع سنوي'
-                        : recurringFrequency === 'semiannual'
-                          ? 'نصف سنوي'
-                          : 'أخرى'}
-                </span>
-                <ChevronDown className="w-3 h-3 shrink-0" />
-              </button>
-            </div>
-
-            {/* Dropdown menu for extra frequencies */}
-            {showExtraFrequencyDropdown && (
-              <div className="mt-2 p-1.5 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-lg grid grid-cols-2 gap-1.5">
-                {[
-                  { value: 'daily' as Frequency, label: 'يومي' },
-                  { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },
-                  { value: 'quarterly' as Frequency, label: 'ربع سنوي (3 أشهر)' },
-                  { value: 'semiannual' as Frequency, label: 'نصف سنوي (6 أشهر)' },
-                ].map((f) => (
-                  <button
-                    key={f.value}
-                    type="button"
-                    onClick={() => {
-                      setRecurringFrequency(f.value)
-                      setShowExtraFrequencyDropdown(false)
-                    }}
-                    className={cn(
-                      'px-2.5 py-2 text-xs font-bold rounded-lg text-start flex items-center justify-between transition-colors',
-                      recurringFrequency === f.value
-                        ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                        : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-                    )}
-                  >
-                    <span>{f.label}</span>
-                    {recurringFrequency === f.value && (
-                      <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* End date toggle + picker */}
-          <div className="pt-1 space-y-2">
-            <Toggle
-              checked={hasEndDate}
-              onChange={setHasEndDate}
-              label="تحديد تاريخ انتهاء للتكرار"
-            />
-            {hasEndDate && (
-              <DatePickerInput
-                id="rec-end-date"
-                label="تاريخ الانتهاء"
-                value={endDateStr}
-                onChange={setEndDateStr}
-                required
-              />
-            )}
-          </div>
-
-          {/* Past date schedule notice */}
-          {parseLocalDateInput(dateStr) < new Date(new Date().setHours(0, 0, 0, 0)) && (
-            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-[#E4E4E7] dark:border-[#27272A] text-[11px] text-zinc-600 dark:text-zinc-300 flex items-center justify-between gap-2">
-              <span>تاريخ المعاملة في الماضي؛ سيتم تلقائياً جدولة الاستحقاق القادم من اليوم</span>
-              <Toggle
-                checked={scheduleNextIfPast}
-                onChange={setScheduleNextIfPast}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Error message */}
       {error && (
         <div
           role="alert"
@@ -1589,101 +175,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
       )}
 
-      {/* Delete confirmation if editing */}
-      {isEditing && !isLockedTransaction && showDeleteConfirm ? (
-        <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 space-y-2.5">
-          <p className="text-xs font-bold text-red-800 dark:text-red-300">
-            هل أنت متأكد من حذف هذه المعاملة نهائياً؟
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex-1"
-            >
-              {deleting ? 'جاري الحذف...' : 'نعم، احذف المعاملة'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDeleteConfirm(false)}
-              disabled={deleting}
-            >
-              تراجع
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Actions */}
-      <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={submitting}
-            className="flex-1"
-          >
-            {submitting
-              ? 'جاري الحفظ...'
-              : isEditing
-                ? 'تعديل المعاملة'
-                : isActualDuplicate
-                  ? 'حفظ النسخة'
-                  : 'حفظ'}
-          </Button>
-
-          {!isEditing && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleSaveAndAddAnother}
-              disabled={submitting}
-              className="text-xs sm:text-sm font-semibold whitespace-nowrap"
-            >
-              حفظ وإضافة أخرى
-            </Button>
-          )}
-
-          {isEditing && !isLockedTransaction && !isLinkedToDebtPayment && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDuplicateCurrent}
-              disabled={submitting || deleting}
-              icon={<Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-              className="text-xs sm:text-sm font-semibold whitespace-nowrap"
-            >
-              تكرار هذه المعاملة
-            </Button>
-          )}
-
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            إلغاء
-          </Button>
-        </div>
-
-        {isEditing && !isLockedTransaction && !showDeleteConfirm && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setShowDeleteConfirm(true)}
-            aria-label="حذف المعاملة"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 p-2.5"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+      <TransactionActionsBar
+        isEditing={isEditing}
+        isLockedTransaction={isLockedTransaction}
+        isLinkedToDebtPayment={isLinkedToDebtPayment}
+        isActualDuplicate={isActualDuplicate}
+        showDeleteConfirm={showDeleteConfirm}
+        onShowDeleteConfirm={setShowDeleteConfirm}
+        submitting={submitting}
+        deleting={deleting}
+        onClose={props.onClose}
+        onDelete={handleDelete}
+        onSaveAndAddAnother={handleSaveAndAddAnother}
+        onDuplicateCurrent={handleDuplicateCurrent}
+      />
 
       {isCreateCatOpen && (
         <CategoryForm

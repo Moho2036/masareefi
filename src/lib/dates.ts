@@ -186,16 +186,23 @@ export function formatDayHeader(date: Date, today: Date): string {
  * and daylight savings shifts never push the date across calendar or month boundaries.
  */
 export function parseLocalDateInput(dateStr: string): Date {
-  if (!dateStr) return new Date()
-  const [yearStr, monthStr, dayStr] = dateStr.split('-')
-  const year = Number(yearStr)
-  const month = Number(monthStr)
-  const day = Number(dayStr)
+  if (!dateStr || typeof dateStr !== 'string') return new Date()
+  const parts = dateStr.trim().split('-')
+  if (parts.length === 3) {
+    const [yearStr, monthStr, dayStr] = parts
+    const isDigits = (s?: string) => typeof s === 'string' && /^\d+$/.test(s.trim())
+    if (isDigits(yearStr) && isDigits(monthStr) && isDigits(dayStr)) {
+      const year = Number(yearStr)
+      const month = Number(monthStr)
+      const day = Number(dayStr)
 
-  if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-    return new Date(year, month - 1, day, 12, 0, 0, 0)
+      if (year >= 1970 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return new Date(year, month - 1, day, 12, 0, 0, 0)
+      }
+    }
   }
-  return new Date(dateStr)
+  const fallback = new Date(dateStr)
+  return Number.isNaN(fallback.getTime()) ? new Date() : fallback
 }
 
 /**

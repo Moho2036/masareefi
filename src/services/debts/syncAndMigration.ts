@@ -15,28 +15,28 @@ import {
   type CompactDebtEntriesResult,
 } from './typesAndHelpers'
 
-export async function compactDebtPayments(
-  uid: string,
-  debtId: string
-): Promise<CompactDebtPaymentsResult> {
-  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
-  const snap = await safeGetDoc(docRef)
-  if (!snap.exists() || !snap.data()) {
-    throw new Error('سجل الدين غير موجود')
+export interface CompactedPaymentsListResult {
+  payments: DebtPayment[]
+  mergedCount: number
+  mergedAmountFils: number
+}
+
+export interface CompactedEntriesListResult {
+  entries: DebtEntry[]
+  mergedCount: number
+  mergedAmountFils: number
+}
+
+export function buildCompactedPaymentsList(
+  payments: DebtPayment[],
+  keepCount = 10
+): CompactedPaymentsListResult {
+  if (!Array.isArray(payments) || payments.length <= keepCount) {
+    return { payments: payments || [], mergedCount: 0, mergedAmountFils: 0 }
   }
 
-  const debt = snap.data()!
-  const payments = debt.payments || []
-
-  // If 10 or fewer payments, compaction is not required
-  if (payments.length <= 10) {
-    return { mergedCount: 0, mergedAmountFils: 0 }
-  }
-
-  // Keep the latest 10 payments separate
-  const toKeep = payments.slice(-10)
-  // Merge all older payments
-  const toMerge = payments.slice(0, -10)
+  const toKeep = payments.slice(-keepCount)
+  const toMerge = payments.slice(0, -keepCount)
   const mergedCount = toMerge.reduce((count, p) => {
     if (p.isMerged && typeof p.note === 'string') {
       const match = p.note.match(/\((\d+)\s*دفعة\)/)
@@ -55,8 +55,9 @@ export async function compactDebtPayments(
   const mergedTxIds: string[] = []
   for (const p of toMerge) {
     if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
-      if (!mergedTxIds.includes(p.transactionId.trim())) {
-        mergedTxIds.push(p.transactionId.trim())
+      const trimmed = p.transactionId.trim()
+      if (!mergedTxIds.includes(trimmed)) {
+        mergedTxIds.push(trimmed)
       }
     } else if (!p.isMerged && p.id) {
       const defaultTxId = `debt_pay_${p.id}`
@@ -110,40 +111,24 @@ export async function compactDebtPayments(
     mergedTransactionIds: mergedTxIds,
   }
 
-  const newPayments = [consolidatedPayment, ...toKeep]
-  const serializedPayments = newPayments.map(serializePayment)
-
-  const batch = writeBatch(db)
-  batch.update(docRef, {
-    payments: serializedPayments,
-  })
-
-  await commitFirestoreWrite(batch.commit())
-  return { mergedCount, mergedAmountFils }
+  return {
+    payments: [consolidatedPayment, ...toKeep],
+    mergedCount,
+    mergedAmountFils,
+  }
 }
 
-export async function compactDebtEntries(
-  uid: string,
-  debtId: string
-): Promise<CompactDebtEntriesResult> {
-  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
-  const snap = await safeGetDoc(docRef)
-  if (!snap.exists() || !snap.data()) {
-    throw new Error('سجل الدين غير موجود')
+export function buildCompactedEntriesList(
+  entries: DebtEntry[],
+  debtId: string,
+  keepCount = 10
+): CompactedEntriesListResult {
+  if (!Array.isArray(entries) || entries.length <= keepCount) {
+    return { entries: entries || [], mergedCount: 0, mergedAmountFils: 0 }
   }
 
-  const debt = snap.data()!
-  const entries = debt.entries || []
-
-  // If 10 or fewer entries, compaction is not required
-  if (entries.length <= 10) {
-    return { mergedCount: 0, mergedAmountFils: 0 }
-  }
-
-  // Keep the latest 10 entries separate
-  const toKeep = entries.slice(-10)
-  // Merge all older entries
-  const toMerge = entries.slice(0, -10)
+  const toKeep = entries.slice(-keepCount)
+  const toMerge = entries.slice(0, -keepCount)
   const mergedCount = toMerge.reduce((count, e) => {
     if (e.isMerged && typeof e.title === 'string') {
       const match = e.title.match(/\((\d+)\s*سلفة\)/)
@@ -162,12 +147,18 @@ export async function compactDebtEntries(
   const mergedTxIds: string[] = []
   for (const e of toMerge) {
     if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
-      if (!mergedTxIds.includes(e.transactionId.trim())) {
-        mergedTxIds.push(e.transactionId.trim())
+      const trimmed = e.transactionId.trim()
+      if (!mergedTxIds.includes(trimmed)) {
+        mergedTxIds.push(trimmed)
       }
     } else if (!e.isMerged && e.id) {
-      const defaultTxId = `debt_entry_${e.id}`
-      if (!mergedTxIds.includes(defaultTxId)) {
+      const defaultTxId =
+        e.id === `entry_${debtId}` || e.id === `entry_base_${debtId}`
+          ? `debt_init_${debtId}`
+          : e.id.startsWith('entry_base_')
+            ? `debt_init_${e.id.replace('entry_base_', '')}`
+            : `debt_entry_${e.id}`
+      if (defaultTxId && !mergedTxIds.includes(defaultTxId)) {
         mergedTxIds.push(defaultTxId)
       }
     }
@@ -204,7 +195,7 @@ export async function compactDebtEntries(
       : `رصيد مدمج لـ ${mergedCount} سلفة سابقة`
 
   const consolidatedEntry: DebtEntry = {
-    id: `compacted_entry_${Date.now()}`,
+    id: `compacted_entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     amountFils: mergedAmountFils,
     date: mergedDate,
     title: baseMergedTitle,
@@ -214,7 +205,62 @@ export async function compactDebtEntries(
     mergedTransactionIds: mergedTxIds,
   }
 
-  const newEntries = [consolidatedEntry, ...toKeep]
+  return {
+    entries: [consolidatedEntry, ...toKeep],
+    mergedCount,
+    mergedAmountFils,
+  }
+}
+
+export async function compactDebtPayments(
+  uid: string,
+  debtId: string
+): Promise<CompactDebtPaymentsResult> {
+  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
+  const snap = await safeGetDoc(docRef)
+  if (!snap.exists() || !snap.data()) {
+    throw new Error('سجل الدين غير موجود')
+  }
+
+  const debt = snap.data()!
+  const payments = debt.payments || []
+
+  // If 10 or fewer payments, compaction is not required
+  if (payments.length <= 10) {
+    return { mergedCount: 0, mergedAmountFils: 0 }
+  }
+
+  const { payments: newPayments, mergedCount, mergedAmountFils } = buildCompactedPaymentsList(payments, 10)
+  const serializedPayments = newPayments.map(serializePayment)
+
+  const batch = writeBatch(db)
+  batch.update(docRef, {
+    payments: serializedPayments,
+  })
+
+  await commitFirestoreWrite(batch.commit())
+  return { mergedCount, mergedAmountFils }
+}
+
+export async function compactDebtEntries(
+  uid: string,
+  debtId: string
+): Promise<CompactDebtEntriesResult> {
+  const docRef = doc(db, 'users', uid, 'debts', debtId).withConverter(debtConverter)
+  const snap = await safeGetDoc(docRef)
+  if (!snap.exists() || !snap.data()) {
+    throw new Error('سجل الدين غير موجود')
+  }
+
+  const debt = snap.data()!
+  const entries = debt.entries || []
+
+  // If 10 or fewer entries, compaction is not required
+  if (entries.length <= 10) {
+    return { mergedCount: 0, mergedAmountFils: 0 }
+  }
+
+  const { entries: newEntries, mergedCount, mergedAmountFils } = buildCompactedEntriesList(entries, debtId, 10)
   const serializedEntries = newEntries.map(serializeDebtEntry)
 
   const batch = writeBatch(db)
@@ -300,126 +346,17 @@ export async function mergePersonDebts(
     .filter((d) => !d.settled && d.dueDate)
     .map((d) => (d.dueDate instanceof Date ? d.dueDate : new Date(d.dueDate!)))
     .sort((a, b) => a.getTime() - b.getTime())[0] ?? null
-  const effectiveDueDate = primaryDebt.dueDate ?? fallbackDueDate
+  const effectiveDueDate =
+    !primaryDebt.settled && primaryDebt.dueDate ? primaryDebt.dueDate : fallbackDueDate
 
   let finalPayments = consolidatedPayments
   if (consolidatedPayments.length > 100) {
-    const toKeep = consolidatedPayments.slice(-10)
-    const toMerge = consolidatedPayments.slice(0, -10)
-    const mergedCount = toMerge.length
-    const mergedAmountFils = toMerge.reduce((sum, p) => sum + p.amountFils, 0)
-    const lastMergedPayment = toMerge[toMerge.length - 1]
-    const mergedDate =
-      lastMergedPayment.date instanceof Date
-        ? lastMergedPayment.date
-        : new Date(lastMergedPayment.date)
-
-    const mergedTxIds: string[] = []
-    for (const p of toMerge) {
-      if (p.transactionId && typeof p.transactionId === 'string' && p.transactionId.trim()) {
-        if (!mergedTxIds.includes(p.transactionId.trim())) {
-          mergedTxIds.push(p.transactionId.trim())
-        }
-      } else if (!p.isMerged && p.id) {
-        const defaultTxId = `debt_pay_${p.id}`
-        if (!mergedTxIds.includes(defaultTxId)) {
-          mergedTxIds.push(defaultTxId)
-        }
-      }
-      if (Array.isArray(p.mergedTransactionIds)) {
-        for (const mId of p.mergedTransactionIds) {
-          if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
-            mergedTxIds.push(mId.trim())
-          }
-        }
-      }
-    }
-
-    const genericNotes = new Set([
-      'دفعة سداد',
-      'دفعة استرداد دين',
-      'دفعة سداد دين',
-      'استرداد دفعة دين',
-      'سداد دفعة دين',
-    ])
-    const customNotes: string[] = []
-    for (const p of toMerge) {
-      if (p.note && typeof p.note === 'string') {
-        const trimmed = p.note.trim()
-        if (trimmed && !genericNotes.has(trimmed)) {
-          const cleaned = trimmed
-            .replace(/^رصيد دفعات سابقة مدمجة \(\d+\s*دفعة\):?\s*/, '')
-            .trim()
-          if (cleaned && !customNotes.includes(cleaned)) {
-            customNotes.push(cleaned)
-          }
-        }
-      }
-    }
-    const baseMergedNote = `رصيد دفعات سابقة مدمجة (${mergedCount} دفعة)`
-    const finalMergedNote =
-      customNotes.length > 0
-        ? `${baseMergedNote}: ${customNotes.join(' ، ')}`.slice(0, 500)
-        : baseMergedNote
-
-    const consolidatedPayment: DebtPayment = {
-      id: `compacted_${generatePaymentId()}`,
-      amountFils: mergedAmountFils,
-      date: mergedDate,
-      note: finalMergedNote,
-      createdAt: new Date(),
-      isMerged: true,
-      mergedTransactionIds: mergedTxIds,
-    }
-
-    finalPayments = [consolidatedPayment, ...toKeep]
+    finalPayments = buildCompactedPaymentsList(consolidatedPayments, 10).payments
   }
 
   let finalEntries = consolidatedEntries
   if (consolidatedEntries.length > 100) {
-    const toKeepEntries = consolidatedEntries.slice(-99)
-    const toMergeEntries = consolidatedEntries.slice(0, -99)
-    const mergedEntriesCount = toMergeEntries.length
-    const mergedEntriesAmountFils = toMergeEntries.reduce((sum, e) => sum + e.amountFils, 0)
-    const lastMergedEntry = toMergeEntries[toMergeEntries.length - 1]
-    const mergedEntryDate =
-      lastMergedEntry.date instanceof Date
-        ? lastMergedEntry.date
-        : new Date(lastMergedEntry.date)
-
-    const mergedTxIds: string[] = []
-    for (const e of toMergeEntries) {
-      if (e.transactionId && typeof e.transactionId === 'string' && e.transactionId.trim()) {
-        if (!mergedTxIds.includes(e.transactionId.trim())) {
-          mergedTxIds.push(e.transactionId.trim())
-        }
-      } else if (!e.isMerged && e.id) {
-        const defaultTxId = `debt_entry_${e.id}`
-        if (!mergedTxIds.includes(defaultTxId)) {
-          mergedTxIds.push(defaultTxId)
-        }
-      }
-      if (Array.isArray(e.mergedTransactionIds)) {
-        for (const mId of e.mergedTransactionIds) {
-          if (mId && typeof mId === 'string' && mId.trim() && !mergedTxIds.includes(mId.trim())) {
-            mergedTxIds.push(mId.trim())
-          }
-        }
-      }
-    }
-
-    const consolidatedEntry: DebtEntry = {
-      id: `compacted_entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      amountFils: mergedEntriesAmountFils,
-      date: mergedEntryDate,
-      title: `رصيد سلف سابقة مدمجة (${mergedEntriesCount} سلفة)`,
-      note: `رصيد مدمج لـ ${mergedEntriesCount} سلفة سابقة`,
-      createdAt: new Date(),
-      isMerged: true,
-      mergedTransactionIds: mergedTxIds,
-    }
-
-    finalEntries = [consolidatedEntry, ...toKeepEntries]
+    finalEntries = buildCompactedEntriesList(consolidatedEntries, primaryDebt.id, 99).entries
   }
 
   const batch = writeBatch(db)

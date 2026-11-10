@@ -13,9 +13,49 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import type { Category } from '../types'
+import type { Category, TxType } from '../types'
 import { categoryConverter } from './converters'
 import { commitFirestoreWrite, safeGetDoc, safeGetDocs } from '../lib/firestoreOffline'
+
+async function assertNotArchivingLastActiveCategory(
+  uid: string,
+  categoryIdsToArchiveOrDelete: string[]
+): Promise<void> {
+  const targetIds = Array.from(new Set(categoryIdsToArchiveOrDelete.filter(Boolean)))
+  if (targetIds.length === 0) return
+
+  const targetItems = await Promise.all(
+    targetIds.map(async (id) => ({
+      id,
+      snap: await safeGetDoc(doc(db, 'users', uid, 'categories', id)),
+    }))
+  )
+
+  const activeTargetsByType = new Map<TxType, Set<string>>()
+  for (const { id, snap } of targetItems) {
+    if (!snap.exists()) continue
+    const cat = snap.data() as Category
+    if (cat.type && !cat.archived) {
+      const set = activeTargetsByType.get(cat.type) || new Set()
+      set.add(id)
+      activeTargetsByType.set(cat.type, set)
+    }
+  }
+
+  if (activeTargetsByType.size === 0) return
+
+  const colRef = collection(db, 'users', uid, 'categories')
+  for (const [type, activeTargetSet] of activeTargetsByType.entries()) {
+    const activeSnap = await safeGetDocs(
+      query(colRef, where('type', '==', type), where('archived', '==', false))
+    )
+    const totalActiveCount = activeSnap.docs.length
+    const numTargetsActiveInFirestore = activeSnap.docs.filter((d) => activeTargetSet.has(d.id)).length
+    if (totalActiveCount - numTargetsActiveInFirestore <= 0) {
+      throw new Error('لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
+    }
+  }
+}
 
 export function subscribeCategories(
   uid: string,
@@ -62,7 +102,11 @@ export async function updateCategory(
   const payload: Record<string, unknown> = {}
 
   if (data.name !== undefined) {
-    payload.name = data.name.trim().slice(0, 40)
+    const trimmed = data.name.trim()
+    if (!trimmed) {
+      throw new Error('اسم التصنيف لا يمكن أن يكون فارغاً.')
+    }
+    payload.name = trimmed.slice(0, 40)
   }
   if (data.icon !== undefined) {
     payload.icon = data.icon.slice(0, 16)
@@ -70,7 +114,10 @@ export async function updateCategory(
   if (data.color !== undefined) {
     payload.color = data.color
   }
-  if (data.archived !== undefined) {
+  if (data.archived === true) {
+    await assertNotArchivingLastActiveCategory(uid, [id])
+    payload.archived = true
+  } else if (data.archived !== undefined) {
     payload.archived = Boolean(data.archived)
   }
   if (data.order !== undefined) {
@@ -104,23 +151,9 @@ export async function archiveCategory(
   archived: boolean = true
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
-
   if (archived) {
-    const snap = await safeGetDoc(docRef)
-    if (snap.exists()) {
-      const catData = snap.data() as Category | undefined
-      if (catData?.type && !catData?.archived) {
-        const colRef = collection(db, 'users', uid, 'categories')
-        const activeSnap = await safeGetDocs(
-          query(colRef, where('type', '==', catData.type), where('archived', '==', false))
-        )
-        if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
-          throw new Error('لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
-        }
-      }
-    }
+    await assertNotArchivingLastActiveCategory(uid, [id])
   }
-
   await commitFirestoreWrite(updateDoc(docRef, { archived }))
 }
 
@@ -130,6 +163,9 @@ export async function archiveCategoriesBatch(
   archived: boolean = true
 ): Promise<void> {
   if (!ids || ids.length === 0) return
+  if (archived) {
+    await assertNotArchivingLastActiveCategory(uid, ids)
+  }
   const batch = writeBatch(db)
   for (const id of ids) {
     if (!id) continue
@@ -141,19 +177,7 @@ export async function archiveCategoriesBatch(
 
 export async function deleteCategory(uid: string, id: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'categories', id)
-  const catSnap = await safeGetDoc(docRef)
-  if (catSnap.exists()) {
-    const catData = catSnap.data() as Category | undefined
-    if (catData?.type && !catData?.archived) {
-      const colRef = collection(db, 'users', uid, 'categories')
-      const activeSnap = await safeGetDocs(
-        query(colRef, where('type', '==', catData.type), where('archived', '==', false))
-      )
-      if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === id)) {
-        throw new Error('لا يمكن أرشفة أو حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
-      }
-    }
-  }
+  await assertNotArchivingLastActiveCategory(uid, [id])
 
   const txsCol = collection(db, 'users', uid, 'transactions')
   const recCol = collection(db, 'users', uid, 'recurring')
@@ -212,13 +236,7 @@ export async function reassignAndDeleteCategory(
   }
 
   if (!sourceData.archived && targetData.archived) {
-    const colRef = collection(db, 'users', uid, 'categories')
-    const activeSnap = await safeGetDocs(
-      query(colRef, where('type', '==', sourceData.type), where('archived', '==', false))
-    )
-    if (activeSnap.docs.length <= 1 && activeSnap.docs.some((d) => d.id === sourceCatId)) {
-      throw new Error('لا يمكن حذف آخر تصنيف نشط في هذا القسم؛ يجب بقاء تصنيف واحد نشط على الأقل.')
-    }
+    await assertNotArchivingLastActiveCategory(uid, [sourceCatId])
   }
 
   const txsCol = collection(db, 'users', uid, 'transactions')

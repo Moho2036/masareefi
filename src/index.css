@@ -29,6 +29,8 @@
 html {
   overscroll-behavior-y: none;
   background-color: #f4f4f5;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 html.dark {
@@ -45,6 +47,15 @@ body {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
+  max-width: 100vw;
+  width: 100%;
+}
+
+#root {
+  max-width: 100%;
+  overflow-x: clip;
+  min-height: 100vh;
 }
 
 /* Allow text selection inside inputs and textareas */
@@ -196,7 +207,7 @@ html.dark ::-webkit-scrollbar-thumb:hover,
 
   header,
   nav,
-  button,
+  button:not(.print-include),
   aside[aria-label="القائمة الجانبية"],
   .print-hide {
     display: none !important;
@@ -204,37 +215,57 @@ html.dark ::-webkit-scrollbar-thumb:hover,
 
   html,
   body {
-    background-color: #ffffff !important;
-    color: #18181b !important;
     padding: 0 !important;
     margin: 0 !important;
     font-size: 11pt !important;
     position: static !important;
     overflow: visible !important;
     height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   main {
-    background-color: #ffffff !important;
-    color: #18181b !important;
     padding: 0 !important;
     margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
   }
 
-  /* Modals when printed */
+  /* Modals when printed: isolate dialog and render cleanly as formal statement */
   body:has([role="dialog"]) #root {
+    display: none !important;
+  }
+
+  body:has([role="dialog"]) {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  [role="presentation"] {
+    position: static !important;
+    overflow: visible !important;
+    display: block !important;
+    inset: auto !important;
+    background: transparent !important;
+  }
+
+  [data-testid="modal-backdrop"] {
     display: none !important;
   }
 
   [role="dialog"] {
     position: static !important;
+    width: 100% !important;
     max-width: 100% !important;
     max-height: none !important;
     overflow: visible !important;
     box-shadow: none !important;
-    border: 1px solid #e4e4e7 !important;
-    background-color: #ffffff !important;
-    color: #18181b !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
   }
 
   [role="dialog"] * {
@@ -250,106 +281,11 @@ html.dark ::-webkit-scrollbar-thumb:hover,
   .print-avoid-break {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-  }
-
-  /* Neutralize card shadows and enforce clean light borders */
-  .card,
-  tr,
-  .print-avoid-break {
     box-shadow: none !important;
-    border: 1px solid #e4e4e7 !important;
-    background-color: #ffffff !important;
-  }
-
-  /* Comprehensive Dark-Mode overrides for printing (ensures printed document matches Daylight Swiss styling) */
-  .dark,
-  html.dark,
-  .dark body,
-  .dark main,
-  .dark aside,
-  [class*="dark:bg-[#121215]"],
-  [class*="dark:bg-[#09090B]"] {
-    background-color: #ffffff !important;
-  }
-
-  /* Secondary neutral backgrounds (table headers, stats sub-cards, badge backgrounds) */
-  .dark [class*="dark:bg-zinc-900"],
-  .dark [class*="dark:bg-zinc-800"] {
-    background-color: #f4f4f5 !important;
-  }
-
-  /* Clean light borders */
-  .dark [class*="dark:border-[#27272A]"],
-  .dark [class*="dark:border-zinc-800"],
-  .dark [class*="dark:border-zinc-700"] {
-    border-color: #e4e4e7 !important;
-  }
-
-  /* Neutral text tokens */
-  .dark [class*="dark:text-white"],
-  .dark [class*="dark:text-zinc-50"],
-  .dark [class*="dark:text-zinc-100"] {
-    color: #18181b !important;
-  }
-
-  .dark [class*="dark:text-zinc-200"],
-  .dark [class*="dark:text-zinc-300"] {
-    color: #27272a !important;
-  }
-
-  .dark [class*="dark:text-zinc-400"],
-  .dark [class*="dark:text-zinc-500"] {
-    color: #71717a !important;
-  }
-
-  /* Preserve Semantic Financial Colors on print */
-  .dark [class*="dark:text-red-400"],
-  .dark [class*="dark:text-red-500"] {
-    color: #dc2626 !important;
-  }
-
-  .dark [class*="dark:text-emerald-400"],
-  .dark [class*="dark:text-emerald-500"],
-  .dark [class*="dark:text-green-400"],
-  .dark [class*="dark:text-green-500"] {
-    color: #16a34a !important;
-  }
-
-  .dark [class*="dark:text-blue-400"],
-  .dark [class*="dark:text-blue-500"] {
-    color: #2563eb !important;
-  }
-
-  .dark [class*="dark:text-amber-400"],
-  .dark [class*="dark:text-amber-500"] {
-    color: #d97706 !important;
-  }
-
-  /* Chart bars and SVG elements color fidelity */
-  rect[fill="#34D399"],
-  path[fill="#34D399"] {
-    fill: #16a34a !important;
-    stroke: #16a34a !important;
-  }
-
-  rect[fill="#F87171"],
-  path[fill="#F87171"] {
-    fill: #dc2626 !important;
-    stroke: #dc2626 !important;
-  }
-
-  .recharts-cartesian-grid line {
-    stroke: #e4e4e7 !important;
-    opacity: 0.8 !important;
-  }
-
-  .recharts-text,
-  .recharts-cartesian-axis-tick text {
-    fill: #71717a !important;
   }
 
   @page {
-    margin: 1.2cm;
+    margin: 1cm;
     size: auto;
   }
 }

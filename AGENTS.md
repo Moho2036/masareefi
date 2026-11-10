@@ -1,8 +1,8 @@
 # بَصير (Baseer) — Engineering Conventions & Agent Rules (binding for every agent)
 
-Before starting any task, read:
-1. `DESIGN_SYSTEM.md` (الدستور البصري الشامل ولغة التصميم السويسرية الموحدة والمحرمات البصرية الـ 13).
-2. `docs/PROJECT_BIBLE.md` (architecture, data model, design system).
+Before starting any task, selectively consult documentation based on your task scope:
+1. Read `DESIGN_SYSTEM.md` (الدستور البصري الشامل ولغة التصميم السويسرية الموحدة والمحرمات البصرية الـ 13) **ONLY** when creating or modifying UI components, pages, forms, modals, or styles.
+2. Read the relevant section of `docs/PROJECT_BIBLE.md` corresponding to the domain being modified (architecture, specific Firestore collections, financial calculations, or sync protocols).
 
 ---
 
@@ -32,6 +32,22 @@ Before starting any task, read:
 5. **توحيد المصطلحات والأرقام بين الصفحات (Cross-Page Metric Parity):**
    - لا يجوز أن يظهر نفس المفهوم المالي (مثل فائض/عجز الشهر أو الرصيد المتاح) برقم أخضر في لوحة التحكم وبرقم أحمر متناقض في صفحة التقارير لنفس الشهر! يجب أن تحترم جميع الصفحات إعداد `rolloverBalance` و `monthStartDay` بنفس المعادلة تماماً.
 
+## 0A. بروتوكول النظافة المعمارية ومنع التشابك والتكرار (Clean Architecture, DRY & Modularity Rules)
+1. **منع النسخ والتكرار نهائياً (Zero Copy-Paste Duplication / Strict DRY):**
+   - يُمنع منعاً باتاً تكرار كتل منطقية متشابهة (>10 أسطر) عبر الدوال أو الملفات. يجب استخراج أي منطق مشترك (سواء كان تحققاً Validation، أو حسابات رياضية، أو تحويلات Serialization، أو تجهيز عمليات دفعات Firestore) في دالة مساعدة نقية وموحدة وقابلة لإعادة الاستخدام.
+2. **الحد الأقصى لحجم الملفات (Hard File Size Ceiling):**
+   - لا يجوز لأي ملف منطق أو خدمة جديد أو معدل (`src/lib/*` أو `src/services/*`) أن يتجاوز **350 سطراً**.
+   - لا يجوز لأي ملف واجهة أو مكون أو صفحة (`src/components/*` أو `src/pages/*`) أن يتجاوز **450 سطراً**.
+   - عند اقتراب أي ملف من تجاوز هذا السقف، يجب تقسيمه فوراً إلى حزمة وحدات فرعية متخصصة داخل مجلد مستقل مع الحفاظ على ملف برميل تصدير رقيق (`Thin Barrel Re-export`: `export * from ...`) لضمان عدم كسر مسارات الاستيراد القائمة.
+3. **الفصل الصارم بين الطبقات المعمارية (Strict Layer Separation):**
+   - `src/lib/*`: دوال رياضية ودومين نقية ومتزامنة 100% (يُحظر تماماً استيراد Firestore أو استخدام React hooks/state داخلها).
+   - `src/services/*`: عمليات الإدخال والإخراج لقاعدة بيانات Firestore وتنسيق الدفعات (`writeBatch`) وحفظ واسترجاع البيانات فقط (ويجب أن تفوّض أي حسابات أو تحليلات رياضية إلى `src/lib/*`).
+   - `src/pages/*` و `src/components/*`: عرض الواجهات التفاعلية وتجربة المستخدم فقط (يُحظر تضمين معادلات مالية خام أو حلقات تجميع معقدة ومباشرة داخل ملفات `.tsx`).
+4. **التخلص الفوري من الكود الميت (Zero Zombie Code):**
+   - عند إعادة هيكلة أو استبدال أي دالة أو مساعد برمجي، احذف الدالة القديمة غير المستخدمة واختباراتها المتقادمة فوراً لمنع تراكم التصديرات الميتة في المشروع.
+5. **منع إضعاف أو التلاعب بالاختبارات لتمرير كود معيب (Never Weaken Tests to Pass Buggy Code / Test Integrity Rule):**
+   - عند فشل أي اختبار وحدة (`unit test`) بعد تعديل الكود، يُحظر منعاً باتاً تعديل الأرقام أو النتائج المتوقعة في الاختبار بصورة عمياء لتطابق المخرجات الجديدة المكسورة! لا يجوز تعديل الاختبار إلا إذا ثبت رياضياً ومحاسبياً بالدليل القاطع أن القيمة القديمة في الاختبار كانت هي الخطأ وأن السلوك الجديد هو الصواب المحاسبي الدقيق.
+
 ## 1. بروتوكول دورة الحياة الكاملة (Full Lifecycle: Create, Edit, Delete, Archive, Restore)
 عند بناء أو تعديل أي ميزة، لا تفكر أبداً في مسار "الإنشاء (Create)" فقط. يجب عليك فحص وتغطية المسارات الخمسة:
 - **عند التعديل (Edit):**
@@ -52,10 +68,11 @@ Before starting any task, read:
    - لا تقسم إجمالي المصاريف السنوية أو الشهرية على شهر لم يكتمل بعد أو بدأ للتو وكأنه شهر كامل.
    - في حساب "متوسط الإنفاق الشهري"، يجب أن يعتمد المقام فقط على الأشهر التي وُجدت فيها **مصاريف فعلية** (لا تدخل شهراً فيه دخل فقط ومصاريفه صفر ضمن مقام قسمة المصاريف!)، ويجب معالجة الشهر الجاري غير المكتمل بذكاء (إما باستثنائه إذا كانت هناك أشهر سابقة مكتملة، أو التنبيه بوضوح، وعدم احتساب أشهر مستقبلية).
 3. **الأشهر الفارغة أو الصفرية (Zero / Empty State):** ماذا لو كان الشهر السابق `0` عند حساب نسبة التغير المئوية؟ (تجنب القسمة على صفر، ولا تخفِ المؤشر بصمت دون نص يوضح عدم وجود بيانات سابقة).
-4. **الرصيد المرحّل الموجب والسالب (Positive Surplus & Negative Deficit Rollover):**
+4. **الرصيد المرحّل الموجب والسالب والرصيد الافتتاحي (Rollover & Opening Balance):**
    - عندما يكون `rolloverBalance` مفعلاً، فإن "الميزانية المتاحة للشهر" هي `(دخل الشهر الحالي + الرصيد المرحّل من الأشهر السابقة سواء كان موجباً أو سالباً)`.
    - يمنع تجاهل العجز المرحّل السالب (`Math.max(0, rollover)`) في حساب "حد الصرف اليومي الآمن" أو "التوقع المالي"، لأن تجاهل العجز يوهم المستخدم بميزانية غير موجودة.
    - في مؤشرات وتنبيهات الصحة المالية (مثل "لا يوجد دخل هذا الشهر" أو "استهلكت 80% من الدخل")، يجب فحص **إجمالي السيولة المتاحة (شاملة الرصيد المرحّل)** وليس دخل الشهر الحالي وحده.
+   - يدخل الرصيد الافتتاحي (`openingBalanceFils`) حصرياً عندما يكون `rolloverBalance` مفعلاً والفترة المعروضة تبدأ بعد `rolloverStartDate` (إذا كان محدداً: `periodRange.start > rolloverStartDate`). وتلتزم جميع الصفحات (`DashboardPage`, `ReportsPage`, `SafeDailySpendCard`) بهذه المعادلة الموحدة دون ابتداع شروط محلية.
 5. **المعاملات ذات التاريخ المستقبلي (Future-Dated Transactions):** تأكد من أن وجود معاملة بتاريخ مستقبلي لا يفسد حسابات الأشهر المنقضية أو متوسطات الصرف الفعلية حتى اليوم.
 6. **تخصيص يوم بداية الشهر المالي (`monthStartDay` من 1 إلى 28):** جميع الفلاتر، التقارير الشهرية والسنوية، الرسوم البيانية، والتوقعات يجب أن تستخدم نطاق الشهر المالي المخصص وليس الشهر الميلادي (`1..31`).
 7. **حماية الأزرار من التكرار والتناقض المنطقي:** (مثل منع الضغط المزدوج، ومنع تسجيل دفعة على "مستلم الشهر" المعفى في الجمعية حتى لا يتجاوز عدد الدافعين إجمالي الأعضاء).
@@ -70,7 +87,7 @@ Before starting any task, read:
 5. **التزامن مع النسخ الاحتياطي (`backupRestore.ts`):** أي حقل اختياري (`null` أو `undefined`) يجب ألا يتحول بالخطأ إلى `0` عبر `Number(null)` فيكسر شروط `firestore.rules` أثناء الاستعادة.
 
 ## 4. بروتوكول التحقق الذاتي قبل تسليم أي مهمة (Pre-Completion Verification)
-قبل أن تنهي ردك، اسأل نفسك: "لو كنت مستخدماً حقيقياً وجربت إضافة ثم تعديل ثم حذف هذا العنصر، أو جربته في أول يوم من الشهر/السنة، أو جربته مع رصيد سالب، هل سيحدث أي سلوك غريب؟" ثم شغّل فحص الأنواع (`typecheck`)، الـ `lint`، الاختبارات (`test`)، والبناء (`build`).
+قبل أن تنهي ردك، اسأل نفسك: "لو كنت مستخدماً حقيقياً وجربت إضافة ثم تعديل ثم حذف هذا العنصر، أو جربته في أول يوم من الشهر/السنة، أو جربته مع رصيد سالب، هل سيحدث أي سلوك غريب؟" ثم شغّل فحص الأنواع (`typecheck`)، الـ `lint`، الاختبارات (`test`)، والبناء (`build`). والتزم تماماً بعدم إضعاف أي اختبار وحدة أو التلاعب بنتائجه المتوقعة لتمرير كود معيب.
 
 ## 5. ضابط رفع ونشر الكود إلى الموقع (Deployment & Production Release Protocol)
 - يُمنع منعاً باتاً نشر أو رفع الكود إلى الموقع الحي (`firebase deploy` / Production) تلقائياً أو بمبادرة ذاتية من الوكيل.
@@ -87,14 +104,14 @@ Before starting any task, read:
 ## UI rules
 - `<html lang="ar" dir="rtl">`. Fonts: **IBM Plex Sans Arabic** + **Cairo** (Google Fonts).
 - Use logical Tailwind utilities only (`ms-/me-/ps-/pe-/start-/end-/text-start`), never `ml-/mr-/left-/right-` for layout.
-- Colors (Swiss Carbon & Sapphire Clarity): primary sapphire `#2563EB` (Tailwind `blue-600`), hover `#3B82F6`, expense `#DC2626` (Tailwind `red-600`), income `#16A34A` (Tailwind `green-600`). Light bg `#F4F4F5` (`slate-50`) + white cards; dark bg `#09090B` (`slate-900`) + cards `#121215` (`slate-800`), border `#27272A` (`slate-700`).
+- Colors (Swiss Carbon & Sapphire Clarity): primary sapphire `#2563EB` (Tailwind `blue-600`), hover `#1D4ED8` (`blue-700`) / `#3B82F6` (`blue-500`), expense `#DC2626` (Tailwind `red-600`) / dark `#F87171` (`red-400`), income `#059669` (Tailwind `emerald-600`) / dark `#34D399` (`emerald-400`). Light bg `#F4F4F5` (`zinc-100`) + white cards; dark bg `#09090B` (`zinc-950`) + cards `#121215` (`carbon-card`), border `#E4E4E7` (`zinc-200`) light / `#27272A` (`zinc-800`) dark.
 - Cards: `rounded-2xl`, soft shadow, `p-5`. Buttons `rounded-xl`.
 - Dark mode: class strategy on `<html>` (`.dark`), setting = system | light | dark (default system). Use `@custom-variant dark (&:where(.dark, .dark *));`.
 - Desktop (≥ lg): sidebar on the RIGHT (start side). Mobile: bottom nav (الرئيسية، المعاملات، [+ FAB]، الديون، المزيد).
 - Zero blocking spinners: Use skeleton loading (`AppShellSkeleton`, `DashboardSkeleton`, `HeroCardSkeleton`, `PageSkeleton`) instead of full-screen spinners or blank screens. Guard balance hero cards against flashing deficit (`danger`) states during initial data resolution.
 - Zero native OS pickers: Strictly prohibit using raw `<select>` and `<input type="date">`; always use custom `<Select>` and `<DatePickerInput>` components.
 - Anti-patterns & color purity: Strictly prohibit nested boxes (`Box-in-Box`). Restrict semantic colors (red/green/amber) to explicit financial numbers and top indicator line (`h-1`) only; never use semantic colors as card/badge/avatar/button backgrounds per `DESIGN_SYSTEM.md`.
-- All user-facing text in Arabic. Numbers in Western digits (0-9) for readability: use `Intl.NumberFormat('ar-JO', { numberingSystem: 'latn' })`.
+- All user-facing text in Arabic. Numbers in Western digits (0-9) for readability. NEVER instantiate new Intl.NumberFormat in components or pages; ALWAYS format currency and numbers exclusively through formatMoney / getFormatter in src/lib/money.ts or the <FormattedMoney /> component.
 
 ## Money & dates
 - Store money as **integer fils** (`amountFils`, 1 JOD = 1000 fils). Never store floats. Display e.g. `12.500 د.أ`.

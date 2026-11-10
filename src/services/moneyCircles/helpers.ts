@@ -116,54 +116,8 @@ export const circleConverter: FirestoreDataConverter<MoneyCircle> = {
   },
 }
 
-/**
- * Calculates the 0-based elapsed monthly cycles from startDate to refDate based on actual monthly cycles.
- * e.g., if start is Jan 20:
- * Jan 20 to Feb 19 -> 0
- * Feb 20 to Mar 19 -> 1
- * Before Jan 20 -> -1
- */
-export function getCircleCycleIndex(
-  startDate: Date,
-  refDate: Date = new Date(),
-  monthStartDay?: number
-): number {
-  const rawStart = startDate instanceof Date ? startDate : new Date(startDate)
-  const target = refDate instanceof Date ? refDate : new Date(refDate)
-
-  let start = rawStart
-  const isNearMonthBoundary = rawStart.getDate() === 1 || rawStart.getDate() >= 28
-  if (monthStartDay !== undefined && monthStartDay > 1 && isNearMonthBoundary) {
-    const candidateStart = new Date(
-      rawStart.getFullYear(),
-      rawStart.getMonth(),
-      Math.min(28, Math.max(1, Math.round(monthStartDay)))
-    )
-    if (candidateStart <= target || rawStart > target) {
-      start = candidateStart
-    }
-  }
-
-  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0)
-  const t = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 12, 0, 0)
-
-  const anchorDay = start.getDate()
-  const addMonthsWithAnchor = (base: Date, count: number) => {
-    const d = new Date(base.getFullYear(), base.getMonth() + count, 1, 12, 0, 0)
-    const daysInM = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
-    d.setDate(Math.min(anchorDay, daysInM))
-    return d
-  }
-
-  let approxMonths = (t.getFullYear() - s.getFullYear()) * 12 + (t.getMonth() - s.getMonth())
-  while (addMonthsWithAnchor(s, approxMonths) > t) {
-    approxMonths--
-  }
-  while (addMonthsWithAnchor(s, approxMonths + 1) <= t) {
-    approxMonths++
-  }
-  return approxMonths
-}
+import { getCircleCycleIndex } from '../../lib/recurring'
+export { getCircleCycleIndex }
 
 /**
  * Calculates which month (1-indexed) the circle is currently in based on actual monthly cycles from startDate.

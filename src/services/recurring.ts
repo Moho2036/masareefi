@@ -211,6 +211,81 @@ export async function deleteRecurring(uid: string, id: string): Promise<void> {
  * installment for the corresponding cycle month as paid in the circle.
  * Returns the number of new transactions created.
  */
+/**
+ * Advances the next occurrence date past skipped occurrences and computes whether the rule should deactivate.
+ */
+function computeNextActiveOccurrence(
+  rec: Recurring,
+  fromDate: Date,
+  monthStartDay?: number
+): { newNextDate: Date; shouldDeactivate: boolean } {
+  const occDate = fromDate instanceof Date ? fromDate : new Date(fromDate)
+  const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
+  const targetDay = startDate.getDate()
+  let newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
+  let skipGuard = 50
+  while (isOccurrenceSkipped(rec, newNextDate, monthStartDay) && skipGuard-- > 0) {
+    newNextDate = advanceDateWithTargetDay(newNextDate, rec.frequency, targetDay)
+  }
+
+  const endOfEndDate = rec.endDate
+    ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
+    : null
+  if (endOfEndDate) {
+    endOfEndDate.setHours(23, 59, 59, 999)
+  }
+  const shouldDeactivate = Boolean(endOfEndDate && newNextDate > endOfEndDate)
+
+  return { newNextDate, shouldDeactivate }
+}
+
+/**
+ * Marks the circle cycle as paid for the user member(s) (supporting both myTurnMonth and double-share secondTurnMonth).
+ * Returns true if any member record was updated.
+ */
+function markCircleCyclePaidForUser(circle: MoneyCircle, cycleIndex: number): boolean {
+  const isExemptCycle =
+    cycleIndex === circle.myTurnMonth ||
+    (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
+
+  if (cycleIndex < 1 || cycleIndex > circle.membersCount || isExemptCycle) {
+    return false
+  }
+
+  const isUserMemberMatch = (m: { turnMonth: number }) =>
+    m.turnMonth === circle.myTurnMonth ||
+    (circle.shareType === 'double' &&
+      circle.secondTurnMonth !== undefined &&
+      m.turnMonth === circle.secondTurnMonth)
+
+  const userMembers = (circle.members || []).filter(isUserMemberMatch)
+  if (userMembers.length === 0) {
+    return false
+  }
+
+  let modified = false
+  for (const userMember of userMembers) {
+    if (!Array.isArray(userMember.paidMonths)) {
+      userMember.paidMonths = []
+    }
+    if (!userMember.paymentsByMonth) {
+      userMember.paymentsByMonth = {}
+    }
+
+    const wasPaid =
+      userMember.paidMonths.includes(cycleIndex) ||
+      userMember.paymentsByMonth[String(cycleIndex)] === true
+
+    if (!wasPaid) {
+      userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
+      userMember.paymentsByMonth[String(cycleIndex)] = true
+      modified = true
+    }
+  }
+
+  return modified
+}
+
 export async function processDueRecurring(
   uid: string,
   today: Date = new Date(),
@@ -234,8 +309,10 @@ export async function processDueRecurring(
   interface PendingTx {
     txId: string
     txRef: ReturnType<typeof doc>
+    circleManualTxRef?: ReturnType<typeof doc>
     occDate: Date
     rec: Recurring
+    cycleIndex?: number
   }
 
   // Pre-fetch any linked circles for recurring items to prevent deductions on completed circles or double deduction
@@ -282,27 +359,47 @@ export async function processDueRecurring(
       }
     }
 
-    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(rec, endOfToday)
+    const { dates, newNextDate, shouldDeactivate } = calculateDueOccurrences(
+      rec,
+      endOfToday,
+      effectiveMonthStartDay
+    )
 
     if (dates.length > 0) {
       for (const occDate of dates) {
+        let circleManualTxRef: ReturnType<typeof doc> | undefined
+        let cycleIndex: number | undefined
         if (rec.circleId && circleMap.has(rec.circleId)) {
           const circle = circleMap.get(rec.circleId)!
-          const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
-          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
-          if (
-            userMember?.paymentsByMonth?.[String(cycleIndex)] === false ||
-            userMember?.paymentsByMonth?.[String(cycleIndex)] === true ||
-            (Array.isArray(userMember?.paidMonths) && userMember.paidMonths.includes(cycleIndex))
-          ) {
+          const currentCycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
+          cycleIndex = currentCycleIndex
+
+          const isUserMemberMatch = (m: { turnMonth: number }) =>
+            m.turnMonth === circle.myTurnMonth ||
+            (circle.shareType === 'double' &&
+              circle.secondTurnMonth !== undefined &&
+              m.turnMonth === circle.secondTurnMonth)
+
+          const userMembers = (circle.members || []).filter(isUserMemberMatch)
+
+          const isAlreadyHandled = userMembers.some(
+            (m) =>
+              m.paymentsByMonth?.[String(currentCycleIndex)] === false ||
+              m.paymentsByMonth?.[String(currentCycleIndex)] === true ||
+              (Array.isArray(m.paidMonths) && m.paidMonths.includes(currentCycleIndex))
+          )
+
+          if (isAlreadyHandled) {
             // User explicitly cancelled/unpaid or already paid this month; do not auto-generate transaction
             continue
           }
+
+          circleManualTxRef = doc(db, 'users', uid, 'transactions', `circle_${circle.id}_m${currentCycleIndex}`)
         }
 
         const txId = getDeterministicTxId(rec.id, occDate)
         const txRef = doc(db, 'users', uid, 'transactions', txId)
-        pendingTxs.push({ txId, txRef, occDate, rec })
+        pendingTxs.push({ txId, txRef, circleManualTxRef, occDate, rec, cycleIndex })
       }
     }
 
@@ -318,16 +415,22 @@ export async function processDueRecurring(
   const circleModified = new Set<string>()
 
   // Fetch verification documents concurrently via Promise.all
-  const txSnaps = await Promise.all(pendingTxs.map((item) => safeGetDoc(item.txRef)))
+  const verificationSnaps = await Promise.all(
+    pendingTxs.map(async (item) => {
+      const txSnap = await safeGetDoc(item.txRef)
+      const manualSnap = item.circleManualTxRef ? await safeGetDoc(item.circleManualTxRef) : null
+      return { txSnap, manualSnap }
+    })
+  )
 
   let createdCount = 0
   type BatchOp = (b: ReturnType<typeof writeBatch>) => void
   const operations: BatchOp[] = []
 
   for (let i = 0; i < pendingTxs.length; i++) {
-    const txSnap = txSnaps[i]
-    if (!txSnap.exists()) {
-      const { txRef, occDate, rec } = pendingTxs[i]
+    const { txSnap, manualSnap } = verificationSnaps[i]
+    if (!txSnap.exists() && (!manualSnap || !manualSnap.exists())) {
+      const { txRef, occDate, rec, cycleIndex } = pendingTxs[i]
       const newTxData: Record<string, unknown> = {
         type: rec.type,
         amountFils: rec.amountFils,
@@ -343,27 +446,12 @@ export async function processDueRecurring(
       operations.push((b) => b.set(txRef, newTxData))
       createdCount++
 
-      // If linked to circle, automatically mark user's slot (myTurnMonth) as paid for this cycle
-      if (rec.circleId && circleMap.has(rec.circleId)) {
+      // If linked to circle, automatically mark user's slot as paid for this cycle
+      if (rec.circleId && circleMap.has(rec.circleId) && cycleIndex !== undefined) {
         const circle = circleMap.get(rec.circleId)!
-        const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
-        const isExemptCycle =
-          cycleIndex === circle.myTurnMonth ||
-          (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
-        if (
-          cycleIndex >= 1 &&
-          cycleIndex <= circle.membersCount &&
-          !isExemptCycle
-        ) {
-          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
-          if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
-            userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
-            userMember.paymentsByMonth = {
-              ...(userMember.paymentsByMonth || {}),
-              [String(cycleIndex)]: true,
-            }
-            circleModified.add(circle.id)
-          }
+        const marked = markCircleCyclePaidForUser(circle, cycleIndex)
+        if (marked) {
+          circleModified.add(circle.id)
         }
       }
     }
@@ -430,21 +518,7 @@ export async function confirmRecurringOccurrence(
   const txRef = doc(db, 'users', uid, 'transactions', txId)
   const recRef = doc(db, 'users', uid, 'recurring', rec.id)
 
-  const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
-  const targetDay = startDate.getDate()
-  let newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
-  let skipGuard = 50
-  while (isOccurrenceSkipped(rec, newNextDate) && skipGuard-- > 0) {
-    newNextDate = advanceDateWithTargetDay(newNextDate, rec.frequency, targetDay)
-  }
-
-  const endOfEndDate = rec.endDate
-    ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
-    : null
-  if (endOfEndDate) {
-    endOfEndDate.setHours(23, 59, 59, 999)
-  }
-  const shouldDeactivate = Boolean(endOfEndDate && newNextDate > endOfEndDate)
+  const { newNextDate, shouldDeactivate } = computeNextActiveOccurrence(rec, occDate, monthStartDay)
 
   const batch = writeBatch(db)
 
@@ -479,30 +553,17 @@ export async function confirmRecurringOccurrence(
         const circle = circleSnap.data()
         const effectiveMonthStartDay = monthStartDay ?? 1
         const cycleIndex = getCircleCycleIndex(circle.startDate, occDate, effectiveMonthStartDay) + 1
-        const isExemptCycle =
-          cycleIndex === circle.myTurnMonth ||
-          (circle.shareType === 'double' && cycleIndex === circle.secondTurnMonth)
-        if (
-          cycleIndex >= 1 &&
-          cycleIndex <= circle.membersCount &&
-          !isExemptCycle
-        ) {
-          const userMember = circle.members.find((m) => m.turnMonth === circle.myTurnMonth)
-          if (userMember && !userMember.paidMonths.includes(cycleIndex)) {
-            userMember.paidMonths = [...userMember.paidMonths, cycleIndex]
-            if (userMember.paymentsByMonth) {
-              userMember.paymentsByMonth[String(cycleIndex)] = true
-            }
-            batch.update(doc(db, 'users', uid, 'circles', circle.id), {
-              members: circle.members.map((m) => ({
-                id: m.id,
-                name: m.name.trim().slice(0, 50),
-                turnMonth: Math.round(m.turnMonth),
-                paidMonths: (m.paidMonths || []).map(Number),
-                ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
-              })),
-            })
-          }
+        const marked = markCircleCyclePaidForUser(circle, cycleIndex)
+        if (marked) {
+          batch.update(doc(db, 'users', uid, 'circles', circle.id), {
+            members: circle.members.map((m) => ({
+              id: m.id,
+              name: m.name.trim().slice(0, 50),
+              turnMonth: Math.round(m.turnMonth),
+              paidMonths: (m.paidMonths || []).map(Number),
+              ...(m.paymentsByMonth ? { paymentsByMonth: m.paymentsByMonth } : {}),
+            })),
+          })
         }
       }
     } catch (err) {
@@ -519,24 +580,11 @@ export async function confirmRecurringOccurrence(
  */
 export async function skipRecurringOccurrence(
   uid: string,
-  rec: Recurring
+  rec: Recurring,
+  monthStartDay?: number
 ): Promise<void> {
   const occDate = rec.nextDate instanceof Date ? rec.nextDate : new Date(rec.nextDate)
-  const startDate = rec.startDate instanceof Date ? rec.startDate : new Date(rec.startDate)
-  const targetDay = startDate.getDate()
-  let newNextDate = advanceDateWithTargetDay(occDate, rec.frequency, targetDay)
-  let skipGuard = 50
-  while (isOccurrenceSkipped(rec, newNextDate) && skipGuard-- > 0) {
-    newNextDate = advanceDateWithTargetDay(newNextDate, rec.frequency, targetDay)
-  }
-
-  const endOfEndDate = rec.endDate
-    ? new Date(rec.endDate instanceof Date ? rec.endDate.getTime() : new Date(rec.endDate).getTime())
-    : null
-  if (endOfEndDate) {
-    endOfEndDate.setHours(23, 59, 59, 999)
-  }
-  const shouldDeactivate = Boolean(endOfEndDate && newNextDate > endOfEndDate)
+  const { newNextDate, shouldDeactivate } = computeNextActiveOccurrence(rec, occDate, monthStartDay)
 
   const recRef = doc(db, 'users', uid, 'recurring', rec.id)
   const recUpdate: Record<string, unknown> = {

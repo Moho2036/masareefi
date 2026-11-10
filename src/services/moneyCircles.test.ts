@@ -5,6 +5,7 @@ import {
   isUserTurnMonth,
   isCircleFullyPaid,
   circleConverter,
+  addMoneyCircle,
   deleteMoneyCircle,
   updateMoneyCircle,
   checkCircleHasTransactions,
@@ -247,12 +248,13 @@ describe('moneyCircles service', () => {
 
       await deleteMoneyCircle('uid-1', 'circle-1', { deleteTransactions: true })
 
-      expect(mockBatchDelete).toHaveBeenCalledTimes(6)
+      expect(mockBatchDelete).toHaveBeenCalledTimes(7)
       const deletedPaths = mockBatchDelete.mock.calls.map((c) => c[0].path)
       expect(deletedPaths).toContain('users/uid-1/circles/circle-1')
       expect(deletedPaths).toContain('users/uid-1/recurring/rec-assoc-1')
       expect(deletedPaths).toContain('users/uid-1/recurring/rec-query-1')
       expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-1')
+      expect(deletedPaths).toContain('users/uid-1/transactions/circle_payout_circle-1_t2')
       expect(deletedPaths).toContain('users/uid-1/transactions/tx-rec-1')
       expect(deletedPaths).toContain('users/uid-1/transactions/tx-rec-2')
 
@@ -305,10 +307,10 @@ describe('moneyCircles service', () => {
 
       await deleteMoneyCircle('uid-1', 'circle-large', { deleteTransactions: true })
 
-      // Total items: 1 (doc) + 1 (rec-1) + 1 (payout) + 450 (manual txs) = 453 items
-      // Chunks: 400 + 53 -> 2 commits
+      // Total items: 1 (doc) + 1 (rec-1) + 2 (payouts t1 & t2) + 450 (manual txs) = 454 items
+      // Chunks: 400 + 54 -> 2 commits
       expect(mockBatchCommit).toHaveBeenCalledTimes(2)
-      expect(mockBatchDelete).toHaveBeenCalledTimes(453)
+      expect(mockBatchDelete).toHaveBeenCalledTimes(454)
     })
   })
 
@@ -1753,6 +1755,296 @@ describe('moneyCircles service', () => {
       expect(mockBatchDelete).toHaveBeenCalled()
       expect(mockBatchUpdate).toHaveBeenCalled()
       expect(mockBatchCommit).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('double share validation, payout deletion, manual installment update, and turn swapping', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('addMoneyCircle throws when shareType is double and secondTurnMonth is out of range or equals myTurnMonth', async () => {
+      // Out of range (secondTurn = 0)
+      await expect(
+        addMoneyCircle('uid-1', {
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 0,
+          startDate: new Date(2026, 0, 1),
+          members: [],
+          status: 'active',
+        })
+      ).rejects.toThrow('دور الاستلام الثاني يجب أن يكون بين 1 وعدد الأعضاء')
+
+      // Out of range (secondTurn > membersCount)
+      await expect(
+        addMoneyCircle('uid-1', {
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 6,
+          startDate: new Date(2026, 0, 1),
+          members: [],
+          status: 'active',
+        })
+      ).rejects.toThrow('دور الاستلام الثاني يجب أن يكون بين 1 وعدد الأعضاء')
+
+      // Equals myTurnMonth
+      await expect(
+        addMoneyCircle('uid-1', {
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 2,
+          startDate: new Date(2026, 0, 1),
+          members: [],
+          status: 'active',
+        })
+      ).rejects.toThrow('دور الاستلام الثاني لا يمكن أن يكون نفس الدور الأول')
+    })
+
+    it('updateMoneyCircle throws when shareType is double and secondTurnMonth is invalid', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-val-1',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية تجريبية',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 2,
+          shareType: 'double',
+          secondTurnMonth: 4,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await expect(
+        updateMoneyCircle('uid-1', 'c-val-1', {
+          secondTurnMonth: 2, // matches myTurnMonth
+        })
+      ).rejects.toThrow('دور الاستلام الثاني لا يمكن أن يكون نفس الدور الأول')
+    })
+
+    it('updateMoneyCircle deletes circle_payout_${id}_t2 when shareType changes from double to full', async () => {
+      // 1. circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-turn2-del',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية تحويل سهم',
+          monthlyAmountFils: 50000,
+          membersCount: 5,
+          totalAmountFils: 250000,
+          myTurnMonth: 1,
+          shareType: 'double',
+          secondTurnMonth: 4,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. payout t1 does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 3. payout t2 EXISTS!
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ amountFils: 200000 }),
+      })
+      // 4. user settings (for monthStartDay in ensureCycleComputed)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ monthStartDay: 1 }),
+      })
+
+      await updateMoneyCircle('uid-1', 'c-turn2-del', {
+        shareType: 'full',
+      })
+
+      // payout t2 should be deleted
+      const deleteCall = mockBatchDelete.mock.calls.find((call) =>
+        call[0].path?.includes('circle_payout_c-turn2-del_t2')
+      )
+      expect(deleteCall).toBeDefined()
+
+      // circle doc should clear secondTurnMonth
+      const updateCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/c-turn2-del')
+      )
+      expect(updateCall).toBeDefined()
+      expect(updateCall![1].secondTurnMonth).toEqual({ _method: 'deleteField' })
+    })
+
+    it('updateMoneyCircle updates manual installment transactions on name and amount change', async () => {
+      // 1. circle doc exists
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-manual-upd',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية قديمة',
+          monthlyAmountFils: 50000,
+          membersCount: 2,
+          totalAmountFils: 100000,
+          myTurnMonth: 1,
+          shareType: 'full',
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // 2. payout doc does not exist
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false })
+      // 3. recurring rules query
+      mockGetDocs.mockResolvedValueOnce({ docs: [] })
+      // 4. manual tx m1 exists (future/current date)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية قديمة (شهر 1)',
+          amountFils: 50000,
+          date: { toDate: () => new Date(2099, 0, 1) },
+        }),
+      })
+      // 5. manual tx m2 exists (past month date: should only update title, not amount)
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          title: 'قسط جمعية قديمة (شهر 2)',
+          amountFils: 50000,
+          date: { toDate: () => new Date(2020, 0, 1) },
+        }),
+      })
+
+      await updateMoneyCircle(
+        'uid-1',
+        'c-manual-upd',
+        {
+          name: 'جمعية جديدة',
+          monthlyAmountFils: 75000,
+        },
+        { monthStartDay: 1 }
+      )
+
+      const m1Call = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('transactions/circle_c-manual-upd_m1')
+      )
+      expect(m1Call).toBeDefined()
+      expect(m1Call![1].amountFils).toBe(75000)
+      expect(m1Call![1].title).toBe('قسط جمعية جديدة (شهر 1)')
+
+      const m2Call = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('transactions/circle_c-manual-upd_m2')
+      )
+      expect(m2Call).toBeDefined()
+      expect(m2Call![1].amountFils).toBeUndefined() // past month: preserved
+      expect(m2Call![1].title).toBe('قسط جمعية جديدة (شهر 2)')
+    })
+
+    it('swapMemberTurns correctly swaps turn 1 and turn 2 for a double-share circle when both user members have name أنت', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-swap-double',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية التبادل',
+          monthlyAmountFils: 50000,
+          membersCount: 4,
+          totalAmountFils: 200000,
+          myTurnMonth: 1,
+          shareType: 'double',
+          secondTurnMonth: 3,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-u1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+            { id: 'm-other', name: 'أحمد', turnMonth: 2, paidMonths: [] },
+            { id: 'm-u2', name: 'أنت', turnMonth: 3, paidMonths: [] },
+            { id: 'm-other2', name: 'سارة', turnMonth: 4, paidMonths: [] },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+      // updateMoneyCircle gets circle doc
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-swap-double',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية التبادل',
+          monthlyAmountFils: 50000,
+          membersCount: 4,
+          totalAmountFils: 200000,
+          myTurnMonth: 1,
+          shareType: 'double',
+          secondTurnMonth: 3,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [
+            { id: 'm-u1', name: 'أنت', turnMonth: 1, paidMonths: [] },
+            { id: 'm-other', name: 'أحمد', turnMonth: 2, paidMonths: [] },
+            { id: 'm-u2', name: 'أنت', turnMonth: 3, paidMonths: [] },
+            { id: 'm-other2', name: 'سارة', turnMonth: 4, paidMonths: [] },
+          ],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      // Swap m-u2 (second turn = 3) with m-other (turn = 2)
+      await swapMemberTurns('uid-1', 'c-swap-double', 'm-u2', 'm-other')
+
+      const circleCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/c-swap-double')
+      )
+      expect(circleCall).toBeDefined()
+      // myTurnMonth should stay 1
+      expect(circleCall![1].myTurnMonth).toBe(1)
+      // secondTurnMonth should become 2
+      expect(circleCall![1].secondTurnMonth).toBe(2)
+    })
+
+    it('clamps myTurnMonth and secondTurnMonth when membersCount is reduced', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        id: 'c-reduce-members',
+        exists: () => true,
+        data: () => ({
+          name: 'جمعية كبيرة',
+          monthlyAmountFils: 50000,
+          membersCount: 10,
+          totalAmountFils: 500000,
+          myTurnMonth: 8,
+          shareType: 'double',
+          secondTurnMonth: 10,
+          startDate: { toDate: () => new Date(2026, 0, 1) },
+          members: [],
+          status: 'active',
+          createdAt: { toDate: () => new Date() },
+        }),
+      })
+
+      await updateMoneyCircle('uid-1', 'c-reduce-members', {
+        membersCount: 5,
+      })
+
+      const circleCall = mockBatchUpdate.mock.calls.find((call) =>
+        call[0].path?.includes('circles/c-reduce-members')
+      )
+      expect(circleCall).toBeDefined()
+      expect(circleCall![1].membersCount).toBe(5)
+      expect(circleCall![1].myTurnMonth).toBe(5) // clamped from 8 to 5
+      expect(circleCall![1].secondTurnMonth).toBe(4) // clamped and adjusted so != myTurnMonth
     })
   })
 })

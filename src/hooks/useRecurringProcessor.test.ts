@@ -18,6 +18,10 @@ vi.mock('./useToast', () => ({
   useToast: vi.fn(),
 }))
 
+vi.mock('./useUserSettings', () => ({
+  useUserSettings: () => ({ data: { monthStartDay: 1 }, loading: false }),
+}))
+
 describe('useRecurringProcessor', () => {
   const mockShowToast = vi.fn()
   const mockProcessDueRecurring = vi.mocked(recurringService.processDueRecurring)
@@ -41,7 +45,7 @@ describe('useRecurringProcessor', () => {
     renderHook(() => useRecurringProcessor())
 
     expect(mockProcessDueRecurring).toHaveBeenCalledTimes(1)
-    expect(mockProcessDueRecurring).toHaveBeenCalledWith('user-abc')
+    expect(mockProcessDueRecurring).toHaveBeenCalledWith('user-abc', expect.any(Date), 1)
   })
 
   it('shows toast when due transactions are processed', async () => {

@@ -131,7 +131,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = React.memo(({
       <div
         ref={containerRef}
         onTouchEnd={handleTouchEnd}
-        className="w-full relative flex items-center justify-center"
+        className="w-full relative flex items-center justify-center min-w-0 max-w-full overflow-hidden"
         style={{ height }}
       >
         <ResponsiveContainer width="100%" height="100%">

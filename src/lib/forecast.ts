@@ -4,8 +4,8 @@ import {
   advanceDateWithTargetDay,
   getDeterministicTxId,
   getOccurrenceMonthIndex,
+  getCircleCycleIndex,
 } from './recurring'
-import { getCircleCycleIndex } from '../services/moneyCircles'
 import type { Recurring, Debt, Transaction, MoneyCircle } from '../types'
 
 export interface ForecastParams {
@@ -137,14 +137,15 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   }
 
   for (const tx of params.transactions) {
+    if (typeof tx.amountFils !== 'number' || !Number.isFinite(tx.amountFils)) continue
     const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
     if (tx.type === 'income') {
-      currentIncome += tx.amountFils || 0
+      currentIncome += tx.amountFils
       if (isCurrentMonth && toStartOfDay(txDate) > now) {
-        futureDatedManualIncome += tx.amountFils || 0
+        futureDatedManualIncome += tx.amountFils
       }
     } else if (tx.type === 'expense') {
-      const amount = tx.amountFils || 0
+      const amount = tx.amountFils
       currentExpense += amount
 
       const isFixedCommitment = Boolean(
@@ -181,6 +182,15 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
   )
   const bookedCircleInstallmentIds = new Set<string>()
 
+  const circleIdByRecurringId = new Map<string, string>()
+  if (params.circles) {
+    for (const c of params.circles) {
+      if (c.recurringId) {
+        circleIdByRecurringId.set(c.recurringId, c.id)
+      }
+    }
+  }
+
   if (params.recurring && (isCurrentMonth || isFutureMonth)) {
     for (const rec of params.recurring) {
       if (!rec.active) continue
@@ -197,26 +207,27 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
       while (toStartOfDay(curr) < rangeEnd) {
         if (recEnd && toStartOfDay(curr) > toStartOfDay(recEnd)) break
         const occStart = toStartOfDay(curr)
-        const circleManualTxId = rec.circleId
-          ? `circle_${rec.circleId}_m${getOccurrenceMonthIndex(rec.startDate, curr)}`
+        const matchedCircleId = rec.circleId || circleIdByRecurringId.get(rec.id)
+        const circleManualTxId = matchedCircleId
+          ? `circle_${matchedCircleId}_m${getOccurrenceMonthIndex(rec.startDate, curr, monthStartDay)}`
           : null
         const isRecorded =
           existingTxIds.has(getDeterministicTxId(rec.id, curr)) ||
           Boolean(circleManualTxId && existingTxIds.has(circleManualTxId))
 
         if (occStart >= rangeStart && occStart < rangeEnd) {
-          if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
+          if (!isRecorded && !isOccurrenceSkipped(rec, curr, monthStartDay)) {
             if (rec.type === 'expense') {
               upcomingRecurringExpenses += rec.amountFils || 0
-              if (rec.circleId) {
-                bookedCircleInstallmentIds.add(rec.circleId)
+              if (matchedCircleId) {
+                bookedCircleInstallmentIds.add(matchedCircleId)
               }
             } else if (rec.type === 'income') {
               upcomingRecurringIncome += rec.amountFils || 0
             }
           }
         } else if (isFutureMonth && occStart >= now && occStart < rangeStart) {
-          if (!isRecorded && !isOccurrenceSkipped(rec, curr)) {
+          if (!isRecorded && !isOccurrenceSkipped(rec, curr, monthStartDay)) {
             if (rec.type === 'expense') {
               intermediateRecurringNet -= rec.amountFils || 0
             } else if (rec.type === 'income') {
@@ -242,9 +253,25 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
           (circle.shareType === 'double' && circleMonth === circle.secondTurnMonth)
         if (isExempt) continue
 
-        const userMember = circle.members?.find((m) => m.turnMonth === circle.myTurnMonth)
+        const userMember = circle.members?.find(
+          (m) =>
+            m.turnMonth === circle.myTurnMonth ||
+            (circle.shareType === 'double' &&
+              circle.secondTurnMonth !== undefined &&
+              m.turnMonth === circle.secondTurnMonth)
+        )
+
+        if (
+          userMember?.paymentsByMonth?.[String(circleMonth)] === false ||
+          userMember?.paymentsByMonth?.[circleMonth] === false
+        ) {
+          continue
+        }
+
         const isPaid =
-          Boolean(userMember?.paidMonths && userMember.paidMonths.includes(circleMonth)) ||
+          Boolean(userMember?.paidMonths?.includes(circleMonth)) ||
+          userMember?.paymentsByMonth?.[String(circleMonth)] === true ||
+          userMember?.paymentsByMonth?.[circleMonth] === true ||
           existingTxIds.has(`circle_${circle.id}_m${circleMonth}`)
 
         if (!isPaid) {
@@ -329,7 +356,7 @@ export function calculateForecast(params: ForecastParams): ForecastResult {
 
           const occStart = toStartOfDay(curr)
           if (occStart >= rangeEnd && occStart <= threeDaysHorizon) {
-            if (!isOccurrenceSkipped(rec, curr)) {
+            if (!isOccurrenceSkipped(rec, curr, monthStartDay)) {
               nextCycleSoonObligationsFils += rec.amountFils || 0
               nextCycleSoonCount++
               nextCycleSoonRecurringCount++
