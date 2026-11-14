@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
-import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from './useSelectedMonth'
 import { useTransactions } from './useTransactions'
 import { useCategories } from './useCategories'
@@ -10,13 +9,12 @@ import { useDebts } from './useDebts'
 import { useMoneyCircles } from './useMoneyCircles'
 import { useUserSettings } from './useUserSettings'
 import { useTransactionModal } from './useTransactionModal'
-import { subscribePriorBalance } from '../services/transactions'
+import { usePeriodRollover } from './usePeriodRollover'
 import { sumByType } from '../lib/aggregate'
 import { calculateCategoryDistribution } from '../lib/reports'
-import { calculateDebtSummary } from '../lib/debts'
+import { calculateDebtSummary, getDebtRemainingFils } from '../lib/debts'
 import { calculateForecast } from '../lib/forecast'
 import { isOccurrenceSkipped, advanceDateWithTargetDay } from '../lib/recurring'
-import { getFiscalMonthKey, getFinancialMonthRange } from '../lib/dates'
 import { getDashboardHeroVisualStatus } from '../lib/dashboard'
 import type { Recurring } from '../types'
 
@@ -33,33 +31,13 @@ export function useDashboardData() {
 
   const hasLoadedOnceRef = useRef(false)
 
-  const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
-  const isRolloverEnabled = settings?.rolloverBalance ?? true
   const monthStartDay = settings?.monthStartDay ?? 1
-
-  const appData = useAppData()
-  const isCurrentFiscalMonth =
-    getFiscalMonthKey(range.start, monthStartDay) ===
-    getFiscalMonthKey(new Date(), monthStartDay)
-
-  const parsedRolloverStartDate = useMemo(() => {
-    if (!settings?.rolloverStartDate) return null
-    const raw = settings.rolloverStartDate
-    return raw instanceof Date
-      ? raw
-      : typeof (raw as { toDate?: () => Date }).toDate === 'function'
-      ? (raw as { toDate: () => Date }).toDate()
-      : new Date(raw as unknown as string)
-  }, [settings?.rolloverStartDate])
-
-  const isRolloverResolving = useMemo(() => {
-    if (isCurrentFiscalMonth) {
-      return Boolean(appData?.rolloverLoading)
-    }
-    if (!isRolloverEnabled) return false
-    if (parsedRolloverStartDate && range.start.getTime() <= parsedRolloverStartDate.getTime()) return false
-    return localRollover.key !== range.start.toISOString()
-  }, [isCurrentFiscalMonth, appData?.rolloverLoading, isRolloverEnabled, parsedRolloverStartDate, range.start, localRollover.key])
+  const {
+    effectiveRollover,
+    isRolloverResolving,
+    isCurrentFiscalMonth,
+    isRolloverEnabled,
+  } = usePeriodRollover(range, settings)
 
   useEffect(() => {
     if (!txLoading && !settingsLoading && !isRolloverResolving) {
@@ -69,68 +47,6 @@ export function useDashboardData() {
 
   const isInitialOrLoading =
     !hasLoadedOnceRef.current && (txLoading || settingsLoading || isRolloverResolving)
-
-  useEffect(() => {
-    if (!user?.uid || !isRolloverEnabled || isCurrentFiscalMonth) {
-      return
-    }
-    if (parsedRolloverStartDate && range.start.getTime() <= parsedRolloverStartDate.getTime()) {
-      return
-    }
-    const currentKey = range.start.toISOString()
-    const unsub = subscribePriorBalance(
-      user.uid,
-      range.start,
-      (bal) => {
-        setLocalRollover({ key: currentKey, amount: bal })
-      },
-      (err) => {
-        console.error('Failed to subscribe prior balance in DashboardPage:', err)
-      },
-      parsedRolloverStartDate
-    )
-    return () => {
-      unsub()
-    }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, parsedRolloverStartDate])
-
-  const effectiveLocalRollover =
-    localRollover.key === range.start.toISOString() ? localRollover.amount : 0
-
-  const effectiveRollover = useMemo(() => {
-    if (isCurrentFiscalMonth) {
-      return appData?.rolloverBalanceFils ?? 0
-    }
-    if (!isRolloverEnabled) {
-      return 0
-    }
-    if (parsedRolloverStartDate && range.start.getTime() < parsedRolloverStartDate.getTime()) {
-      return 0
-    }
-    if (settings?.createdAt) {
-      const rawCreated = settings.createdAt
-      const createdAtDate =
-        rawCreated instanceof Date
-          ? rawCreated
-          : typeof (rawCreated as { toDate?: () => Date }).toDate === 'function'
-          ? (rawCreated as { toDate: () => Date }).toDate()
-          : new Date(rawCreated as unknown as string)
-      const createdCycleStart = getFinancialMonthRange(createdAtDate, monthStartDay).start
-      if (range.start.getTime() < createdCycleStart.getTime()) {
-        return 0
-      }
-    }
-    return effectiveLocalRollover + (settings?.openingBalanceFils ?? 0)
-  }, [
-    isCurrentFiscalMonth,
-    appData?.rolloverBalanceFils,
-    isRolloverEnabled,
-    parsedRolloverStartDate,
-    range.start,
-    settings,
-    monthStartDay,
-    effectiveLocalRollover,
-  ])
 
   // Calculate monthly totals
   const sums = useMemo(() => sumByType(rawTransactions), [rawTransactions])
@@ -180,7 +96,13 @@ export function useDashboardData() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const activeWithDue = debts
-      .filter((d) => !d.settled && d.dueDate && new Date(d.dueDate).getTime() >= today.getTime())
+      .filter(
+        (d) =>
+          !d.settled &&
+          getDebtRemainingFils(d) > 0 &&
+          d.dueDate &&
+          new Date(d.dueDate).getTime() >= today.getTime()
+      )
       .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
     return activeWithDue[0] || null
   }, [debts])
@@ -226,9 +148,10 @@ export function useDashboardData() {
       if (!r.active) continue
 
       let nextD = r.nextDate instanceof Date ? r.nextDate : new Date(r.nextDate)
+      const startD = r.startDate instanceof Date ? r.startDate : new Date(r.startDate)
 
-      if (isOccurrenceSkipped(r, nextD)) {
-        const startD = r.startDate instanceof Date ? r.startDate : new Date(r.startDate)
+      let guard = 24
+      while (isOccurrenceSkipped(r, nextD, monthStartDay) && guard-- > 0) {
         nextD = advanceDateWithTargetDay(nextD, r.frequency, startD.getDate())
       }
 
@@ -247,7 +170,7 @@ export function useDashboardData() {
     return list
       .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
       .slice(0, 3)
-  }, [recurringList])
+  }, [recurringList, monthStartDay])
 
   const [focusTick, setFocusTick] = useState(0)
 

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>بَصير — جارٍ التحويل...</title>
+    <meta http-equiv="refresh" content="0;url=https://baseer-finance.web.app" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #09090B;
+        color: #fff;
+        text-align: center;
+        padding: 1rem;
+      }
+      p { font-size: 1rem; opacity: 0.7; margin-top: 0.5rem; }
+      a { color: #3B82F6; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h2>بَصير</h2>
+      <p>جارٍ تحويلك تلقائياً إلى الموقع الجديد...</p>
+      <p><a href="https://baseer-finance.web.app">اضغط هنا إذا لم يتم التحويل</a></p>
+    </div>
+    <script>
+      (function () {
+        var NEW = 'https://baseer-finance.web.app';
+
+        // 1. Unregister old Service Worker, clear all caches, then redirect
+        function redirectNow() {
+          var dest = NEW + window.location.pathname + window.location.search + window.location.hash;
+          window.location.replace(dest);
+        }
+
+        if ('serviceWorker' in navigator) {
+          // Listen for messages from the new redirect SW
+          navigator.serviceWorker.addEventListener('message', function (e) {
+            if (e.data && e.data.type === 'REDIRECT_TO_NEW_DOMAIN' && e.data.url) {
+              window.location.replace(e.data.url);
+            }
+          });
+
+          // Unregister all existing SWs and clear all caches
+          Promise.all([
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            }),
+            'caches' in window
+              ? caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                })
+              : Promise.resolve(),
+          ])
+            .then(function () {
+              // Register the redirect SW so it handles any future navigations too
+              return navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            })
+            .then(function () {
+              redirectNow();
+            })
+            .catch(function () {
+              redirectNow();
+            });
+        } else {
+          redirectNow();
+        }
+      })();
+    </script>
+  </body>
+</html>

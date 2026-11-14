@@ -8,6 +8,7 @@ import {
   parseCircleInstallmentId,
   isSystemLinkedTransaction,
   resolveTransactionLockStatus,
+  buildDebtLookup,
 } from './transactionLocks'
 import type { Transaction, Debt, MoneyCircle } from '../types'
 
@@ -171,5 +172,62 @@ describe('transactionLocks lib', () => {
     const statusMissing = resolveTransactionLockStatus(tx, [sampleDebt], [])
     expect(statusMissing.isLocked).toBe(false)
     expect(statusMissing.isSourceMissing).toBe(true)
+  })
+
+  it('buildDebtLookup indexes debt_init and merged entry transaction IDs', () => {
+    const debtWithMergedEntry: Debt = {
+      ...sampleDebt,
+      entries: [
+        {
+          id: 'entry-merged-1',
+          amountFils: 30_000,
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+          isMerged: true,
+          mergedTransactionIds: ['merged-tx-1', 'merged-tx-2'],
+        },
+      ],
+    }
+
+    const lookup = buildDebtLookup([debtWithMergedEntry])
+    expect(lookup.entryTxIdsSet.has('debt_init_debt-123')).toBe(true)
+    expect(lookup.entryTxIdsSet.has('merged-tx-1')).toBe(true)
+    expect(lookup.entryTxIdsSet.has('merged-tx-2')).toBe(true)
+    expect(lookup.entryTxIdsSet.has('debt_entry_entry-merged-1')).toBe(true)
+  })
+
+  it('locks compacted/merged debt entry transaction', () => {
+    const debtWithMergedEntry: Debt = {
+      ...sampleDebt,
+      entries: [
+        {
+          id: 'entry-merged-1',
+          amountFils: 30_000,
+          date: new Date(),
+          note: '',
+          createdAt: new Date(),
+          isMerged: true,
+          mergedTransactionIds: ['merged-tx-1', 'merged-tx-2'],
+        },
+      ],
+    }
+
+    const tx: Transaction = {
+      id: 'merged-tx-1',
+      title: 'دفعة سابقة مدمجة في بند دين',
+      amountFils: 15_000,
+      type: 'expense',
+      date: new Date(),
+      categoryId: 'cat-1',
+      note: '',
+      createdAt: new Date(),
+    }
+
+    const status = resolveTransactionLockStatus(tx, [debtWithMergedEntry], [sampleCircle])
+    expect(status.isLocked).toBe(true)
+    expect(status.lockReason).toBe('debt_entry')
+    expect(status.isMergedEntryTx).toBe(true)
+    expect(status.isSourceMissing).toBe(false)
   })
 })

@@ -51,8 +51,7 @@ export function calculateReconciliation(
     return (
       txDate >= currentCycle.start &&
       txDate < currentCycle.end &&
-      tx.title === RECONCILIATION_TITLE &&
-      tx.note === RECONCILIATION_NOTE
+      isReconciliationTransaction(tx)
     )
   })
   const oldReconcileIds = new Set(oldReconcileTxs.map((t) => t.id))
@@ -82,7 +81,9 @@ export function calculateReconciliation(
   })
 
   const netTxFils = relevantTxs.reduce((acc, tx) => {
-    return tx.type === 'income' ? acc + tx.amountFils : acc - tx.amountFils
+    const amount =
+      typeof tx.amountFils === 'number' && Number.isFinite(tx.amountFils) ? tx.amountFils : 0
+    return tx.type === 'income' ? acc + amount : acc - amount
   }, 0)
 
   const requiredOpening = targetFils - netTxFils

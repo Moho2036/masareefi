@@ -25,6 +25,28 @@ if (typeof window !== 'undefined') {
   } catch {
     // ignore
   }
+
+  // Auto-reload when a new Service Worker takes control (skipWaiting activated).
+  // This ensures users always get the latest version without manual refresh.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      try {
+        const alreadyReloaded = sessionStorage.getItem('baseer_sw_reload') === 'true'
+        if (!alreadyReloaded) {
+          sessionStorage.setItem('baseer_sw_reload', 'true')
+          window.location.reload()
+        }
+      } catch {
+        window.location.reload()
+      }
+    })
+    // Clear sw reload flag after boot so next update can reload again
+    try {
+      sessionStorage.removeItem('baseer_sw_reload')
+    } catch {
+      // ignore
+    }
+  }
 }
 
 migrateLegacyStorage()

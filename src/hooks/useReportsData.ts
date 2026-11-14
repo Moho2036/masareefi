@@ -2,15 +2,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { subDays, format as formatDate, differenceInDays } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { useAuth } from './useAuth'
-import { useAppData } from '../context/AppDataContext'
 import { useSelectedMonth } from './useSelectedMonth'
 import { useTransactions } from './useTransactions'
 import { useUserSettings } from './useUserSettings'
 import { useDebts } from './useDebts'
 import { useRecurring } from './useRecurring'
 import { useMoneyCircles } from './useMoneyCircles'
-import { subscribePriorBalance } from '../services/transactions'
+import { usePeriodRollover } from './usePeriodRollover'
 import { sumByType } from '../lib/aggregate'
 import {
   calculateYearlyBreakdown,
@@ -22,7 +20,6 @@ import {
 import {
   getFinancialMonthRange,
   getMonthRange,
-  getFiscalMonthKey,
   getFiscalMonthInfo,
   toWesternDigits,
   getPreviousFinancialMonth,
@@ -33,8 +30,6 @@ import { generateReportYearOptions } from '../lib/reportYears'
 export function useReportsData() {
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly')
 
-  const { user } = useAuth()
-  const appData = useAppData()
   const { range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
@@ -42,52 +37,14 @@ export function useReportsData() {
   const { data: circles } = useMoneyCircles()
   const monthStartDay = settings?.monthStartDay ?? 1
 
-  const [localRollover, setLocalRollover] = useState<{ key: string; amount: number }>({ key: '', amount: 0 })
-  const isRolloverEnabled = settings?.rolloverBalance ?? true
-
-  const isCurrentFiscalMonth =
-    getFiscalMonthKey(range.start, monthStartDay) ===
-    getFiscalMonthKey(new Date(), monthStartDay)
+  const {
+    effectiveRollover,
+    isRolloverEnabled,
+    isCurrentFiscalMonth,
+  } = usePeriodRollover(range, settings)
 
   const isEarlyMonth =
     isCurrentFiscalMonth && differenceInDays(new Date(), range.start) < 4
-
-  const parsedRolloverStartDate = useMemo(() => {
-    if (!settings?.rolloverStartDate) return null
-    const raw = settings.rolloverStartDate
-    return raw instanceof Date
-      ? raw
-      : typeof (raw as { toDate?: () => Date }).toDate === 'function'
-      ? (raw as { toDate: () => Date }).toDate()
-      : new Date(raw as unknown as string)
-  }, [settings?.rolloverStartDate])
-
-  useEffect(() => {
-    if (!user?.uid || !isRolloverEnabled || isCurrentFiscalMonth) {
-      return
-    }
-    if (parsedRolloverStartDate && range.start.getTime() <= parsedRolloverStartDate.getTime()) {
-      return
-    }
-    const currentKey = range.start.toISOString()
-    const unsub = subscribePriorBalance(
-      user.uid,
-      range.start,
-      (bal) => {
-        setLocalRollover({ key: currentKey, amount: bal })
-      },
-      (err) => {
-        console.error('Failed to subscribe prior balance in ReportsPage:', err)
-      },
-      parsedRolloverStartDate
-    )
-    return () => {
-      unsub()
-    }
-  }, [user?.uid, isRolloverEnabled, range.start, isCurrentFiscalMonth, parsedRolloverStartDate])
-
-  const effectiveLocalRollover =
-    localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
   const isMonthly = reportPeriod === 'monthly'
   const isYearly = reportPeriod === 'yearly'
@@ -136,41 +93,6 @@ export function useReportsData() {
       return t >= prevStartMs && t < prevEndMs
     })
   }, [twoMonthsTransactions, prevStartMs, prevEndMs])
-
-  const effectiveRollover = useMemo(() => {
-    if (isCurrentFiscalMonth) {
-      return appData?.rolloverBalanceFils ?? 0
-    }
-    if (!isRolloverEnabled) {
-      return 0
-    }
-    if (parsedRolloverStartDate && range.start.getTime() < parsedRolloverStartDate.getTime()) {
-      return 0
-    }
-    if (settings?.createdAt) {
-      const rawCreated = settings.createdAt
-      const createdAtDate =
-        rawCreated instanceof Date
-          ? rawCreated
-          : typeof (rawCreated as { toDate?: () => Date }).toDate === 'function'
-          ? (rawCreated as { toDate: () => Date }).toDate()
-          : new Date(rawCreated as unknown as string)
-      const createdCycleStart = getFinancialMonthRange(createdAtDate, monthStartDay).start
-      if (range.start.getTime() < createdCycleStart.getTime()) {
-        return 0
-      }
-    }
-    return effectiveLocalRollover + (settings?.openingBalanceFils ?? 0)
-  }, [
-    isCurrentFiscalMonth,
-    appData?.rolloverBalanceFils,
-    isRolloverEnabled,
-    parsedRolloverStartDate,
-    range.start,
-    settings,
-    monthStartDay,
-    effectiveLocalRollover,
-  ])
 
   const forecast = useMemo(() => {
     return calculateForecast({

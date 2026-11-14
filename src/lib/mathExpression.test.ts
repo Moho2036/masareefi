@@ -45,6 +45,12 @@ describe('mathExpression lib', () => {
       expect(cleanNumberToken('1,000')).toBe(1000)
     })
 
+    it('treats comma as decimal separator for zero-prefixed values (JOD-style)', () => {
+      expect(cleanNumberToken('0,500')).toBe(0.5)
+      expect(cleanNumberToken('-0,500')).toBe(-0.5)
+      expect(cleanNumberToken('0,750')).toBe(0.75)
+    })
+
     it('returns NaN for invalid number strings', () => {
       expect(cleanNumberToken('')).toBeNaN()
       expect(cleanNumberToken('1.2.3')).toBeNaN()
@@ -95,6 +101,19 @@ describe('mathExpression lib', () => {
       expect(evaluateMathExpression('')).toBeNull()
       expect(evaluateMathExpression('abc')).toBeNull()
       expect(evaluateMathExpression('++')).toBeNull()
+    })
+
+    it('strips invisible bidirectional Unicode characters before parsing', () => {
+      // LRM (U+200E) and RLM (U+200F) injected around digits and operators
+      expect(evaluateMathExpression('\u200E10\u200F+\u200E5\u200F')).toBe(15)
+      expect(evaluateMathExpression('\u202A100\u202B*\u202C2\u202D')).toBe(200)
+    })
+
+    it('supports unary minus/plus immediately after * or /', () => {
+      expect(evaluateMathExpression('100*-2')).toBe(-200)
+      expect(evaluateMathExpression('50+-10')).toBe(40)
+      expect(evaluateMathExpression('20/-4')).toBe(-5)
+      expect(evaluateMathExpression('10*+3')).toBe(30)
     })
   })
 })

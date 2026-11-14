@@ -37,12 +37,22 @@
     },
     {
       "site": "masareefi-81676",
-      "public": "dist",
-      "redirects": [
+      "public": "dist-redirect",
+      "ignore": ["firebase.json", "**/.*"],
+      "rewrites": [
         {
           "source": "**",
-          "destination": "https://baseer-finance.web.app",
-          "type": 301
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+            { "key": "Pragma", "value": "no-cache" },
+            { "key": "Expires", "value": "0" }
+          ]
         }
       ]
     }

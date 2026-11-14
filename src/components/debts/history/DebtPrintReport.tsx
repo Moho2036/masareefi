@@ -42,6 +42,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
             date: debtStartDate,
             title: 'أصل الدين',
             note: debt.note || '',
+            createdAt: debtStartDate,
           },
         ]
 
@@ -49,18 +50,18 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
   const totalPaymentsFils = payments.reduce((sum, p) => sum + p.amountFils, 0)
 
   return (
-    <div className="hidden print:block w-full max-w-full text-zinc-900 dark:text-zinc-100 p-2 text-start font-sans">
+    <div className="hidden print:block w-full max-w-full text-zinc-900 bg-white p-2 text-start font-sans">
       {/* Formal Statement Header */}
-      <div className="border-b-2 border-zinc-900 dark:border-zinc-100 pb-4 mb-6">
+      <div className="border-b-2 border-zinc-900 pb-4 mb-6">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-black tracking-tight">بَصير</span>
-              <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400">
+              <span className="text-xl font-black tracking-tight text-zinc-900">بَصير</span>
+              <span className="text-sm font-bold text-zinc-600">
                 — كشف حساب مالي تفصيلي
               </span>
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            <p className="text-xs text-zinc-600 mt-1">
               تقرير رسمي صادر عن نظام بَصير لإدارة الذمم والالتزامات المالية
             </p>
           </div>
@@ -68,13 +69,13 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
             <span
               className={`inline-block px-3 py-1 rounded-md text-xs font-black border ${
                 debt.settled
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
-                  : 'bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-700'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-blue-50 text-blue-800 border-blue-300'
               }`}
             >
               {statusLabel}
             </span>
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+            <div className="text-[11px] text-zinc-600 mt-1">
               تاريخ الطباعة: {printDateStr}
             </div>
           </div>
@@ -82,36 +83,36 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
       </div>
 
       {/* Account & Party Metadata Cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6 text-xs bg-zinc-50 dark:bg-zinc-900/40 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="grid grid-cols-2 gap-4 mb-6 text-xs bg-zinc-50 p-4 rounded-xl border border-zinc-200">
         <div className="space-y-1.5">
           <div>
-            <span className="font-semibold text-zinc-500 dark:text-zinc-400">اسم الطرف: </span>
-            <span className="font-black text-sm text-zinc-900 dark:text-zinc-100">
+            <span className="font-semibold text-zinc-600">اسم الطرف: </span>
+            <span className="font-black text-sm text-zinc-900">
               {debt.personName}
             </span>
           </div>
           <div>
-            <span className="font-semibold text-zinc-500 dark:text-zinc-400">نوع المعاملة: </span>
-            <span className="font-bold">{statementType}</span>
+            <span className="font-semibold text-zinc-600">نوع المعاملة: </span>
+            <span className="font-bold text-zinc-900">{statementType}</span>
           </div>
           {debt.note && (
             <div>
-              <span className="font-semibold text-zinc-500 dark:text-zinc-400">البيان العام: </span>
-              <span className="font-medium">{debt.note}</span>
+              <span className="font-semibold text-zinc-600">البيان العام: </span>
+              <span className="font-medium text-zinc-800">{debt.note}</span>
             </div>
           )}
         </div>
 
         <div className="space-y-1.5">
           <div>
-            <span className="font-semibold text-zinc-500 dark:text-zinc-400">تاريخ بدء الدين: </span>
-            <span className="font-bold">
+            <span className="font-semibold text-zinc-600">تاريخ بدء الدين: </span>
+            <span className="font-bold text-zinc-900">
               {toWesternDigits(formatDate(debtStartDate, 'yyyy/MM/dd'))}
             </span>
           </div>
           <div>
-            <span className="font-semibold text-zinc-500 dark:text-zinc-400">تاريخ الاستحقاق: </span>
-            <span className="font-bold">
+            <span className="font-semibold text-zinc-600">تاريخ الاستحقاق: </span>
+            <span className="font-bold text-zinc-900">
               {debtDueDate ? toWesternDigits(formatDate(debtDueDate, 'yyyy/MM/dd')) : 'غير محدد'}
             </span>
           </div>
@@ -120,35 +121,35 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
 
       {/* Financial Summary KPI Block */}
       <div className="grid grid-cols-3 gap-3 mb-6 print-avoid-break">
-        <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-start">
-          <div className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+        <div className="p-3.5 rounded-xl border border-zinc-200 bg-white text-start">
+          <div className="text-[11px] font-bold text-zinc-600 mb-1">
             إجمالي المبلغ
           </div>
-          <div className="text-base font-black text-zinc-900 dark:text-zinc-100">
+          <div className="text-base font-black text-zinc-900">
             <FormattedMoney amountFils={debt.amountFils} />
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-start">
-          <div className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+        <div className="p-3.5 rounded-xl border border-zinc-200 bg-white text-start">
+          <div className="text-[11px] font-bold text-zinc-600 mb-1">
             إجمالي المسدد
           </div>
-          <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
+          <div className="text-base font-black text-emerald-600">
             <FormattedMoney amountFils={debt.paidFils || 0} />
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-start">
-          <div className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+        <div className="p-3.5 rounded-xl border border-zinc-200 bg-white text-start">
+          <div className="text-[11px] font-bold text-zinc-600 mb-1">
             المتبقي الفعلي
           </div>
           <div
             className={`text-base font-black ${
               remainingFils > 0
                 ? isLent
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-red-600 dark:text-red-400'
-                : 'text-zinc-400'
+                  ? 'text-blue-600'
+                  : 'text-red-600'
+                : 'text-zinc-500'
             }`}
           >
             <FormattedMoney amountFils={remainingFils} />
@@ -158,31 +159,31 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
 
       {/* Table 1: Debt Entries / Advances */}
       <div className="mb-6 print-avoid-break">
-        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 mb-2 border-b border-zinc-200 dark:border-zinc-700 pb-1">
+        <h3 className="text-xs font-black text-zinc-900 mb-2 border-b border-zinc-200 pb-1">
           أولاً: تفاصيل أصل الدين والسلف المسجلة ({displayEntries.length})
         </h3>
-        <table className="w-full text-xs text-start border-collapse border border-zinc-200 dark:border-zinc-700">
+        <table className="w-full text-xs text-start border-collapse border border-zinc-200">
           <thead>
-            <tr className="bg-zinc-100 dark:bg-zinc-800/80 font-bold border-b border-zinc-200 dark:border-zinc-700">
-              <th className="p-2 text-start w-10">#</th>
-              <th className="p-2 text-start w-28">التاريخ</th>
-              <th className="p-2 text-start">البيان / العنوان</th>
-              <th className="p-2 text-start">الملاحظات</th>
-              <th className="p-2 text-end w-32">المبلغ</th>
+            <tr className="bg-zinc-100 font-bold border-b border-zinc-200">
+              <th className="p-2 text-start w-10 text-zinc-700">#</th>
+              <th className="p-2 text-start w-28 text-zinc-700">التاريخ</th>
+              <th className="p-2 text-start text-zinc-700">البيان / العنوان</th>
+              <th className="p-2 text-start text-zinc-700">الملاحظات</th>
+              <th className="p-2 text-end w-32 text-zinc-700">المبلغ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+          <tbody className="divide-y divide-zinc-200 bg-white">
             {displayEntries.map((entry, idx) => {
               const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date)
               return (
                 <tr key={entry.id || idx}>
                   <td className="p-2 text-zinc-500">{toWesternDigits(String(idx + 1))}</td>
-                  <td className="p-2 font-mono">
+                  <td className="p-2 font-mono text-zinc-800">
                     {toWesternDigits(formatDate(entryDate, 'yyyy/MM/dd'))}
                   </td>
-                  <td className="p-2 font-bold">{entry.title || 'سلفة / حركة دين'}</td>
-                  <td className="p-2 text-zinc-500 dark:text-zinc-400">{entry.note || '—'}</td>
-                  <td className="p-2 text-end font-black font-mono">
+                  <td className="p-2 font-bold text-zinc-900">{entry.title || 'سلفة / حركة دين'}</td>
+                  <td className="p-2 text-zinc-600">{entry.note || '—'}</td>
+                  <td className="p-2 text-end font-black font-mono text-zinc-900">
                     <FormattedMoney amountFils={entry.amountFils} />
                   </td>
                 </tr>
@@ -190,11 +191,11 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-zinc-50 dark:bg-zinc-800/50 font-black border-t-2 border-zinc-300 dark:border-zinc-600">
-              <td colSpan={4} className="p-2 text-start">
+            <tr className="bg-zinc-50 font-black border-t-2 border-zinc-300">
+              <td colSpan={4} className="p-2 text-start text-zinc-900">
                 مجموع أصل الدين والسلف
               </td>
-              <td className="p-2 text-end font-mono">
+              <td className="p-2 text-end font-mono text-zinc-900">
                 <FormattedMoney amountFils={totalEntriesFils} />
               </td>
             </tr>
@@ -204,36 +205,36 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
 
       {/* Table 2: Payments History */}
       <div className="mb-6 print-avoid-break">
-        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 mb-2 border-b border-zinc-200 dark:border-zinc-700 pb-1">
+        <h3 className="text-xs font-black text-zinc-900 mb-2 border-b border-zinc-200 pb-1">
           ثانياً: سجل الدفعات المسددة ({payments.length})
         </h3>
         {payments.length === 0 ? (
-          <div className="p-4 text-center text-xs text-zinc-400 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl">
+          <div className="p-4 text-center text-xs text-zinc-500 border border-dashed border-zinc-300 rounded-xl bg-white">
             لا توجد دفعات مسددة مسجلة على هذا الحساب بعد.
           </div>
         ) : (
-          <table className="w-full text-xs text-start border-collapse border border-zinc-200 dark:border-zinc-700">
+          <table className="w-full text-xs text-start border-collapse border border-zinc-200">
             <thead>
-              <tr className="bg-zinc-100 dark:bg-zinc-800/80 font-bold border-b border-zinc-200 dark:border-zinc-700">
-                <th className="p-2 text-start w-10">#</th>
-                <th className="p-2 text-start w-28">التاريخ</th>
-                <th className="p-2 text-start">البيان</th>
-                <th className="p-2 text-start">الملاحظات</th>
-                <th className="p-2 text-end w-32">المبلغ المسدد</th>
+              <tr className="bg-zinc-100 font-bold border-b border-zinc-200">
+                <th className="p-2 text-start w-10 text-zinc-700">#</th>
+                <th className="p-2 text-start w-28 text-zinc-700">التاريخ</th>
+                <th className="p-2 text-start text-zinc-700">البيان</th>
+                <th className="p-2 text-start text-zinc-700">الملاحظات</th>
+                <th className="p-2 text-end w-32 text-zinc-700">المبلغ المسدد</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+            <tbody className="divide-y divide-zinc-200 bg-white">
               {payments.map((pmt, idx) => {
                 const pmtDate = pmt.date instanceof Date ? pmt.date : new Date(pmt.date)
                 return (
                   <tr key={pmt.id || idx}>
                     <td className="p-2 text-zinc-500">{toWesternDigits(String(idx + 1))}</td>
-                    <td className="p-2 font-mono">
+                    <td className="p-2 font-mono text-zinc-800">
                       {toWesternDigits(formatDate(pmtDate, 'yyyy/MM/dd'))}
                     </td>
-                    <td className="p-2 font-bold">دفعة سداد</td>
-                    <td className="p-2 text-zinc-500 dark:text-zinc-400">{pmt.note || '—'}</td>
-                    <td className="p-2 text-end font-black font-mono text-emerald-600 dark:text-emerald-400">
+                    <td className="p-2 font-bold text-zinc-900">دفعة سداد</td>
+                    <td className="p-2 text-zinc-600">{pmt.note || '—'}</td>
+                    <td className="p-2 text-end font-black font-mono text-emerald-600">
                       <FormattedMoney amountFils={pmt.amountFils} />
                     </td>
                   </tr>
@@ -241,11 +242,11 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
               })}
             </tbody>
             <tfoot>
-              <tr className="bg-zinc-50 dark:bg-zinc-800/50 font-black border-t-2 border-zinc-300 dark:border-zinc-600">
-                <td colSpan={4} className="p-2 text-start">
+              <tr className="bg-zinc-50 font-black border-t-2 border-zinc-300">
+                <td colSpan={4} className="p-2 text-start text-zinc-900">
                   إجمالي المبالغ المسددة
                 </td>
-                <td className="p-2 text-end font-mono text-emerald-600 dark:text-emerald-400">
+                <td className="p-2 text-end font-mono text-emerald-600">
                   <FormattedMoney amountFils={totalPaymentsFils} />
                 </td>
               </tr>
@@ -255,10 +256,10 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
       </div>
 
       {/* Statement Certification Footer */}
-      <div className="pt-4 border-t border-zinc-200 dark:border-zinc-700 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
+      <div className="pt-4 border-t border-zinc-200 flex items-center justify-between text-[10px] text-zinc-500">
         <div>
           <span>كشف حساب مالي تفصيلي صادر إلكترونياً من تطبيق </span>
-          <span className="font-bold text-zinc-800 dark:text-zinc-200">بَصير</span>
+          <span className="font-bold text-zinc-900">بَصير</span>
         </div>
         <div>صفحة 1 من 1</div>
       </div>

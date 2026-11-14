@@ -198,11 +198,13 @@ html.dark ::-webkit-scrollbar-thumb:hover,
   background-color: #3f3f46;
 }
 
-/* Print optimization & Exact Color Fidelity */
+/* Print optimization & Exact Color Fidelity (Always white paper, dark text, ink-friendly) */
 @media print {
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   header,
@@ -213,8 +215,11 @@ html.dark ::-webkit-scrollbar-thumb:hover,
     display: none !important;
   }
 
+  /* Force pure white paper canvas and dark text */
   html,
   body {
+    background-color: #ffffff !important;
+    color: #18181b !important;
     padding: 0 !important;
     margin: 0 !important;
     font-size: 11pt !important;
@@ -226,6 +231,8 @@ html.dark ::-webkit-scrollbar-thumb:hover,
   }
 
   main {
+    background-color: #ffffff !important;
+    color: #18181b !important;
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
@@ -265,12 +272,105 @@ html.dark ::-webkit-scrollbar-thumb:hover,
     border: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    background: transparent !important;
+    background-color: #ffffff !important;
+    color: #18181b !important;
   }
 
   [role="dialog"] * {
     overflow: visible !important;
     max-height: none !important;
+  }
+
+  /* All dark backgrounds and cards become clean white cards / containers */
+  .dark,
+  .dark body,
+  .dark main,
+  .dark .card,
+  .dark [role="dialog"],
+  .dark [class*="bg-white"],
+  .dark [class*="dark:bg-"] {
+    background-color: #ffffff !important;
+  }
+
+  /* Secondary neutral backgrounds for table headers, sub-rows and badges */
+  .dark thead tr,
+  .dark th,
+  .dark [class*="bg-zinc-50"],
+  .dark [class*="bg-zinc-100"] {
+    background-color: #f4f4f5 !important;
+  }
+
+  /* Base typography in dark mode printed to crisp dark carbon (#18181b) */
+  .dark h1,
+  .dark h2,
+  .dark h3,
+  .dark h4,
+  .dark h5,
+  .dark h6,
+  .dark p,
+  .dark label,
+  .dark td,
+  .dark th {
+    color: #18181b !important;
+  }
+
+  /* Force all light/white texts in dark mode to crisp dark carbon (#18181b) */
+  .dark [class*="text-white"],
+  .dark [class*="dark:text-white"],
+  .dark [class*="dark:text-zinc-50"],
+  .dark [class*="dark:text-zinc-100"],
+  .dark [class*="dark:text-zinc-200"],
+  .dark [class*="dark:text-zinc-300"],
+  .dark [class*="text-zinc-900"],
+  .dark [class*="text-zinc-800"],
+  .dark [class*="text-zinc-700"] {
+    color: #18181b !important;
+  }
+
+  /* Secondary/muted text in print */
+  .dark [class*="dark:text-zinc-400"],
+  .dark [class*="dark:text-zinc-500"],
+  .dark [class*="text-zinc-400"],
+  .dark [class*="text-zinc-500"] {
+    color: #71717a !important;
+  }
+
+  /* Financial Semantic Colors: High contrast in print */
+  .dark [class*="dark:text-red-"],
+  .dark [class*="text-red-"] {
+    color: #dc2626 !important;
+  }
+
+  .dark [class*="dark:text-emerald-"],
+  .dark [class*="dark:text-green-"],
+  .dark [class*="text-emerald-"],
+  .dark [class*="text-green-"] {
+    color: #16a34a !important;
+  }
+
+  .dark [class*="dark:text-blue-"],
+  .dark [class*="text-blue-"] {
+    color: #2563eb !important;
+  }
+
+  .dark [class*="dark:text-amber-"],
+  .dark [class*="text-amber-"] {
+    color: #d97706 !important;
+  }
+
+  /* Clean light borders for all elements in print */
+  .dark [class*="dark:border-"],
+  .dark [class*="border-"],
+  .dark table,
+  .dark th,
+  .dark td,
+  .dark tr {
+    border-color: #e4e4e7 !important;
+  }
+
+  .dark [class*="divide-"] > * + *,
+  .dark [class*="dark:divide-"] > * + * {
+    border-color: #e4e4e7 !important;
   }
 
   /* Prevent page cuts inside cards and charts */
@@ -282,6 +382,28 @@ html.dark ::-webkit-scrollbar-thumb:hover,
     break-inside: avoid !important;
     page-break-inside: avoid !important;
     box-shadow: none !important;
+  }
+
+  /* Chart bars SVG fill on white paper */
+  rect[fill="#34D399"],
+  path[fill="#34D399"] {
+    fill: #16a34a !important;
+    stroke: #16a34a !important;
+  }
+
+  rect[fill="#F87171"],
+  path[fill="#F87171"] {
+    fill: #dc2626 !important;
+    stroke: #dc2626 !important;
+  }
+
+  .recharts-cartesian-grid line {
+    stroke: #e4e4e7 !important;
+  }
+
+  .recharts-text,
+  .recharts-cartesian-axis-tick text {
+    fill: #71717a !important;
   }
 
   @page {

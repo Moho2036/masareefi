@@ -247,21 +247,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId || !hasSettings || !isRolloverEnabled) {
       if (hasSettings && !isRolloverEnabled) {
+        setRolloverBalanceFils(0)
         setRolloverLoading(false)
       }
       return
     }
 
     const periodRange = getFinancialMonthRange(new Date(), monthStartDay)
-    const rolloverStartDate = settings?.rolloverStartDate
-      ? settings.rolloverStartDate instanceof Date
-        ? settings.rolloverStartDate
-        : typeof (settings.rolloverStartDate as { toDate?: () => Date }).toDate === 'function'
-          ? (settings.rolloverStartDate as { toDate: () => Date }).toDate()
-          : new Date(settings.rolloverStartDate as unknown as string)
+    const rawStart = settings?.rolloverStartDate
+    const rolloverStartDate = rawStart
+      ? rawStart instanceof Date
+        ? rawStart
+        : typeof (rawStart as { toDate?: () => Date }).toDate === 'function'
+          ? (rawStart as { toDate: () => Date }).toDate()
+          : new Date(rawStart as unknown as string)
       : null
+    const rolloverStartTime = rolloverStartDate ? rolloverStartDate.getTime() : null
 
-    if (rolloverStartDate && periodRange.start.getTime() <= rolloverStartDate.getTime()) {
+    if (rolloverStartTime !== null && periodRange.start.getTime() <= rolloverStartTime) {
       setRolloverBalanceFils(0)
       setRolloverLoading(false)
       return
@@ -330,9 +333,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const openingFils = settings?.openingBalanceFils ?? 0
-    const effectiveRolloverBalanceFils =
-      (user && isRolloverEnabled ? rolloverBalanceFils : 0) + openingFils
+    const periodRange = getFinancialMonthRange(new Date(), monthStartDay)
+    const rawStart = settings?.rolloverStartDate
+    const rolloverStartDate = rawStart
+      ? rawStart instanceof Date
+        ? rawStart
+        : typeof (rawStart as { toDate?: () => Date }).toDate === 'function'
+          ? (rawStart as { toDate: () => Date }).toDate()
+          : new Date(rawStart as unknown as string)
+      : null
+    const rolloverStartTime = rolloverStartDate ? rolloverStartDate.getTime() : null
+
+    const includeOpeningBalance =
+      Boolean(user) && (rolloverStartTime === null || periodRange.start.getTime() >= rolloverStartTime)
+    const openingFils = includeOpeningBalance ? (settings?.openingBalanceFils ?? 0) : 0
+    const priorFils = user && isRolloverEnabled ? rolloverBalanceFils : 0
+    const effectiveRolloverBalanceFils = priorFils + openingFils
     const calculatedRolloverLoading = !user
       ? false
       : isBulkOpActive || settingsLoading || (isRolloverEnabled && rolloverLoading)
@@ -367,6 +383,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     user,
     settings,
     isRolloverEnabled,
+    monthStartDay,
     settingsLoading,
     settingsError,
     handleUpdateSettings,
