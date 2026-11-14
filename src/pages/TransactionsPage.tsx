@@ -60,6 +60,8 @@ export const TransactionsPage: React.FC = () => {
     setTxToDelete,
     deleting,
     linkedDebtPayment,
+    linkedDebtInit,
+    linkedDebtEntry,
     circleInstallmentToDelete,
     handleDeleteConfirm,
     handleExportCsv,
@@ -264,6 +266,8 @@ export const TransactionsPage: React.FC = () => {
         onConfirm={handleDeleteConfirm}
         deleting={deleting}
         linkedDebtPayment={linkedDebtPayment}
+        linkedDebtInit={linkedDebtInit}
+        linkedDebtEntry={linkedDebtEntry}
         circleInstallmentToDelete={circleInstallmentToDelete}
       />
     </div>

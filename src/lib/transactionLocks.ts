@@ -1,4 +1,4 @@
-import type { Transaction, Debt, MoneyCircle } from '../types'
+import type { Transaction, Debt, DebtEntry, MoneyCircle } from '../types'
 import { findLinkedDebtPayment } from './debts'
 import { getOccurrenceMonthIndex } from './recurring'
 
@@ -23,6 +23,8 @@ export interface TransactionLockStatus {
   circleInstallmentMonth: number | null
   linkedCircleInstallment: MoneyCircle | null
   linkedDebtPayment: ReturnType<typeof findLinkedDebtPayment>
+  linkedDebt: Debt | null
+  linkedDebtEntry: { debt: Debt; entry: DebtEntry } | null
   isSourceMissing: boolean
   isDebtExists: boolean
   isDebtEntryExists: boolean
@@ -73,26 +75,42 @@ export function isSystemLinkedTransaction(tx: { id: string; note?: string }): bo
 export interface DebtLookup {
   debtIdsSet: Set<string>
   entryTxIdsSet: Set<string>
+  debtByIdMap: Map<string, Debt>
+  entryByTxIdMap: Map<string, { debt: Debt; entry: DebtEntry }>
   paymentByTxIdMap: Map<string, { debt: Debt; payment: Debt['payments'][number] }>
 }
 
 export function buildDebtLookup(debts: Debt[]): DebtLookup {
   const debtIdsSet = new Set<string>()
   const entryTxIdsSet = new Set<string>()
+  const debtByIdMap = new Map<string, Debt>()
+  const entryByTxIdMap = new Map<string, { debt: Debt; entry: DebtEntry }>()
   const paymentByTxIdMap = new Map<string, { debt: Debt; payment: Debt['payments'][number] }>()
 
   for (const d of debts) {
     debtIdsSet.add(d.id)
+    debtByIdMap.set(d.id, d)
     // The debt initialisation transaction is deterministically identified by debt_init_<debtId>
     entryTxIdsSet.add(`debt_init_${d.id}`)
     if (d.entries) {
       for (const e of d.entries) {
-        if (e.transactionId) entryTxIdsSet.add(e.transactionId)
+        const entryItem = { debt: d, entry: e }
+        if (e.transactionId) {
+          entryTxIdsSet.add(e.transactionId)
+          entryByTxIdMap.set(e.transactionId, entryItem)
+        }
         entryTxIdsSet.add(`debt_entry_${e.id}`)
+        entryByTxIdMap.set(`debt_entry_${e.id}`, entryItem)
+        if (e.transactionId === `debt_init_${d.id}`) {
+          entryByTxIdMap.set(`debt_init_${d.id}`, entryItem)
+        }
         // Merged entry transaction IDs (e.g. from debt entry consolidation)
         if (Array.isArray(e.mergedTransactionIds)) {
           for (const mid of e.mergedTransactionIds) {
-            if (mid) entryTxIdsSet.add(mid)
+            if (mid) {
+              entryTxIdsSet.add(mid)
+              entryByTxIdMap.set(mid, entryItem)
+            }
           }
         }
       }
@@ -111,7 +129,7 @@ export function buildDebtLookup(debts: Debt[]): DebtLookup {
     }
   }
 
-  return { debtIdsSet, entryTxIdsSet, paymentByTxIdMap }
+  return { debtIdsSet, entryTxIdsSet, debtByIdMap, entryByTxIdMap, paymentByTxIdMap }
 }
 
 export function buildDebtTxIdsSet(debtLookup: DebtLookup): Set<string> {
@@ -144,6 +162,8 @@ export function resolveTransactionLockStatus(
       circleInstallmentMonth: null,
       linkedCircleInstallment: null,
       linkedDebtPayment: null,
+      linkedDebt: null,
+      linkedDebtEntry: null,
       isSourceMissing: false,
       isDebtExists: false,
       isDebtEntryExists: false,
@@ -161,6 +181,7 @@ export function resolveTransactionLockStatus(
 
   const isLinkedToDebtInit = isDebtInitTransaction(tx.id)
   const debtId = isLinkedToDebtInit ? tx.id.replace('debt_init_', '') : null
+  const linkedDebt = debtId ? debts.find((d) => d.id === debtId) || null : null
   const isDebtExists = Boolean(
     (debtId && debts.some((d) => d.id === debtId)) ||
       debts.some((d) =>
@@ -172,18 +193,26 @@ export function resolveTransactionLockStatus(
       )
   )
 
+  let linkedDebtEntry: { debt: Debt; entry: DebtEntry } | null = null
   const isLinkedToDebtEntry = isDebtEntryTransaction(tx.id) || isMergedEntryTx
-  const isDebtEntryExists = Boolean(
-    isLinkedToDebtEntry &&
-      debts.some((d) =>
-        (d.entries || []).some(
-          (e) =>
+  if (isLinkedToDebtEntry) {
+    for (const d of debts) {
+      if (d.entries) {
+        for (const e of d.entries) {
+          if (
             e.transactionId === tx.id ||
             `debt_entry_${e.id}` === tx.id ||
             (Array.isArray(e.mergedTransactionIds) && e.mergedTransactionIds.includes(tx.id))
-        )
-      )
-  )
+          ) {
+            linkedDebtEntry = { debt: d, entry: e }
+            break
+          }
+        }
+      }
+      if (linkedDebtEntry) break
+    }
+  }
+  const isDebtEntryExists = Boolean(linkedDebtEntry)
 
   const isLinkedToDebtPayment = Boolean(
     linkedDebtPayment ||
@@ -269,6 +298,8 @@ export function resolveTransactionLockStatus(
     circleInstallmentMonth,
     linkedCircleInstallment,
     linkedDebtPayment,
+    linkedDebt,
+    linkedDebtEntry,
     isSourceMissing,
     isDebtExists,
     isDebtEntryExists,

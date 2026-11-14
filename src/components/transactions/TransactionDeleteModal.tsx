@@ -2,7 +2,7 @@ import React from 'react'
 import { AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import type { Transaction, Debt } from '../../types'
+import type { Transaction, Debt, DebtEntry } from '../../types'
 
 export interface TransactionDeleteModalProps {
   txToDelete: Transaction | null
@@ -10,6 +10,8 @@ export interface TransactionDeleteModalProps {
   onConfirm: () => void
   deleting: boolean
   linkedDebtPayment: { debt: Debt; payment: Debt['payments'][number] } | null
+  linkedDebtInit?: Debt | null
+  linkedDebtEntry?: { debt: Debt; entry: DebtEntry } | null
   circleInstallmentToDelete: { name: string } | null
 }
 
@@ -19,6 +21,8 @@ export const TransactionDeleteModal: React.FC<TransactionDeleteModalProps> = ({
   onConfirm,
   deleting,
   linkedDebtPayment,
+  linkedDebtInit,
+  linkedDebtEntry,
   circleInstallmentToDelete,
 }) => {
   return (
@@ -36,6 +40,28 @@ export const TransactionDeleteModal: React.FC<TransactionDeleteModalProps> = ({
             </div>
             <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
               هذه المعاملة مرتبطة بسجل دين لـ <strong>{linkedDebtPayment.debt.personName}</strong>. عند تأكيد الحذف، سيتم أيضاً حذف دفعة السداد وإعادة فتح المبلغ المستحق في سجل الديون للحفاظ على تطابق الرصيد المحاسبي.
+            </p>
+          </div>
+        )}
+        {linkedDebtInit && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>تنبيه: هذه المعاملة تمثل أصل الدين</span>
+            </div>
+            <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
+              هذه المعاملة تمثل نشوء الدين لـ <strong>{linkedDebtInit.personName}</strong>. عند تأكيد الحذف، سيتم حذف سجل الدين بالكامل من صفحة الديون للحفاظ على تطابق الرصيد المحاسبي.
+            </p>
+          </div>
+        )}
+        {linkedDebtEntry && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>تنبيه: هذه المعاملة مرتبطة بسلفة إضافية</span>
+            </div>
+            <p className="leading-relaxed text-[11px] text-amber-700/90 dark:text-amber-300/80">
+              هذه المعاملة مرتبطة بسلفة إضافية في سجل دين <strong>{linkedDebtEntry.debt.personName}</strong>. عند تأكيد الحذف، سيتم حذف السلفة وإعادة احتساب إجمالي الدين للحفاظ على دقة الحسابات.
             </p>
           </div>
         )}

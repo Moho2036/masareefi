@@ -109,6 +109,8 @@ export function useTransactionsData() {
     setTxToDelete,
     deleting,
     linkedDebtPayment,
+    linkedDebtInit,
+    linkedDebtEntry,
     circleInstallmentToDelete,
     handleDeleteConfirm,
   } = useTransactionDeletion({
@@ -335,6 +337,8 @@ export function useTransactionsData() {
     setTxToDelete,
     deleting,
     linkedDebtPayment,
+    linkedDebtInit,
+    linkedDebtEntry,
     circleInstallmentToDelete,
     handleDeleteConfirm,
     // Actions

@@ -61,19 +61,29 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
   const icon = cat?.icon ?? '➕'
   const color = cat?.color ?? '#94A3B8'
 
-  const maxSwipe = isSystemLinked ? 70 : isLockedDebt || isLockedCircle ? 140 : 210
+  const canDuplicate = !(isLockedDebt || isLockedCircle || isSystemLinked)
+  const hasDebtLink = isLockedDebt
+  const hasCircleLink = isLockedCircle
+  const canDelete = !isMergedDebtPayment && !isLockedCircle
+  const buttonCount =
+    (canDuplicate ? 1 : 0) +
+    (hasDebtLink ? 1 : 0) +
+    (hasCircleLink ? 1 : 0) +
+    1 +
+    (canDelete ? 1 : 0)
+  const maxSwipe = buttonCount * 70
 
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none group">
       {/* Mobile Swipe-to-Right Action Reveal Strip */}
       <div
         className={cn(
-          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden',
+          'absolute inset-y-0 start-0 flex items-stretch z-0 sm:hidden print:hidden',
           swipeOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
       >
-        {!(isLockedDebt || isLockedCircle || isSystemLinked) && (
+        {canDuplicate && (
           <button
             type="button"
             onClick={(e) => {
@@ -81,12 +91,40 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               setSwipeOffset(0)
               openDuplicate(tx)
             }}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لتكرار المعاملة"
           >
             <Copy className="w-4 h-4 shrink-0" />
             <span className="truncate">تكرار</span>
           </button>
+        )}
+        {hasDebtLink && (
+          <Link
+            to="/debts"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+            }}
+            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
+            aria-label="سحب للانتقال إلى صفحة الديون"
+          >
+            <ExternalLink className="w-4 h-4 shrink-0" />
+            <span className="truncate">الديون</span>
+          </Link>
+        )}
+        {hasCircleLink && (
+          <Link
+            to="/tools?tool=circles"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSwipeOffset(0)
+            }}
+            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
+            aria-label="سحب للانتقال إلى صفحة الجمعيات"
+          >
+            <ExternalLink className="w-4 h-4 shrink-0" />
+            <span className="truncate">الجمعيات</span>
+          </Link>
         )}
         <button
           type="button"
@@ -95,39 +133,13 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             setSwipeOffset(0)
             openEdit(tx)
           }}
-          className="flex-1 bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+          className="flex-1 min-w-[68px] bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
           aria-label="سحب لتعديل المعاملة"
         >
           <Pencil className="w-4 h-4 shrink-0" />
           <span className="truncate">تعديل</span>
         </button>
-        {isLockedDebt ? (
-          <Link
-            to="/debts"
-            onClick={(e) => {
-              e.stopPropagation()
-              setSwipeOffset(0)
-            }}
-            className="flex-1 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
-            aria-label="سحب للانتقال إلى صفحة الديون"
-          >
-            <ExternalLink className="w-4 h-4 shrink-0" />
-            <span className="truncate">الديون</span>
-          </Link>
-        ) : isLockedCircle ? (
-          <Link
-            to="/tools?tool=circles"
-            onClick={(e) => {
-              e.stopPropagation()
-              setSwipeOffset(0)
-            }}
-            className="flex-1 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
-            aria-label="سحب للانتقال إلى صفحة الجمعيات"
-          >
-            <ExternalLink className="w-4 h-4 shrink-0" />
-            <span className="truncate">الجمعيات</span>
-          </Link>
-        ) : !isSystemLinked ? (
+        {canDelete && (
           <button
             type="button"
             onClick={(e) => {
@@ -135,13 +147,13 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               setSwipeOffset(0)
               setTxToDelete(tx)
             }}
-            className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+            className="flex-1 min-w-[68px] bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لحذف المعاملة"
           >
             <Trash2 className="w-4 h-4 shrink-0" />
             <span className="truncate">حذف</span>
           </button>
-        ) : null}
+        )}
       </div>
 
       {/* Main Row Content (Slides right on touch swipe) */}
@@ -286,7 +298,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
 
           {/* Desktop Hover Quick Actions (Hidden on Mobile) */}
           <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
-            {!(isLockedDebt || isLockedCircle || isSystemLinked) && (
+            {canDuplicate && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -300,19 +312,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                 <Copy className="w-3.5 h-3.5" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                openEdit(tx)
-              }}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-              aria-label="تعديل المعاملة"
-              title="تعديل المعاملة"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            {isLockedDebt ? (
+            {hasDebtLink && (
               <Link
                 to="/debts"
                 onClick={(e) => e.stopPropagation()}
@@ -326,7 +326,8 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </Link>
-            ) : isLockedCircle ? (
+            )}
+            {hasCircleLink && (
               <Link
                 to="/tools?tool=circles"
                 onClick={(e) => e.stopPropagation()}
@@ -336,7 +337,20 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </Link>
-            ) : (
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                openEdit(tx)
+              }}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+              aria-label="تعديل المعاملة"
+              title="تعديل المعاملة"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            {canDelete && (
               <button
                 type="button"
                 onClick={(e) => {

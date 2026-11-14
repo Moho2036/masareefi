@@ -1,5 +1,5 @@
 import { deleteTransaction } from '../../services/transactions'
-import { removeDebtPayment } from '../../services/debts'
+import { deleteDebt, deleteDebtEntry, removeDebtPayment } from '../../services/debts'
 import { removeCircleInstallmentPayment } from '../../services/moneyCircles'
 import type { Transaction } from '../../types'
 import type { TransactionLockStatus } from '../../lib/transactionLocks'
@@ -34,6 +34,8 @@ export function useTransactionDeleteHandler(params: UseTransactionDeleteHandlerP
     linkedDebtPayment,
     isLinkedToDebtInit,
     isLinkedToDebtEntry,
+    linkedDebt,
+    linkedDebtEntry,
     isDebtExists,
     isDebtEntryExists,
     isLinkedToCircle,
@@ -62,6 +64,40 @@ export function useTransactionDeleteHandler(params: UseTransactionDeleteHandlerP
       } catch (err) {
         console.error('Failed to remove linked debt payment:', err)
         setError('تعذر حذف دفعة الدين المرتبطة')
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
+    if (isLinkedToDebtInit && linkedDebt && !isSourceDeleted) {
+      setDeleting(true)
+      try {
+        await deleteDebt(user.uid, linkedDebt.id, { deleteTransactions: true })
+        showToast(`تم حذف الدين لـ (${linkedDebt.personName}) وجميع معاملاته بنجاح`, 'info')
+        onSuccess?.()
+        onClose()
+      } catch (err) {
+        console.error('Failed to delete linked debt:', err)
+        setError('تعذر حذف الدين المرتبط')
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
+    if (isLinkedToDebtEntry && linkedDebtEntry && !isSourceDeleted) {
+      if (linkedDebtEntry.entry.isMerged) {
+        setError('لا يمكن حذف سلفة مدمجة من هنا، يرجى إدارتها من سجل الديون.')
+        return
+      }
+      setDeleting(true)
+      try {
+        await deleteDebtEntry(user.uid, linkedDebtEntry.debt, linkedDebtEntry.entry.id)
+        showToast(`تم حذف السلفة الإضافية لـ (${linkedDebtEntry.debt.personName}) بنجاح`, 'info')
+        onSuccess?.()
+        onClose()
+      } catch (err) {
+        console.error('Failed to delete linked debt entry:', err)
+        setError('تعذر حذف السلفة الإضافية المرتبطة')
       } finally {
         setDeleting(false)
       }

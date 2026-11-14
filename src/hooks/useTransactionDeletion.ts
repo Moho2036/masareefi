@@ -3,7 +3,7 @@ import type { Transaction, MoneyCircle } from '../types'
 import type { DebtLookup } from '../lib/transactionLocks'
 import type { ToastType } from './useToast'
 import { deleteTransaction } from '../services/transactions'
-import { removeDebtPayment } from '../services/debts'
+import { deleteDebt, deleteDebtEntry, removeDebtPayment } from '../services/debts'
 import { removeCircleInstallmentPayment } from '../services/moneyCircles'
 import { getOccurrenceMonthIndex } from '../lib/recurring'
 
@@ -26,6 +26,17 @@ export function useTransactionDeletion({
   const [deleting, setDeleting] = useState(false)
 
   const linkedDebtPayment = txToDelete?.id ? debtLookup.paymentByTxIdMap.get(txToDelete.id) ?? null : null
+
+  const linkedDebtInit = useMemo(() => {
+    if (!txToDelete?.id || !txToDelete.id.startsWith('debt_init_')) return null
+    const debtId = txToDelete.id.replace('debt_init_', '')
+    return debtLookup.debtByIdMap.get(debtId) ?? null
+  }, [txToDelete, debtLookup])
+
+  const linkedDebtEntry = useMemo(() => {
+    if (!txToDelete?.id || !txToDelete.id.startsWith('debt_entry_')) return null
+    return debtLookup.entryByTxIdMap.get(txToDelete.id) ?? null
+  }, [txToDelete, debtLookup])
 
   const circleInstallmentToDelete = useMemo(() => {
     if (!txToDelete) return null
@@ -67,20 +78,39 @@ export function useTransactionDeletion({
       return
     }
 
-    if (txToDelete.id.startsWith('debt_init_')) {
-      const debtId = txToDelete.id.replace('debt_init_', '')
-      if ((debtId && debtLookup.debtIdsSet.has(debtId)) || debtLookup.entryTxIdsSet.has(txToDelete.id)) {
-        showToast('لا يمكن حذف معاملة أصل الدين من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+    if (linkedDebtInit) {
+      setDeleting(true)
+      try {
+        await deleteDebt(userId, linkedDebtInit.id, { deleteTransactions: true })
+        showToast(`تم حذف الدين لـ (${linkedDebtInit.personName}) وجميع معاملاته بنجاح`, 'info')
         setTxToDelete(null)
-        return
+      } catch (err) {
+        console.error('Failed to delete linked debt:', err)
+        showToast('تعذر حذف الدين المرتبط', 'error')
+      } finally {
+        setDeleting(false)
       }
+      return
     }
-    if (txToDelete.id.startsWith('debt_entry_')) {
-      if (debtLookup.entryTxIdsSet.has(txToDelete.id)) {
-        showToast('لا يمكن حذف معاملة السلفة الإضافية من هنا، يرجى حذف أو إدارة الدين من صفحة الديون.', 'error')
+
+    if (linkedDebtEntry) {
+      if (linkedDebtEntry.entry.isMerged) {
+        showToast('لا يمكن حذف سلفة مدمجة من هنا، يرجى إدارتها من سجل الديون.', 'error')
         setTxToDelete(null)
         return
       }
+      setDeleting(true)
+      try {
+        await deleteDebtEntry(userId, linkedDebtEntry.debt, linkedDebtEntry.entry.id)
+        showToast(`تم حذف السلفة الإضافية لـ (${linkedDebtEntry.debt.personName}) بنجاح`, 'info')
+        setTxToDelete(null)
+      } catch (err) {
+        console.error('Failed to delete linked debt entry:', err)
+        showToast('تعذر حذف السلفة الإضافية المرتبطة', 'error')
+      } finally {
+        setDeleting(false)
+      }
+      return
     }
     if (txToDelete.id.startsWith('circle_payout_')) {
       const circleId = txToDelete.id.replace('circle_payout_', '')
@@ -145,6 +175,8 @@ export function useTransactionDeletion({
     setTxToDelete,
     deleting,
     linkedDebtPayment,
+    linkedDebtInit,
+    linkedDebtEntry,
     circleInstallmentToDelete,
     handleDeleteConfirm,
   }

@@ -15,6 +15,8 @@ export interface TransactionActionsBarProps {
   onDelete: () => void
   onSaveAndAddAnother: () => void
   onDuplicateCurrent: () => void
+  canDelete?: boolean
+  deleteConfirmMessage?: string
 }
 
 export const TransactionActionsBar: React.FC<TransactionActionsBarProps> = ({
@@ -30,14 +32,18 @@ export const TransactionActionsBar: React.FC<TransactionActionsBarProps> = ({
   onDelete,
   onSaveAndAddAnother,
   onDuplicateCurrent,
+  canDelete,
+  deleteConfirmMessage,
 }) => {
+  const effectiveCanDelete = canDelete ?? !isLockedTransaction
+
   return (
     <>
       {/* Delete confirmation if editing */}
-      {isEditing && !isLockedTransaction && showDeleteConfirm ? (
+      {isEditing && effectiveCanDelete && showDeleteConfirm ? (
         <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 space-y-2.5">
           <p className="text-xs font-bold text-red-800 dark:text-red-300">
-            هل أنت متأكد من حذف هذه المعاملة نهائياً؟
+            {deleteConfirmMessage || 'هل أنت متأكد من حذف هذه المعاملة نهائياً؟'}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -116,7 +122,7 @@ export const TransactionActionsBar: React.FC<TransactionActionsBarProps> = ({
           </Button>
         </div>
 
-        {isEditing && !isLockedTransaction && !showDeleteConfirm && (
+        {isEditing && effectiveCanDelete && !showDeleteConfirm && (
           <Button
             type="button"
             variant="ghost"
