@@ -1,6 +1,7 @@
 /**
  * Standardized Swiss Motion Tokens for Baseer (React 19 + Motion).
  * Physics parameters, timing curves, and reusable motion variants.
+ * Calibrated for precision, stability, and zero exaggerated bounce.
  */
 
 export const isTestEnv =
@@ -11,26 +12,26 @@ export const isTestEnv =
 
 export const springSnappy = {
   type: 'spring' as const,
-  stiffness: 450,
-  damping: 35,
+  stiffness: 380,
+  damping: 36,
 }
 
 export const springSheet = {
   type: 'spring' as const,
-  stiffness: 380,
-  damping: 32,
+  stiffness: 300,
+  damping: 36,
   mass: 0.9,
 }
 
 export const springBounce = {
   type: 'spring' as const,
-  stiffness: 500,
-  damping: 24,
+  stiffness: 360,
+  damping: 30,
 }
 
 export const springGentle = {
   type: 'spring' as const,
-  stiffness: 280,
+  stiffness: 240,
   damping: 28,
 }
 
@@ -41,7 +42,7 @@ export const pageVariants = {
 }
 
 export const pageTransition = {
-  duration: 0.18,
+  duration: 0.15,
   ease: 'easeOut' as const,
 }
 

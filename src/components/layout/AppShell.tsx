@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation, Outlet } from 'react-router'
+import { Link, useLocation, useSearchParams, Outlet } from 'react-router'
 import {
   Settings, Plus, WifiOff, RotateCcw, Bell, Eye, EyeOff,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
 import { MonthSelector } from '../ui/MonthSelector'
+import { YearSelector } from '../ui/YearSelector'
 import { navGroups } from './navConfig'
 import { useAuth } from '../../hooks/useAuth'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
@@ -17,7 +18,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { hasExistingUserData } from '../../services/userProfile'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
 import { cn } from '../../lib/cn'
-import { pageVariants, pageTransition, isTestEnv } from '../../lib/motionTokens'
+import { isTestEnv } from '../../lib/motionTokens'
 
 const OnboardingWizard = React.lazy(() =>
   import('../onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
@@ -39,6 +40,8 @@ export const AppShell: React.FC = () => {
   const { openAdd } = useTransactionModal()
   const isOnline = useOnlineStatus()
   const { goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const isReportsYearly = pathname === '/reports' && searchParams.get('period') === 'yearly'
 
   const isMonthPage = pathname === '/' || pathname === '/transactions' || pathname === '/reports'
 
@@ -346,7 +349,25 @@ export const AppShell: React.FC = () => {
               )}
             </button>
 
-            {isMonthPage ? (
+            {isReportsYearly ? (
+              <YearSelector
+                selectedYear={
+                  searchParams.get('year')
+                    ? Number(searchParams.get('year'))
+                    : new Date().getFullYear()
+                }
+                onSelectYear={(year) => {
+                  setSearchParams(
+                    (prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.set('year', String(year))
+                      return next
+                    },
+                    { replace: true }
+                  )
+                }}
+              />
+            ) : isMonthPage ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
                 {!isCurrentMonth && (
                   <button
@@ -377,24 +398,23 @@ export const AppShell: React.FC = () => {
 
         {/* Page View Slot */}
         <main className="flex-1 min-w-0 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto overflow-x-clip">
-          <React.Suspense fallback={<PageSkeleton />}>
-            {isTestEnv ? (
+          {isTestEnv ? (
+            <React.Suspense fallback={<PageSkeleton />}>
               <Outlet />
-            ) : (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={pathname}
-                  variants={pageVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={pageTransition}
-                >
-                  <Outlet />
-                </motion.div>
-              </AnimatePresence>
-            )}
-          </React.Suspense>
+            </React.Suspense>
+          ) : (
+            <motion.div
+              key={pathname}
+              initial={false}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              className="flex-1 w-full"
+            >
+              <React.Suspense fallback={<PageSkeleton />}>
+                <Outlet />
+              </React.Suspense>
+            </motion.div>
+          )}
         </main>
       </div>
 

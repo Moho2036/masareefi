@@ -22,38 +22,38 @@ describe('Baseer Haptic Bank (haptics.ts)', () => {
     })
   })
 
-  it('triggers tick / light haptic with 10ms pulse', () => {
+  it('triggers tick / light haptic with 35ms pulse', () => {
     triggerHaptic('tick')
-    expect(mockVibrate).toHaveBeenCalledWith(10)
+    expect(mockVibrate).toHaveBeenCalledWith(35)
 
     triggerHaptic('light')
-    expect(mockVibrate).toHaveBeenCalledWith(10)
+    expect(mockVibrate).toHaveBeenCalledWith(35)
   })
 
-  it('triggers impact / medium haptic with 20ms pulse', () => {
+  it('triggers impact / medium haptic with 55ms pulse', () => {
     triggerHaptic('impact')
-    expect(mockVibrate).toHaveBeenCalledWith(20)
+    expect(mockVibrate).toHaveBeenCalledWith(55)
 
     triggerHaptic('medium')
-    expect(mockVibrate).toHaveBeenCalledWith(20)
+    expect(mockVibrate).toHaveBeenCalledWith(55)
   })
 
   it('triggers success delight double pulse', () => {
     triggerHaptic('success')
-    expect(mockVibrate).toHaveBeenCalledWith([15, 40, 25])
+    expect(mockVibrate).toHaveBeenCalledWith([45, 60, 45])
   })
 
-  it('triggers warning snap pulse with 35ms', () => {
+  it('triggers warning snap pulse with [60, 45, 60]', () => {
     triggerHaptic('warning')
-    expect(mockVibrate).toHaveBeenCalledWith(35)
+    expect(mockVibrate).toHaveBeenCalledWith([60, 45, 60])
   })
 
   it('triggers destructive triple pulse', () => {
     triggerHaptic('destructive')
-    expect(mockVibrate).toHaveBeenCalledWith([25, 35, 25])
+    expect(mockVibrate).toHaveBeenCalledWith([75, 45, 90])
   })
 
-  it('gracefully handles missing vibrate support without throwing', () => {
+  it('gracefully handles missing vibrate support using audio impulse without throwing', () => {
     Object.defineProperty(navigator, 'vibrate', {
       value: undefined,
       writable: true,
@@ -61,5 +61,9 @@ describe('Baseer Haptic Bank (haptics.ts)', () => {
     })
 
     expect(() => triggerHaptic('tick')).not.toThrow()
+    expect(() => triggerHaptic('impact')).not.toThrow()
+    expect(() => triggerHaptic('success')).not.toThrow()
+    expect(() => triggerHaptic('warning')).not.toThrow()
+    expect(() => triggerHaptic('destructive')).not.toThrow()
   })
 })

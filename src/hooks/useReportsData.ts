@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/refs */
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useMemo, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router'
 import { subDays, format as formatDate, differenceInDays } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { useSelectedMonth } from './useSelectedMonth'
@@ -28,7 +29,27 @@ import { calculateForecast } from '../lib/forecast'
 import { generateReportYearOptions } from '../lib/reportYears'
 
 export function useReportsData() {
-  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const periodParam = searchParams.get('period')
+  const reportPeriod: 'monthly' | 'yearly' = periodParam === 'yearly' ? 'yearly' : 'monthly'
+
+  const setReportPeriod = useCallback(
+    (period: 'monthly' | 'yearly') => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (period === 'yearly') {
+            next.set('period', 'yearly')
+          } else {
+            next.delete('period')
+          }
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
 
   const { range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
@@ -121,19 +142,26 @@ export function useReportsData() {
 
   // Yearly data hooks
   const defaultYear = useMemo(() => range.start.getFullYear(), [range.start])
-  const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null)
-  const [prevDefaultYear, setPrevDefaultYear] = useState(defaultYear)
-  if (defaultYear !== prevDefaultYear) {
-    setPrevDefaultYear(defaultYear)
-    setUserSelectedYear(null)
-  }
   const currentFiscalInfo = useMemo(
     () => getFiscalMonthInfo(new Date(), monthStartDay),
     [monthStartDay]
   )
   const currentYear = currentFiscalInfo.year
-  const selectedYear = userSelectedYear ?? defaultYear
-  const setSelectedYear = (year: number) => setUserSelectedYear(year)
+  const yearParam = searchParams.get('year')
+  const selectedYear = yearParam ? Number(yearParam) : defaultYear
+  const setSelectedYear = useCallback(
+    (year: number) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('year', String(year))
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
 
   const yearRange = useMemo(() => {
     const start = getMonthRange(selectedYear, 0, monthStartDay).start

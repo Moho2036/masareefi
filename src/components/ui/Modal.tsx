@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { motion, AnimatePresence, useDragControls } from 'motion/react'
+import { motion, AnimatePresence, useMotionValue, animate } from 'motion/react'
 import { cn } from '../../lib/cn'
 import { triggerHaptic } from '../../lib/haptics'
-import { springSheet } from '../../lib/motionTokens'
+import { springSheet, isTestEnv } from '../../lib/motionTokens'
 
 export interface ModalProps {
   isOpen: boolean
@@ -75,35 +75,16 @@ export const Modal: React.FC<ModalProps> = ({
   hideCloseButton = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const contentScrollRef = useRef<HTMLDivElement>(null)
   const [isNudging, setIsNudging] = useState(false)
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const modalId = useId()
-  const dragControls = useDragControls()
+
+  const dragY = useMotionValue(0)
+  const isDraggingSheetRef = useRef(false)
   const touchStartYRef = useRef<number | null>(null)
-  const touchDeltaYRef = useRef<number>(0)
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      touchStartYRef.current = e.touches[0].clientY
-      touchDeltaYRef.current = 0
-    }
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartYRef.current !== null && e.touches.length === 1) {
-      const currentY = e.touches[0].clientY
-      touchDeltaYRef.current = currentY - touchStartYRef.current
-    }
-  }
-
-  const handleTouchEnd = () => {
-    if (touchDeltaYRef.current > 70) {
-      triggerHaptic('tick')
-      onClose()
-    }
-    touchStartYRef.current = null
-    touchDeltaYRef.current = 0
-  }
+  const touchStartXRef = useRef<number | null>(null)
+  const touchStartTimeRef = useRef<number>(0)
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -119,6 +100,54 @@ export const Modal: React.FC<ModalProps> = ({
     mql.addEventListener('change', handler)
     return () => mql.removeEventListener('change', handler)
   }, [])
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    touchStartYRef.current = e.touches[0].clientY
+    touchStartXRef.current = e.touches[0].clientX ?? 0
+    touchStartTimeRef.current = Date.now()
+    isDraggingSheetRef.current = false
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null || e.touches.length !== 1) return
+    const currentY = e.touches[0].clientY
+    const currentX = e.touches[0].clientX ?? 0
+    const diffY = currentY - touchStartYRef.current
+    const diffX = currentX - (touchStartXRef.current ?? currentX)
+
+    if (Math.abs(diffY) >= Math.abs(diffX) && diffY > 0) {
+      const isAtTop = !contentScrollRef.current || contentScrollRef.current.scrollTop <= 0
+      if (isAtTop || isDraggingSheetRef.current) {
+        isDraggingSheetRef.current = true
+        const resistedY = Math.max(0, diffY * 0.85)
+        dragY.set(resistedY)
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    const currentOffset = dragY.get()
+    const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current)
+    const velocity = (currentOffset / elapsed) * 1000
+
+    if (isDraggingSheetRef.current && (currentOffset > 70 || velocity > 350)) {
+      triggerHaptic('tick')
+      if (isTestEnv) {
+        onClose()
+      } else {
+        animate(dragY, 600, { duration: 0.18, ease: 'easeIn' }).then(() => {
+          dragY.set(0)
+          onClose()
+        })
+      }
+    } else {
+      animate(dragY, 0, springSheet)
+    }
+    touchStartYRef.current = null
+    touchStartXRef.current = null
+    isDraggingSheetRef.current = false
+  }
 
   const allowBackdropClose =
     closeOnBackdropClick !== undefined
@@ -159,22 +188,20 @@ export const Modal: React.FC<ModalProps> = ({
     const openedPath = window.location.pathname + window.location.search
 
     try {
-      window.history.pushState({ modalOpen: true, modalId }, '')
+      window.history.pushState({ modalId }, '')
       isPushedRef.current = true
     } catch {
       isPushedRef.current = false
     }
 
     const handlePopState = () => {
-      const isTopModal =
-        openModalStack.length === 0 ||
-        openModalStack[openModalStack.length - 1] === modalId
+      if (!isPushedRef.current) return
+      const isTop = openModalStack[openModalStack.length - 1] === modalId
+      if (!isTop) return
 
-      if (isPushedRef.current && isTopModal) {
-        isPushedRef.current = false
-        isClosingFromPopStateRef.current = true
-        onCloseRef.current()
-      }
+      isPushedRef.current = false
+      isClosingFromPopStateRef.current = true
+      onCloseRef.current()
     }
 
     window.addEventListener('popstate', handlePopState)
@@ -198,54 +225,42 @@ export const Modal: React.FC<ModalProps> = ({
     }
   }, [isOpen, enableHistoryBack, modalId])
 
-  // Handle ESC and Tab focus trap (only top of stack responds)
+  // Keyboard navigation & Accessibility
   useEffect(() => {
     if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isTopModal =
-        openModalStack.length === 0 ||
-        openModalStack[openModalStack.length - 1] === modalId
-
-      if (!isTopModal) return
+      const isTop = openModalStack[openModalStack.length - 1] === modalId
+      if (!isTop) return
 
       if (e.key === 'Escape') {
-        onCloseRef.current()
-        return
-      }
-
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusableElements = Array.from(
-          dialogRef.current.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]):not(.sr-only), select:not([disabled]):not(.sr-only), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        ).filter((el) => {
-          return el.style.display !== 'none' && el.getAttribute('aria-hidden') !== 'true'
-        })
-
-        if (focusableElements.length === 0) {
-          e.preventDefault()
-          dialogRef.current.focus()
-          return
+        if (allowBackdropClose) {
+          triggerHaptic('tick')
+          onCloseRef.current()
+        } else {
+          setIsNudging(true)
+          triggerHaptic('warning')
+          setTimeout(() => setIsNudging(false), 200)
         }
+      } else if (e.key === 'Tab') {
+        const dialog = dialogRef.current
+        if (!dialog) return
 
+        const focusableElements = dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
         const firstElement = focusableElements[0]
         const lastElement = focusableElements[focusableElements.length - 1]
 
+        if (!firstElement || !lastElement) return
+
         if (e.shiftKey) {
-          if (
-            document.activeElement === firstElement ||
-            document.activeElement === dialogRef.current ||
-            !dialogRef.current.contains(document.activeElement)
-          ) {
+          if (document.activeElement === firstElement) {
             e.preventDefault()
             lastElement.focus()
           }
         } else {
-          if (
-            document.activeElement === lastElement ||
-            !dialogRef.current.contains(document.activeElement)
-          ) {
+          if (document.activeElement === lastElement) {
             e.preventDefault()
             firstElement.focus()
           }
@@ -255,7 +270,7 @@ export const Modal: React.FC<ModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, modalId])
+  }, [isOpen, modalId, allowBackdropClose])
 
   // Auto-focus dialog on mount
   useEffect(() => {
@@ -329,7 +344,7 @@ export const Modal: React.FC<ModalProps> = ({
             data-testid="modal-backdrop"
           />
 
-          {/* Dialog container: Bottom Sheet with 1:1 drag-to-dismiss on mobile, Centered Dialog on desktop */}
+          {/* Dialog container: Bottom Sheet with touch drag-to-dismiss on mobile, Centered Dialog on desktop */}
           <motion.div
             key="modal-dialog"
             ref={dialogRef}
@@ -341,17 +356,10 @@ export const Modal: React.FC<ModalProps> = ({
             animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
             exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 8 }}
             transition={springSheet}
-            drag={isMobile ? 'y' : false}
-            dragControls={dragControls}
-            dragListener={false}
-            dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0.08, bottom: 0.85 }}
-            onDragEnd={(_e, info) => {
-              if (info.velocity.y > 400 || info.offset.y > 80) {
-                triggerHaptic('tick')
-                onClose()
-              }
-            }}
+            style={isMobile ? { y: dragY } : undefined}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             className={cn(
               'relative z-10 w-full bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xl outline-none smooth-touch-scroll flex flex-col',
               isNudging && 'scale-[1.015]',
@@ -363,17 +371,7 @@ export const Modal: React.FC<ModalProps> = ({
             )}
           >
             {/* Mobile Header / Drag Handle Area with swipe-down dismissal */}
-            <div
-              className="shrink-0 select-none touch-none"
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onPointerDown={(e) => {
-                if (isMobile) {
-                  dragControls.start(e)
-                }
-              }}
-            >
+            <div className="shrink-0 select-none touch-none">
               {/* Mobile drag handle bar */}
               <div className="flex justify-center mb-3 lg:hidden cursor-grab active:cursor-grabbing py-1">
                 <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
@@ -421,6 +419,7 @@ export const Modal: React.FC<ModalProps> = ({
 
             {/* Modal Scrollable Content Container */}
             <div
+              ref={contentScrollRef}
               onFocusCapture={handleFocusCapture}
               className="flex-1 overflow-y-auto overscroll-contain min-h-0 text-zinc-700 dark:text-zinc-300"
             >
