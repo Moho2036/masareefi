@@ -98,21 +98,18 @@ const RecentTransactionRow: React.FC<RecentTransactionRowProps> = ({
           const absY = Math.abs(diffY)
 
           if (touchDirection.current === null) {
-            if (Math.max(absX, absY) < 8) return
-            if (absY >= absX * 0.8) {
+            if (absX < 8 && absY < 8) return
+            if (absY > absX) {
               touchDirection.current = 'vertical'
               return
-            }
-            if (absX > 14 && absX > absY * 1.8) {
-              touchDirection.current = 'horizontal'
             } else {
-              return
+              touchDirection.current = 'horizontal'
             }
           }
 
           if (touchDirection.current === 'horizontal') {
             if (diffX > 8) {
-              setSwipeOffset(Math.min(diffX, 80))
+              setSwipeOffset(Math.min(diffX, 85))
             } else if (swipeOffset > 0 && diffX < -8) {
               setSwipeOffset(0)
             }
@@ -122,7 +119,7 @@ const RecentTransactionRow: React.FC<RecentTransactionRowProps> = ({
           touchStartX.current = null
           touchStartY.current = null
           touchDirection.current = null
-          if (swipeOffset > 45) {
+          if (swipeOffset > 35) {
             setSwipeOffset(72)
           } else {
             setSwipeOffset(0)

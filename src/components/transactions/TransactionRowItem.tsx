@@ -61,14 +61,14 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
   const icon = cat?.icon ?? '➕'
   const color = cat?.color ?? '#94A3B8'
 
-  const maxSwipe = isSystemLinked || isLockedDebt || isLockedCircle ? 100 : 160
+  const maxSwipe = isSystemLinked ? 70 : isLockedDebt || isLockedCircle ? 140 : 210
 
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none group">
       {/* Mobile Swipe-to-Right Action Reveal Strip */}
       <div
         className={cn(
-          'absolute inset-y-0 start-0 flex items-stretch z-0',
+          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden',
           swipeOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
@@ -81,11 +81,11 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               setSwipeOffset(0)
               openDuplicate(tx)
             }}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لتكرار المعاملة"
           >
-            <Copy className="w-4 h-4" />
-            <span>تكرار</span>
+            <Copy className="w-4 h-4 shrink-0" />
+            <span className="truncate">تكرار</span>
           </button>
         )}
         <button
@@ -95,11 +95,11 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             setSwipeOffset(0)
             openEdit(tx)
           }}
-          className="flex-1 bg-zinc-600 hover:bg-zinc-700 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
+          className="flex-1 bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
           aria-label="سحب لتعديل المعاملة"
         >
-          <Pencil className="w-4 h-4" />
-          <span>تعديل</span>
+          <Pencil className="w-4 h-4 shrink-0" />
+          <span className="truncate">تعديل</span>
         </button>
         {isLockedDebt ? (
           <Link
@@ -108,11 +108,11 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               e.stopPropagation()
               setSwipeOffset(0)
             }}
-            className="flex-1 bg-blue-700 hover:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors"
+            className="flex-1 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
             aria-label="سحب للانتقال إلى صفحة الديون"
           >
-            <ExternalLink className="w-4 h-4" />
-            <span>الديون</span>
+            <ExternalLink className="w-4 h-4 shrink-0" />
+            <span className="truncate">الديون</span>
           </Link>
         ) : isLockedCircle ? (
           <Link
@@ -121,13 +121,13 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               e.stopPropagation()
               setSwipeOffset(0)
             }}
-            className="flex-1 bg-blue-700 hover:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors"
+            className="flex-1 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
             aria-label="سحب للانتقال إلى صفحة الجمعيات"
           >
-            <ExternalLink className="w-4 h-4" />
-            <span>الجمعيات</span>
+            <ExternalLink className="w-4 h-4 shrink-0" />
+            <span className="truncate">الجمعيات</span>
           </Link>
-        ) : (
+        ) : !isSystemLinked ? (
           <button
             type="button"
             onClick={(e) => {
@@ -135,13 +135,13 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               setSwipeOffset(0)
               setTxToDelete(tx)
             }}
-            className="flex-1 bg-red-600 hover:bg-red-700 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
+            className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لحذف المعاملة"
           >
-            <Trash2 className="w-4 h-4" />
-            <span>حذف</span>
+            <Trash2 className="w-4 h-4 shrink-0" />
+            <span className="truncate">حذف</span>
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* Main Row Content (Slides right on touch swipe) */}
@@ -178,15 +178,12 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           const absY = Math.abs(diffY)
 
           if (touchDirection.current === null) {
-            if (Math.max(absX, absY) < 8) return
-            if (absY >= absX * 0.8) {
+            if (absX < 8 && absY < 8) return
+            if (absY > absX) {
               touchDirection.current = 'vertical'
               return
-            }
-            if (absX > 14 && absX > absY * 1.8) {
-              touchDirection.current = 'horizontal'
             } else {
-              return
+              touchDirection.current = 'horizontal'
             }
           }
 
@@ -202,7 +199,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           touchStartX.current = null
           touchStartY.current = null
           touchDirection.current = null
-          if (swipeOffset > 60) {
+          if (swipeOffset > maxSwipe / 3) {
             setSwipeOffset(maxSwipe)
           } else {
             setSwipeOffset(0)
