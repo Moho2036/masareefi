@@ -10,8 +10,13 @@ import {
   getDay,
 } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '../../lib/cn'
 import { parseLocalDateInput, toWesternDigits, formatDateInput } from '../../lib/dates'
+import { triggerHaptic } from '../../lib/haptics'
+import { popoverVariants, isTestEnv } from '../../lib/motionTokens'
+
+const PopoverWrapper = isTestEnv ? React.Fragment : AnimatePresence
 
 export interface DatePickerInputProps {
   id?: string
@@ -91,6 +96,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
 
   const handleContainerClick = () => {
     if (disabled || readOnly) return
+    triggerHaptic('tick')
     if (!isOpen && value) {
       try {
         setViewDate(parseLocalDateInput(value))
@@ -103,6 +109,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
 
   const handleQuickSelect = (daysOffset: number) => {
     if (disabled || readOnly) return
+    triggerHaptic('impact')
     const d = new Date()
     d.setDate(d.getDate() - daysOffset)
     const dayStr = formatDateInput(d)
@@ -222,13 +229,18 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
       </div>
 
       {/* Custom Swiss Arabic Calendar Popover */}
-      {isOpen && !disabled && !readOnly && (
-        <div
-          className={cn(
-            'absolute top-[calc(100%+0.35rem)] z-50 w-72 sm:w-80 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none animate-slide-down',
-            popoverAlign === 'end' ? 'end-0' : 'start-0'
-          )}
-        >
+      <PopoverWrapper>
+        {isOpen && !disabled && !readOnly && (
+          <motion.div
+            variants={popoverVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={cn(
+              'absolute top-[calc(100%+0.35rem)] z-50 w-72 sm:w-80 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none',
+              popoverAlign === 'end' ? 'end-0' : 'start-0'
+            )}
+          >
           {/* Row 1: Month/Year navigation */}
           <div className="flex items-center justify-between px-1">
             <button
@@ -336,8 +348,9 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
               </button>
             </div>
           )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </PopoverWrapper>
 
       {error && <p className="text-xs text-red-500 dark:text-red-400 font-medium">{error}</p>}
     </div>

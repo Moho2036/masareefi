@@ -1,5 +1,7 @@
 import React from 'react'
+import { motion } from 'motion/react'
 import { Delete, Fingerprint } from 'lucide-react'
+import { isTestEnv } from '../../lib/motionTokens'
 
 export interface PinKeypadProps {
   inputPin: string
@@ -22,8 +24,13 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({
 }) => {
   return (
     <>
-      {/* PIN Dots */}
-      <div dir="ltr" className="flex items-center justify-center gap-4 py-2">
+      {/* PIN Dots with Error Shake Animation */}
+      <motion.div
+        dir="ltr"
+        animate={!isTestEnv && errorMsg ? { x: [-8, 8, -6, 6, -3, 3, 0] } : { x: 0 }}
+        transition={{ duration: 0.35, ease: 'easeInOut' }}
+        className="flex items-center justify-center gap-4 py-2"
+      >
         {[0, 1, 2, 3].map((index) => {
           const isFilled = inputPin.length > index
           return (
@@ -37,7 +44,7 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({
             />
           )
         })}
-      </div>
+      </motion.div>
 
       {/* Error message */}
       {errorMsg && (

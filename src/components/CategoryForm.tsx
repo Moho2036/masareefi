@@ -106,7 +106,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           icon: trimmedIcon,
           color,
         })
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تم تعديل التصنيف بنجاح', 'success')
         onSuccess?.(initialCategory.id, initialCategory.type)
       } else {
@@ -124,7 +124,7 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
           archived: false,
           order,
         })
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تمت إضافة التصنيف بنجاح', 'success')
         onSuccess?.(newCatId, type)
       }

@@ -173,7 +173,7 @@ export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDa
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
     if (targetIndex < 0 || targetIndex >= activeCategories.length) return
 
-    triggerHaptic('light')
+    triggerHaptic('tick')
     setLastMovedId(cat.id)
     setTimeout(() => {
       setLastMovedId((current) => (current === cat.id ? null : current))

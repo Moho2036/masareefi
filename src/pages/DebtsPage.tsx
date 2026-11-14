@@ -3,7 +3,6 @@ import {
   HandCoins,
   Plus,
   X,
-  GitMerge,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
@@ -19,7 +18,13 @@ import { DebtsSummaryCards } from '../components/debts/DebtsSummaryCards'
 import { DebtsFilterBar } from '../components/debts/DebtsFilterBar'
 import { DebtDeleteModal } from '../components/debts/DebtDeleteModal'
 import { DebtsMergeModal } from '../components/debts/DebtsMergeModal'
+import { DebtsMergeBanner } from '../components/debts/DebtsMergeBanner'
+import { motion, AnimatePresence } from 'motion/react'
+import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../lib/motionTokens'
 import { useAuth } from '../hooks/useAuth'
+
+const PresenceWrapper = isTestEnv ? React.Fragment : AnimatePresence
+const MotionDiv = isTestEnv ? 'div' : motion.div
 import { useDebts } from '../hooks/useDebts'
 import { useToast } from '../hooks/useToast'
 import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
@@ -245,112 +250,64 @@ export const DebtsPage: React.FC = () => {
         settledCount={summary.settledCount}
       />
 
-      {mergeCandidates.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] text-xs">
-          <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-            <GitMerge className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="font-semibold">توجد ديون متعددة لنفس الشخص يمكن دمجها:</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {mergeCandidates.map((c) => (
-              <Button
-                key={c.key}
-                variant="outline"
-                size="sm"
-                onClick={() => setMergeTarget({ debts: c.debts, personName: c.personName })}
-                className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-50 dark:hover:bg-zinc-800/60 cursor-pointer"
-              >
-                <GitMerge className="w-3.5 h-3.5" />
-                <span>
-                  {c.type === 'lent'
-                    ? `دمج ديون ${c.personName} في سجل موحد`
-                    : `دمج التزامات ${c.personName} في سجل موحد`}
-                </span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
+      <DebtsMergeBanner
+        candidates={mergeCandidates}
+        onSelectCandidate={setMergeTarget}
+      />
 
-      {filteredDebts.length === 0 ? (
-        <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-8 shadow-2xs">
-          <EmptyState
-            icon={<HandCoins className="w-7 h-7" />}
-            title={
-              search || typeFilter !== 'all' || statusFilter !== 'all'
-                ? 'لا توجد نتائج مطابقة لبحثك'
-                : 'لا توجد أي ديون مسجلة بعد'
-            }
-            description={
-              search || typeFilter !== 'all' || statusFilter !== 'all'
-                ? 'جرّب تغيير كلمات البحث أو إعادة ضبط خيارات التصفية'
-                : 'يمكنك البدء بتسجيل مبالغ أقرضتها للآخرين أو استدنتها لمتابعتها بسهولة ودقة'
-            }
-            action={
-              search || typeFilter !== 'all' || statusFilter !== 'all' ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearch('')
-                    setTypeFilter('all')
-                    setStatusFilter('all')
-                  }}
-                  icon={<X className="w-4 h-4" />}
-                >
-                  مسح البحث
-                </Button>
-              ) : (
-                <Button variant="primary" onClick={handleOpenAdd}>
-                  إضافة دين جديد
-                </Button>
-              )
-            }
-          />
-        </div>
-      ) : isArchiveMode ? (
-        <div className="space-y-6">
-          {activeDebts.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {activeDebts.map((debt) => (
-                <DebtCard
-                  key={debt.id}
-                  debt={debt}
-                  onOpenPaymentModal={handleOpenPaymentModal}
-                  onOpenHistoryModal={handleOpenHistoryModal}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
+      <PresenceWrapper {...(isTestEnv ? {} : { mode: 'wait' })}>
+        <MotionDiv
+          key={`${typeFilter}-${statusFilter}-${isArchiveMode ? 'archive' : 'flat'}`}
+          {...(isTestEnv
+            ? {}
+            : {
+                variants: filterCrossFadeVariants,
+                initial: 'initial',
+                animate: 'animate',
+                exit: 'exit',
+                transition: filterTransition,
+              })}
+        >
+          {filteredDebts.length === 0 ? (
+            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-8 shadow-2xs">
+              <EmptyState
+                icon={<HandCoins className="w-7 h-7" />}
+                title={
+                  search || typeFilter !== 'all' || statusFilter !== 'all'
+                    ? 'لا توجد نتائج مطابقة لبحثك'
+                    : 'لا توجد أي ديون مسجلة بعد'
+                }
+                description={
+                  search || typeFilter !== 'all' || statusFilter !== 'all'
+                    ? 'جرّب تغيير كلمات البحث أو إعادة ضبط خيارات التصفية'
+                    : 'يمكنك البدء بتسجيل مبالغ أقرضتها للآخرين أو استدنتها لمتابعتها بسهولة ودقة'
+                }
+                action={
+                  search || typeFilter !== 'all' || statusFilter !== 'all' ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSearch('')
+                        setTypeFilter('all')
+                        setStatusFilter('all')
+                      }}
+                      icon={<X className="w-4 h-4" />}
+                    >
+                      مسح البحث
+                    </Button>
+                  ) : (
+                    <Button variant="primary" onClick={handleOpenAdd}>
+                      إضافة دين جديد
+                    </Button>
+                  )
+                }
+              />
             </div>
-          ) : (
-            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
-              <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                لا توجد ديون أو التزامات نشطة حالياً.
-              </p>
-            </div>
-          )}
-
-          {settledDebts.length > 0 && (
-            <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setUserToggledSettled(!isSettledExpanded)}
-                className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
-                aria-expanded={isSettledExpanded}
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>الديون المسددة سابقاً ({settledDebts.length})</span>
-                </div>
-                {isSettledExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-zinc-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-500" />
-                )}
-              </button>
-              {isSettledExpanded && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-slide-down">
-                  {settledDebts.map((debt) => (
+          ) : isArchiveMode ? (
+            <div className="space-y-6">
+              {activeDebts.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {activeDebts.map((debt) => (
                     <DebtCard
                       key={debt.id}
                       debt={debt}
@@ -361,24 +318,65 @@ export const DebtsPage: React.FC = () => {
                     />
                   ))}
                 </div>
+              ) : (
+                <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    لا توجد ديون أو التزامات نشطة حالياً.
+                  </p>
+                </div>
+              )}
+
+              {settledDebts.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserToggledSettled(!isSettledExpanded)}
+                    className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]"
+                    aria-expanded={isSettledExpanded}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>الديون المسددة سابقاً ({settledDebts.length})</span>
+                    </div>
+                    {isSettledExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-zinc-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-500" />
+                    )}
+                  </button>
+                  {isSettledExpanded && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-slide-down">
+                      {settledDebts.map((debt) => (
+                        <DebtCard
+                          key={debt.id}
+                          debt={debt}
+                          onOpenPaymentModal={handleOpenPaymentModal}
+                          onOpenHistoryModal={handleOpenHistoryModal}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredDebts.map((debt) => (
+                <DebtCard
+                  key={debt.id}
+                  debt={debt}
+                  onOpenPaymentModal={handleOpenPaymentModal}
+                  onOpenHistoryModal={handleOpenHistoryModal}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
           )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredDebts.map((debt) => (
-            <DebtCard
-              key={debt.id}
-              debt={debt}
-              onOpenPaymentModal={handleOpenPaymentModal}
-              onOpenHistoryModal={handleOpenHistoryModal}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
-      )}
+        </MotionDiv>
+      </PresenceWrapper>
 
       {/* Form Modal (Add / Edit) */}
       <DebtFormModal

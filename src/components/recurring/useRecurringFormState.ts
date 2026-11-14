@@ -260,7 +260,7 @@ export function useRecurringFormState({
         }
 
         await processDueRecurring(user.uid)
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تم تعديل المعاملة المتكررة بنجاح', 'success')
       } else {
         const linkedCircle = circleId ? circles.find((c) => c.id === circleId) : null
@@ -308,7 +308,7 @@ export function useRecurringFormState({
         }
 
         await processDueRecurring(user.uid)
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تمت إضافة المعاملة المتكررة بنجاح', 'success')
       }
 

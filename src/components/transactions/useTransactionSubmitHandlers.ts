@@ -257,7 +257,7 @@ export function useTransactionSubmitHandlers(params: UseTransactionSubmitHandler
         )
       }
 
-      triggerHaptic('light')
+      triggerHaptic('impact')
 
       if (isOutsideMonth) {
         setSelectedDate(parsedDate)
@@ -353,7 +353,7 @@ export function useTransactionSubmitHandlers(params: UseTransactionSubmitHandler
         'success'
       )
 
-      triggerHaptic('light')
+      triggerHaptic('impact')
 
       if (isOutsideMonth) {
         setSelectedDate(parsedDate)

@@ -53,6 +53,7 @@ export function useDebtPaymentsHistory({ debt, onSuccess }: UseDebtPaymentsHisto
     setDeletingId(paymentId)
     try {
       await deleteDebtPayment(user.uid, debt, paymentId, { deleteTransaction: deleteTx })
+      triggerHaptic('destructive')
       showToast('تم حذف الدفعة وتحديث الرصيد', 'success')
       setConfirmDeleteId(null)
       setDeletePaymentTx(true)
@@ -139,7 +140,7 @@ export function useDebtPaymentsHistory({ debt, onSuccess }: UseDebtPaymentsHisto
         note: editNote.trim(),
         syncTransaction: editSyncTx,
       })
-      triggerHaptic('light')
+      triggerHaptic('impact')
       showToast('تم تعديل الدفعة وتحديث الرصيد', 'success')
       setEditingPaymentId(null)
       onSuccess?.()

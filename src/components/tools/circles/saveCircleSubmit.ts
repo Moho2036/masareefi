@@ -254,7 +254,7 @@ export async function executeSaveCircle(params: SaveCircleParams): Promise<void>
         removeDepositedCircleId(editingCircle.id)
       }
 
-      triggerHaptic('light')
+      triggerHaptic('impact')
       showToast('تم تعديل الجمعية بنجاح', 'success')
     } else {
       const members: CircleMember[] = []
@@ -306,7 +306,7 @@ export async function executeSaveCircle(params: SaveCircleParams): Promise<void>
         }
       }
 
-      triggerHaptic('light')
+      triggerHaptic('impact')
       showToast('تم إنشاء الجمعية بنجاح', 'success')
     }
 

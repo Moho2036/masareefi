@@ -131,7 +131,12 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         { syncTransaction }
       )
 
-      triggerHaptic('light')
+      const isSettledAfterPayment = amountFils >= remainingFils
+      if (isSettledAfterPayment) {
+        triggerHaptic('success')
+      } else {
+        triggerHaptic('impact')
+      }
       showToast('تم تسجيل الدفعة بنجاح', 'success')
       onSuccess?.()
       onClose()

@@ -1,7 +1,12 @@
 import React from 'react'
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useToast } from '../../hooks/useToast'
 import { cn } from '../../lib/cn'
+import { springBounce, isTestEnv } from '../../lib/motionTokens'
+
+const ToastPresence = isTestEnv ? React.Fragment : AnimatePresence
+const MotionToast = isTestEnv ? 'div' : motion.div
 
 export const ToastContainer: React.FC = () => {
   const { toasts, dismissToast } = useToast()
@@ -14,43 +19,53 @@ export const ToastContainer: React.FC = () => {
       role="region"
       aria-label="الإشعارات"
     >
-      {toasts.map((toast) => {
-        const isSuccess = toast.type === 'success'
-        const isError = toast.type === 'error'
+      <ToastPresence>
+        {toasts.map((toast) => {
+          const isSuccess = toast.type === 'success'
+          const isError = toast.type === 'error'
 
-        return (
-          <div
-            key={toast.id}
-            role="alert"
-            className={cn(
-              'pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-xl shadow-md border text-sm font-bold transition-all animate-in slide-in-from-bottom-2 duration-200 backdrop-blur-md',
-              isSuccess &&
-                'bg-white/95 text-zinc-900 border-[#E4E4E7] dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-[#27272A]',
-              isError &&
-                'bg-white/95 text-zinc-900 border-red-200 dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-red-900/50',
-              !isSuccess &&
-                !isError &&
-                'bg-white/95 text-zinc-900 border-[#E4E4E7] dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-[#27272A]'
-            )}
-          >
-            <div className="flex items-center gap-2.5">
-              {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
-              {isError && <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />}
-              {!isSuccess && !isError && <Info className="w-5 h-5 text-zinc-500 shrink-0" />}
-              <span>{toast.message}</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => dismissToast(toast.id)}
-              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
-              aria-label="إغلاق الإشعار"
+          return (
+            <MotionToast
+              key={toast.id}
+              role="alert"
+              {...(isTestEnv
+                ? {}
+                : {
+                    initial: { opacity: 0, y: 16, scale: 0.95 },
+                    animate: { opacity: 1, y: 0, scale: 1 },
+                    exit: { opacity: 0, y: 10, scale: 0.95, transition: { duration: 0.15 } },
+                    transition: springBounce,
+                  })}
+              className={cn(
+                'pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-xl shadow-md border text-sm font-bold backdrop-blur-md',
+                isSuccess &&
+                  'bg-white/95 text-zinc-900 border-[#E4E4E7] dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-[#27272A]',
+                isError &&
+                  'bg-white/95 text-zinc-900 border-red-200 dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-red-900/50',
+                !isSuccess &&
+                  !isError &&
+                  'bg-white/95 text-zinc-900 border-[#E4E4E7] dark:bg-[#121215]/95 dark:text-zinc-100 dark:border-[#27272A]'
+              )}
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )
-      })}
+              <div className="flex items-center gap-2.5">
+                {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
+                {isError && <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />}
+                {!isSuccess && !isError && <Info className="w-5 h-5 text-zinc-500 shrink-0" />}
+                <span>{toast.message}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => dismissToast(toast.id)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                aria-label="إغلاق الإشعار"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </MotionToast>
+          )
+        })}
+      </ToastPresence>
     </div>
   )
 }

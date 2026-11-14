@@ -1,7 +1,35 @@
 import React, { useMemo } from 'react'
+import { motion } from 'motion/react'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { getCurrencyConfig, fromFils, getFormatter } from '../../lib/money'
 import { cn } from '../../lib/cn'
+import { springBounce, isTestEnv } from '../../lib/motionTokens'
+
+const NUMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+const RollingDigit: React.FC<{ char: string }> = ({ char }) => {
+  const digit = parseInt(char, 10)
+  if (isNaN(digit)) {
+    return <span>{char}</span>
+  }
+
+  return (
+    <span className="inline-block relative h-[1.1em] w-[0.62em] overflow-hidden align-text-bottom tabular-nums">
+      <motion.span
+        initial={false}
+        animate={{ y: `-${digit * 10}%` }}
+        transition={springBounce}
+        className="absolute top-0 start-0 flex flex-col items-center w-full"
+      >
+        {NUMS.map((n) => (
+          <span key={n} className="h-[1.1em] leading-none flex items-center justify-center">
+            {n}
+          </span>
+        ))}
+      </motion.span>
+    </span>
+  )
+}
 
 export interface FormattedMoneyProps {
   amountFils: number
@@ -10,6 +38,7 @@ export interface FormattedMoneyProps {
   hideZeroDecimals?: boolean
   maskAmount?: boolean
   showCurrency?: boolean
+  animated?: boolean
   className?: string
   symbolClassName?: string
   decimalClassName?: string
@@ -22,6 +51,7 @@ export const FormattedMoney: React.FC<FormattedMoneyProps> = ({
   hideZeroDecimals,
   maskAmount,
   showCurrency = true,
+  animated = false,
   className,
   symbolClassName,
   decimalClassName,
@@ -79,7 +109,13 @@ export const FormattedMoney: React.FC<FormattedMoneyProps> = ({
     <span className={cn('inline-flex items-baseline tabular-nums select-none', className)}>
       <span dir="ltr" className="inline-flex items-baseline">
         {signPrefix && <span className="me-0.5">{signPrefix}</span>}
-        <span className="font-bold">{integerPart}</span>
+        <span className="font-bold">
+          {animated && !isTestEnv
+            ? integerPart.split('').map((char, i) => (
+                <RollingDigit key={`${integerPart.length - i}-${char}`} char={char} />
+              ))
+            : integerPart}
+        </span>
         {decimalPart !== undefined && (
           <span className={cn('text-[0.72em] opacity-80 font-medium', decimalClassName)}>
             .{decimalPart}

@@ -214,7 +214,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
           },
           { syncTransaction }
         )
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تم تحديث بيانات الدين بنجاح', 'success')
       } else {
         const initialPaidFils = !isEditing && initialPaidStr.trim() ? toFils(initialPaidStr, config.decimals) : 0
@@ -247,7 +247,7 @@ const DebtFormContent: React.FC<DebtFormContentProps> = ({
             initialPaymentNote: 'سداد مسبق (توثيقي)',
           }
         )
-        triggerHaptic('light')
+        triggerHaptic('impact')
         showToast('تمت إضافة الدين بنجاح', 'success')
       }
 

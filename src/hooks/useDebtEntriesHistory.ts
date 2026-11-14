@@ -83,7 +83,7 @@ export function useDebtEntriesHistory({ debt, onSuccess }: UseDebtEntriesHistory
         },
         { syncTransaction: newEntrySync }
       )
-      triggerHaptic('light')
+      triggerHaptic('impact')
       showToast('تمت إضافة السلفة وتحديث إجمالي الدين بنجاح', 'success')
       setIsAddingEntry(false)
       setNewEntryAmountStr('')
@@ -127,7 +127,7 @@ export function useDebtEntriesHistory({ debt, onSuccess }: UseDebtEntriesHistory
         title: editEntryTitle.trim() || undefined,
         note: editEntryNote.trim() || undefined,
       })
-      triggerHaptic('light')
+      triggerHaptic('impact')
       showToast('تم تحديث السلفة بنجاح', 'success')
       setEditingEntryId(null)
       onSuccess?.()
@@ -144,6 +144,7 @@ export function useDebtEntriesHistory({ debt, onSuccess }: UseDebtEntriesHistory
     setIsDeletingEntry(true)
     try {
       await deleteDebtEntry(user.uid, debt, entryId)
+      triggerHaptic('destructive')
       showToast('تم حذف السلفة وتحديث إجمالي الدين', 'success')
       setConfirmDeleteEntryId(null)
       onSuccess?.()

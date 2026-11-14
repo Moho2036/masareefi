@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, Outlet } from 'react-router'
 import {
-  Home, ArrowLeftRight, RefreshCw, BarChart3, LayoutGrid, Settings,
-  Plus, WifiOff, HandCoins, RotateCcw, Calculator, Bell, Eye, EyeOff,
+  Settings, Plus, WifiOff, RotateCcw, Bell, Eye, EyeOff,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
 import { MonthSelector } from '../ui/MonthSelector'
+import { navGroups } from './navConfig'
 import { useAuth } from '../../hooks/useAuth'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
 import { useUserSettings } from '../../hooks/useUserSettings'
@@ -16,6 +17,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { hasExistingUserData } from '../../services/userProfile'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
 import { cn } from '../../lib/cn'
+import { pageVariants, pageTransition, isTestEnv } from '../../lib/motionTokens'
 
 const OnboardingWizard = React.lazy(() =>
   import('../onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
@@ -28,43 +30,6 @@ const NotificationCenterModal = React.lazy(() =>
     default: m.NotificationCenterModal,
   }))
 )
-
-interface NavItem {
-  to: string
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-}
-
-interface NavGroup {
-  title: string
-  items: NavItem[]
-}
-
-const navGroups: NavGroup[] = [
-  {
-    title: 'المتابعة اليومية',
-    items: [
-      { to: '/', label: 'لوحة التحكم', icon: Home },
-      { to: '/transactions', label: 'المعاملات', icon: ArrowLeftRight },
-    ],
-  },
-  {
-    title: 'الالتزامات والتخطيط',
-    items: [
-      { to: '/debts', label: 'الديون', icon: HandCoins },
-      { to: '/recurring', label: 'المتكررة', icon: RefreshCw },
-      { to: '/tools', label: 'الأدوات الإضافية', icon: Calculator },
-      { to: '/reports', label: 'التقارير', icon: BarChart3 },
-    ],
-  },
-  {
-    title: 'التخصيص والنظام',
-    items: [
-      { to: '/categories', label: 'التصنيفات', icon: LayoutGrid },
-      { to: '/settings', label: 'الإعدادات', icon: Settings },
-    ],
-  },
-]
 
 
 export const AppShell: React.FC = () => {
@@ -413,7 +378,22 @@ export const AppShell: React.FC = () => {
         {/* Page View Slot */}
         <main className="flex-1 min-w-0 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto overflow-x-clip">
           <React.Suspense fallback={<PageSkeleton />}>
-            <Outlet />
+            {isTestEnv ? (
+              <Outlet />
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={pathname}
+                  variants={pageVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={pageTransition}
+                >
+                  <Outlet />
+                </motion.div>
+              </AnimatePresence>
+            )}
           </React.Suspense>
         </main>
       </div>

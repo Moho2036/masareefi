@@ -19,6 +19,8 @@ import {
 } from '../components/reports/CategoryBreakdownSection'
 import { AnnualSummaryTable } from '../components/reports/AnnualSummaryTable'
 import { CategoryTransactionsModal } from '../components/reports/CategoryTransactionsModal'
+import { motion, AnimatePresence } from 'motion/react'
+import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../lib/motionTokens'
 import type { TxType } from '../types'
 
 export const ReportsPage: React.FC = () => {
@@ -126,78 +128,147 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MONTHLY REPORT */}
-      {reports.reportPeriod === 'monthly' && (
-        <div className="space-y-6">
-          <SafeDailySpendCard forecast={reports.forecast} />
-
-          <MonthlyKpiCards
-            monthSums={reports.monthSums}
-            prevMonthSums={reports.prevMonthSums}
-            monthSavingsRate={reports.monthSavingsRate}
-            monthComparison={reports.monthComparison}
-            monthIncomeComparison={reports.monthIncomeComparison}
-            forecast={reports.forecast}
-            isEarlyMonth={reports.isEarlyMonth}
-            effectiveRollover={reports.effectiveRollover}
-            isRolloverEnabled={reports.isRolloverEnabled}
-            openingBalanceFils={reports.settings?.openingBalanceFils ?? 0}
-          />
-
-          <DailyExpenseSection
-            dailyExpenses={reports.dailyExpenses}
-            dailyStats={reports.dailyStats}
-            isFutureMonth={reports.forecast.isFutureMonth}
-          />
-
-          <MonthlyCategoryBreakdown
-            categoryDist={monthCategoryDist}
-            categoryType={monthCategoryType}
-            onCategoryTypeChange={setMonthCategoryType}
-            loading={reports.monthLoading}
-            hasLoadedOnce={reports.hasLoadedMonthOnce}
-            onSelectCategory={setSelectedCategoryModal}
-            onSelectPieCategory={handleSelectMonthPieCategory}
-          />
-        </div>
-      )}
-
-      {/* YEARLY REPORT */}
-      {reports.reportPeriod === 'yearly' && (
-        <div className="space-y-6">
-          {reports.monthStartDay > 1 && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
-              <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-              <span>السنة المالية: {reports.financialYearLabel}</span>
-            </div>
-          )}
-
-          <YearlyKpiCards
-            yearSums={reports.yearSums}
-            yearlySavingsRate={reports.yearlySavingsRate}
-            annualSummary={reports.annualSummary}
-            selectedYear={reports.selectedYear}
-            monthlyAverage={reports.monthlyAverage}
-          />
-
-          <AnnualSummaryTable
-            yearlyBreakdown={reports.yearlyBreakdown}
-            yearSums={reports.yearSums}
-            selectedYear={reports.selectedYear}
-            currentYear={reports.currentYear}
-            currentFiscalInfo={reports.currentFiscalInfo}
-            monthStartDay={reports.monthStartDay}
-          />
-
-          <YearlyCategoryBreakdown
-            categoryDist={yearCategoryDist}
-            categoryType={yearCategoryType}
-            onCategoryTypeChange={setYearCategoryType}
-            loading={reports.yearLoading}
-            hasLoadedOnce={reports.hasLoadedYearOnce}
-            onSelectCategory={setSelectedCategoryModal}
-          />
-        </div>
+      {/* Content Section with Cross-Fade */}
+      {isTestEnv ? (
+        reports.reportPeriod === 'monthly' ? (
+          <div className="space-y-6">
+            <SafeDailySpendCard forecast={reports.forecast} />
+            <MonthlyKpiCards
+              monthSums={reports.monthSums}
+              prevMonthSums={reports.prevMonthSums}
+              monthSavingsRate={reports.monthSavingsRate}
+              monthComparison={reports.monthComparison}
+              monthIncomeComparison={reports.monthIncomeComparison}
+              forecast={reports.forecast}
+              isEarlyMonth={reports.isEarlyMonth}
+              effectiveRollover={reports.effectiveRollover}
+              isRolloverEnabled={reports.isRolloverEnabled}
+              openingBalanceFils={reports.settings?.openingBalanceFils ?? 0}
+            />
+            <DailyExpenseSection
+              dailyExpenses={reports.dailyExpenses}
+              dailyStats={reports.dailyStats}
+              isFutureMonth={reports.forecast.isFutureMonth}
+            />
+            <MonthlyCategoryBreakdown
+              categoryDist={monthCategoryDist}
+              categoryType={monthCategoryType}
+              onCategoryTypeChange={setMonthCategoryType}
+              loading={reports.monthLoading}
+              hasLoadedOnce={reports.hasLoadedMonthOnce}
+              onSelectCategory={setSelectedCategoryModal}
+              onSelectPieCategory={handleSelectMonthPieCategory}
+            />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {reports.monthStartDay > 1 && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
+                <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span>السنة المالية: {reports.financialYearLabel}</span>
+              </div>
+            )}
+            <YearlyKpiCards
+              yearSums={reports.yearSums}
+              yearlySavingsRate={reports.yearlySavingsRate}
+              annualSummary={reports.annualSummary}
+              selectedYear={reports.selectedYear}
+              monthlyAverage={reports.monthlyAverage}
+            />
+            <AnnualSummaryTable
+              yearlyBreakdown={reports.yearlyBreakdown}
+              yearSums={reports.yearSums}
+              selectedYear={reports.selectedYear}
+              currentYear={reports.currentYear}
+              currentFiscalInfo={reports.currentFiscalInfo}
+              monthStartDay={reports.monthStartDay}
+            />
+            <YearlyCategoryBreakdown
+              categoryDist={yearCategoryDist}
+              categoryType={yearCategoryType}
+              onCategoryTypeChange={setYearCategoryType}
+              loading={reports.yearLoading}
+              hasLoadedOnce={reports.hasLoadedYearOnce}
+              onSelectCategory={setSelectedCategoryModal}
+            />
+          </div>
+        )
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={reports.reportPeriod}
+            variants={filterCrossFadeVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={filterTransition}
+            className="space-y-6"
+          >
+            {reports.reportPeriod === 'monthly' ? (
+              <>
+                <SafeDailySpendCard forecast={reports.forecast} />
+                <MonthlyKpiCards
+                  monthSums={reports.monthSums}
+                  prevMonthSums={reports.prevMonthSums}
+                  monthSavingsRate={reports.monthSavingsRate}
+                  monthComparison={reports.monthComparison}
+                  monthIncomeComparison={reports.monthIncomeComparison}
+                  forecast={reports.forecast}
+                  isEarlyMonth={reports.isEarlyMonth}
+                  effectiveRollover={reports.effectiveRollover}
+                  isRolloverEnabled={reports.isRolloverEnabled}
+                  openingBalanceFils={reports.settings?.openingBalanceFils ?? 0}
+                />
+                <DailyExpenseSection
+                  dailyExpenses={reports.dailyExpenses}
+                  dailyStats={reports.dailyStats}
+                  isFutureMonth={reports.forecast.isFutureMonth}
+                />
+                <MonthlyCategoryBreakdown
+                  categoryDist={monthCategoryDist}
+                  categoryType={monthCategoryType}
+                  onCategoryTypeChange={setMonthCategoryType}
+                  loading={reports.monthLoading}
+                  hasLoadedOnce={reports.hasLoadedMonthOnce}
+                  onSelectCategory={setSelectedCategoryModal}
+                  onSelectPieCategory={handleSelectMonthPieCategory}
+                />
+              </>
+            ) : (
+              <>
+                {reports.monthStartDay > 1 && (
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
+                    <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span>السنة المالية: {reports.financialYearLabel}</span>
+                  </div>
+                )}
+                <YearlyKpiCards
+                  yearSums={reports.yearSums}
+                  yearlySavingsRate={reports.yearlySavingsRate}
+                  annualSummary={reports.annualSummary}
+                  selectedYear={reports.selectedYear}
+                  monthlyAverage={reports.monthlyAverage}
+                />
+                <AnnualSummaryTable
+                  yearlyBreakdown={reports.yearlyBreakdown}
+                  yearSums={reports.yearSums}
+                  selectedYear={reports.selectedYear}
+                  currentYear={reports.currentYear}
+                  currentFiscalInfo={reports.currentFiscalInfo}
+                  monthStartDay={reports.monthStartDay}
+                />
+                <YearlyCategoryBreakdown
+                  categoryDist={yearCategoryDist}
+                  categoryType={yearCategoryType}
+                  onCategoryTypeChange={setYearCategoryType}
+                  loading={reports.yearLoading}
+                  hasLoadedOnce={reports.hasLoadedYearOnce}
+                  onSelectCategory={setSelectedCategoryModal}
+                />
+              </>
+            )}
+          </motion.div>
+        </AnimatePresence>
       )}
 
       {/* Category Transactions Modal */}

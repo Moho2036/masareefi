@@ -85,7 +85,7 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       {/* Main Balance & Clean Typographic Subline (Persistent min-h to prevent layout shifts) */}
       <div className="space-y-1.5">
         <div className={cn('text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight select-none text-zinc-950 dark:text-zinc-50 transition-opacity', isRolloverResolving ? 'opacity-70 animate-pulse' : 'opacity-100')}>
-          <FormattedMoney amountFils={safeDisplayBalance} />
+          <FormattedMoney amountFils={safeDisplayBalance} animated />
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium pt-1">

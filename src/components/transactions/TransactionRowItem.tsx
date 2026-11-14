@@ -9,6 +9,7 @@ import {
   Users,
 } from 'lucide-react'
 import { CategoryIcon } from '../ui/CategoryIcon'
+import { triggerHaptic } from '../../lib/haptics'
 import { useCurrency } from '../../hooks/useCurrency'
 import { formatDateInput } from '../../lib/dates'
 import { cn } from '../../lib/cn'
@@ -131,6 +132,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           onClick={(e) => {
             e.stopPropagation()
             setSwipeOffset(0)
+            triggerHaptic('tick')
             openEdit(tx)
           }}
           className="flex-1 min-w-[68px] bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
@@ -145,6 +147,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             onClick={(e) => {
               e.stopPropagation()
               setSwipeOffset(0)
+              triggerHaptic('destructive')
               setTxToDelete(tx)
             }}
             className="flex-1 min-w-[68px] bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
@@ -168,6 +171,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
         }}
         onClick={() => {
           if (swipeOffset > 0) {
+            triggerHaptic('tick')
             setSwipeOffset(0)
             return
           }
@@ -212,6 +216,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           touchStartY.current = null
           touchDirection.current = null
           if (swipeOffset > maxSwipe / 3) {
+            triggerHaptic('tick')
             setSwipeOffset(maxSwipe)
           } else {
             setSwipeOffset(0)

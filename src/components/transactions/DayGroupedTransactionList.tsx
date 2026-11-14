@@ -5,8 +5,12 @@ import { Button } from '../ui/Button'
 import { FormattedMoney } from '../ui/FormattedMoney'
 import { formatDayHeader } from '../../lib/dates'
 import { cn } from '../../lib/cn'
+import { motion, AnimatePresence } from 'motion/react'
+import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../../lib/motionTokens'
 import type { Transaction } from '../../types'
 import type { TransactionSortOption } from '../../lib/aggregate'
+
+const MotionDiv = isTestEnv ? 'div' : motion.div
 
 export interface DayGroupItem {
   date: Date
@@ -111,49 +115,61 @@ export const DayGroupedTransactionList: React.FC<DayGroupedTransactionListProps>
 
   return (
     <div ref={listRef} className="space-y-5 scroll-mt-20">
-      {/* Flat list for amount-based sorting */}
-      {sortBy === 'highest' || sortBy === 'lowest' ? (
-        <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
-          {displayedTransactions.map((tx) => renderRow(tx, true))}
-        </div>
-      ) : (
-        /* Grouped by day for date-based sorting */
-        dayGroups.map((group) => {
-          const dayNetFils = group.dayNetFils
-
-          return (
-            <div key={group.dateKey} className="space-y-2">
-              {/* Day Header with clearly displayed net spend */}
-              <div className="flex items-center justify-between px-1 text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>{formatDayHeader(group.date, today)}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">صافي اليوم:</span>
-                  <span
-                    className={cn(
-                      'font-extrabold text-xs select-none',
-                      dayNetFils > 0
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : dayNetFils < 0
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-zinc-400'
-                    )}
-                  >
-                    <FormattedMoney amountFils={dayNetFils} withSign="auto" />
-                  </span>
-                </div>
-              </div>
-
-              {/* Transactions in this day */}
-              <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
-                {group.transactions.map((tx) => renderRow(tx, false))}
-              </div>
+      <AnimatePresence mode="wait">
+        <MotionDiv
+          key={`${currentPage}-${sortBy}`}
+          variants={isTestEnv ? undefined : filterCrossFadeVariants}
+          initial={isTestEnv ? undefined : 'initial'}
+          animate={isTestEnv ? undefined : 'animate'}
+          exit={isTestEnv ? undefined : 'exit'}
+          transition={filterTransition}
+          className="space-y-5"
+        >
+          {/* Flat list for amount-based sorting */}
+          {sortBy === 'highest' || sortBy === 'lowest' ? (
+            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
+              {displayedTransactions.map((tx) => renderRow(tx, true))}
             </div>
-          )
-        })
-      )}
+          ) : (
+            /* Grouped by day for date-based sorting */
+            dayGroups.map((group) => {
+              const dayNetFils = group.dayNetFils
+
+              return (
+                <div key={group.dateKey} className="space-y-2">
+                  {/* Day Header with clearly displayed net spend */}
+                  <div className="flex items-center justify-between px-1 text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{formatDayHeader(group.date, today)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">صافي اليوم:</span>
+                      <span
+                        className={cn(
+                          'font-extrabold text-xs select-none',
+                          dayNetFils > 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : dayNetFils < 0
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-zinc-400'
+                        )}
+                      >
+                        <FormattedMoney amountFils={dayNetFils} withSign="auto" />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Transactions in this day */}
+                  <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
+                    {group.transactions.map((tx) => renderRow(tx, false))}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </MotionDiv>
+      </AnimatePresence>
 
       {/* Pagination Controls */}
       {!isPrinting && totalPages > 1 && (

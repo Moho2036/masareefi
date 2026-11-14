@@ -1,9 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { ChevronRight, ChevronLeft, Calendar } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
 import { getFiscalMonthInfo } from '../../lib/dates'
 import { ARABIC_MONTH_NAMES } from '../../lib/reports'
 import { cn } from '../../lib/cn'
+import { triggerHaptic } from '../../lib/haptics'
+import { popoverVariants, isTestEnv } from '../../lib/motionTokens'
+
+const PopoverWrapper = isTestEnv ? React.Fragment : AnimatePresence
 
 interface MonthSelectorProps {
   className?: string
@@ -34,6 +39,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const handleToggleOpen = () => {
+    triggerHaptic('tick')
     setIsOpen((prev) => {
       if (!prev) {
         setPickerYear(activeFiscal.year)
@@ -43,6 +49,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   }
 
   const handleSelectMonth = (monthIndex: number) => {
+    triggerHaptic('impact')
     const safeDay = Math.max(1, Math.min(28, monthStartDay))
     setSelectedDate(new Date(pickerYear, monthIndex, safeDay, 12, 0, 0, 0))
     setIsOpen(false)
@@ -85,7 +92,10 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
     >
       <button
         type="button"
-        onClick={goToPreviousMonth}
+        onClick={() => {
+          triggerHaptic('tick')
+          goToPreviousMonth()
+        }}
         className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         aria-label="الشهر السابق"
       >
@@ -115,7 +125,10 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
 
       <button
         type="button"
-        onClick={goToNextMonth}
+        onClick={() => {
+          triggerHaptic('tick')
+          goToNextMonth()
+        }}
         className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         aria-label="الشهر التالي"
       >
@@ -123,12 +136,17 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
       </button>
 
       {/* Swiss Popover Picker Panel */}
-      {isOpen && (
-        <div
-          className="absolute top-[calc(100%+0.35rem)] end-0 sm:left-1/2 sm:-translate-x-1/2 z-50 w-72 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none animate-slide-down"
-          role="dialog"
-          aria-label="منتقي الشهر والسنة"
-        >
+      <PopoverWrapper>
+        {isOpen && (
+          <motion.div
+            variants={popoverVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute top-[calc(100%+0.35rem)] end-0 sm:left-1/2 sm:-translate-x-1/2 z-50 w-72 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none"
+            role="dialog"
+            aria-label="منتقي الشهر والسنة"
+          >
           {/* Year Navigation Bar */}
           <div className="flex items-center justify-between px-1">
             <button
@@ -190,8 +208,9 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
               </button>
             </div>
           )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </PopoverWrapper>
     </div>
   )
 }

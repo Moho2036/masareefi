@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '../../lib/cn'
+import { triggerHaptic } from '../../lib/haptics'
+import { popoverVariants, isTestEnv } from '../../lib/motionTokens'
+
+const PopoverWrapper = isTestEnv ? React.Fragment : AnimatePresence
 
 export interface SelectOption {
   value: string | number
@@ -137,6 +142,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
     const handleSelectOption = (opt: NormalizedOption) => {
       if (opt.disabled) return
+      triggerHaptic('impact')
       setUncontrolledValue(opt.value)
       if (internalSelectRef.current) {
         internalSelectRef.current.value = String(opt.value)
@@ -190,7 +196,12 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           <button
             type="button"
             disabled={disabled}
-            onClick={() => !disabled && setIsOpen((o) => !o)}
+            onClick={() => {
+              if (!disabled) {
+                triggerHaptic('tick')
+                setIsOpen((o) => !o)
+              }
+            }}
             aria-haspopup="listbox"
             aria-expanded={isOpen}
             className={cn(
@@ -215,39 +226,45 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </button>
 
           {/* Custom Swiss Dropdown Popover */}
-          {isOpen && !disabled && (
-            <div
-              className="absolute start-0 end-0 top-[calc(100%+0.35rem)] z-50 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-1.5 max-h-60 overflow-y-auto space-y-0.5 select-none animate-slide-down"
-              role="listbox"
-            >
-              {normalizedOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(currentValue)
-                return (
-                  <button
-                    key={String(opt.value)}
-                    type="button"
-                    disabled={opt.disabled}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleSelectOption(opt)
-                    }}
-                    className={cn(
-                      'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors cursor-pointer text-start',
-                      isSelected
-                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-bold'
-                        : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/70',
-                      opt.disabled && 'opacity-40 cursor-not-allowed pointer-events-none',
-                    )}
-                  >
-                    <span className="truncate flex-1">{opt.label}</span>
-                    {isSelected && (
-                      <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <PopoverWrapper>
+            {isOpen && !disabled && (
+              <motion.div
+                variants={popoverVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="absolute start-0 end-0 top-[calc(100%+0.35rem)] z-50 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-1.5 max-h-60 overflow-y-auto space-y-0.5 select-none"
+                role="listbox"
+              >
+                {normalizedOptions.map((opt) => {
+                  const isSelected = String(opt.value) === String(currentValue)
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      disabled={opt.disabled}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleSelectOption(opt)
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors cursor-pointer text-start',
+                        isSelected
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-bold'
+                          : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/70',
+                        opt.disabled && 'opacity-40 cursor-not-allowed pointer-events-none',
+                      )}
+                    >
+                      <span className="truncate flex-1">{opt.label}</span>
+                      {isSelected && (
+                        <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      )}
+                    </button>
+                  )
+                })}
+              </motion.div>
+            )}
+          </PopoverWrapper>
         </div>
         {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
         {!error && helperText && (

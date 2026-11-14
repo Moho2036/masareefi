@@ -12,6 +12,7 @@ import {
 } from './pinCrypto'
 import { PinKeypad } from './PinKeypad'
 import { PinForgotModal } from './PinForgotModal'
+import { triggerHaptic } from '../../lib/haptics'
 
 export { AUTO_LOCK_TIMEOUT_MS, registerBiometricCredential }
 
@@ -187,6 +188,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
         const computedHash = await hashPin(pinToVerify)
 
         if (storedHash === computedHash) {
+          triggerHaptic('success')
           sessionStorage.setItem(unlockSessionKey, 'true')
           if (typeof window !== 'undefined' && window.sessionStorage) {
             sessionStorage.removeItem(lockoutSessionKey)
@@ -199,6 +201,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
           setFailedAttempts(0)
           setLockoutSeconds(0)
         } else {
+          triggerHaptic('destructive')
           const nextAttempts = failedAttempts + 1
           if (nextAttempts >= 5) {
             const until = Date.now() + 30 * 1000
@@ -220,6 +223,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
           setInputPin('')
         }
       } catch (err) {
+        triggerHaptic('destructive')
         console.error('PIN verification error:', err)
         setErrorMsg('حدث خطأ أثناء التحقق')
         pinBufferRef.current = ''
@@ -234,6 +238,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
     (digit: string) => {
       if (lockoutSeconds > 0) return
       if (pinBufferRef.current.length >= 4) return
+      triggerHaptic('tick')
       setErrorMsg(null)
       const nextPin = pinBufferRef.current + digit
       pinBufferRef.current = nextPin
@@ -249,6 +254,7 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
   // Handle backspace
   const handleDelete = useCallback(() => {
     if (lockoutSeconds > 0) return
+    triggerHaptic('tick')
     setErrorMsg(null)
     pinBufferRef.current = pinBufferRef.current.slice(0, -1)
     setInputPin(pinBufferRef.current)

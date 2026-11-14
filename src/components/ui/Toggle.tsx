@@ -27,7 +27,7 @@ export const Toggle: React.FC<ToggleProps> = ({
 
   const handleToggle = () => {
     if (disabled) return
-    triggerHaptic('light')
+    triggerHaptic('tick')
     onChange(!checked)
   }
 
