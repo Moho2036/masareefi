@@ -65,9 +65,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = (props) => {
     error,
     setError,
     submitting,
-    showDeleteConfirm,
-    setShowDeleteConfirm,
-    deleting,
     categoriesLoading,
     availableCategories,
     displayedCategories,
@@ -78,8 +75,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = (props) => {
     currencyConfig,
     handleSubmit,
     handleSaveAndAddAnother,
-    handleDelete,
-    handleDuplicateCurrent,
   } = useTransactionFormState(props)
 
   const isTouchDevice =
@@ -177,37 +172,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = (props) => {
 
       <TransactionActionsBar
         isEditing={isEditing}
-        isLockedTransaction={isLockedTransaction}
-        isLinkedToDebtPayment={isLinkedToDebtPayment}
         isActualDuplicate={isActualDuplicate}
-        showDeleteConfirm={showDeleteConfirm}
-        onShowDeleteConfirm={setShowDeleteConfirm}
         submitting={submitting}
-        deleting={deleting}
-        onClose={props.onClose}
-        onDelete={handleDelete}
         onSaveAndAddAnother={handleSaveAndAddAnother}
-        onDuplicateCurrent={handleDuplicateCurrent}
-        canDelete={
-          isEditing &&
-          !lockStatus.isMergedPaymentTx &&
-          !lockStatus.isMergedEntryTx &&
-          !lockStatus.isLinkedToCircle &&
-          (!isLockedTransaction ||
-            Boolean(lockStatus.linkedDebt) ||
-            Boolean(lockStatus.linkedDebtEntry) ||
-            Boolean(lockStatus.isLinkedToDebtPayment) ||
-            Boolean(lockStatus.isLinkedToCircleInstallment))
-        }
-        deleteConfirmMessage={
-          lockStatus.linkedDebt
-            ? `تنبيه: هذه المعاملة تمثل أصل الدين لـ (${lockStatus.linkedDebt.personName}). حذفها سيؤدي لحذف سجل الدين بالكامل من صفحة الديون. هل أنت متأكد؟`
-            : lockStatus.linkedDebtEntry
-              ? `تنبيه: هذه المعاملة مرتبطة بسلفة إضافية لـ (${lockStatus.linkedDebtEntry.debt.personName}). حذفها سيؤدي لحذف السلفة وإعادة احتساب إجمالي الدين. هل أنت متأكد؟`
-              : lockStatus.linkedDebtPayment
-                ? 'تنبيه: هذه المعاملة تمثل دفعة سداد دين. حذفها سيعيد فتح المبلغ المستحق في سجل الدين. هل أنت متأكد؟'
-                : undefined
-        }
       />
 
       {isCreateCatOpen && (

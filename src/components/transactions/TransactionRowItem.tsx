@@ -245,16 +245,28 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           }
         }}
         onTouchEnd={() => {
+          const wasOpen = startOffsetRef.current > 0
           touchStartX.current = null
           touchStartY.current = null
           touchDirection.current = null
           setIsDragging(false)
-          const snapThreshold = maxSwipe * 0.42
-          if (swipeOffset >= snapThreshold) {
-            triggerHaptic('tick')
-            onSwipeChange?.(true)
+
+          if (wasOpen) {
+            // When already open, a reasonable swipe to the left closes it
+            if (swipeOffset < maxSwipe * 0.75) {
+              onSwipeChange?.(false)
+            } else {
+              onSwipeChange?.(true)
+            }
           } else {
-            onSwipeChange?.(false)
+            // When closed, swiping past threshold opens it
+            const snapThreshold = maxSwipe * 0.38
+            if (swipeOffset >= snapThreshold) {
+              triggerHaptic('tick')
+              onSwipeChange?.(true)
+            } else {
+              onSwipeChange?.(false)
+            }
           }
         }}
         style={{

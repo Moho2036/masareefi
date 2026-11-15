@@ -5,7 +5,6 @@ import { TransactionForm } from './TransactionForm'
 import * as txServices from '../services/transactions'
 import * as recurringServices from '../services/recurring'
 import * as debtServices from '../services/debts'
-import * as circleServices from '../services/moneyCircles'
 import type { Transaction, Debt, MoneyCircle } from '../types'
 
 const renderWithRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -264,7 +263,7 @@ describe('TransactionForm Component', () => {
     expect(screen.getByDisplayValue('50')).toBeInTheDocument()
     expect(screen.getByDisplayValue('تعبئة بنزين')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'تعديل المعاملة' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'حذف المعاملة' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
   })
 
   it('creates recurring transaction when recurring toggle is enabled', async () => {
@@ -407,7 +406,7 @@ describe('TransactionForm Component', () => {
     expect(screen.getByDisplayValue('بنزين سفر')).toBeInTheDocument()
     expect(screen.getByDisplayValue('طريق المطار')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ النسخة' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'حفظ وإضافة أخرى' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حفظ وإضافة أخرى' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
 
     // Submitting it calls addTransaction, not updateTransaction
@@ -628,21 +627,7 @@ describe('TransactionForm Component', () => {
     )
 
     expect(screen.getByText(/معاملة مرتبطة بقسط جمعية \(جمعية الأقارب\) - شهر 2/)).toBeInTheDocument()
-
-    const deleteBtn = screen.getByRole('button', { name: 'حذف المعاملة' })
-    fireEvent.click(deleteBtn)
-
-    const confirmBtn = screen.getByRole('button', { name: 'نعم، احذف المعاملة' })
-    fireEvent.click(confirmBtn)
-
-    await waitFor(() => {
-      expect(circleServices.removeCircleInstallmentPayment).toHaveBeenCalledWith(
-        'user-123',
-        'circle-789',
-        2
-      )
-      expect(mockShowToast).toHaveBeenCalledWith('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
-    })
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
   })
 
   it('calls removeCircleInstallmentPayment when deleting an automatic recurring circle installment transaction', async () => {
@@ -683,21 +668,7 @@ describe('TransactionForm Component', () => {
     )
 
     expect(screen.getByText(/معاملة مرتبطة بقسط جمعية \(جمعية الأقارب\) - شهر 2/)).toBeInTheDocument()
-
-    const deleteBtn = screen.getByRole('button', { name: 'حذف المعاملة' })
-    fireEvent.click(deleteBtn)
-
-    const confirmBtn = screen.getByRole('button', { name: 'نعم، احذف المعاملة' })
-    fireEvent.click(confirmBtn)
-
-    await waitFor(() => {
-      expect(circleServices.removeCircleInstallmentPayment).toHaveBeenCalledWith(
-        'user-123',
-        'circle-789',
-        2
-      )
-      expect(mockShowToast).toHaveBeenCalledWith('تم حذف قسط الجمعية وتحديث السجل بنجاح', 'info')
-    })
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
   })
 
   it('shows clear Toast and updates selected month when saving a transaction outside the active month', async () => {
@@ -754,19 +725,9 @@ describe('TransactionForm Component', () => {
       />
     )
 
-    const duplicateBtn = screen.getByRole('button', { name: /تكرار هذه المعاملة/i })
-    expect(duplicateBtn).toBeInTheDocument()
-
-    fireEvent.click(duplicateBtn)
-    expect(onDuplicate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: initialTx.type,
-        amountFils: initialTx.amountFils,
-        categoryId: initialTx.categoryId,
-        title: initialTx.title,
-        note: initialTx.note,
-      })
-    )
+    expect(screen.queryByRole('button', { name: /تكرار هذه المعاملة/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'تعديل المعاملة' })).toBeInTheDocument()
   })
 
   it('preserves archived category when editing transaction originally categorized under it and labels it (مؤرشف)', () => {
@@ -849,19 +810,11 @@ describe('TransactionForm Component', () => {
     const amountInput = screen.getByPlaceholderText('0.000') as HTMLInputElement
     expect(amountInput.disabled).toBe(false)
 
-    // Should allow deleting
-    const deleteBtn = screen.getByRole('button', { name: 'حذف المعاملة' })
-    fireEvent.click(deleteBtn)
-
-    const confirmDeleteBtn = screen.getByRole('button', { name: 'نعم، احذف المعاملة' })
-    fireEvent.click(confirmDeleteBtn)
-
-    await waitFor(() => {
-      expect(txServices.deleteTransaction).toHaveBeenCalledWith('user-123', 'debt_init_deletedDebt')
-    })
+    expect(screen.getByRole('button', { name: 'تعديل المعاملة' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
   })
 
-  it('unlocks circle_payout_ transaction and allows deleting when linked circle is deleted', async () => {
+  it('unlocks circle_payout_ transaction and enables editing when linked circle is deleted', async () => {
     // Empty circles so circle-789 does not exist
     mockCircles = []
 
@@ -1075,10 +1028,7 @@ describe('TransactionForm Component', () => {
     expect(debtServices.updateDebtPayment).not.toHaveBeenCalled()
   })
 
-  it('passes modified field values when user edits a transaction and clicks "تكرار هذه المعاملة"', () => {
-    const onDuplicate = vi.fn()
-    const onClose = vi.fn()
-
+  it('does NOT render duplicate, delete, or cancel button in edit mode, keeping the focus strictly on editing', () => {
     const existingTx: Transaction = {
       id: 'tx-orig',
       type: 'expense',
@@ -1093,32 +1043,14 @@ describe('TransactionForm Component', () => {
     renderWithRouter(
       <TransactionForm
         initialTransaction={existingTx}
-        onDuplicate={onDuplicate}
-        onClose={onClose}
+        onClose={vi.fn()}
       />
     )
 
-    // Modify amount to 30 JOD
-    const amountInput = screen.getByPlaceholderText('0.000')
-    fireEvent.change(amountInput, { target: { value: '30' } })
-
-    // Modify title
-    const titleInput = screen.getByPlaceholderText('مثال: فاتورة كهرباء، مشتريات تموينية...')
-    fireEvent.change(titleInput, { target: { value: 'بنزين معدل للتكرار' } })
-
-    // Click "تكرار هذه المعاملة"
-    const duplicateBtn = screen.getByRole('button', { name: 'تكرار هذه المعاملة' })
-    fireEvent.click(duplicateBtn)
-
-    expect(onDuplicate).toHaveBeenCalledTimes(1)
-    expect(onDuplicate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'expense',
-        amountFils: 30000,
-        title: 'بنزين معدل للتكرار',
-        categoryId: 'c-fuel',
-      })
-    )
+    expect(screen.queryByRole('button', { name: 'تكرار هذه المعاملة' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'حذف المعاملة' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'إلغاء' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'تعديل المعاملة' })).toBeInTheDocument()
   })
 
   it('displays count of retroactively processed recurring transactions in toast message when count > 1', async () => {
