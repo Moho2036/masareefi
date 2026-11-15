@@ -6,6 +6,7 @@ import {
   Share2,
   PlusSquare,
   Info,
+  Sparkles,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -146,13 +147,28 @@ export const AboutBaseerSection: React.FC<AboutBaseerSectionProps> = ({ onRestar
             <img src="/icons/icon.svg" alt="بَصير" className="w-6 h-6 object-contain" />
           </div>
           <div>
-            <div className="text-sm font-black text-zinc-900 dark:text-zinc-50">
-              بَصير — Baseer
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">
+                بَصير — Baseer
+              </span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80">
+                نسخة بيتا (Beta)
+              </span>
             </div>
             <div className="text-[11px] text-zinc-400">
-              الإصدار 2.5.0 (Swiss Carbon & Sapphire Clarity)
+              الإصدار 2.5.0-beta (Swiss Carbon & Sapphire Clarity)
             </div>
           </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-blue-900 dark:text-blue-200">
+            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>حالة وتفاصيل النسخة التجريبية (Beta)</span>
+          </div>
+          <p className="text-blue-800 dark:text-blue-300">
+            تطبيق بَصير حالياً في مرحلة الإطلاق التجريبي (Beta). يجري تحسين تجربة الاستخدام، واستجابة السحب والإيماءات، والربط السحابي، والتنبيهات الذكية بصورة دورية ومستمرة. ملاحظاتك المباشرة هي حجر الأساس لاعتماد الإصدار النهائي.
+          </p>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 space-y-1.5">

@@ -33,6 +33,8 @@ export interface TransactionRowItemProps {
   openEdit: (tx: Transaction) => void
   openDuplicate: (tx: Transaction) => void
   setTxToDelete: (tx: Transaction) => void
+  isSwipedOpen?: boolean
+  onSwipeChange?: (isOpen: boolean) => void
 }
 
 export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
@@ -53,12 +55,16 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
   openEdit,
   openDuplicate,
   setTxToDelete,
+  isSwipedOpen = false,
+  onSwipeChange,
 }) => {
   const { formatWithSign } = useCurrency()
   const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const touchDirection = useRef<'horizontal' | 'vertical' | null>(null)
+  const startOffsetRef = useRef(0)
   const icon = cat?.icon ?? '➕'
   const color = cat?.color ?? '#94A3B8'
 
@@ -72,27 +78,48 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
     (hasCircleLink ? 1 : 0) +
     1 +
     (canDelete ? 1 : 0)
-  const maxSwipe = buttonCount * 70
+  const maxSwipe = buttonCount * 58
+
+  const effectiveOffset = isDragging ? swipeOffset : isSwipedOpen ? maxSwipe : 0
 
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none group">
       {/* Mobile Swipe-to-Right Action Reveal Strip */}
       <div
+        dir="ltr"
         className={cn(
-          'absolute inset-y-0 start-0 flex items-stretch z-0 sm:hidden print:hidden',
-          swipeOffset === 0 && 'pointer-events-none'
+          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden overflow-hidden',
+          effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
       >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setSwipeOffset(0)
+            onSwipeChange?.(false)
+            triggerHaptic('tick')
+            openEdit(tx)
+          }}
+          className="flex-1 bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+          aria-label="سحب لتعديل المعاملة"
+        >
+          <Pencil className="w-4 h-4 shrink-0" />
+          <span className="truncate">تعديل</span>
+        </button>
+
         {canDuplicate && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
               setSwipeOffset(0)
+              onSwipeChange?.(false)
+              triggerHaptic('tick')
               openDuplicate(tx)
             }}
-            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لتكرار المعاملة"
           >
             <Copy className="w-4 h-4 shrink-0" />
@@ -105,8 +132,10 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             onClick={(e) => {
               e.stopPropagation()
               setSwipeOffset(0)
+              onSwipeChange?.(false)
+              triggerHaptic('tick')
             }}
-            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
             aria-label="سحب للانتقال إلى صفحة الديون"
           >
             <ExternalLink className="w-4 h-4 shrink-0" />
@@ -119,38 +148,27 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             onClick={(e) => {
               e.stopPropagation()
               setSwipeOffset(0)
+              onSwipeChange?.(false)
+              triggerHaptic('tick')
             }}
-            className="flex-1 min-w-[68px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors px-1"
             aria-label="سحب للانتقال إلى صفحة الجمعيات"
           >
             <ExternalLink className="w-4 h-4 shrink-0" />
             <span className="truncate">الجمعيات</span>
           </Link>
         )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setSwipeOffset(0)
-            triggerHaptic('tick')
-            openEdit(tx)
-          }}
-          className="flex-1 min-w-[68px] bg-zinc-600 hover:bg-zinc-700 active:bg-zinc-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
-          aria-label="سحب لتعديل المعاملة"
-        >
-          <Pencil className="w-4 h-4 shrink-0" />
-          <span className="truncate">تعديل</span>
-        </button>
         {canDelete && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
               setSwipeOffset(0)
+              onSwipeChange?.(false)
               triggerHaptic('destructive')
               setTxToDelete(tx)
             }}
-            className="flex-1 min-w-[68px] bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
+            className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
             aria-label="سحب لحذف المعاملة"
           >
             <Trash2 className="w-4 h-4 shrink-0" />
@@ -170,9 +188,9 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           }
         }}
         onClick={() => {
-          if (swipeOffset > 0) {
+          if (effectiveOffset > 0) {
             triggerHaptic('tick')
-            setSwipeOffset(0)
+            onSwipeChange?.(false)
             return
           }
           openEdit(tx)
@@ -181,6 +199,9 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           touchStartX.current = e.touches[0].clientX
           touchStartY.current = e.touches[0].clientY
           touchDirection.current = null
+          startOffsetRef.current = isSwipedOpen ? maxSwipe : 0
+          setSwipeOffset(startOffsetRef.current)
+          setIsDragging(true)
         }}
         onTouchMove={(e) => {
           if (touchStartX.current === null || touchStartY.current === null) return
@@ -204,30 +225,36 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           }
 
           if (touchDirection.current === 'horizontal') {
-            if (diffX > 8) {
-              setSwipeOffset(Math.min(diffX, maxSwipe + 15))
-            } else if (swipeOffset > 0 && diffX < -8) {
-              setSwipeOffset(0)
-            }
+            const rawTarget = startOffsetRef.current + diffX
+            const clamped = Math.max(0, rawTarget)
+            const resistedOffset =
+              clamped <= maxSwipe
+                ? clamped * 0.96
+                : maxSwipe + (clamped - maxSwipe) * 0.28
+            setSwipeOffset(resistedOffset)
           }
         }}
         onTouchEnd={() => {
           touchStartX.current = null
           touchStartY.current = null
           touchDirection.current = null
-          if (swipeOffset > maxSwipe / 3) {
+          setIsDragging(false)
+          const snapThreshold = maxSwipe * 0.42
+          if (swipeOffset >= snapThreshold) {
             triggerHaptic('tick')
-            setSwipeOffset(maxSwipe)
+            onSwipeChange?.(true)
           } else {
-            setSwipeOffset(0)
+            onSwipeChange?.(false)
           }
         }}
         style={{
-          transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
+          transform: effectiveOffset > 0 ? `translateX(${effectiveOffset}px)` : undefined,
+          transition: isDragging
+            ? 'none'
+            : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className={cn(
-          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10',
-          swipeOffset === 0 && 'transition-transform duration-200 ease-out'
+          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10'
         )}
       >
         {/* Right side: Icon + Title + Subline */}

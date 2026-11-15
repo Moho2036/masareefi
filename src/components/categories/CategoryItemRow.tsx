@@ -20,6 +20,8 @@ export interface CategoryItemRowProps {
   onEdit: (cat: Category) => void
   onArchive: (cat: Category) => void
   onDelete: (cat: Category) => void
+  isSwipedOpen?: boolean
+  onSwipeChange?: (isOpen: boolean) => void
 }
 
 export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
@@ -36,20 +38,27 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
   onEdit,
   onArchive,
   onDelete,
+  isSwipedOpen = false,
+  onSwipeChange,
 }) => {
   const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const touchDirection = useRef<'horizontal' | 'vertical' | null>(null)
-  const maxSwipe = 150
+  const startOffsetRef = useRef(0)
+  const maxSwipe = 168
+
+  const effectiveOffset = isDragging ? swipeOffset : isSwipedOpen ? maxSwipe : 0
 
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none rounded-2xl group">
       {/* Mobile Swipe-to-Right Action Reveal Strip */}
       <div
+        dir="ltr"
         className={cn(
-          'absolute inset-y-0 start-0 flex items-stretch z-0 sm:hidden print:hidden rounded-2xl overflow-hidden',
-          swipeOffset === 0 && 'pointer-events-none'
+          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden rounded-2xl overflow-hidden',
+          effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
       >
@@ -58,13 +67,14 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           onClick={(e) => {
             e.stopPropagation()
             setSwipeOffset(0)
+            onSwipeChange?.(false)
             triggerHaptic('tick')
             onEdit(cat)
           }}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors cursor-pointer px-1"
+          className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
           aria-label={`سحب لتعديل تصنيف ${cat.name}`}
         >
-          <Pencil className="w-3.5 h-3.5 shrink-0" />
+          <Pencil className="w-4 h-4 shrink-0" />
           <span>تعديل</span>
         </button>
 
@@ -73,13 +83,14 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           onClick={(e) => {
             e.stopPropagation()
             setSwipeOffset(0)
+            onSwipeChange?.(false)
             triggerHaptic('warning')
             onArchive(cat)
           }}
-          className="flex-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white flex flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors cursor-pointer px-1"
+          className="flex-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
           aria-label={`سحب لأرشفة تصنيف ${cat.name}`}
         >
-          <Archive className="w-3.5 h-3.5 shrink-0" />
+          <Archive className="w-4 h-4 shrink-0" />
           <span>أرشفة</span>
         </button>
 
@@ -88,13 +99,14 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           onClick={(e) => {
             e.stopPropagation()
             setSwipeOffset(0)
+            onSwipeChange?.(false)
             triggerHaptic('destructive')
             onDelete(cat)
           }}
-          className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors cursor-pointer px-1"
+          className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors cursor-pointer px-1"
           aria-label={`سحب لحذف تصنيف ${cat.name}`}
         >
-          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+          <Trash2 className="w-4 h-4 shrink-0" />
           <span>حذف</span>
         </button>
       </div>
@@ -102,18 +114,24 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
       {/* Foreground Card */}
       <div
         style={{
-          transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
+          transform: effectiveOffset > 0 ? `translateX(${effectiveOffset}px)` : undefined,
+          transition: isDragging
+            ? 'none'
+            : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         onClick={() => {
-          if (swipeOffset > 0) {
+          if (effectiveOffset > 0) {
             triggerHaptic('tick')
-            setSwipeOffset(0)
+            onSwipeChange?.(false)
           }
         }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0].clientX
           touchStartY.current = e.touches[0].clientY
           touchDirection.current = null
+          startOffsetRef.current = isSwipedOpen ? maxSwipe : 0
+          setSwipeOffset(startOffsetRef.current)
+          setIsDragging(true)
         }}
         onTouchMove={(e) => {
           if (touchStartX.current === null || touchStartY.current === null) return
@@ -137,31 +155,30 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           }
 
           if (touchDirection.current === 'horizontal') {
-            if (diffX > 8) {
-              const newOffset = Math.min(diffX, maxSwipe + 15)
-              if (swipeOffset < maxSwipe / 3 && newOffset >= maxSwipe / 3) {
-                triggerHaptic('tick')
-              }
-              setSwipeOffset(newOffset)
-            } else if (swipeOffset > 0 && diffX < -8) {
-              setSwipeOffset(0)
-            }
+            const rawTarget = startOffsetRef.current + diffX
+            const clamped = Math.max(0, rawTarget)
+            const resistedOffset =
+              clamped <= maxSwipe
+                ? clamped * 0.96
+                : maxSwipe + (clamped - maxSwipe) * 0.28
+            setSwipeOffset(resistedOffset)
           }
         }}
         onTouchEnd={() => {
           touchStartX.current = null
           touchStartY.current = null
           touchDirection.current = null
-          if (swipeOffset > maxSwipe / 3) {
-            setSwipeOffset(maxSwipe)
+          setIsDragging(false)
+          const snapThreshold = maxSwipe * 0.42
+          if (swipeOffset >= snapThreshold) {
             triggerHaptic('tick')
+            onSwipeChange?.(true)
           } else {
-            setSwipeOffset(0)
+            onSwipeChange?.(false)
           }
         }}
         className={cn(
-          'group bg-white dark:bg-[#121215] rounded-2xl p-3.5 sm:p-4 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-200 flex items-center justify-between gap-3 relative z-10',
-          swipeOffset === 0 && 'transition-transform duration-200 ease-out',
+          'group bg-white dark:bg-[#121215] rounded-2xl p-3.5 sm:p-4 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none hover:border-zinc-300 dark:hover:border-zinc-700 flex items-center justify-between gap-3 relative z-10',
           isLastMoved && 'ring-2 ring-blue-500/70 scale-[1.01] shadow-sm z-20'
         )}
       >

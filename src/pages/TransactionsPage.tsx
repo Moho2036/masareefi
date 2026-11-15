@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Plus, Download, Printer } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
@@ -71,6 +71,8 @@ export const TransactionsPage: React.FC = () => {
     setCurrentPage,
   } = useTransactionsData()
 
+  const [swipedTxId, setSwipedTxId] = useState<string | null>(null)
+
   const renderTransactionRow = (tx: Transaction, showDateBadge = false) => {
     const cat = categoryMap.get(tx.categoryId)
     const isDebtInitOrEntry = tx.id.startsWith('debt_init_') || tx.id.startsWith('debt_entry_')
@@ -121,6 +123,8 @@ export const TransactionsPage: React.FC = () => {
         openEdit={openEdit}
         openDuplicate={openDuplicate}
         setTxToDelete={setTxToDelete}
+        isSwipedOpen={swipedTxId === tx.id}
+        onSwipeChange={(isOpen) => setSwipedTxId(isOpen ? tx.id : null)}
       />
     )
   }

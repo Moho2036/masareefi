@@ -60,6 +60,7 @@ export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDa
   const [targetReassignCatId, setTargetReassignCatId] = useState<string>('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [lastMovedId, setLastMovedId] = useState<string | null>(null)
+  const [swipedCatId, setSwipedCatId] = useState<string | null>(null)
 
   const monthStartDay = userSettings?.monthStartDay ?? 1
   const currentFinancialRange = useMemo(() => {
@@ -350,6 +351,8 @@ export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDa
               linkedCommitmentsText={getLinkedText(cat.id)}
               usageText={getUsageText(cat.id)}
               isLastMoved={lastMovedId === cat.id}
+              isSwipedOpen={swipedCatId === cat.id}
+              onSwipeChange={(isOpen) => setSwipedCatId(isOpen ? cat.id : null)}
               onMove={handleMoveCategory}
               onEdit={handleOpenEdit}
               onArchive={handleRequestArchive}
