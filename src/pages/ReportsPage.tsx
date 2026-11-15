@@ -200,7 +200,7 @@ export const ReportsPage: React.FC = () => {
       ) : (
         <AnimatePresence mode="wait">
           <motion.div
-            key={reports.reportPeriod}
+            key={`${reports.reportPeriod}-${reports.reportPeriod === 'monthly' ? reports.range.start.toISOString().slice(0, 7) : reports.selectedYear}`}
             variants={filterCrossFadeVariants}
             initial="initial"
             animate="animate"

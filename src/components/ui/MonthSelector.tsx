@@ -35,8 +35,19 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
 
   const [isOpen, setIsOpen] = useState(false)
   const [pickerYear, setPickerYear] = useState<number>(() => activeFiscal.year)
+  const [slideDirection, setSlideDirection] = useState<number>(0)
+  const prevDateRef = useRef<number>(selectedDate.getTime())
 
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const prev = prevDateRef.current
+    const curr = selectedDate.getTime()
+    if (prev !== curr) {
+      setSlideDirection(curr > prev ? -1 : 1)
+      prevDateRef.current = curr
+    }
+  }, [selectedDate])
 
   const handleToggleOpen = () => {
     triggerHaptic('tick')
@@ -114,7 +125,35 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
           {showIcon && (
             <Calendar className="hidden sm:inline-block w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
           )}
-          <span>{monthLabel}</span>
+          <span className="relative inline-flex items-center justify-center overflow-hidden min-w-[6.8rem] h-5">
+            <AnimatePresence mode="popLayout" custom={slideDirection} initial={false}>
+              <motion.span
+                key={monthLabel}
+                custom={slideDirection}
+                variants={{
+                  enter: (dir: number) => ({
+                    x: dir > 0 ? 16 : -16,
+                    opacity: 0,
+                  }),
+                  center: {
+                    x: 0,
+                    opacity: 1,
+                  },
+                  exit: (dir: number) => ({
+                    x: dir > 0 ? -16 : 16,
+                    opacity: 0,
+                  }),
+                }}
+                initial={isTestEnv ? false : 'enter'}
+                animate="center"
+                exit={isTestEnv ? undefined : 'exit'}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="inline-block whitespace-nowrap"
+              >
+                {monthLabel}
+              </motion.span>
+            </AnimatePresence>
+          </span>
         </div>
         {monthStartDay !== 1 && rangeLabel && (
           <span className="text-[10px] sm:text-[11px] font-semibold text-blue-600 dark:text-blue-400 leading-tight whitespace-nowrap">

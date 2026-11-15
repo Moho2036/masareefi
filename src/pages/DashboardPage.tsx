@@ -1,5 +1,6 @@
 import React from 'react'
 import { Plus } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { QuickFeatureHub } from '../components/dashboard/QuickFeatureHub'
@@ -7,6 +8,7 @@ import { DashboardHeroSection } from '../components/dashboard/DashboardHeroSecti
 import { DashboardRecentTransactions } from '../components/dashboard/DashboardRecentTransactions'
 import { DashboardUpcomingSection } from '../components/dashboard/DashboardUpcomingSection'
 import { useDashboardData } from '../hooks/useDashboardData'
+import { isTestEnv } from '../lib/motionTokens'
 
 export const DashboardPage: React.FC = () => {
   const {
@@ -56,48 +58,60 @@ export const DashboardPage: React.FC = () => {
         }
       />
 
-      {/* 1. Hero Card: Clean Swiss Surface */}
-      <DashboardHeroSection
-        isInitialOrLoading={isInitialOrLoading}
-        isRolloverResolving={isRolloverResolving}
-        isCurrentFiscalMonth={isCurrentFiscalMonth}
-        range={range}
-        monthStartDay={monthStartDay}
-        goToCurrentMonth={goToCurrentMonth}
-        safeDisplayBalance={safeDisplayBalance}
-        sums={sums}
-        forecast={forecast}
-        heroTopBar={heroTopBar}
-        heroShieldColor={heroShieldColor}
-      />
+      {/* Monthly Content with Smooth Transition */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={range.start.toISOString().slice(0, 7)}
+          initial={isTestEnv ? false : { opacity: 0.85, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={isTestEnv ? undefined : { opacity: 0.85, y: -8 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="space-y-6"
+        >
+          {/* 1. Hero Card: Clean Swiss Surface */}
+          <DashboardHeroSection
+            isInitialOrLoading={isInitialOrLoading}
+            isRolloverResolving={isRolloverResolving}
+            isCurrentFiscalMonth={isCurrentFiscalMonth}
+            range={range}
+            monthStartDay={monthStartDay}
+            goToCurrentMonth={goToCurrentMonth}
+            safeDisplayBalance={safeDisplayBalance}
+            sums={sums}
+            forecast={forecast}
+            heroTopBar={heroTopBar}
+            heroShieldColor={heroShieldColor}
+          />
 
-      {/* Quick Feature Access Hub (Mobile only, hidden on lg desktop) */}
-      <QuickFeatureHub />
+          {/* Quick Feature Access Hub (Mobile only, hidden on lg desktop) */}
+          <QuickFeatureHub />
 
-      {/* 2. Core Activity: Recent Transactions (col 7) & Debts Summary + Upcoming Recurring (col 5) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        <DashboardRecentTransactions
-          isInitialOrLoading={isInitialOrLoading}
-          recentTransactions={recentTransactions}
-          topExpenseCategories={topExpenseCategories}
-          categoryMap={categoryMap}
-          today={today}
-          openAdd={openAdd}
-          openEdit={openEdit}
-          openDuplicate={openDuplicate}
-        />
+          {/* 2. Core Activity: Recent Transactions (col 7) & Debts Summary + Upcoming Recurring (col 5) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <DashboardRecentTransactions
+              isInitialOrLoading={isInitialOrLoading}
+              recentTransactions={recentTransactions}
+              topExpenseCategories={topExpenseCategories}
+              categoryMap={categoryMap}
+              today={today}
+              openAdd={openAdd}
+              openEdit={openEdit}
+              openDuplicate={openDuplicate}
+            />
 
-        <DashboardUpcomingSection
-          isInitialOrLoading={isInitialOrLoading}
-          debtsLoading={debtsLoading}
-          debtSummary={debtSummary}
-          nearestUpcomingDebt={nearestUpcomingDebt}
-          upcomingRecurring={upcomingRecurring}
-          recurringLoading={recurringLoading}
-          categoryMap={categoryMap}
-          today={today}
-        />
-      </div>
+            <DashboardUpcomingSection
+              isInitialOrLoading={isInitialOrLoading}
+              debtsLoading={debtsLoading}
+              debtSummary={debtSummary}
+              nearestUpcomingDebt={nearestUpcomingDebt}
+              upcomingRecurring={upcomingRecurring}
+              recurringLoading={recurringLoading}
+              categoryMap={categoryMap}
+              today={today}
+            />
+          </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

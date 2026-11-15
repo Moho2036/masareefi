@@ -8,6 +8,7 @@ import { BottomNav } from './BottomNav'
 import { Button } from '../ui/Button'
 import { MonthSelector } from '../ui/MonthSelector'
 import { YearSelector } from '../ui/YearSelector'
+import { OverscrollBounceContainer } from './OverscrollBounceContainer'
 import { navGroups } from './navConfig'
 import { useAuth } from '../../hooks/useAuth'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
@@ -358,21 +359,8 @@ export const AppShell: React.FC = () => {
             {isReportsYearly ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <YearSelector
-                  selectedYear={
-                    searchParams.get('year')
-                      ? Number(searchParams.get('year'))
-                      : new Date().getFullYear()
-                  }
-                  onSelectYear={(year) => {
-                    setSearchParams(
-                      (prev) => {
-                        const next = new URLSearchParams(prev)
-                        next.set('year', String(year))
-                        return next
-                      },
-                      { replace: true }
-                    )
-                  }}
+                  selectedYear={searchParams.get('year') ? Number(searchParams.get('year')) : new Date().getFullYear()}
+                  onSelectYear={(year) => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.set('year', String(year)); return next }, { replace: true })}
                 />
               </div>
             ) : isMonthPage ? (
@@ -406,23 +394,25 @@ export const AppShell: React.FC = () => {
 
         {/* Page View Slot */}
         <main className="flex-1 min-w-0 p-3.5 sm:p-6 lg:p-8 pb-28 lg:pb-8 max-w-7xl w-full mx-auto overflow-x-clip">
-          {isTestEnv ? (
-            <React.Suspense fallback={<PageSkeleton />}>
-              <Outlet />
-            </React.Suspense>
-          ) : (
-            <motion.div
-              key={pathname}
-              initial={false}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.12, ease: 'easeOut' }}
-              className="flex-1 w-full"
-            >
+          <OverscrollBounceContainer>
+            {isTestEnv ? (
               <React.Suspense fallback={<PageSkeleton />}>
                 <Outlet />
               </React.Suspense>
-            </motion.div>
-          )}
+            ) : (
+              <motion.div
+                key={pathname}
+                initial={false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.12, ease: 'easeOut' }}
+                className="flex-1 w-full"
+              >
+                <React.Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </React.Suspense>
+              </motion.div>
+            )}
+          </OverscrollBounceContainer>
         </main>
       </div>
 
