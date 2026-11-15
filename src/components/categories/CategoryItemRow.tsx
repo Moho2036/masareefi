@@ -236,7 +236,7 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           </div>
         </div>
 
-        {/* Left side: Reorder & Actions in one clean row */}
+        {/* Left side: Reorder & Desktop Hover Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <div className="flex items-center gap-0.5 pe-1 border-e border-zinc-100 dark:border-zinc-800">
             <button
@@ -267,41 +267,45 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic('tick')
-              onEdit(cat)
-            }}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            aria-label={`تعديل تصنيف ${cat.name}`}
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic('warning')
-              onArchive(cat)
-            }}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
-            aria-label={`أرشفة تصنيف ${cat.name}`}
-            title="أرشفة التصنيف"
-          >
-            <Archive className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic('destructive')
-              onDelete(cat)
-            }}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-            aria-label={`حذف تصنيف ${cat.name}`}
-            title="حذف التصنيف"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {/* Desktop Hover Quick Actions (Hidden on Mobile - Mobile relies exclusively on swipe-to-right) */}
+          <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('tick')
+                onEdit(cat)
+              }}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              aria-label={`تعديل تصنيف ${cat.name}`}
+              title="تعديل التصنيف"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('warning')
+                onArchive(cat)
+              }}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+              aria-label={`أرشفة تصنيف ${cat.name}`}
+              title="أرشفة التصنيف"
+            >
+              <Archive className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('destructive')
+                onDelete(cat)
+              }}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+              aria-label={`حذف تصنيف ${cat.name}`}
+              title="حذف التصنيف"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -198,7 +198,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             hasMovedRef.current = false
             return
           }
-          openEdit(tx)
+          // Do not open edit modal on plain row click; editing is handled via swipe action strip or desktop action button
         }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0].clientX
@@ -264,7 +264,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className={cn(
-          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10'
+          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-default bg-white dark:bg-[#121215] relative z-10'
         )}
       >
         {/* Right side: Icon + Title + Subline */}
