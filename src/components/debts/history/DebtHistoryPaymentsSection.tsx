@@ -2,9 +2,12 @@ import React from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { AlertCircle, Pencil, Trash2 } from 'lucide-react'
+import { motion } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
 import { toWesternDigits } from '../../../lib/dates'
+import { triggerHaptic } from '../../../lib/haptics'
+import { springSnappy } from '../../../lib/motionTokens'
 import { cn } from '../../../lib/cn'
 import type { DebtPayment } from '../../../types'
 
@@ -124,7 +127,12 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                   className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col gap-2.5"
                 >
                   {editingPaymentId === p.id ? (
-                    <div className="w-full space-y-2.5">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={springSnappy}
+                      className="w-full space-y-2.5"
+                    >
                       {editError && (
                         <div className="p-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-900/50">
                           {editError}
@@ -178,14 +186,17 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                       <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                         <button
                           type="button"
-                          onClick={onCancelEdit}
+                          onClick={() => {
+                            triggerHaptic('tick')
+                            onCancelEdit()
+                          }}
                           disabled={isSavingEdit}
                           className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors cursor-pointer"
                         >
                           إلغاء
                         </button>
                         <button
-                          type="button"
+                          type="submit"
                           onClick={() => onSaveEdit(p)}
                           disabled={isSavingEdit || checkingEditSync}
                           className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -193,7 +204,7 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                           {isSavingEdit ? 'جارٍ الحفظ...' : checkingEditSync ? 'جارٍ التحقق...' : 'حفظ التعديل'}
                         </button>
                       </div>
-                    </div>
+                    </motion.div>
                   ) : confirmDeleteId === p.id ? (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
@@ -304,8 +315,11 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                           <button
                             type="button"
                             disabled={Boolean(deletingId) || isSavingEdit}
-                            onClick={() => onStartEdit(p)}
-                            className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            onClick={() => {
+                              triggerHaptic('tick')
+                              onStartEdit(p)
+                            }}
+                            className="press-scale p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                             title="تعديل هذه الدفعة"
                             aria-label="تعديل هذه الدفعة"
                           >

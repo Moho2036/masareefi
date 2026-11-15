@@ -21,6 +21,7 @@ import { DebtsMergeModal } from '../components/debts/DebtsMergeModal'
 import { DebtsMergeBanner } from '../components/debts/DebtsMergeBanner'
 import { motion, AnimatePresence } from 'motion/react'
 import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../lib/motionTokens'
+import { triggerHaptic } from '../lib/haptics'
 import { useAuth } from '../hooks/useAuth'
 
 const PresenceWrapper = isTestEnv ? React.Fragment : AnimatePresence
@@ -175,14 +176,22 @@ export const DebtsPage: React.FC = () => {
   )
 
   const handleOpenAdd = () => {
+    triggerHaptic('impact')
     setEditingDebt(null)
     setIsFormOpen(true)
   }
 
-  const handleOpenPaymentModal = useCallback((d: Debt) => setPaymentDebtId(d.id), [])
-  const handleOpenHistoryModal = useCallback((d: Debt) => setHistoryDebtId(d.id), [])
+  const handleOpenPaymentModal = useCallback((d: Debt) => {
+    triggerHaptic('tick')
+    setPaymentDebtId(d.id)
+  }, [])
+  const handleOpenHistoryModal = useCallback((d: Debt) => {
+    triggerHaptic('tick')
+    setHistoryDebtId(d.id)
+  }, [])
 
   const handleEdit = useCallback((debt: Debt) => {
+    triggerHaptic('tick')
     setEditingDebt(debt)
     setIsFormOpen(true)
   }, [])

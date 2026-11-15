@@ -308,10 +308,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onSuccess,
 }) => {
   const [isDirty, setIsDirty] = useState(false)
+  const [prevDebt, setPrevDebt] = useState<Debt | null>(debt)
+  const [cachedDebt, setCachedDebt] = useState<Debt | null>(debt)
 
-  if (!debt) return null
+  if (debt !== prevDebt) {
+    setPrevDebt(debt)
+    if (debt) {
+      setCachedDebt(debt)
+    }
+  }
+  const activeDebt = debt ?? cachedDebt
 
-  const isLent = debt.type === 'lent'
+  if (!activeDebt) return null
+
+  const isLent = activeDebt.type === 'lent'
 
   return (
     <Modal
@@ -323,15 +333,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       closeOnBackdropClick={!isDirty}
       title={isLent ? 'تسجيل دفعة استرداد' : 'تسجيل دفعة سداد'}
     >
-      {isOpen && (
-        <PaymentFormContent
-          key={debt.id}
-          debt={debt}
-          onClose={onClose}
-          onSuccess={onSuccess}
-          onDirtyChange={setIsDirty}
-        />
-      )}
+      <PaymentFormContent
+        key={activeDebt.id}
+        debt={activeDebt}
+        onClose={onClose}
+        onSuccess={onSuccess}
+        onDirtyChange={setIsDirty}
+      />
     </Modal>
   )
 }

@@ -23,7 +23,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const hasCustomDisplay = Boolean(className && /\b(hidden|flex|block|inline-block|grid)\b/.test(className))
     const baseStyles = cn(
       !hasCustomDisplay && 'inline-flex',
-      'items-center justify-center gap-2 font-medium transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
+      'press-scale items-center justify-center gap-2 font-medium transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer active:scale-[0.98]'
     )
 
     const sizeStyles = {

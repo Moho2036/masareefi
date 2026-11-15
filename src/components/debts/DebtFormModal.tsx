@@ -375,17 +375,15 @@ export const DebtFormModal: React.FC<DebtFormModalProps> = ({
       title={initialDebt ? 'تعديل بيانات الدين' : 'إضافة دين جديد'}
       closeOnBackdropClick={!isDirty && !initialDebt}
     >
-      {isOpen && (
-        <AppDataContext.Provider value={existingAppData ?? fallbackAppData}>
-          <DebtFormContent
-            key={initialDebt?.id ?? 'new'}
-            initialDebt={initialDebt}
-            onClose={onClose}
-            onSuccess={onSuccess}
-            onDirtyChange={setIsDirty}
-          />
-        </AppDataContext.Provider>
-      )}
+      <AppDataContext.Provider value={existingAppData ?? fallbackAppData}>
+        <DebtFormContent
+          key={initialDebt?.id ?? 'new'}
+          initialDebt={initialDebt}
+          onClose={onClose}
+          onSuccess={onSuccess}
+          onDirtyChange={setIsDirty}
+        />
+      </AppDataContext.Provider>
     </Modal>
   )
 }

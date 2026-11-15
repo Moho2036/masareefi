@@ -27,23 +27,32 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const { showToast } = useToast()
   const { format: formatCurrency, config } = useCurrency()
 
-  const entriesState = useDebtEntriesHistory({ debt, onSuccess })
-  const paymentsState = useDebtPaymentsHistory({ debt, onSuccess })
+  const [prevDebt, setPrevDebt] = React.useState<Debt | null>(debt)
+  const [cachedDebt, setCachedDebt] = React.useState<Debt | null>(debt)
+
+  if (debt !== prevDebt) {
+    setPrevDebt(debt)
+    if (debt) {
+      setCachedDebt(debt)
+    }
+  }
+  const activeDebt = debt ?? cachedDebt
+
+  const entriesState = useDebtEntriesHistory({ debt: activeDebt, onSuccess })
+  const paymentsState = useDebtPaymentsHistory({ debt: activeDebt, onSuccess })
 
   const handleClose = () => {
-    entriesState.resetEntriesState()
-    paymentsState.resetPaymentsState()
     onClose()
   }
 
-  if (!debt) return null
+  if (!activeDebt) return null
 
-  const remainingFils = getDebtRemainingFils(debt)
-  const isLent = debt.type === 'lent'
+  const remainingFils = getDebtRemainingFils(activeDebt)
+  const isLent = activeDebt.type === 'lent'
 
   const handleCopyStatement = async () => {
     try {
-      const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
+      const text = formatDebtAccountStatement(activeDebt, config.symbol, config.decimals)
       await navigator.clipboard.writeText(text)
       showToast('تم نسخ كشف الحساب بنجاح', 'success')
     } catch (err) {
@@ -53,7 +62,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   }
 
   const handleWhatsAppShare = () => {
-    const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
+    const text = formatDebtAccountStatement(activeDebt, config.symbol, config.decimals)
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -63,9 +72,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const handleNativeShare = async () => {
     if (!canShare) return
     try {
-      const text = formatDebtAccountStatement(debt, config.symbol, config.decimals)
+      const text = formatDebtAccountStatement(activeDebt, config.symbol, config.decimals)
       await navigator.share({
-        title: `كشف حساب — ${debt.personName}`,
+        title: `كشف حساب — ${activeDebt.personName}`,
         text,
       })
     } catch (err) {
@@ -84,12 +93,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`سجل الحركات وكشف الحساب — ${debt.personName}`}
+      title={`سجل الحركات وكشف الحساب — ${activeDebt.personName}`}
     >
       {/* Interactive Modal Content (Hidden when printing) */}
       <div className="space-y-4 print:hidden">
         <DebtHistoryActionBar
-          debt={debt}
+          debt={activeDebt}
           remainingFils={remainingFils}
           isLent={isLent}
           canShare={canShare}
@@ -101,7 +110,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
         <DebtHistoryEntriesSection
           rawEntries={entriesState.rawEntries}
-          hasExplicitEntries={Boolean(debt.entries && debt.entries.length > 0)}
+          hasExplicitEntries={Boolean(activeDebt.entries && activeDebt.entries.length > 0)}
           entryError={entriesState.entryError}
           isCompactingEntries={entriesState.isCompactingEntries}
           onCompactEntries={entriesState.handleCompactEntries}
@@ -174,7 +183,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
       {/* Formal Printable Statement Report (Visible ONLY when printing) */}
       <DebtPrintReport
-        debt={debt}
+        debt={activeDebt}
         entries={entriesState.rawEntries}
         payments={paymentsState.payments}
         remainingFils={remainingFils}

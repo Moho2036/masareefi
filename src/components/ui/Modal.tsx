@@ -108,7 +108,6 @@ export const Modal: React.FC<ModalProps> = ({
         onClose()
       } else {
         animate(dragY, 600, { duration: 0.18, ease: 'easeIn' }).then(() => {
-          dragY.set(0)
           onClose()
         })
       }
@@ -245,12 +244,23 @@ export const Modal: React.FC<ModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, modalId, allowBackdropClose])
 
-  // Auto-focus dialog on mount
+  const [cachedChildren, setCachedChildren] = useState<React.ReactNode>(children)
+  const [prevChildren, setPrevChildren] = useState<React.ReactNode>(children)
+
+  if (children !== prevChildren) {
+    setPrevChildren(children)
+    if (isOpen && children) {
+      setCachedChildren(children)
+    }
+  }
+
+  // Auto-focus dialog and reset drag offset on open
   useEffect(() => {
     if (isOpen) {
+      dragY.set(0)
       dialogRef.current?.focus()
     }
-  }, [isOpen])
+  }, [isOpen, dragY])
 
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
     mouseDownTargetRef.current = e.target
@@ -326,9 +336,12 @@ export const Modal: React.FC<ModalProps> = ({
             aria-labelledby={hasTitle ? 'modal-title' : undefined}
             tabIndex={-1}
             initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 8 }}
-            animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
-            exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 8 }}
-            transition={springSheet}
+            animate={isMobile ? { y: 0, transition: springSheet } : { opacity: 1, scale: 1, y: 0, transition: springSheet }}
+            exit={
+              isMobile
+                ? { y: '100%', transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } }
+                : { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15, ease: 'easeOut' } }
+            }
             style={isMobile ? { y: dragY } : undefined}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -396,7 +409,7 @@ export const Modal: React.FC<ModalProps> = ({
               onFocusCapture={handleFocusCapture}
               className="flex-1 overflow-y-auto overscroll-contain min-h-0 text-zinc-700 dark:text-zinc-300"
             >
-              {children}
+              {isOpen ? children : (children || cachedChildren)}
             </div>
           </motion.div>
         </div>

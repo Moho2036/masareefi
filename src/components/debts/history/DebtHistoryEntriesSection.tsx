@@ -2,9 +2,12 @@ import React from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { Plus, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
 import { toWesternDigits } from '../../../lib/dates'
+import { triggerHaptic } from '../../../lib/haptics'
+import { springSnappy } from '../../../lib/motionTokens'
 import type { DebtEntry } from '../../../types'
 
 export interface DebtHistoryEntriesSectionProps {
@@ -96,8 +99,11 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
         </h3>
         <button
           type="button"
-          onClick={() => setIsAddingEntry((prev) => !prev)}
-          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer print-hide"
+          onClick={() => {
+            triggerHaptic('tick')
+            setIsAddingEntry((prev) => !prev)
+          }}
+          className="press-scale inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer print-hide"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>إضافة سلفة جديدة على هذا الحساب</span>
@@ -133,9 +139,17 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
         </div>
       )}
 
-      {/* Inline Add Entry Form */}
-      {isAddingEntry && (
-        <form onSubmit={onAddEntry} noValidate className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5 print-hide">
+      {/* Inline Add Entry Form with smooth accordion expansion */}
+      <AnimatePresence>
+        {isAddingEntry && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={springSnappy}
+            className="overflow-hidden print-hide"
+          >
+            <form onSubmit={onAddEntry} noValidate className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5">
           <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">
             تسجيل سلفة إضافية جديدة لنفس الشخص
           </span>
@@ -196,7 +210,10 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setIsAddingEntry(false)}
+              onClick={() => {
+                triggerHaptic('tick')
+                setIsAddingEntry(false)
+              }}
               disabled={isSavingEntry}
               className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 cursor-pointer"
             >
@@ -211,7 +228,9 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
             </button>
           </div>
         </form>
-      )}
+      </motion.div>
+    )}
+  </AnimatePresence>
 
       {/* Entries list */}
       <div className="space-y-2">
@@ -222,7 +241,13 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
 
           if (isEditingThis) {
             return (
-              <div key={e.id} className="p-3 rounded-xl bg-white dark:bg-zinc-800 border border-blue-500/40 dark:border-blue-500/50 space-y-2">
+              <motion.div
+                key={e.id}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={springSnappy}
+                className="p-3 rounded-xl bg-white dark:bg-zinc-800 border border-blue-500/40 dark:border-blue-500/50 space-y-2"
+              >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">المبلغ</label>
@@ -266,7 +291,10 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                 <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                   <button
                     type="button"
-                    onClick={onCancelEditEntry}
+                    onClick={() => {
+                      triggerHaptic('tick')
+                      onCancelEditEntry()
+                    }}
                     disabled={isSavingEditEntry}
                     className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 cursor-pointer"
                   >
@@ -281,7 +309,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                     {isSavingEditEntry ? 'جاري الحفظ...' : 'حفظ التعديل'}
                   </button>
                 </div>
-              </div>
+              </motion.div>
             )
           }
 
@@ -343,8 +371,11 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                   {!e.isMerged && !e.id.startsWith('compacted_entry_') && (
                     <button
                       type="button"
-                      onClick={() => onStartEditEntry(e)}
-                      className="p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
+                      onClick={() => {
+                        triggerHaptic('tick')
+                        onStartEditEntry(e)
+                      }}
+                      className="press-scale p-1.5 min-w-[34px] min-h-[34px] flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg cursor-pointer"
                       title="تعديل السلفة"
                       aria-label="تعديل السلفة"
                     >

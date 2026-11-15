@@ -1,5 +1,7 @@
 import React from 'react'
 import { Search, X } from 'lucide-react'
+import { SegmentedControl } from '../ui/SegmentedControl'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 import type { DebtType } from '../../types'
 
@@ -56,45 +58,20 @@ export const DebtsFilterBar: React.FC<DebtsFilterBarProps> = ({
           )}
         </div>
 
-        {/* Type Filter Buttons */}
-        <div className="inline-flex items-center p-1 rounded-xl bg-zinc-100 dark:bg-[#18181B] border border-[#E4E4E7] dark:border-[#27272A] gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setTypeFilter('all')}
-            className={cn(
-              'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
-              typeFilter === 'all'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            )}
-          >
-            الكل
-          </button>
-          <button
-            type="button"
-            onClick={() => setTypeFilter('lent')}
-            className={cn(
-              'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
-              typeFilter === 'lent'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            )}
-          >
-            لي (أطلبهم)
-          </button>
-          <button
-            type="button"
-            onClick={() => setTypeFilter('borrowed')}
-            className={cn(
-              'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
-              typeFilter === 'borrowed'
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs dark:shadow-none border border-transparent dark:border-zinc-700'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            )}
-          >
-            عليّ (يطلبوني)
-          </button>
-        </div>
+        {/* Type Filter Segmented Control */}
+        <SegmentedControl<'all' | DebtType>
+          value={typeFilter}
+          onChange={(val) => {
+            setTypeFilter(val)
+          }}
+          options={[
+            { value: 'all', label: 'الكل' },
+            { value: 'lent', label: 'لي (أطلبهم)' },
+            { value: 'borrowed', label: 'عليّ (يطلبوني)' },
+          ]}
+          size="sm"
+          className="shrink-0"
+        />
       </div>
 
       {/* Secondary Status Pills */}
@@ -102,7 +79,10 @@ export const DebtsFilterBar: React.FC<DebtsFilterBarProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold no-scrollbar">
           <button
             type="button"
-            onClick={() => setStatusFilter('all')}
+            onClick={() => {
+              triggerHaptic('tick')
+              setStatusFilter('all')
+            }}
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'all'
@@ -114,7 +94,10 @@ export const DebtsFilterBar: React.FC<DebtsFilterBarProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter('active')}
+            onClick={() => {
+              triggerHaptic('tick')
+              setStatusFilter('active')
+            }}
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'active'
@@ -126,7 +109,10 @@ export const DebtsFilterBar: React.FC<DebtsFilterBarProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter('overdue')}
+            onClick={() => {
+              triggerHaptic('tick')
+              setStatusFilter('overdue')
+            }}
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'overdue'
@@ -138,7 +124,10 @@ export const DebtsFilterBar: React.FC<DebtsFilterBarProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter('settled')}
+            onClick={() => {
+              triggerHaptic('tick')
+              setStatusFilter('settled')
+            }}
             className={cn(
               'px-3 py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0',
               statusFilter === 'settled'

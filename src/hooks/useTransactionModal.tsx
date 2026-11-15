@@ -65,8 +65,6 @@ export function TransactionModalProvider({ children }: { children: ReactNode }) 
 
   const closeModal = useCallback(() => {
     setIsOpen(false)
-    setEditingTransaction(null)
-    setDuplicateTransaction(null)
     setIsFormDirty(false)
   }, [])
 

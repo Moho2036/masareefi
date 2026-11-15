@@ -19,6 +19,7 @@ import { hasExistingUserData } from '../../services/userProfile'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
 import { cn } from '../../lib/cn'
 import { isTestEnv } from '../../lib/motionTokens'
+import { triggerHaptic } from '../../lib/haptics'
 
 const OnboardingWizard = React.lazy(() =>
   import('../onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
@@ -67,6 +68,7 @@ export const AppShell: React.FC = () => {
   const [showWizard, setShowWizard] = useState<boolean>(false)
   const [showTour, setShowTour] = useState<boolean>(false)
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false)
+  const [hasMountedNotifications, setHasMountedNotifications] = useState<boolean>(false)
 
   // Check onboarding eligibility for new vs existing users
   useEffect(() => {
@@ -335,7 +337,11 @@ export const AppShell: React.FC = () => {
             {/* Notifications Bell Button */}
             <button
               type="button"
-              onClick={() => setShowNotificationsModal(true)}
+              onClick={() => {
+                triggerHaptic('tick')
+                setHasMountedNotifications(true)
+                setShowNotificationsModal(true)
+              }}
               aria-label="مركز التنبيهات"
               data-tour="notifications-bell"
               title="مركز التنبيهات"
@@ -430,7 +436,7 @@ export const AppShell: React.FC = () => {
         {showTour && uid && (
           <SpotlightTour isOpen={showTour} onFinish={() => setShowTour(false)} />
         )}
-        {showNotificationsModal && (
+        {hasMountedNotifications && (
           <NotificationCenterModal
             isOpen={showNotificationsModal}
             onClose={() => setShowNotificationsModal(false)}

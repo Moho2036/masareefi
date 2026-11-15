@@ -1,10 +1,13 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Search, SlidersHorizontal, X, Calendar, AlertCircle } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { Select } from '../ui/Select'
 import { DatePickerInput } from '../ui/DatePickerInput'
 import { CategoryIcon } from '../ui/CategoryIcon'
 import { FormattedMoney } from '../ui/FormattedMoney'
+import { triggerHaptic } from '../../lib/haptics'
+import { springSnappy } from '../../lib/motionTokens'
 import { cn } from '../../lib/cn'
 import type { TxType, Category } from '../../types'
 import type { TransactionSortOption } from '../../lib/aggregate'
@@ -36,36 +39,32 @@ export interface TransactionFilterToolbarProps {
   totals: { income: number; expense: number; balance: number }
 }
 
-export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> = ({
-  filterType,
-  onFilterTypeChange,
-  query,
-  onQueryChange,
-  sortBy,
-  onSortByChange,
-  allMonths,
-  onToggleAllMonths,
-  isCustomDateRange,
-  onToggleCustomDateRange,
-  customDateFrom,
-  onCustomDateFromChange,
-  customDateTo,
-  onCustomDateToChange,
-  selectedSource,
-  onSelectedSourceChange,
-  selectedCategories,
-  onToggleCategory,
-  onClearCategories,
-  relevantCategories,
-  isFilterActive,
-  onResetFilters,
-  filteredCount,
-  totals,
-}) => {
+export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> = (props) => {
+  const {
+    filterType, onFilterTypeChange, query, onQueryChange, sortBy, onSortByChange,
+    allMonths, onToggleAllMonths, isCustomDateRange, onToggleCustomDateRange,
+    customDateFrom, onCustomDateFromChange, customDateTo, onCustomDateToChange,
+    selectedSource, onSelectedSourceChange, selectedCategories, onToggleCategory,
+    onClearCategories, relevantCategories, isFilterActive, onResetFilters,
+    filteredCount, totals,
+  } = props
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
   const [showAllFilterCats, setShowAllFilterCats] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    return window.matchMedia('(max-width: 1023px)').matches
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mql = window.matchMedia('(max-width: 1023px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
 
   const activeAdvancedFiltersCount =
     (allMonths ? 1 : 0) +
@@ -98,9 +97,10 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
             <button
               type="button"
               onClick={() => {
+                triggerHaptic('tick')
                 setIsMobileSearchOpen((prev) => {
                   const next = !prev
-                  if (next) setTimeout(() => searchInputRef.current?.focus(), 50)
+                  if (next) setTimeout(() => searchInputRef.current?.focus(), 80)
                   return next
                 })
               }}
@@ -117,7 +117,10 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
 
             <button
               type="button"
-              onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
+              onClick={() => {
+                triggerHaptic('tick')
+                setIsMobileFiltersOpen((prev) => !prev)
+              }}
               aria-label="الفلاتر المتقدمة"
               className={cn(
                 'relative w-9 h-9 rounded-xl border flex items-center justify-center transition-colors cursor-pointer',
@@ -136,30 +139,46 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
           </div>
         </div>
 
-        {/* Search Input (Hidden on mobile unless opened or has query, always visible on desktop) */}
-        <div className={cn('relative', !isMobileSearchOpen && !query.trim() && 'hidden lg:block')}>
-          <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none text-zinc-400">
-            <Search className="w-4 h-4" />
-          </div>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="ابحث في العنوان، الملاحظات، التصنيف، أو المبلغ..."
-            className="w-full ps-9 pe-8 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-hidden focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
-          />
-          {query.trim() && (
-            <button
-              type="button"
-              onClick={() => onQueryChange('')}
-              aria-label="مسح نص البحث"
-              className="absolute inset-y-0 end-0 pe-2.5 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+        {/* Search Input (Smooth animated reveal on mobile, persistent on desktop) */}
+        <AnimatePresence initial={false}>
+          {(!isMobile || isMobileSearchOpen || Boolean(query.trim())) && (
+            <motion.div
+              key="search-box"
+              initial={isMobile ? { opacity: 0, height: 0 } : false}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={isMobile ? { opacity: 0, height: 0 } : undefined}
+              transition={springSnappy}
+              className="overflow-hidden"
             >
-              <X className="w-4 h-4" />
-            </button>
+              <div className="relative pt-0.5">
+                <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none text-zinc-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => onQueryChange(e.target.value)}
+                  placeholder="ابحث في العنوان، الملاحظات، التصنيف، أو المبلغ..."
+                  className="w-full ps-9 pe-8 py-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50 dark:bg-zinc-900/60 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-hidden focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all"
+                />
+                {query.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tick')
+                      onQueryChange('')
+                    }}
+                    aria-label="مسح نص البحث"
+                    className="absolute inset-y-0 end-0 pe-2.5 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
 
         {/* Sort Selector */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs">
@@ -180,75 +199,100 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
           </div>
         </div>
 
-        {/* Advanced Filters Panel (Collapsible on mobile, always visible on desktop) */}
-        <div className={cn('space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800', !isMobileFiltersOpen && 'hidden lg:block')}>
-          {/* Date Range Options: All Months or Custom Range */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={onToggleAllMonths}
-                className={cn(
-                  'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
-                  allMonths
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
-                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
-                )}
-                title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
-                aria-pressed={allMonths}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>كل الأشهر</span>
-              </button>
+        {/* Advanced Filters Panel (Collapsible with smooth animation on mobile, always visible on desktop) */}
+        <AnimatePresence initial={false}>
+          {(!isMobile || isMobileFiltersOpen) && (
+            <motion.div
+              key="advanced-filters"
+              initial={isMobile ? { opacity: 0, height: 0 } : false}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={isMobile ? { opacity: 0, height: 0 } : undefined}
+              transition={springSnappy}
+              className="overflow-hidden space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800"
+            >
+              {/* Date Range Options: All Months or Custom Range */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tick')
+                      onToggleAllMonths()
+                    }}
+                    className={cn(
+                      'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
+                      allMonths
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
+                    )}
+                    title={allMonths ? 'التبديل إلى معاملات الشهر المالي المحدد فقط' : 'البحث في كامل سجل المعاملات (كافة الأشهر)'}
+                    aria-pressed={allMonths}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>كل الأشهر</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={onToggleCustomDateRange}
-                className={cn(
-                  'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
-                  isCustomDateRange
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
-                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
-                )}
-                title="فلترة المعاملات ضمن نطاق زمني مخصص"
-                aria-pressed={isCustomDateRange}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>فترة مخصصة</span>
-              </button>
-            </div>
-
-            {isCustomDateRange && (
-              <div className="space-y-2 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
-                <div className="grid grid-cols-2 gap-2">
-                  <DatePickerInput
-                    id="tx-custom-from"
-                    label="من تاريخ"
-                    value={customDateFrom}
-                    max={customDateTo || undefined}
-                    onChange={onCustomDateFromChange}
-                  />
-                  <DatePickerInput
-                    id="tx-custom-to"
-                    label="إلى تاريخ"
-                    value={customDateTo}
-                    min={customDateFrom || undefined}
-                    popoverAlign="end"
-                    onChange={onCustomDateToChange}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tick')
+                      onToggleCustomDateRange()
+                    }}
+                    className={cn(
+                      'press-scale inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0',
+                      isCustomDateRange
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs dark:shadow-none'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-[#E4E4E7] dark:border-[#27272A] hover:bg-zinc-200/70 dark:hover:bg-zinc-700'
+                    )}
+                    title="فلترة المعاملات ضمن نطاق زمني مخصص"
+                    aria-pressed={isCustomDateRange}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>فترة مخصصة</span>
+                  </button>
                 </div>
-                {customDateFrom && customDateTo && customDateFrom > customDateTo ? (
-                  <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
-                    تاريخ البداية يجب أن يسبق أو يطابق تاريخ النهاية.
-                  </p>
-                ) : !customDateFrom && !customDateTo ? (
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
-                    حدد تاريخ البداية والنهاية لتطبيق الفلترة المخصصة.
-                  </p>
-                ) : null}
+
+                <AnimatePresence>
+                  {isCustomDateRange && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={springSnappy}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-2 pt-2.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
+                        <div className="grid grid-cols-2 gap-2">
+                          <DatePickerInput
+                            id="tx-custom-from"
+                            label="من تاريخ"
+                            value={customDateFrom}
+                            max={customDateTo || undefined}
+                            onChange={onCustomDateFromChange}
+                          />
+                          <DatePickerInput
+                            id="tx-custom-to"
+                            label="إلى تاريخ"
+                            value={customDateTo}
+                            min={customDateFrom || undefined}
+                            popoverAlign="end"
+                            onChange={onCustomDateToChange}
+                          />
+                        </div>
+                        {customDateFrom && customDateTo && customDateFrom > customDateTo ? (
+                          <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                            تاريخ البداية يجب أن يسبق أو يطابق تاريخ النهاية.
+                          </p>
+                        ) : !customDateFrom && !customDateTo ? (
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                            حدد تاريخ البداية والنهاية لتطبيق الفلترة المخصصة.
+                          </p>
+                        ) : null}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            )}
-          </div>
 
           {/* Source Filter Chips */}
           <div className="space-y-1">
@@ -341,7 +385,9 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
       </div>
 
       {/* All Months Indicator Banner */}
@@ -351,11 +397,7 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
             <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
             <span className="truncate">وضع البحث في كامل السجل (كل الأشهر) مفعّل حالياً</span>
           </div>
-          <button
-            type="button"
-            onClick={onToggleAllMonths}
-            className="text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:underline shrink-0 cursor-pointer"
-          >
+          <button type="button" onClick={onToggleAllMonths} className="text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:underline shrink-0 cursor-pointer">
             إلغاء
           </button>
         </div>
@@ -367,16 +409,9 @@ export const TransactionFilterToolbar: React.FC<TransactionFilterToolbarProps> =
           <span className="inline-flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-200">
             <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>النتائج المطابقة:</span>
-            <span className="px-1.5 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-black">
-              {filteredCount}
-            </span>
+            <span className="px-1.5 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-black">{filteredCount}</span>
           </span>
-
-          <button
-            type="button"
-            onClick={onResetFilters}
-            className="text-xs font-bold text-blue-700 dark:text-blue-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
-          >
+          <button type="button" onClick={onResetFilters} className="text-xs font-bold text-blue-700 dark:text-blue-300 hover:underline inline-flex items-center gap-1 cursor-pointer">
             <span>مسح الفلتر</span>
             <X className="w-3.5 h-3.5" />
           </button>
