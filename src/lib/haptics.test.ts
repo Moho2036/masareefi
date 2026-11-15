@@ -22,35 +22,35 @@ describe('Baseer Haptic Bank (haptics.ts)', () => {
     })
   })
 
-  it('triggers tick / light haptic with 35ms pulse', () => {
+  it('triggers tick / light haptic with 60ms pulse', () => {
     triggerHaptic('tick')
-    expect(mockVibrate).toHaveBeenCalledWith(35)
+    expect(mockVibrate).toHaveBeenCalledWith(60)
 
     triggerHaptic('light')
-    expect(mockVibrate).toHaveBeenCalledWith(35)
+    expect(mockVibrate).toHaveBeenCalledWith(60)
   })
 
-  it('triggers impact / medium haptic with 55ms pulse', () => {
+  it('triggers impact / medium haptic with 85ms pulse', () => {
     triggerHaptic('impact')
-    expect(mockVibrate).toHaveBeenCalledWith(55)
+    expect(mockVibrate).toHaveBeenCalledWith(85)
 
     triggerHaptic('medium')
-    expect(mockVibrate).toHaveBeenCalledWith(55)
+    expect(mockVibrate).toHaveBeenCalledWith(85)
   })
 
   it('triggers success delight double pulse', () => {
     triggerHaptic('success')
-    expect(mockVibrate).toHaveBeenCalledWith([45, 60, 45])
+    expect(mockVibrate).toHaveBeenCalledWith([65, 60, 85])
   })
 
-  it('triggers warning snap pulse with [60, 45, 60]', () => {
+  it('triggers warning snap pulse with [80, 50, 80]', () => {
     triggerHaptic('warning')
-    expect(mockVibrate).toHaveBeenCalledWith([60, 45, 60])
+    expect(mockVibrate).toHaveBeenCalledWith([80, 50, 80])
   })
 
   it('triggers destructive triple pulse', () => {
     triggerHaptic('destructive')
-    expect(mockVibrate).toHaveBeenCalledWith([75, 45, 90])
+    expect(mockVibrate).toHaveBeenCalledWith([90, 50, 90, 50, 110])
   })
 
   it('gracefully handles missing vibrate support using audio impulse without throwing', () => {

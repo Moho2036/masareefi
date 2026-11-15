@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
+import { triggerHaptic } from '../../lib/haptics'
 
 export interface PWAInstallSectionProps {
   isInstallable: boolean
@@ -181,7 +182,14 @@ export const AboutBaseerSection: React.FC<AboutBaseerSectionProps> = ({ onRestar
           </p>
         </div>
 
-        <div className="pt-2 flex justify-start">
+        <div className="pt-2 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => triggerHaptic('impact')}
+          >
+            اختبار الاهتزاز اللمسي
+          </Button>
           <Button
             variant="outline"
             size="sm"
