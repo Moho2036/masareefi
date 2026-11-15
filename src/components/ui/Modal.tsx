@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useMotionValue, animate } from 'motion/react'
 import { cn } from '../../lib/cn'
 import { triggerHaptic } from '../../lib/haptics'
 import { springSheet, isTestEnv } from '../../lib/motionTokens'
+import { openModalStack, lockBodyScroll, unlockBodyScroll } from './modalScrollLock'
 
 export interface ModalProps {
   isOpen: boolean
@@ -16,51 +17,6 @@ export interface ModalProps {
   closeOnOverlayClick?: boolean
   enableHistoryBack?: boolean
   hideCloseButton?: boolean
-}
-
-// Module-level stack tracking open modal IDs for nested modal handling
-const openModalStack: string[] = []
-
-let savedScrollY = 0
-let savedBodyStyle: {
-  overflow: string
-  position: string
-  top: string
-  width: string
-} | null = null
-
-function lockBodyScroll() {
-  if (typeof document === 'undefined') return
-  if (openModalStack.length === 1) {
-    savedScrollY = window.scrollY || window.pageYOffset || 0
-    savedBodyStyle = {
-      overflow: document.body.style.overflow,
-      position: document.body.style.position,
-      top: document.body.style.top,
-      width: document.body.style.width,
-    }
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${savedScrollY}px`
-    document.body.style.width = '100%'
-  }
-}
-
-function unlockBodyScroll() {
-  if (typeof document === 'undefined') return
-  if (openModalStack.length === 0 && savedBodyStyle) {
-    document.body.style.overflow = savedBodyStyle.overflow
-    document.body.style.position = savedBodyStyle.position
-    document.body.style.top = savedBodyStyle.top
-    document.body.style.width = savedBodyStyle.width
-    if (
-      typeof window.scrollTo === 'function' &&
-      !window.scrollTo.toString().includes('notImplementedMethod')
-    ) {
-      window.scrollTo(0, savedScrollY)
-    }
-    savedBodyStyle = null
-  }
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -84,7 +40,9 @@ export const Modal: React.FC<ModalProps> = ({
   const isDraggingSheetRef = useRef(false)
   const touchStartYRef = useRef<number | null>(null)
   const touchStartXRef = useRef<number | null>(null)
+  const lastTouchYRef = useRef<number | null>(null)
   const touchStartTimeRef = useRef<number>(0)
+  const isMovingDownRef = useRef(false)
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -105,8 +63,10 @@ export const Modal: React.FC<ModalProps> = ({
     if (e.touches.length !== 1) return
     touchStartYRef.current = e.touches[0].clientY
     touchStartXRef.current = e.touches[0].clientX ?? 0
+    lastTouchYRef.current = e.touches[0].clientY
     touchStartTimeRef.current = Date.now()
     isDraggingSheetRef.current = false
+    isMovingDownRef.current = false
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -116,12 +76,22 @@ export const Modal: React.FC<ModalProps> = ({
     const diffY = currentY - touchStartYRef.current
     const diffX = currentX - (touchStartXRef.current ?? currentX)
 
-    if (Math.abs(diffY) >= Math.abs(diffX) && diffY > 0) {
+    isMovingDownRef.current = currentY > (lastTouchYRef.current ?? currentY)
+    lastTouchYRef.current = currentY
+
+    if (Math.abs(diffY) >= Math.abs(diffX)) {
       const isAtTop = !contentScrollRef.current || contentScrollRef.current.scrollTop <= 0
-      if (isAtTop || isDraggingSheetRef.current) {
+      if (diffY > 8 && (isAtTop || isDraggingSheetRef.current)) {
         isDraggingSheetRef.current = true
-        const resistedY = Math.max(0, diffY * 0.85)
+        // Initial tactile resistance zone (8px deadzone + 0.78 elastic ratio)
+        const resistedY = Math.max(0, (diffY - 8) * 0.78)
         dragY.set(resistedY)
+      } else if (diffY <= 8 && isDraggingSheetRef.current) {
+        // When pushing back up to cancel, track back down to 0
+        dragY.set(0)
+        if (diffY <= 0) {
+          isDraggingSheetRef.current = false
+        }
       }
     }
   }
@@ -131,7 +101,8 @@ export const Modal: React.FC<ModalProps> = ({
     const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current)
     const velocity = (currentOffset / elapsed) * 1000
 
-    if (isDraggingSheetRef.current && (currentOffset > 70 || velocity > 350)) {
+    // Only close if pulled significantly downwards AND user wasn't actively pushing back up
+    if (isDraggingSheetRef.current && isMovingDownRef.current && (currentOffset > 50 || velocity > 350)) {
       triggerHaptic('tick')
       if (isTestEnv) {
         onClose()
@@ -146,7 +117,9 @@ export const Modal: React.FC<ModalProps> = ({
     }
     touchStartYRef.current = null
     touchStartXRef.current = null
+    lastTouchYRef.current = null
     isDraggingSheetRef.current = false
+    isMovingDownRef.current = false
   }
 
   const allowBackdropClose =

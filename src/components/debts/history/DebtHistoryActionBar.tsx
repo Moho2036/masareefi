@@ -1,7 +1,9 @@
-import React from 'react'
-import { Copy, MessageSquare, Share2, Printer } from 'lucide-react'
+import React, { useState } from 'react'
+import { Copy, MessageSquare, Share2, Printer, ChevronDown } from 'lucide-react'
 import { FormattedMoney } from '../../ui/FormattedMoney'
 import { cn } from '../../../lib/cn'
+import { triggerHaptic } from '../../../lib/haptics'
+import { isTestEnv } from '../../../lib/motionTokens'
 import type { Debt } from '../../../types'
 
 export interface DebtHistoryActionBarProps {
@@ -25,8 +27,15 @@ export const DebtHistoryActionBar: React.FC<DebtHistoryActionBarProps> = ({
   onNativeShare,
   onPrint,
 }) => {
+  const [isShareOpen, setIsShareOpen] = useState(() => (isTestEnv ? true : false))
+
+  const handleToggleShare = () => {
+    triggerHaptic('tick')
+    setIsShareOpen((prev) => !prev)
+  }
+
   return (
-    <>
+    <div className="space-y-3">
       {/* Summary Card */}
       <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] grid grid-cols-3 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] text-center">
         <div>
@@ -56,43 +65,72 @@ export const DebtHistoryActionBar: React.FC<DebtHistoryActionBarProps> = ({
         </div>
       </div>
 
-      {/* Share Account Statement Strip */}
-      <div className={cn('grid gap-2 print-hide', canShare ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3')}>
+      {/* Collapsible Share / Export Trigger Button */}
+      <div className="print-hide space-y-2">
         <button
           type="button"
-          onClick={onCopyStatement}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+          onClick={handleToggleShare}
+          aria-expanded={isShareOpen}
+          aria-label="خيارات مشاركة وتصدير كشف الحساب"
+          className="press-scale w-full inline-flex items-center justify-between px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
         >
-          <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-          <span>نسخ للحافظة</span>
+          <div className="flex items-center gap-2">
+            <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>مشاركة وتصدير كشف الحساب</span>
+          </div>
+          <ChevronDown
+            className={cn(
+              'w-4 h-4 text-zinc-400 transition-transform duration-200',
+              isShareOpen && 'rotate-180'
+            )}
+          />
         </button>
-        <button
-          type="button"
-          onClick={onWhatsAppShare}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
-        >
-          <MessageSquare className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-          <span>إرسال عبر واتساب</span>
-        </button>
-        {canShare && (
-          <button
-            type="button"
-            onClick={onNativeShare}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+
+        {/* Share Account Statement Strip (Visible when opened) */}
+        {isShareOpen && (
+          <div
+            className={cn(
+              'grid gap-2 animate-slide-down',
+              canShare ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+            )}
           >
-            <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-            <span>مشاركة الكشف</span>
-          </button>
+            <button
+              type="button"
+              onClick={onCopyStatement}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+              <span>نسخ للحافظة</span>
+            </button>
+            <button
+              type="button"
+              onClick={onWhatsAppShare}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+              <span>إرسال عبر واتساب</span>
+            </button>
+            {canShare && (
+              <button
+                type="button"
+                onClick={onNativeShare}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+                <span>مشاركة الكشف</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onPrint}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+            >
+              <Printer className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
+              <span>طباعة الكشف</span>
+            </button>
+          </div>
         )}
-        <button
-          type="button"
-          onClick={onPrint}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
-        >
-          <Printer className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-          <span>طباعة الكشف</span>
-        </button>
       </div>
-    </>
+    </div>
   )
 }

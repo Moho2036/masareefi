@@ -1,6 +1,5 @@
 import React from 'react'
 import { Modal } from '../ui/Modal'
-import { Button } from '../ui/Button'
 import { useToast } from '../../hooks/useToast'
 import { useCurrency } from '../../hooks/useCurrency'
 import { useDebtEntriesHistory } from '../../hooks/useDebtEntriesHistory'
@@ -171,17 +170,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           onCancelEdit={paymentsState.handleCancelEdit}
           onSaveEdit={paymentsState.handleSaveEdit}
         />
-
-        <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 print-hide">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full font-bold"
-            onClick={handleClose}
-          >
-            إغلاق
-          </Button>
-        </div>
       </div>
 
       {/* Formal Printable Statement Report (Visible ONLY when printing) */}

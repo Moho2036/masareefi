@@ -350,23 +350,25 @@ export const AppShell: React.FC = () => {
             </button>
 
             {isReportsYearly ? (
-              <YearSelector
-                selectedYear={
-                  searchParams.get('year')
-                    ? Number(searchParams.get('year'))
-                    : new Date().getFullYear()
-                }
-                onSelectYear={(year) => {
-                  setSearchParams(
-                    (prev) => {
-                      const next = new URLSearchParams(prev)
-                      next.set('year', String(year))
-                      return next
-                    },
-                    { replace: true }
-                  )
-                }}
-              />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <YearSelector
+                  selectedYear={
+                    searchParams.get('year')
+                      ? Number(searchParams.get('year'))
+                      : new Date().getFullYear()
+                  }
+                  onSelectYear={(year) => {
+                    setSearchParams(
+                      (prev) => {
+                        const next = new URLSearchParams(prev)
+                        next.set('year', String(year))
+                        return next
+                      },
+                      { replace: true }
+                    )
+                  }}
+                />
+              </div>
             ) : isMonthPage ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
                 {!isCurrentMonth && (

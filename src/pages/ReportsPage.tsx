@@ -4,7 +4,6 @@ import { ar } from 'date-fns/locale'
 import { Printer, Calendar } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { Select } from '../components/ui/Select'
 import { Button } from '../components/ui/Button'
 import { useCategories } from '../hooks/useCategories'
 import { useReportsData } from '../hooks/useReportsData'
@@ -87,13 +86,18 @@ export const ReportsPage: React.FC = () => {
               ]}
             />
             {reports.reportPeriod === 'yearly' && (
-              <div className="w-36">
-                <Select
-                  value={String(reports.selectedYear)}
-                  onChange={(e) => reports.setSelectedYear(Number(e.target.value))}
-                  options={reports.yearOptions}
-                />
-              </div>
+              <select
+                className="sr-only"
+                aria-label="اختيار السنة"
+                value={String(reports.selectedYear)}
+                onChange={(e) => reports.setSelectedYear(Number(e.target.value))}
+              >
+                {reports.yearOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             )}
             <Button
               type="button"

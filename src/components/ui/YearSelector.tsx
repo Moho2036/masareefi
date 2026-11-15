@@ -66,44 +66,52 @@ export const YearSelector: React.FC<YearSelectorProps> = ({
   }, [isOpen])
 
   return (
-    <div ref={containerRef} className={cn('relative inline-flex items-center', className)}>
-      <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 rounded-xl p-0.5 border border-zinc-200/80 dark:border-zinc-700/80 shadow-2xs">
-        {/* Next Year Button (Right Chevron in RTL advances year) */}
-        <button
-          type="button"
-          onClick={() => handleStepYear(1)}
-          className="press-scale p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-white/80 dark:hover:bg-zinc-700/80 transition-colors cursor-pointer"
-          aria-label="السنة التالية"
-          title="السنة التالية"
-        >
-          <ChevronRight className="w-4 h-4 stroke-[2.5]" />
-        </button>
+    <div
+      ref={containerRef}
+      className={cn(
+        'relative inline-flex items-center gap-1 p-1 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none',
+        className
+      )}
+      role="group"
+      aria-label="اختيار السنة المالية"
+    >
+      {/* Next Year Button (Right Chevron in RTL advances year) */}
+      <button
+        type="button"
+        onClick={() => handleStepYear(1)}
+        className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        aria-label="السنة التالية"
+        title="السنة التالية"
+      >
+        <ChevronRight className="w-4 h-4 stroke-[2.2]" />
+      </button>
 
-        {/* Year Label Button */}
-        <button
-          type="button"
-          onClick={handleToggleOpen}
-          aria-label="اختيار السنة"
-          aria-expanded={isOpen}
-          aria-haspopup="dialog"
-          title="اختيار السنة"
-          className="press-scale flex items-center gap-1.5 px-2.5 py-1 text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer select-none"
-        >
-          <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+      {/* Center Interactive Year Title Button */}
+      <button
+        type="button"
+        onClick={handleToggleOpen}
+        aria-label="اختيار السنة"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        title="اختيار السنة"
+        className="flex flex-col items-center justify-center px-1.5 sm:px-2.5 py-1 min-h-[36px] text-center select-none min-w-0 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+          <Calendar className="hidden sm:inline-block w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
           <span>سنة {selectedYear}</span>
-        </button>
+        </div>
+      </button>
 
-        {/* Previous Year Button (Left Chevron in RTL steps back a year) */}
-        <button
-          type="button"
-          onClick={() => handleStepYear(-1)}
-          className="press-scale p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-white/80 dark:hover:bg-zinc-700/80 transition-colors cursor-pointer"
-          aria-label="السنة السابقة"
-          title="السنة السابقة"
-        >
-          <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
-        </button>
-      </div>
+      {/* Previous Year Button (Left Chevron in RTL steps back a year) */}
+      <button
+        type="button"
+        onClick={() => handleStepYear(-1)}
+        className="p-1.5 sm:p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        aria-label="السنة السابقة"
+        title="السنة السابقة"
+      >
+        <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
+      </button>
 
       {/* Dropdown Popover */}
       <PopoverWrapper>
