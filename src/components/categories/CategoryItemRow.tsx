@@ -57,7 +57,7 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
       <div
         dir="ltr"
         className={cn(
-          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden rounded-2xl overflow-hidden',
+          'absolute inset-y-0 left-0 flex items-stretch z-0 sm:hidden print:hidden rounded-2xl overflow-hidden',
           effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}

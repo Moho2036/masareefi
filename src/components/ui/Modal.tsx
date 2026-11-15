@@ -37,6 +37,7 @@ export const Modal: React.FC<ModalProps> = ({
   const modalId = useId()
 
   const dragY = useMotionValue(0)
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false)
   const isDraggingSheetRef = useRef(false)
   const touchStartYRef = useRef<number | null>(null)
   const touchStartXRef = useRef<number | null>(null)
@@ -82,7 +83,10 @@ export const Modal: React.FC<ModalProps> = ({
     if (Math.abs(diffY) >= Math.abs(diffX)) {
       const isAtTop = !contentScrollRef.current || contentScrollRef.current.scrollTop <= 0
       if (diffY > 8 && (isAtTop || isDraggingSheetRef.current)) {
-        isDraggingSheetRef.current = true
+        if (!isDraggingSheetRef.current) {
+          isDraggingSheetRef.current = true
+          setIsDraggingSheet(true)
+        }
         // Initial tactile resistance zone (8px deadzone + 0.78 elastic ratio)
         const resistedY = Math.max(0, (diffY - 8) * 0.78)
         dragY.set(resistedY)
@@ -91,6 +95,7 @@ export const Modal: React.FC<ModalProps> = ({
         dragY.set(0)
         if (diffY <= 0) {
           isDraggingSheetRef.current = false
+          setIsDraggingSheet(false)
         }
       }
     }
@@ -105,12 +110,18 @@ export const Modal: React.FC<ModalProps> = ({
     if (isDraggingSheetRef.current && isMovingDownRef.current && (currentOffset > 50 || velocity > 350)) {
       triggerHaptic('tick')
       if (isTestEnv) {
+        setIsDraggingSheet(false)
         onClose()
       } else {
         animate(dragY, 600, { duration: 0.18, ease: 'easeIn' }).then(() => {
+          setIsDraggingSheet(false)
           onClose()
         })
       }
+    } else if (isDraggingSheetRef.current) {
+      animate(dragY, 0, springSheet).then(() => {
+        setIsDraggingSheet(false)
+      })
     } else {
       animate(dragY, 0, springSheet)
     }
@@ -257,6 +268,7 @@ export const Modal: React.FC<ModalProps> = ({
   // Auto-focus dialog and reset drag offset on open
   useEffect(() => {
     if (isOpen) {
+      isDraggingSheetRef.current = false
       dragY.set(0)
       dialogRef.current?.focus()
     }
@@ -342,7 +354,7 @@ export const Modal: React.FC<ModalProps> = ({
                 ? { y: '100%', transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } }
                 : { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15, ease: 'easeOut' } }
             }
-            style={isMobile ? { y: dragY } : undefined}
+            style={isMobile && isDraggingSheet ? { y: dragY } : undefined}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}

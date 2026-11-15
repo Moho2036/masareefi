@@ -65,6 +65,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
   const touchStartY = useRef<number | null>(null)
   const touchDirection = useRef<'horizontal' | 'vertical' | null>(null)
   const startOffsetRef = useRef(0)
+  const hasMovedRef = useRef(false)
   const icon = cat?.icon ?? '➕'
   const color = cat?.color ?? '#94A3B8'
 
@@ -88,7 +89,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
       <div
         dir="ltr"
         className={cn(
-          'absolute inset-y-0 end-0 flex items-stretch z-0 sm:hidden print:hidden overflow-hidden',
+          'absolute inset-y-0 left-0 flex items-stretch z-0 sm:hidden print:hidden overflow-hidden',
           effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
@@ -193,12 +194,17 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             onSwipeChange?.(false)
             return
           }
+          if (hasMovedRef.current) {
+            hasMovedRef.current = false
+            return
+          }
           openEdit(tx)
         }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0].clientX
           touchStartY.current = e.touches[0].clientY
           touchDirection.current = null
+          hasMovedRef.current = false
           startOffsetRef.current = isSwipedOpen ? maxSwipe : 0
           setSwipeOffset(startOffsetRef.current)
           setIsDragging(true)
@@ -213,6 +219,10 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           const diffY = currentY - touchStartY.current
           const absX = Math.abs(diffX)
           const absY = Math.abs(diffY)
+
+          if (absX > 8 || absY > 8) {
+            hasMovedRef.current = true
+          }
 
           if (touchDirection.current === null) {
             if (absX < 8 && absY < 8) return
