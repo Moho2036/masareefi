@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, Check } from 'lucide-react'
 import { Input } from '../ui/Input'
 import { DatePickerInput } from '../ui/DatePickerInput'
@@ -68,6 +68,34 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
   scheduleNextIfPast,
   onScheduleNextIfPastChange,
 }) => {
+  const extraDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showExtraFrequencyDropdown) return
+
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      if (extraDropdownRef.current && !extraDropdownRef.current.contains(e.target as Node)) {
+        onCloseExtraFrequencyDropdown()
+      }
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseExtraFrequencyDropdown()
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showExtraFrequencyDropdown, onCloseExtraFrequencyDropdown])
+
   return (
     <div className="space-y-3.5">
       {/* Date Picker */}
@@ -99,8 +127,8 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
       <div>
         <Input
           type="text"
-          label="الوصف / العنوان (اختياري)"
-          placeholder="مثال: فاتورة كهرباء، مشتريات تموينية..."
+          label="بيان المعاملة / المتجر (اختياري)"
+          placeholder="مثال: كارفور، فاتورة كهرباء، مطعم..."
           value={title}
           onChange={(e) => {
             if (isLockedTransaction) return
@@ -138,7 +166,7 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
               onClick={onShowNoteField}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
-              <span>+ إضافة ملاحظة تفصيلية</span>
+              <span>+ إضافة ملاحظة إضافية</span>
             </button>
             <Toggle
               checked={isRecurring}
@@ -154,7 +182,7 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
               onClick={onShowNoteField}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
-              <span>+ إضافة ملاحظة تفصيلية</span>
+              <span>+ إضافة ملاحظة إضافية</span>
             </button>
           </div>
         )
@@ -163,7 +191,7 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                ملاحظة تفصيلية (اختياري)
+                ملاحظات إضافية (اختياري)
               </label>
               {!note.trim() && (
                 <button
@@ -289,7 +317,10 @@ export const TransactionDetailsSection: React.FC<TransactionDetailsSectionProps>
 
             {/* Dropdown menu for extra frequencies */}
             {showExtraFrequencyDropdown && (
-              <div className="mt-2 p-1.5 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-lg grid grid-cols-2 gap-1.5">
+              <div
+                ref={extraDropdownRef}
+                className="mt-2 p-1.5 bg-white dark:bg-[#121215] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] shadow-lg grid grid-cols-2 gap-1.5"
+              >
                 {[
                   { value: 'daily' as Frequency, label: 'يومي' },
                   { value: 'biweekly' as Frequency, label: 'كل أسبوعين' },

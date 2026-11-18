@@ -2,6 +2,7 @@ import React from 'react'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { FormattedMoney } from '../ui/FormattedMoney'
 import { toFils } from '../../lib/money'
+import { triggerHaptic } from '../../lib/haptics'
 import { hasMathOperator, evaluateMathExpression } from '../../lib/mathExpression'
 import { cn } from '../../lib/cn'
 import type { TxType } from '../../types'
@@ -111,6 +112,45 @@ export const TransactionAmountSection: React.FC<TransactionAmountSectionProps> =
             {currencyConfig.symbol}
           </span>
         </div>
+
+        {/* Mini Math Operator Bar (Accessible calculation on mobile & desktop) */}
+        {!isLockedTransaction && (
+          <div className="flex items-center gap-1.5 mt-2 px-0.5 select-none">
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold me-0.5">حاسبة:</span>
+            {[
+              { label: '+', op: '+' },
+              { label: '-', op: '-' },
+              { label: '×', op: '*' },
+              { label: '÷', op: '/' },
+            ].map(({ label, op }) => (
+              <button
+                key={op}
+                type="button"
+                onClick={() => {
+                  triggerHaptic('tick')
+                  onAmountChange(amountStr ? `${amountStr}${op}` : op)
+                  amountInputRef.current?.focus()
+                }}
+                className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
+                aria-label={`إضافة عملية ${label}`}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('impact')
+                handleEvaluateMath()
+              }}
+              disabled={!hasMathOperator(amountStr)}
+              className="px-2.5 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="حساب الناتج"
+            >
+              =
+            </button>
+          </div>
+        )}
 
         {/* Guidance Subline for Expense in Current Month */}
         {type === 'expense' && forecast && forecast.isCurrentMonth && (

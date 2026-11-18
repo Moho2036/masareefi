@@ -38,3 +38,4 @@ ai_studio_review/
 *.njsproj
 *.sln
 *.sw?
+.agents/

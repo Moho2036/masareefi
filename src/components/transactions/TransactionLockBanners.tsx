@@ -58,7 +58,7 @@ export const TransactionLockBanners: React.FC<TransactionLockBannersProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
             >
               <span>الانتقال إلى سجل الديون</span>
-              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+              <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
         )}
@@ -80,7 +80,7 @@ export const TransactionLockBanners: React.FC<TransactionLockBannersProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
             >
               <span>الانتقال إلى سجل الديون</span>
-              <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+              <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
         ) : (
@@ -116,7 +116,7 @@ export const TransactionLockBanners: React.FC<TransactionLockBannersProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-2xs dark:shadow-none"
           >
             <span>الانتقال إلى صفحة الجمعيات</span>
-            <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+            <ArrowLeft className="w-3.5 h-3.5" />
           </Link>
         </div>
       )}

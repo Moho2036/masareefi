@@ -127,7 +127,8 @@ describe('PinLockGate Component', () => {
       fireEvent.click(screen.getByRole('button', { name: '9' }))
       fireEvent.click(screen.getByRole('button', { name: '9' }))
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(50)
+        await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(100)
       })
     }
 
@@ -141,7 +142,8 @@ describe('PinLockGate Component', () => {
     fireEvent.click(screen.getByRole('button', { name: '9' }))
     fireEvent.click(screen.getByRole('button', { name: '9' }))
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(50)
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(100)
     })
 
     expect(

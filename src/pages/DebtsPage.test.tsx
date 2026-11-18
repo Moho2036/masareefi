@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { DebtsPage } from './DebtsPage'
 import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
 import type { Debt } from '../types'
+
+const renderDebtsPage = (initialEntries?: string[]) =>
+  render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <DebtsPage />
+    </MemoryRouter>
+  )
 
 vi.mock('../lib/firebase', () => ({
   db: {},
@@ -66,6 +74,14 @@ vi.mock('../hooks/useDebts', () => ({
   }),
 }))
 
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => ({
+    data: { currency: 'JOD', monthStartDay: 1 },
+    loading: false,
+    updateSettings: vi.fn(),
+  }),
+}))
+
 vi.mock('../hooks/useCurrency', () => ({
   useCurrency: () => ({
     currency: 'JOD',
@@ -100,14 +116,14 @@ describe('DebtsPage Component', () => {
   })
 
   it('renders search input and debt cards', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     expect(screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i)).toBeInTheDocument()
     expect(screen.getByText('أحمد محمود')).toBeInTheDocument()
     expect(screen.getByText('خالد عبد الله')).toBeInTheDocument()
   })
 
   it('filters debts when typing a person name or note in search input', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const searchInput = screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i) as HTMLInputElement
 
     fireEvent.change(searchInput, { target: { value: 'أحمد' } })
@@ -121,7 +137,7 @@ describe('DebtsPage Component', () => {
   })
 
   it('shows clear button (X) when search is active and clears search when clicked', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const searchInput = screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i) as HTMLInputElement
 
     fireEvent.change(searchInput, { target: { value: 'أحمد' } })
@@ -135,7 +151,7 @@ describe('DebtsPage Component', () => {
   })
 
   it('shows empty state with "مسح البحث" action when no results match and resets search', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const searchInput = screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i) as HTMLInputElement
 
     fireEvent.change(searchInput, { target: { value: 'اسم_غير_موجود' } })
@@ -152,7 +168,7 @@ describe('DebtsPage Component', () => {
   })
 
   it('opens delete confirmation modal with deleteTransactions checked by default to prevent orphaned records', async () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
     fireEvent.click(deleteButtons[0]) // أحمد محمود has paidFils > 0
 
@@ -173,7 +189,7 @@ describe('DebtsPage Component', () => {
   })
 
   it('allows unchecking deleteTransactions and calls deleteDebt with deleteTransactions = false', async () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
     fireEvent.click(deleteButtons[0])
 
@@ -194,7 +210,7 @@ describe('DebtsPage Component', () => {
   it('shows deleteTransactions checkbox for zero-payment debt when checkDebtInitialTransactionExists returns true', async () => {
     vi.mocked(checkDebtInitialTransactionExists).mockResolvedValue(true)
 
-    render(<DebtsPage />)
+    renderDebtsPage()
     const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
     // debt-3 has paidFils: 0 and payments: [] (index 1 after debt-1)
     fireEvent.click(deleteButtons[1])
@@ -208,12 +224,12 @@ describe('DebtsPage Component', () => {
   })
 
   it('renders overdue count pill', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     expect(screen.getByRole('button', { name: /المتأخرة عن الموعد \(0\)/i })).toBeInTheDocument()
   })
 
   it('filters debts when searching by amount in Western or Eastern numerals', () => {
-    render(<DebtsPage />)
+    renderDebtsPage()
     const searchInput = screen.getByPlaceholderText(/ابحث باسم الشخص أو الملاحظة/i) as HTMLInputElement
 
     // Remaining of debt-1 is 60 JOD (60000 fils)
@@ -245,9 +261,9 @@ describe('DebtsPage Component', () => {
       },
     ]
 
-    render(<DebtsPage />)
+    renderDebtsPage()
 
-    const mergeBtn = screen.getByRole('button', { name: /دمج ديون أحمد محمود في سجل موحد/i })
+    const mergeBtn = screen.getByRole('button', { name: /دمج ديون.*أحمد محمود/i })
     expect(mergeBtn).toBeInTheDocument()
     fireEvent.click(mergeBtn)
 
@@ -265,5 +281,12 @@ describe('DebtsPage Component', () => {
         ])
       )
     })
+  })
+
+  it('initializes with typeFilter from URL search params (?type=lent) (GAP-03)', () => {
+    renderDebtsPage(['/debts?type=lent'])
+    // أحمد محمود is lent, خالد عبد الله is borrowed
+    expect(screen.getByText('أحمد محمود')).toBeInTheDocument()
+    expect(screen.queryByText('خالد عبد الله')).not.toBeInTheDocument()
   })
 })

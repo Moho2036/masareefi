@@ -273,20 +273,20 @@ export const AppShell: React.FC = () => {
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#09090B]/90 backdrop-blur-md border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all min-w-0 max-w-full">
           {/* Mobile brand logo & User avatar shortcut */}
-          <div className="flex items-center gap-2.5 lg:hidden shrink min-w-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 lg:hidden shrink min-w-0">
             <Link to="/settings" className="press-scale flex items-center gap-2 shrink-0" title="الإعدادات">
               {user?.photoURL ? (
                 <img
                   src={user.photoURL}
                   alt={displayName}
-                  className="w-8 h-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                  className="w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
                   referrerPolicy="no-referrer"
                 />
               ) : (
                 <div
                   style={{ backgroundColor: settings?.avatarColor || undefined }}
                   className={cn(
-                    'w-8 h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs transition-colors',
+                    'w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs transition-colors',
                     !settings?.avatarColor && 'bg-blue-600'
                   )}
                 >
@@ -294,17 +294,9 @@ export const AppShell: React.FC = () => {
                 </div>
               )}
             </Link>
-            <span className="text-lg font-black text-zinc-900 dark:text-white shrink-0">
+            <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
               بَصير
             </span>
-            {pathname !== '/' && (
-              <>
-                <span className="text-zinc-300 dark:text-zinc-700 font-light shrink-0">/</span>
-                <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 truncate">
-                  {currentPageTitle}
-                </span>
-              </>
-            )}
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
@@ -314,7 +306,7 @@ export const AppShell: React.FC = () => {
           </div>
 
           {/* Top Header Actions / Month Controls */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Privacy Mode (hideBalances) Toggle Button */}
             <button
               type="button"
@@ -322,9 +314,9 @@ export const AppShell: React.FC = () => {
               aria-label={settings?.hideBalances ? 'إظهار الأرصدة' : 'إخفاء الأرصدة'}
               title={settings?.hideBalances ? 'إظهار الأرصدة' : 'وضع الخصوصية (إخفاء الأرصدة)'}
               className={cn(
-                'relative p-2 rounded-xl transition-colors cursor-pointer',
+                'relative p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer',
                 settings?.hideBalances
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                  ? 'text-blue-600 dark:text-blue-400 bg-zinc-100 dark:bg-zinc-800'
                   : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               )}
             >
@@ -346,7 +338,7 @@ export const AppShell: React.FC = () => {
               aria-label="مركز التنبيهات"
               data-tour="notifications-bell"
               title="مركز التنبيهات"
-              className="relative p-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="relative p-1.5 sm:p-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <Bell className="w-5 h-5 stroke-[2.2]" />
               {unreadCount > 0 && (
@@ -369,7 +361,7 @@ export const AppShell: React.FC = () => {
                   <button
                     type="button"
                     onClick={goToCurrentMonth}
-                    className="press-scale hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 transition-colors cursor-pointer"
+                    className="press-scale hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl text-zinc-700 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400 bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
                     title="العودة إلى الشهر الحالي"
                   >
                     <RotateCcw className="w-3 h-3" />

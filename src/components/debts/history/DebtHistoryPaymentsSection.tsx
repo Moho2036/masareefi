@@ -95,7 +95,7 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
               type="button"
               disabled={isCompacting || isSavingEdit || Boolean(deletingId)}
               onClick={onCompact}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
             >
               {isCompacting ? 'جاري الدمج...' : 'دمج الدفعات القديمة'}
             </button>
@@ -147,7 +147,7 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                               inputMode="decimal"
                               value={editAmountStr}
                               onChange={(e) => setEditAmountStr(toWesternDigits(e.target.value))}
-                              className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
+                              className="w-full text-base sm:text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                               required
                             />
                             <span className="text-[10px] text-zinc-400 font-bold">{currencySymbol}</span>
@@ -169,7 +169,7 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                           type="text"
                           value={editNote}
                           onChange={(e) => setEditNote(e.target.value)}
-                          className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
+                          className="w-full text-base sm:text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                           placeholder="ملاحظة للدفعة..."
                         />
                       </div>
@@ -211,11 +211,12 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <div
+                              dir="ltr"
                               className={cn(
                                 'text-sm font-black tabular-nums',
                                 isLent
                                   ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-amber-600 dark:text-amber-400'
+                                  : 'text-red-600 dark:text-red-400'
                               )}
                             >
                               {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}
@@ -284,11 +285,12 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <div
+                            dir="ltr"
                             className={cn(
                               'text-sm font-black tabular-nums',
                               isLent
                                 ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400'
+                                : 'text-red-600 dark:text-red-400'
                             )}
                           >
                             {isLent ? '+' : '-'} {formatCurrency(p.amountFils)}

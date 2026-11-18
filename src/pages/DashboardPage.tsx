@@ -8,7 +8,7 @@ import { DashboardHeroSection } from '../components/dashboard/DashboardHeroSecti
 import { DashboardRecentTransactions } from '../components/dashboard/DashboardRecentTransactions'
 import { DashboardUpcomingSection } from '../components/dashboard/DashboardUpcomingSection'
 import { useDashboardData } from '../hooks/useDashboardData'
-import { isTestEnv } from '../lib/motionTokens'
+import { isTestEnv, pageTransition } from '../lib/motionTokens'
 
 export const DashboardPage: React.FC = () => {
   const {
@@ -38,6 +38,15 @@ export const DashboardPage: React.FC = () => {
     goToCurrentMonth,
   } = useDashboardData()
 
+  const [prevStart, setPrevStart] = React.useState(() => range.start.getTime())
+  const [slideDirection, setSlideDirection] = React.useState<number>(1)
+
+  const currentStart = range.start.getTime()
+  if (currentStart !== prevStart) {
+    setPrevStart(currentStart)
+    setSlideDirection(currentStart > prevStart ? 1 : -1)
+  }
+
   return (
     <div className="space-y-6 animate-slide-up">
       {/* Header with Title and Desktop-only Quick Add */}
@@ -62,10 +71,10 @@ export const DashboardPage: React.FC = () => {
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={range.start.toISOString().slice(0, 7)}
-          initial={isTestEnv ? false : { opacity: 0.85, y: 8 }}
+          initial={isTestEnv ? false : { opacity: 0.85, y: slideDirection * 10 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={isTestEnv ? undefined : { opacity: 0.85, y: -8 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          exit={isTestEnv ? undefined : { opacity: 0.85, y: -slideDirection * 10 }}
+          transition={pageTransition}
           className="space-y-6"
         >
           {/* 1. Hero Card: Clean Swiss Surface */}

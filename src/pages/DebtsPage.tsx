@@ -1,12 +1,6 @@
 import React, { useState, useMemo, useDeferredValue, useEffect, useCallback } from 'react'
-import {
-  HandCoins,
-  Plus,
-  X,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
-} from 'lucide-react'
+import { useSearchParams } from 'react-router'
+import { HandCoins, Plus, X, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -23,19 +17,20 @@ import { motion, AnimatePresence } from 'motion/react'
 import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../lib/motionTokens'
 import { triggerHaptic } from '../lib/haptics'
 import { useAuth } from '../hooks/useAuth'
-
-const PresenceWrapper = isTestEnv ? React.Fragment : AnimatePresence
-const MotionDiv = isTestEnv ? 'div' : motion.div
 import { useDebts } from '../hooks/useDebts'
 import { useToast } from '../hooks/useToast'
 import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
 import { calculateDebtSummary, filterDebts, isDebtOverdue, groupDebtsByPerson } from '../lib/debts'
 import type { Debt, DebtType } from '../types'
 
+const PresenceWrapper = isTestEnv ? React.Fragment : AnimatePresence
+const MotionDiv = isTestEnv ? 'div' : motion.div
+
 export const DebtsPage: React.FC = () => {
   const { user } = useAuth()
   const { data: debts, loading } = useDebts()
   const { showToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -53,20 +48,38 @@ export const DebtsPage: React.FC = () => {
     return debts.find((d) => d.id === historyDebtId) ?? null
   }, [debts, historyDebtId])
 
-  // Filters state
+  // Filters state with URL deep linking as single source of truth (GAP-03)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
-  const [typeFilter, setTypeFilter] = useState<'all' | DebtType>('all')
+  const typeParam = searchParams.get('type')
+  const typeFilter: 'all' | DebtType = typeParam === 'lent' || typeParam === 'borrowed' ? typeParam : 'all'
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'settled' | 'overdue'>('all')
 
-  // Summary KPIs
-  const summary = useMemo(() => {
-    return calculateDebtSummary(debts)
-  }, [debts])
+  const handleTypeFilterChange = useCallback((newType: 'all' | DebtType) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (newType === 'all') {
+        next.delete('type')
+      } else {
+        next.set('type', newType)
+      }
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
 
-  const overdueCount = useMemo(() => {
-    return debts.filter((d) => isDebtOverdue(d)).length
-  }, [debts])
+  // Summary KPIs
+  const summary = useMemo(() => calculateDebtSummary(debts), [debts])
+
+  // Scoped debts for counts parity with active typeFilter (GAP-02)
+  const scopedDebts = useMemo(() => {
+    if (typeFilter === 'all') return debts
+    return debts.filter((d) => d.type === typeFilter)
+  }, [debts, typeFilter])
+
+  const scopedTotalCount = scopedDebts.length
+  const scopedActiveCount = useMemo(() => scopedDebts.filter((d) => !d.settled).length, [scopedDebts])
+  const scopedOverdueCount = useMemo(() => scopedDebts.filter((d) => isDebtOverdue(d)).length, [scopedDebts])
+  const scopedSettledCount = useMemo(() => scopedDebts.filter((d) => d.settled).length, [scopedDebts])
 
   // Filtered debts (using deferredSearch to prevent keyboard freeze on mobile)
   const filteredDebts = useMemo(() => {
@@ -224,6 +237,17 @@ export const DebtsPage: React.FC = () => {
     }
   }
 
+  const renderDebtCard = useCallback((debt: Debt) => (
+    <DebtCard
+      key={debt.id}
+      debt={debt}
+      onOpenPaymentModal={handleOpenPaymentModal}
+      onOpenHistoryModal={handleOpenHistoryModal}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+    />
+  ), [handleOpenPaymentModal, handleOpenHistoryModal, handleEdit, handleDelete])
+
   return (
     <div className="space-y-6 animate-slide-up">
       <PageHeader
@@ -241,22 +265,19 @@ export const DebtsPage: React.FC = () => {
         }
       />
 
-      <DebtsSummaryCards
-        summary={summary}
-        loading={loading}
-      />
+      <DebtsSummaryCards summary={summary} loading={loading} />
 
       <DebtsFilterBar
         search={search}
         setSearch={setSearch}
         typeFilter={typeFilter}
-        setTypeFilter={setTypeFilter}
+        setTypeFilter={handleTypeFilterChange}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
-        totalCount={debts.length}
-        activeCount={summary.lentActiveCount + summary.borrowedActiveCount}
-        overdueCount={overdueCount}
-        settledCount={summary.settledCount}
+        totalCount={scopedTotalCount}
+        activeCount={scopedActiveCount}
+        overdueCount={scopedOverdueCount}
+        settledCount={scopedSettledCount}
       />
 
       <DebtsMergeBanner
@@ -297,7 +318,7 @@ export const DebtsPage: React.FC = () => {
                       variant="outline"
                       onClick={() => {
                         setSearch('')
-                        setTypeFilter('all')
+                        handleTypeFilterChange('all')
                         setStatusFilter('all')
                       }}
                       icon={<X className="w-4 h-4" />}
@@ -316,16 +337,7 @@ export const DebtsPage: React.FC = () => {
             <div className="space-y-6">
               {activeDebts.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {activeDebts.map((debt) => (
-                    <DebtCard
-                      key={debt.id}
-                      debt={debt}
-                      onOpenPaymentModal={handleOpenPaymentModal}
-                      onOpenHistoryModal={handleOpenHistoryModal}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
+                  {activeDebts.map(renderDebtCard)}
                 </div>
               ) : (
                 <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] p-6 text-center shadow-2xs dark:shadow-none">
@@ -355,16 +367,7 @@ export const DebtsPage: React.FC = () => {
                   </button>
                   {isSettledExpanded && (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-slide-down">
-                      {settledDebts.map((debt) => (
-                        <DebtCard
-                          key={debt.id}
-                          debt={debt}
-                          onOpenPaymentModal={handleOpenPaymentModal}
-                          onOpenHistoryModal={handleOpenHistoryModal}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                        />
-                      ))}
+                      {settledDebts.map(renderDebtCard)}
                     </div>
                   )}
                 </div>
@@ -372,16 +375,7 @@ export const DebtsPage: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredDebts.map((debt) => (
-                <DebtCard
-                  key={debt.id}
-                  debt={debt}
-                  onOpenPaymentModal={handleOpenPaymentModal}
-                  onOpenHistoryModal={handleOpenHistoryModal}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
+              {filteredDebts.map(renderDebtCard)}
             </div>
           )}
         </MotionDiv>

@@ -45,7 +45,7 @@ describe('DebtCard Component', () => {
     )
 
     expect(screen.getByText('عمر التميمي')).toBeInTheDocument()
-    expect(screen.getByText('60 د.أ')).toBeInTheDocument() // 100 - 40 = 60
+    expect(screen.getByText('60')).toBeInTheDocument() // 100 - 40 = 60
     expect(screen.getByText('40% مسدد')).toBeInTheDocument()
     expect(screen.getByText('لي (مستحق)')).toBeInTheDocument()
   })
@@ -94,12 +94,13 @@ describe('DebtCard Component', () => {
     }
 
     const onOpenPaymentModal = vi.fn()
+    const onOpenHistoryModal = vi.fn()
 
     render(
       <DebtCard
         debt={maxDebt}
         onOpenPaymentModal={onOpenPaymentModal}
-        onOpenHistoryModal={vi.fn()}
+        onOpenHistoryModal={onOpenHistoryModal}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
       />
@@ -109,6 +110,6 @@ describe('DebtCard Component', () => {
     expect(compactBtn).toBeInTheDocument()
 
     fireEvent.click(compactBtn)
-    expect(onOpenPaymentModal).toHaveBeenCalledWith(maxDebt)
+    expect(onOpenHistoryModal).toHaveBeenCalledWith(maxDebt)
   })
 })

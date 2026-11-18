@@ -12,6 +12,26 @@ import type { TransactionSortOption } from '../../lib/aggregate'
 
 const MotionDiv = isTestEnv ? 'div' : motion.div
 
+const getPaginationPages = (current: number, total: number): (number | '...')[] => {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const pages: (number | '...')[] = [1]
+  if (current > 3) {
+    pages.push('...')
+  }
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  if (current < total - 2) {
+    pages.push('...')
+  }
+  pages.push(total)
+  return pages
+}
+
 export interface DayGroupItem {
   date: Date
   dateKey: string
@@ -62,12 +82,28 @@ export const DayGroupedTransactionList: React.FC<DayGroupedTransactionListProps>
 }) => {
   if (loading && rawTransactionsCount === 0) {
     return (
-      <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-28 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] animate-pulse"
-          />
+      <div className="space-y-5 animate-pulse" aria-label="جاري تحميل المعاملات...">
+        {[1, 2].map((g) => (
+          <div key={g} className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+              <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+            </div>
+            <div className="bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none divide-y divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden">
+              {[1, 2].map((r) => (
+                <div key={r} className="p-3 sm:p-3.5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 shrink-0" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                      <div className="h-3 w-20 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                    </div>
+                  </div>
+                  <div className="h-5 w-16 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     )
@@ -173,15 +209,14 @@ export const DayGroupedTransactionList: React.FC<DayGroupedTransactionListProps>
 
       {/* Pagination Controls */}
       {!isPrinting && totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 p-3.5 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none text-xs font-semibold print-hide">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-white dark:bg-[#121215] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none text-xs font-semibold print-hide">
           <div className="text-zinc-500 dark:text-zinc-400">
-            صفحة <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentPage}</span> من{' '}
-            <span className="font-bold text-zinc-800 dark:text-zinc-200">{totalPages}</span>
+            صفحة {currentPage} من {totalPages}
             <span className="ms-1.5 text-[11px] text-zinc-400">
               ({filteredCount} معاملة)
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
             <Button
               variant="outline"
               size="sm"
@@ -191,6 +226,29 @@ export const DayGroupedTransactionList: React.FC<DayGroupedTransactionListProps>
             >
               السابق
             </Button>
+            <div className="flex items-center gap-1">
+              {getPaginationPages(currentPage, totalPages).map((p, idx) =>
+                p === '...' ? (
+                  <span key={`ell-${idx}`} className="px-1 text-zinc-400 select-none">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => onPageChange(Number(p))}
+                    aria-label={`انتقال إلى صفحة ${p}`}
+                    aria-current={currentPage === p ? 'page' : undefined}
+                    className={cn(
+                      'w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center select-none',
+                      currentPage === p
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    )}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            </div>
             <Button
               variant="outline"
               size="sm"

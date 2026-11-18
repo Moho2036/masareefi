@@ -147,7 +147,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
             className={`text-base font-black ${
               remainingFils > 0
                 ? isLent
-                  ? 'text-blue-600'
+                  ? 'text-emerald-600'
                   : 'text-red-600'
                 : 'text-zinc-500'
             }`}
@@ -178,12 +178,12 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
               return (
                 <tr key={entry.id || idx}>
                   <td className="p-2 text-zinc-500">{toWesternDigits(String(idx + 1))}</td>
-                  <td className="p-2 font-mono text-zinc-800">
+                  <td className="p-2 tabular-nums text-zinc-800">
                     {toWesternDigits(formatDate(entryDate, 'yyyy/MM/dd'))}
                   </td>
                   <td className="p-2 font-bold text-zinc-900">{entry.title || 'سلفة / حركة دين'}</td>
                   <td className="p-2 text-zinc-600">{entry.note || '—'}</td>
-                  <td className="p-2 text-end font-black font-mono text-zinc-900">
+                  <td className="p-2 text-end font-black tabular-nums text-zinc-900">
                     <FormattedMoney amountFils={entry.amountFils} />
                   </td>
                 </tr>
@@ -195,7 +195,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
               <td colSpan={4} className="p-2 text-start text-zinc-900">
                 مجموع أصل الدين والسلف
               </td>
-              <td className="p-2 text-end font-mono text-zinc-900">
+              <td className="p-2 text-end font-bold tabular-nums text-zinc-900">
                 <FormattedMoney amountFils={totalEntriesFils} />
               </td>
             </tr>
@@ -229,12 +229,12 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
                 return (
                   <tr key={pmt.id || idx}>
                     <td className="p-2 text-zinc-500">{toWesternDigits(String(idx + 1))}</td>
-                    <td className="p-2 font-mono text-zinc-800">
+                    <td className="p-2 tabular-nums text-zinc-800">
                       {toWesternDigits(formatDate(pmtDate, 'yyyy/MM/dd'))}
                     </td>
                     <td className="p-2 font-bold text-zinc-900">دفعة سداد</td>
                     <td className="p-2 text-zinc-600">{pmt.note || '—'}</td>
-                    <td className="p-2 text-end font-black font-mono text-emerald-600">
+                    <td className="p-2 text-end font-black tabular-nums text-emerald-600">
                       <FormattedMoney amountFils={pmt.amountFils} />
                     </td>
                   </tr>
@@ -246,7 +246,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
                 <td colSpan={4} className="p-2 text-start text-zinc-900">
                   إجمالي المبالغ المسددة
                 </td>
-                <td className="p-2 text-end font-mono text-emerald-600">
+                <td className="p-2 text-end font-bold tabular-nums text-emerald-600">
                   <FormattedMoney amountFils={totalPaymentsFils} />
                 </td>
               </tr>

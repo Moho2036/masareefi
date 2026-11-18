@@ -8,7 +8,6 @@ import {
   AlertCircle,
   AlertTriangle,
 } from 'lucide-react'
-import { Button } from '../ui/Button'
 import { FormattedMoney } from '../ui/FormattedMoney'
 import { HeroCardSkeleton } from '../skeletons/DashboardSkeleton'
 import { formatFinancialMonthLabel } from '../../lib/dates'
@@ -50,30 +49,10 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   return (
     <div
       data-tour="hero-balance"
-      className="bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none relative overflow-hidden rounded-2xl p-5 sm:p-6 space-y-5 flex flex-col justify-between transition-all"
+      className="bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none relative overflow-hidden rounded-2xl p-4 sm:p-5 space-y-5 flex flex-col justify-between transition-all"
     >
       {/* Top highlight bar */}
       <div className={cn('h-1 w-full absolute top-0 inset-x-0 transition-colors duration-300', heroTopBar)} />
-
-      {/* Warning banner when browsing a different month (integrated Swiss flat divider style) */}
-      {!isCurrentFiscalMonth && (
-        <div className="pb-3 border-b border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in">
-          <div className="flex items-center gap-2 min-w-0">
-            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="truncate font-medium text-zinc-800 dark:text-zinc-200">
-              أنت تستعرض حالياً بيانات شهر {formatFinancialMonthLabel(range, monthStartDay)}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToCurrentMonth}
-            className="shrink-0 text-xs font-bold"
-          >
-            العودة إلى الشهر الحالي
-          </Button>
-        </div>
-      )}
 
       {/* Header Row */}
       <div className="flex items-center justify-between gap-2 pt-0.5">
@@ -102,7 +81,7 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-3.5 border-t border-[#E4E4E7] dark:border-[#27272A]">
         <Link
           to="/transactions?type=income"
-          className="flex flex-col gap-1 pe-3 hover:opacity-80 transition-opacity cursor-pointer"
+          className="flex flex-col gap-1 ps-2 sm:ps-3 pe-3 hover:opacity-80 transition-opacity cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
           title="عرض كافة معاملات الدخل"
         >
           <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -116,7 +95,7 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
 
         <Link
           to="/transactions?type=expense"
-          className="flex flex-col gap-1 ps-4 hover:opacity-80 transition-opacity cursor-pointer"
+          className="flex flex-col gap-1 ps-3 sm:ps-4 pe-2 sm:pe-3 hover:opacity-80 transition-opacity cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
           title="عرض كافة معاملات المصاريف"
         >
           <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -132,7 +111,7 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       {/* Daily Safe Budget Clean Footer Row */}
       <Link
         to="/reports"
-        className="flex items-center justify-between pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] text-xs hover:opacity-80 transition-opacity group cursor-pointer"
+        className="flex items-center justify-between pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] text-xs hover:opacity-80 transition-opacity group cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
         title="عرض التفاصيل في التقارير"
       >
         <div className="flex items-center gap-1.5 font-semibold text-zinc-600 dark:text-zinc-300">
@@ -159,29 +138,49 @@ export const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </div>
       </Link>
 
+      {/* Warning banner when browsing a different month (integrated at bottom of card) */}
+      {!isCurrentFiscalMonth && (
+        <button
+          type="button"
+          onClick={goToCurrentMonth}
+          aria-label="العودة إلى الشهر الحالي"
+          className="pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] w-full flex items-center justify-between gap-2 text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer group text-start focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none rounded-lg"
+          title="العودة إلى الشهر الحالي"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+              أنت تستعرض حالياً بيانات شهر {formatFinancialMonthLabel(range, monthStartDay)}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 shrink-0 group-hover:underline">
+            العودة للحالي
+          </span>
+        </button>
+      )}
+
       {/* Proactive alert for next cycle soon obligations (within 3 days of new cycle) */}
       {forecast.isCurrentMonth && (forecast.nextCycleSoonObligationsFils ?? 0) > 0 && (
-        <Link
-          to={
-            (forecast.nextCycleSoonRecurringCount ?? 0) > 0 && (forecast.nextCycleSoonDebtCount ?? 0) === 0
-              ? '/recurring'
-              : (forecast.nextCycleSoonDebtCount ?? 0) > 0 && (forecast.nextCycleSoonRecurringCount ?? 0) === 0
-                ? '/debts'
-                : '/recurring'
-          }
-          className="pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between gap-2 text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer group"
+        <button
+          type="button"
+          onClick={() => {
+            const section = document.getElementById('upcoming-obligations-section')
+            if (section) {
+              section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          }}
+          className="pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] w-full flex items-center justify-between gap-2 text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer group text-start focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none rounded-lg"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="font-semibold">
-              تنبيه مطلع الدورة القادمة: لديك{' '}
-              {formatObligationsCount(forecast.nextCycleSoonCount ?? 1)}{' '}
-              خلال أقل من 3 أيام بقيمة{' '}
-              <FormattedMoney amountFils={forecast.nextCycleSoonObligationsFils!} />.
+            <span className="font-semibold truncate">
+              مستحق مطلع الدورة (خلال 3 أيام):{' '}
+              {formatObligationsCount(forecast.nextCycleSoonCount ?? 1)} بقيمة{' '}
+              <FormattedMoney amountFils={forecast.nextCycleSoonObligationsFils!} />
             </span>
           </div>
           <ChevronLeft className="w-4 h-4 text-zinc-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
-        </Link>
+        </button>
       )}
     </div>
   )

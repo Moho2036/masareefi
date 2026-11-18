@@ -8,9 +8,9 @@ import {
   ExternalLink,
   Users,
 } from 'lucide-react'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { CategoryIcon } from '../ui/CategoryIcon'
 import { triggerHaptic } from '../../lib/haptics'
-import { useCurrency } from '../../hooks/useCurrency'
 import { formatDateInput } from '../../lib/dates'
 import { cn } from '../../lib/cn'
 import type { Transaction, Category } from '../../types'
@@ -58,7 +58,6 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
   isSwipedOpen = false,
   onSwipeChange,
 }) => {
-  const { formatWithSign } = useCurrency()
   const [swipeOffset, setSwipeOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const touchStartX = useRef<number | null>(null)
@@ -83,13 +82,18 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
 
   const effectiveOffset = isDragging ? swipeOffset : isSwipedOpen ? maxSwipe : 0
 
+  const isCircleTx =
+    tx.id.startsWith('circle_payout_') ||
+    /^circle_(.+)_m(\d+)$/.test(tx.id) ||
+    Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))
+
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none group">
-      {/* Mobile Swipe-to-Right Action Reveal Strip */}
+      {/* Touch Swipe-to-Right Action Reveal Strip (Reveals on swipe on all touch screens) */}
       <div
         dir="ltr"
         className={cn(
-          'absolute inset-y-0 left-0 flex items-stretch z-0 sm:hidden print:hidden overflow-hidden',
+          'absolute inset-y-0 left-0 flex items-stretch z-0 print:hidden overflow-hidden',
           effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
@@ -198,7 +202,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             hasMovedRef.current = false
             return
           }
-          // Do not open edit modal on plain row click; editing is handled via swipe action strip or desktop action button
+          openEdit(tx)
         }}
         onTouchStart={(e) => {
           touchStartX.current = e.touches[0].clientX
@@ -276,7 +280,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className={cn(
-          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-default bg-white dark:bg-[#121215] relative z-10'
+          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10'
         )}
       >
         {/* Right side: Icon + Title + Subline */}
@@ -304,15 +308,13 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                   <span>دين</span>
                 </span>
               )}
-              {(tx.id.startsWith('circle_payout_') ||
-                /^circle_(.+)_m(\d+)$/.test(tx.id) ||
-                Boolean(tx.recurringId && circleRecurringIdsSet.has(tx.recurringId))) && (
+              {isCircleTx && (
                 <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   <Users className="w-2.5 h-2.5" />
                   <span>جمعية</span>
                 </span>
               )}
-              {tx.recurringId && (
+              {tx.recurringId && !isCircleTx && (
                 <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold shrink-0">
                   <span>متكررة</span>
                 </span>
@@ -347,11 +349,14 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                 : 'text-emerald-600 dark:text-emerald-400'
             )}
           >
-            {formatWithSign(tx.amountFils, tx.type)}
+            <FormattedMoney
+              amountFils={tx.amountFils}
+              withSign={isExpense ? 'expense' : 'income'}
+            />
           </div>
 
           {/* Desktop Hover Quick Actions (Hidden on Mobile) */}
-          <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
+          <div className="hidden sm:flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
             {canDuplicate && (
               <button
                 type="button"
@@ -359,7 +364,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                   e.stopPropagation()
                   openDuplicate(tx)
                 }}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                 aria-label="تكرار المعاملة"
                 title="تكرار المعاملة"
               >
@@ -370,7 +375,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               <Link
                 to="/debts"
                 onClick={(e) => e.stopPropagation()}
-                className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
                 aria-label="الانتقال إلى صفحة الديون"
                 title={
                   isMergedDebtPayment
@@ -385,7 +390,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
               <Link
                 to="/tools?tool=circles"
                 onClick={(e) => e.stopPropagation()}
-                className="p-1.5 rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
                 aria-label="الانتقال إلى صفحة الجمعيات"
                 title="مرتبط بنظام الجمعيات - افتح صفحة الجمعيات للإدارة"
               >
@@ -398,7 +403,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                 e.stopPropagation()
                 openEdit(tx)
               }}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
               aria-label="تعديل المعاملة"
               title="تعديل المعاملة"
             >
@@ -411,7 +416,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
                   e.stopPropagation()
                   setTxToDelete(tx)
                 }}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                 aria-label="حذف المعاملة"
                 title="حذف المعاملة"
               >

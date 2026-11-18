@@ -1,6 +1,6 @@
 import React from 'react'
 import { TrendingUp, TrendingDown, Scale } from 'lucide-react'
-import { useCurrency } from '../../hooks/useCurrency'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import { cn } from '../../lib/cn'
 import type { DebtSummary } from '../../lib/debts'
 
@@ -13,11 +13,9 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
   summary,
   loading,
 }) => {
-  const { format } = useCurrency()
-
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
@@ -38,8 +36,8 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-      {/* Card: مستحقات لي */}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      {/* Card 1: مستحقات لي */}
       <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
         <div>
           <div className="flex items-center justify-between gap-2">
@@ -50,9 +48,9 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
-          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums block mt-1">
-            {format(summary.lentFils)}
-          </span>
+          <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums block mt-1">
+            <FormattedMoney amountFils={summary.lentFils} />
+          </div>
         </div>
         <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
           {summary.lentActiveCount === 0
@@ -67,7 +65,7 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
         </div>
       </div>
 
-      {/* Card: التزامات عليّ */}
+      {/* Card 2: التزامات عليّ */}
       <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
         <div>
           <div className="flex items-center justify-between gap-2">
@@ -78,9 +76,9 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
               <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
-          <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 tabular-nums block mt-1">
-            {format(summary.borrowedFils)}
-          </span>
+          <div className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 tabular-nums block mt-1">
+            <FormattedMoney amountFils={summary.borrowedFils} />
+          </div>
         </div>
         <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
           {summary.borrowedActiveCount === 0
@@ -96,7 +94,7 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
       </div>
 
       {/* Card 3: الديون المتأخرة والمستحقة قريباً */}
-      <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full sm:col-span-2 lg:col-span-1">
+      <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
         <div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
@@ -106,7 +104,7 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
               <Scale className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
-          <span
+          <div
             className={cn(
               'text-xl sm:text-2xl font-black tabular-nums block mt-1',
               summary.overdueCount > 0
@@ -116,12 +114,16 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
                   : 'text-zinc-700 dark:text-zinc-300'
             )}
           >
-            {summary.overdueCount > 0
-              ? format(summary.overdueFils)
-              : summary.upcomingCount > 0
-                ? format(summary.upcomingFils)
-                : format(0)}
-          </span>
+            <FormattedMoney
+              amountFils={
+                summary.overdueCount > 0
+                  ? summary.overdueFils
+                  : summary.upcomingCount > 0
+                    ? summary.upcomingFils
+                    : 0
+              }
+            />
+          </div>
         </div>
         <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
           {summary.overdueCount > 0

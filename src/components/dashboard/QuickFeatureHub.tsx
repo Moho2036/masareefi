@@ -6,6 +6,7 @@ import {
   BarChart3,
   RefreshCw,
 } from 'lucide-react'
+import { triggerHaptic } from '../../lib/haptics'
 import { cn } from '../../lib/cn'
 
 export interface QuickFeatureHubProps {
@@ -48,12 +49,11 @@ export const QuickFeatureHub: React.FC<QuickFeatureHubProps> = ({ className }) =
           <Link
             key={item.id}
             to={item.to}
-            className="press-scale flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none hover:border-blue-500/40 transition-all group"
+            onClick={() => triggerHaptic('tick')}
+            className="flex flex-col items-center justify-center py-2.5 px-1.5 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none active:scale-95 active:bg-zinc-50 dark:active:bg-zinc-800/60 transition-all select-none"
           >
-            <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:bg-blue-50 group-hover:text-blue-600 dark:group-hover:bg-blue-950/40 dark:group-hover:text-blue-400 flex items-center justify-center transition-colors">
-              <Icon className="w-4 h-4 stroke-[2.2]" />
-            </div>
-            <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate mt-1.5 w-full text-center">
+            <Icon className="w-5 h-5 stroke-[2.2] text-zinc-700 dark:text-zinc-300" />
+            <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 truncate mt-1 w-full text-center">
               {item.title}
             </span>
           </Link>

@@ -131,7 +131,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
               type="button"
               disabled={isCompactingEntries || isSavingEditEntry || Boolean(confirmDeleteEntryId)}
               onClick={onCompactEntries}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
             >
               {isCompactingEntries ? 'جاري الدمج...' : 'دمج السلف القديمة'}
             </button>
@@ -163,7 +163,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                   value={newEntryAmountStr}
                   placeholder="0.000"
                   onChange={(e) => setNewEntryAmountStr(toWesternDigits(e.target.value))}
-                  className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
+                  className="w-full text-base sm:text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                   required
                 />
                 <span className="text-[10px] text-zinc-400 font-bold">{currencySymbol}</span>
@@ -185,7 +185,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                 type="text"
                 value={newEntryTitle}
                 onChange={(e) => setNewEntryTitle(e.target.value)}
-                className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
+                className="w-full text-base sm:text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                 placeholder="مثال: سلفة تكاليف السفر..."
               />
             </div>
@@ -195,7 +195,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                 type="text"
                 value={newEntryNote}
                 onChange={(e) => setNewEntryNote(e.target.value)}
-                className="w-full text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
+                className="w-full text-base sm:text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 outline-none"
                 placeholder="تفاصيل إضافية..."
               />
             </div>
@@ -257,7 +257,7 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                         inputMode="decimal"
                         value={editEntryAmountStr}
                         onChange={(ev) => setEditEntryAmountStr(toWesternDigits(ev.target.value))}
-                        className="w-full text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
+                        className="w-full text-base sm:text-xs font-bold bg-transparent outline-none text-zinc-800 dark:text-zinc-100"
                         required
                       />
                       <span className="text-[10px] text-zinc-400 font-bold">{currencySymbol}</span>
@@ -278,14 +278,14 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
                     value={editEntryTitle}
                     onChange={(ev) => setEditEntryTitle(ev.target.value)}
                     placeholder="العنوان أو سبب السلفة..."
-                    className="text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
+                    className="text-base sm:text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
                   />
                   <input
                     type="text"
                     value={editEntryNote}
                     onChange={(ev) => setEditEntryNote(ev.target.value)}
                     placeholder="ملاحظة السلفة..."
-                    className="text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
+                    className="text-base sm:text-xs border border-[#E4E4E7] dark:border-[#27272A] rounded-lg px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none"
                   />
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">

@@ -49,6 +49,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   const remainingFils = getDebtRemainingFils(activeDebt)
   const isLent = activeDebt.type === 'lent'
+  const truncatedPersonName = activeDebt.personName.length > 25
+    ? `${activeDebt.personName.slice(0, 24)}...`
+    : activeDebt.personName
 
   const handleCopyStatement = async () => {
     try {
@@ -93,7 +96,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`سجل الحركات وكشف الحساب — ${activeDebt.personName}`}
+      title={`سجل الحركات وكشف الحساب — ${truncatedPersonName}`}
     >
       {/* Interactive Modal Content (Hidden when printing) */}
       <div className="space-y-4 print:hidden">

@@ -24,18 +24,28 @@ describe('dashboard helpers', () => {
   describe('formatDebtCount', () => {
     it('formats zero active debts', () => {
       expect(formatDebtCount(0)).toBe('لا توجد ديون نشطة')
+      expect(formatDebtCount(0, 'lent')).toBe('لا توجد مستحقات نشطة')
+      expect(formatDebtCount(0, 'borrowed')).toBe('لا توجد التزامات نشطة')
     })
     it('formats 1 active debt', () => {
       expect(formatDebtCount(1)).toBe('دين نشط واحد')
+      expect(formatDebtCount(1, 'lent')).toBe('مستحق نشط واحد')
+      expect(formatDebtCount(1, 'borrowed')).toBe('التزام نشط واحد')
     })
     it('formats 2 active debts', () => {
       expect(formatDebtCount(2)).toBe('دينان نشطان')
+      expect(formatDebtCount(2, 'lent')).toBe('مستحقان نشطان')
+      expect(formatDebtCount(2, 'borrowed')).toBe('التزامان نشطان')
     })
     it('formats 3 to 10 debts', () => {
       expect(formatDebtCount(4)).toBe('4 ديون نشطة')
+      expect(formatDebtCount(4, 'lent')).toBe('4 مستحقات نشطة')
+      expect(formatDebtCount(4, 'borrowed')).toBe('4 التزامات نشطة')
     })
     it('formats 11+ debts', () => {
       expect(formatDebtCount(15)).toBe('15 ديناً نشطاً')
+      expect(formatDebtCount(15, 'lent')).toBe('15 مستحقاً نشطاً')
+      expect(formatDebtCount(15, 'borrowed')).toBe('15 التزاماً نشطاً')
     })
   })
 

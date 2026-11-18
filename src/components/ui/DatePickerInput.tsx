@@ -52,6 +52,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
   'aria-label': ariaLabel,
 }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [flipUp, setFlipUp] = useState(false)
+  const [adjustedAlign, setAdjustedAlign] = useState<'start' | 'end'>(popoverAlign)
   const [viewDate, setViewDate] = useState<Date>(() => {
     try {
       return value ? parseLocalDateInput(value) : new Date()
@@ -62,6 +64,48 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Measure viewport to auto-flip popover and avoid screen edge clipping
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return
+
+    const calculatePosition = () => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+
+      // Calendar height is approx 330px
+      const spaceBelow = viewportHeight - rect.bottom
+      const spaceAbove = rect.top
+      setFlipUp(spaceBelow < 330 && spaceAbove > spaceBelow)
+
+      // Prevent horizontal overflow on narrow mobile screens (<360px)
+      const popoverWidth = viewportWidth < 640 ? 288 : 320
+      const isRtl = document.dir === 'rtl' || document.documentElement.dir === 'rtl'
+      if (isRtl) {
+        if (popoverAlign === 'start' && rect.right - popoverWidth < 8) {
+          setAdjustedAlign('end')
+        } else {
+          setAdjustedAlign(popoverAlign)
+        }
+      } else {
+        if (popoverAlign === 'start' && rect.left + popoverWidth > viewportWidth - 8) {
+          setAdjustedAlign('end')
+        } else {
+          setAdjustedAlign(popoverAlign)
+        }
+      }
+    }
+
+    calculatePosition()
+    window.addEventListener('resize', calculatePosition)
+    window.addEventListener('scroll', calculatePosition, true)
+    return () => {
+      window.removeEventListener('resize', calculatePosition)
+      window.removeEventListener('scroll', calculatePosition, true)
+    }
+  }, [isOpen, popoverAlign])
 
   // Close calendar when clicking outside or pressing Escape
   useEffect(() => {
@@ -151,7 +195,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                 className={cn(
                   'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
                   value === todayStr
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 font-bold'
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold'
                     : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700',
                   (disabled || readOnly) && 'opacity-50 cursor-not-allowed pointer-events-none'
                 )}
@@ -165,7 +209,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                 className={cn(
                   'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
                   value === yesterdayStr
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 font-bold'
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold'
                     : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700',
                   (disabled || readOnly) && 'opacity-50 cursor-not-allowed pointer-events-none'
                 )}
@@ -232,13 +276,18 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
       <PopoverWrapper>
         {isOpen && !disabled && !readOnly && (
           <motion.div
+            role="dialog"
+            aria-label="تقويم اختيار التاريخ"
+            aria-modal="false"
             variants={popoverVariants}
             initial="initial"
             animate="animate"
             exit="exit"
+            style={{ transformOrigin: flipUp ? 'bottom' : 'top' }}
             className={cn(
-              'absolute top-[calc(100%+0.35rem)] z-50 w-72 sm:w-80 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none',
-              popoverAlign === 'end' ? 'end-0' : 'start-0'
+              'absolute z-50 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-xl dark:shadow-none p-3.5 space-y-3 select-none',
+              flipUp ? 'bottom-[calc(100%+0.35rem)]' : 'top-[calc(100%+0.35rem)]',
+              adjustedAlign === 'end' ? 'end-0' : 'start-0'
             )}
           >
           {/* Row 1: Month/Year navigation */}
@@ -300,6 +349,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                   key={dayStr}
                   type="button"
                   disabled={isOutOfRange}
+                  aria-label={toWesternDigits(format(day, 'EEEE، d MMMM yyyy', { locale: ar }))}
+                  aria-current={isSelected ? 'date' : undefined}
                   onClick={(e) => {
                     e.stopPropagation()
                     onChange(dayStr)
@@ -310,7 +361,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                     isSelected
                       ? 'bg-blue-600 text-white font-black shadow-2xs dark:shadow-none'
                       : isToday
-                        ? 'border border-blue-600/50 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                        ? 'border border-blue-600/50 text-blue-600 dark:text-blue-400 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800'
                         : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800',
                     isOutOfRange && 'opacity-25 pointer-events-none cursor-not-allowed'
                   )}

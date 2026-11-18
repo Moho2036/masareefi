@@ -170,7 +170,7 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
               type="button"
               disabled={loading || isCompacting}
               onClick={handleCompact}
-              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
             >
               {isCompacting ? 'جاري الدمج...' : 'دمج الدفعات القديمة لفتح مساحة'}
             </button>
@@ -260,8 +260,8 @@ const PaymentFormContent: React.FC<PaymentFormContentProps> = ({
         />
       </div>
 
-      {/* Accounting Sync Toggle */}
-      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
+      {/* Accounting Sync Toggle (No Box-in-Box - DEBT-10) */}
+      <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
         <Toggle
           checked={syncTransaction}
           onChange={setSyncTransaction}

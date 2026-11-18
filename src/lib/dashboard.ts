@@ -5,8 +5,24 @@ export function formatObligationsCount(count: number): string {
   return `${count} التزاماً يستحق`
 }
 
-export function formatDebtCount(count: number): string {
-  if (count === 0) return 'لا توجد ديون نشطة'
+export function formatDebtCount(count: number, type?: 'lent' | 'borrowed'): string {
+  if (count === 0) {
+    if (type === 'lent') return 'لا توجد مستحقات نشطة'
+    if (type === 'borrowed') return 'لا توجد التزامات نشطة'
+    return 'لا توجد ديون نشطة'
+  }
+  if (type === 'lent') {
+    if (count === 1) return 'مستحق نشط واحد'
+    if (count === 2) return 'مستحقان نشطان'
+    if (count >= 3 && count <= 10) return `${count} مستحقات نشطة`
+    return `${count} مستحقاً نشطاً`
+  }
+  if (type === 'borrowed') {
+    if (count === 1) return 'التزام نشط واحد'
+    if (count === 2) return 'التزامان نشطان'
+    if (count >= 3 && count <= 10) return `${count} التزامات نشطة`
+    return `${count} التزاماً نشطاً`
+  }
   if (count === 1) return 'دين نشط واحد'
   if (count === 2) return 'دينان نشطان'
   if (count >= 3 && count <= 10) return `${count} ديون نشطة`

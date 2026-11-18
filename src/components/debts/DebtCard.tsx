@@ -2,8 +2,8 @@ import React from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { History, Pencil, Trash2, Plus, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { FormattedMoney } from '../ui/FormattedMoney'
 import type { Debt } from '../../types'
-import { useCurrency } from '../../hooks/useCurrency'
 import { getDebtRemainingFils, getDebtProgress, isDebtOverdue, formatDebtEntriesCount } from '../../lib/debts'
 import { toWesternDigits } from '../../lib/dates'
 import { cn } from '../../lib/cn'
@@ -23,7 +23,6 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
   onEdit,
   onDelete,
 }) => {
-  const { format: formatCurrency } = useCurrency()
   const remainingFils = getDebtRemainingFils(debt)
   const progress = getDebtProgress(debt)
   const overdue = isDebtOverdue(debt)
@@ -99,7 +98,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
                     : 'text-red-600 dark:text-red-400'
               )}
             >
-              {formatCurrency(remainingFils)}
+              <FormattedMoney amountFils={remainingFils} />
             </div>
           </div>
           <div className="text-end">
@@ -110,8 +109,8 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
         </div>
 
         <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
-          <span>المبلغ الأصلي: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums">{formatCurrency(debt.amountFils)}</strong></span>
-          <span>المسدد: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums">{formatCurrency(debt.paidFils || 0)}</strong></span>
+          <span>المبلغ الأصلي: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums"><FormattedMoney amountFils={debt.amountFils} /></strong></span>
+          <span>المسدد: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums"><FormattedMoney amountFils={debt.paidFils || 0} /></strong></span>
         </div>
 
         {/* Progress Bar */}
@@ -160,7 +159,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           (debt.payments?.length ?? 0) >= 100 ? (
             <button
               type="button"
-              onClick={() => onOpenPaymentModal(debt)}
+              onClick={() => onOpenHistoryModal(debt)}
               className="px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A]"
               title="وصل إلى الحد الأقصى للدفعات (100 دفعة) — اضغط للدمج"
             >
@@ -184,11 +183,11 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           </span>
         )}
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => onOpenHistoryModal(debt)}
-            className="p-2 sm:p-2.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer relative"
+            className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer relative"
             title="سجل الدفعات"
             aria-label="سجل الدفعات"
           >
@@ -202,7 +201,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           <button
             type="button"
             onClick={() => onEdit(debt)}
-            className="p-2 sm:p-2.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             title="تعديل"
             aria-label="تعديل الدين"
           >
@@ -211,7 +210,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
           <button
             type="button"
             onClick={() => onDelete(debt)}
-            className="p-2 sm:p-2.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+            className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
             title="حذف"
             aria-label="حذف"
           >

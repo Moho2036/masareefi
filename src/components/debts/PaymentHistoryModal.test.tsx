@@ -66,7 +66,7 @@ describe('PaymentHistoryModal', () => {
     expect(paymentAmount.className).toContain('text-emerald-600')
   })
 
-  it('renders borrowed debt payment with - sign and amber color', () => {
+  it('renders borrowed debt payment with - sign and red color', () => {
     const borrowedDebt: Debt = {
       id: 'd2',
       personName: 'سامي',
@@ -98,7 +98,7 @@ describe('PaymentHistoryModal', () => {
 
     const paymentAmount = screen.getByText('- 30 د.أ')
     expect(paymentAmount).toBeDefined()
-    expect(paymentAmount.className).toContain('text-amber-600')
+    expect(paymentAmount.className).toContain('text-red-600')
   })
 
   it('allows editing an existing payment and calls updateDebtPayment', async () => {

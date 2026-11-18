@@ -377,10 +377,10 @@ export const Modal: React.FC<ModalProps> = ({
 
               {/* Modal Header */}
               {hasTitle ? (
-                <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4 gap-2">
                   <h2
                     id="modal-title"
-                    className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100"
+                    className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate pe-1"
                   >
                     {title}
                   </h2>

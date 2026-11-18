@@ -34,7 +34,7 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
   today,
 }) => {
   return (
-    <div className="lg:col-span-5 space-y-5">
+    <div id="upcoming-obligations-section" className="lg:col-span-5 space-y-5 scroll-mt-20">
       {/* Active Debts Summary */}
       <Card className="p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#E4E4E7] dark:border-[#27272A]">
@@ -55,12 +55,12 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
 
         {isInitialOrLoading || debtsLoading ? (
           <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-1 animate-pulse">
-            <div className="pe-3 space-y-2">
+            <div className="ps-2 sm:ps-3 pe-3 space-y-2">
               <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
               <div className="w-20 h-5 rounded bg-zinc-300 dark:bg-zinc-700" />
               <div className="w-12 h-2.5 rounded bg-zinc-200 dark:bg-zinc-800" />
             </div>
-            <div className="ps-4 space-y-2">
+            <div className="ps-3 sm:ps-4 pe-2 sm:pe-3 space-y-2">
               <div className="w-16 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
               <div className="w-20 h-5 rounded bg-zinc-300 dark:bg-zinc-700" />
               <div className="w-12 h-2.5 rounded bg-zinc-200 dark:bg-zinc-800" />
@@ -70,8 +70,8 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
           <>
             <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A]">
               <Link
-                to="/debts"
-                className="flex flex-col gap-1 pe-3 hover:opacity-80 transition-opacity cursor-pointer"
+                to="/debts?type=lent"
+                className="flex flex-col gap-1 ps-2 sm:ps-3 pe-3 hover:opacity-80 transition-opacity cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
                 title="عرض المستحقات في صفحة الديون"
               >
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -88,13 +88,13 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
                   <FormattedMoney amountFils={debtSummary.lentFils} />
                 </span>
                 <span className="text-[10px] text-zinc-400">
-                  {formatDebtCount(debtSummary.lentActiveCount)}
+                  {formatDebtCount(debtSummary.lentActiveCount, 'lent')}
                 </span>
               </Link>
 
               <Link
-                to="/debts"
-                className="flex flex-col gap-1 ps-4 hover:opacity-80 transition-opacity cursor-pointer"
+                to="/debts?type=borrowed"
+                className="flex flex-col gap-1 ps-3 sm:ps-4 pe-2 sm:pe-3 hover:opacity-80 transition-opacity cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
                 title="عرض الالتزامات في صفحة الديون"
               >
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -111,38 +111,68 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
                   <FormattedMoney amountFils={debtSummary.borrowedFils} />
                 </span>
                 <span className="text-[10px] text-zinc-400">
-                  {formatDebtCount(debtSummary.borrowedActiveCount)}
+                  {formatDebtCount(debtSummary.borrowedActiveCount, 'borrowed')}
                 </span>
               </Link>
             </div>
 
             {nearestUpcomingDebt && nearestUpcomingDebt.dueDate && (
               <Link
-                to="/debts"
-                className="mt-3 pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs hover:opacity-80 transition-opacity cursor-pointer"
-                title="عرض الديون المستحقة"
+                to={`/debts?type=${nearestUpcomingDebt.type || 'borrowed'}`}
+                className="mt-3 pt-3 border-t border-[#E4E4E7] dark:border-[#27272A] flex flex-col gap-1 min-h-[44px] justify-center text-xs hover:opacity-80 transition-opacity cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
+                title="عرض تفاصيل أقرب استحقاق في صفحة الديون"
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Calendar className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate">
-                    أقرب استحقاق ({nearestUpcomingDebt.type === 'lent' ? 'مستحق لك' : 'التزام عليك'}): {nearestUpcomingDebt.personName}
-                  </span>
-                  <span className="text-[10px] text-zinc-400 shrink-0">
-                    ({toWesternDigits(formatDate(new Date(nearestUpcomingDebt.dueDate), new Date(nearestUpcomingDebt.dueDate).getFullYear() === today.getFullYear() ? 'd MMMM' : 'd MMMM yyyy', { locale: ar }))})
-                  </span>
-                </div>
-                <div className={cn(
-                  'text-xs sm:text-sm font-black select-none shrink-0 ps-2',
-                  nearestUpcomingDebt.type === 'lent'
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-600 dark:text-red-400'
-                )}>
-                  <FormattedMoney
-                    amountFils={Math.max(
-                      0,
-                      nearestUpcomingDebt.amountFils - (nearestUpcomingDebt.paidFils || 0)
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Calendar className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                      أقرب استحقاق ({nearestUpcomingDebt.type === 'lent' ? 'مستحق لك' : 'التزام عليك'}): {nearestUpcomingDebt.personName}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      'text-xs sm:text-sm font-black select-none shrink-0 ps-2',
+                      nearestUpcomingDebt.type === 'lent'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-red-600 dark:text-red-400'
                     )}
-                  />
+                  >
+                    <FormattedMoney
+                      amountFils={Math.max(
+                        0,
+                        nearestUpcomingDebt.amountFils - (nearestUpcomingDebt.paidFils || 0)
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 ps-5">
+                  <span>
+                    {toWesternDigits(
+                      formatDate(
+                        new Date(nearestUpcomingDebt.dueDate),
+                        new Date(nearestUpcomingDebt.dueDate).getFullYear() === today.getFullYear()
+                          ? 'd MMMM'
+                          : 'd MMMM yyyy',
+                        { locale: ar }
+                      )
+                    )}
+                  </span>
+                  <span>•</span>
+                  <span>
+                    {(() => {
+                      const diff = differenceInDays(
+                        startOfDay(new Date(nearestUpcomingDebt.dueDate)),
+                        startOfDay(today)
+                      )
+                      if (diff < 0) return 'متأخر'
+                      if (diff === 0) return 'يستحق اليوم'
+                      if (diff === 1) return 'يستحق غداً'
+                      if (diff === 2) return 'خلال يومين'
+                      if (diff >= 3 && diff <= 10) return `خلال ${diff} أيام`
+                      return `خلال ${diff} يوماً`
+                    })()}
+                  </span>
                 </div>
               </Link>
             )}
@@ -228,11 +258,11 @@ export const DashboardUpcomingSection: React.FC<DashboardUpcomingSectionProps> =
                 <Link
                   to="/recurring"
                   key={item.id}
-                  className="flex items-center justify-between py-2.5 px-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 rounded-xl transition-colors cursor-pointer"
+                  className="flex items-center justify-between py-2 px-1.5 min-h-[44px] hover:bg-zinc-50 dark:hover:bg-zinc-800/40 rounded-xl transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
-                      <CategoryIcon icon={cat?.icon || '🔄'} color={cat?.color} size="sm" />
+                      <CategoryIcon icon={cat?.icon || 'repeat'} color={cat?.color} size="sm" />
                     </span>
                     <div className="min-w-0">
                       <div className="font-bold text-xs text-zinc-800 dark:text-zinc-100 truncate">

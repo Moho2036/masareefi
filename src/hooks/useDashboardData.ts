@@ -228,9 +228,7 @@ export function useDashboardData() {
   ])
 
   const displayName = settings?.displayName?.trim() || user?.displayName?.trim() || ''
-  const greetingSubtitle = displayName
-    ? `أهلاً بك، ${displayName} — نظرة شاملة على وضعك المالي لهذا الشهر`
-    : 'نظرة شاملة وسريعة على وضعك المالي لهذا الشهر'
+  const greetingSubtitle = displayName ? `أهلاً بك، ${displayName}` : undefined
 
   return {
     range,

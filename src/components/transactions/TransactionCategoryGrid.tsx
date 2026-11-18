@@ -45,7 +45,7 @@ export const TransactionCategoryGrid: React.FC<TransactionCategoryGridProps> = (
         </button>
       </div>
       {categoriesLoading ? (
-        <div className="grid grid-cols-3 gap-1.5 p-0.5 animate-pulse">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5 animate-pulse">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div
               key={i}
@@ -75,7 +75,7 @@ export const TransactionCategoryGrid: React.FC<TransactionCategoryGridProps> = (
               </span>
             </div>
           )}
-          <div className="grid grid-cols-3 gap-1.5 p-0.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-0.5">
             {displayedCategories.map((cat) => {
               const isSelected = activeCategoryId === cat.id
               return (

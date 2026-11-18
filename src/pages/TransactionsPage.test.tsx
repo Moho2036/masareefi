@@ -147,8 +147,8 @@ describe('TransactionsPage Component', () => {
 
     // Pagination controls indicate page 1 of 2
     expect(screen.getByText(/صفحة/i)).toBeInTheDocument()
-    expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1)
 
     // Click "التالي"
     const nextBtn = screen.getByRole('button', { name: 'التالي' })

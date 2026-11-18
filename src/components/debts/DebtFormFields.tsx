@@ -203,7 +203,7 @@ export const DebtFormFields: React.FC<DebtFormFieldsProps> = ({
           )}
       </div>
 
-      {/* 3b. Pre-paid Amount (for new debts) */}
+      {/* 3b. Pre-paid Amount (for new debts - DEBT-10 & DEBT-16) */}
       {!isEditing && (
         <div>
           <label htmlFor="pre-paid-input" className="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1.5">
@@ -217,15 +217,12 @@ export const DebtFormFields: React.FC<DebtFormFieldsProps> = ({
               placeholder={config.decimals === 3 ? '0.000' : '0.00'}
               value={initialPaidStr}
               onChange={(e) => setInitialPaidStr(toWesternDigits(e.target.value))}
-              className="w-full bg-transparent text-base font-bold font-mono text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
+              className="w-full bg-transparent text-base font-bold text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 outline-none tabular-nums"
             />
             <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400 select-none pe-1">
               {config.symbol}
             </span>
           </div>
-          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
-            سجل المبلغ المسدد مسبقاً إذا كان الدين قديماً لتوثيق تاريخه وسداده دون التأثير على سيولة اليوم.
-          </p>
         </div>
       )}
 
@@ -239,8 +236,8 @@ export const DebtFormFields: React.FC<DebtFormFieldsProps> = ({
         />
       </div>
 
-      {/* 5. Due Date Toggle */}
-      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
+      {/* 5. Due Date Toggle (No box-in-box - DEBT-10) */}
+      <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
         <Toggle
           label="تحديد موعد استحقاق"
           description="تنبيه عند حلول موعد السداد المتفق عليه"
@@ -276,8 +273,8 @@ export const DebtFormFields: React.FC<DebtFormFieldsProps> = ({
         />
       </div>
 
-      {/* 7. Accounting Sync Toggle */}
-      <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] space-y-2">
+      {/* 7. Accounting Sync Toggle (No box-in-box & concise copy - DEBT-10 & DEBT-11) */}
+      <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
         <Toggle
           checked={syncTransaction}
           onChange={(val) => {
@@ -290,12 +287,12 @@ export const DebtFormFields: React.FC<DebtFormFieldsProps> = ({
               ? 'خصم المبلغ من الرصيد الحالي تلقائياً'
               : 'إضافة المبلغ للرصيد الحالي (استلمت المبلغ نقداً)'
           }
-          description="يربط مبلغ أصل الدين برصيد محفظتك كمعاملة مالية (دفعات السداد تُدار بشكل مستقل)."
+          description="تسجيل معاملة مالية في المحفظة لأصل الدين (دفعات السداد تُدار مستقلة)"
         />
         {isPastDebt && !syncTransaction && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1 font-medium pt-1 border-t border-amber-200/40 dark:border-amber-900/40">
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1 font-medium pt-1">
             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>بما أن هذا دين سابق، تم إيقاف خصم أصل الدين من سيولة اليوم تلقائياً (ويمكنك تفعيله إن أردت).</span>
+            <span>دين تاريخي: غير مربوط برصيد اليوم افتراضياً لتجنب التأثير على السيولة.</span>
           </p>
         )}
       </div>
