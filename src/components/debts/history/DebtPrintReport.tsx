@@ -2,6 +2,7 @@ import React from 'react'
 import { format as formatDate } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { FormattedMoney } from '../../ui/FormattedMoney'
+import { BaseerLogo } from '../../ui/BaseerLogo'
 import { toWesternDigits } from '../../../lib/dates'
 import type { Debt, DebtEntry, DebtPayment } from '../../../types'
 
@@ -56,6 +57,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
+              <BaseerLogo variant="brand" size={24} />
               <span className="text-xl font-black tracking-tight text-zinc-900">بَصير</span>
               <span className="text-sm font-bold text-zinc-600">
                 — كشف حساب مالي تفصيلي

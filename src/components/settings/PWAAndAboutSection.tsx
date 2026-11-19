@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
+import { BaseerLogo } from '../ui/BaseerLogo'
 
 export interface PWAInstallSectionProps {
   isInstallable: boolean
@@ -142,9 +143,7 @@ export const AboutBaseerSection: React.FC<AboutBaseerSectionProps> = ({ onRestar
     <Card title="حول تطبيق بَصير" subtitle="معلومات الإصدار، التشفير، وحماية الخصوصية">
       <div className="pt-2 space-y-3 text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-zinc-900 dark:bg-zinc-800 border border-blue-500/40 text-white flex items-center justify-center shadow-xs shrink-0">
-            <img src="/icons/icon.svg" alt="بَصير" className="w-6 h-6 object-contain" />
-          </div>
+          <BaseerLogo variant="app-icon" size={40} />
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">

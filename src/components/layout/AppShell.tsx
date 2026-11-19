@@ -18,6 +18,7 @@ import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { useNotifications } from '../../hooks/useNotifications'
 import { hasExistingUserData } from '../../services/userProfile'
 import { PageSkeleton } from '../skeletons/PageSkeleton'
+import { BaseerLogo } from '../ui/BaseerLogo'
 import { cn } from '../../lib/cn'
 import { isTestEnv } from '../../lib/motionTokens'
 import { triggerHaptic } from '../../lib/haptics'
@@ -158,15 +159,9 @@ export const AppShell: React.FC = () => {
             }
           }}
           className="flex items-center gap-3 px-2 mb-8 cursor-pointer group"
+          aria-label="الرئيسية — بَصير"
         >
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-[#E4E4E7] dark:border-[#27272A] text-white flex items-center justify-center shadow-xs">
-            <img src="/icons/icon.svg" alt="بَصير" className="w-6 h-6 object-contain" />
-          </div>
-          <div>
-            <span className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
-              بَصير
-            </span>
-          </div>
+          <BaseerLogo variant="brand" size={36} showWordmark />
         </Link>
 
         {/* Navigation Items */}
@@ -294,9 +289,21 @@ export const AppShell: React.FC = () => {
                 </div>
               )}
             </Link>
-            <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
-              بَصير
-            </span>
+            <Link
+              to="/"
+              onClick={() => {
+                if (!isCurrentMonth) {
+                  goToCurrentMonth()
+                }
+              }}
+              className="flex items-center gap-1.5 shrink-0 cursor-pointer"
+              aria-label="الرئيسية — بَصير"
+            >
+              <BaseerLogo variant="brand" size={22} />
+              <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
+                بَصير
+              </span>
+            </Link>
           </div>
 
           <div className="hidden lg:flex items-center gap-2">

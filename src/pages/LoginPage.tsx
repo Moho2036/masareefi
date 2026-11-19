@@ -21,6 +21,7 @@ import {
   resetPassword,
 } from '../services/auth'
 import { AppShellSkeleton } from '../components/skeletons/AppShellSkeleton'
+import { BaseerLogo } from '../components/ui/BaseerLogo'
 
 export const LoginPage: React.FC = () => {
   const { user, loading } = useAuth()
@@ -219,8 +220,8 @@ export const LoginPage: React.FC = () => {
 
       <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-2xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
         {/* App Logo */}
-        <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-zinc-900 dark:bg-zinc-800/90 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-center shadow-xs p-2.5">
-          <img src="/icons/icon.svg" alt="Baseer Logo" className="w-full h-full object-contain" />
+        <div className="flex justify-center">
+          <BaseerLogo variant="app-icon" size={64} className="shadow-xs" />
         </div>
 
         {/* Brand Details */}
