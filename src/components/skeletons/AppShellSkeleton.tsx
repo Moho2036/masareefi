@@ -73,8 +73,8 @@ export const AppShellSkeleton: React.FC = () => {
         {/* Top Header Bar Skeleton */}
         <header className="sticky top-0 z-20 bg-white/85 dark:bg-[#121215]/85 backdrop-blur-xl border-b border-[#E4E4E7] dark:border-[#27272A] px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2.5 lg:hidden">
-            <BaseerLogo variant="app-icon" size={30} className="opacity-40 animate-pulse" />
-            <Skeleton className="w-20 h-5 rounded" />
+            <Skeleton className="w-8 h-8 rounded-full" />
+            <Skeleton className="w-16 h-5 rounded" />
           </div>
 
           <div className="hidden lg:block">

@@ -19,16 +19,17 @@ describe('BaseerLogo Component', () => {
     render(<BaseerLogo showWordmark size={32} />)
     const wordmark = screen.getByText('بَصير')
     expect(wordmark).toBeDefined()
-    expect(wordmark.classList.contains('font-extrabold')).toBe(true)
+    expect(wordmark.classList.contains('font-black')).toBe(true)
   })
 
   it('renders app-icon variant with sapphire container and white fill', () => {
     const { container } = render(<BaseerLogo variant="app-icon" size={48} />)
-    const appIconWrapper = container.querySelector('.bg-\\[\\#2563EB\\]')
-    expect(appIconWrapper).not.toBeNull()
+    const rect = container.querySelector('rect')
+    expect(rect).not.toBeNull()
+    expect(rect?.getAttribute('fill')).toBe('#2563EB')
     const paths = container.querySelectorAll('path')
     paths.forEach((p) => {
-      expect(p.classList.contains('fill-white')).toBe(true)
+      expect(p.getAttribute('fill')).toBe('#FFFFFF')
     })
   })
 

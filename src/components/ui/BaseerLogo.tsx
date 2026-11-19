@@ -31,11 +31,8 @@ const SMALL_CUT_PATHS = {
 } as const;
 
 /**
- * BaseerLogo — المكون الرسمي لشعار تطبيق بَصير (Baseer)
- * متوافق 100% مع دستور DESIGN_SYSTEM.md (Swiss Carbon & Sapphire Clarity):
- * - صفر تدرجات لونية أو ظلال ملونة ([TABOO-05])
- * - ألوان حصرية من جدول التوكنز: zinc-950 / zinc-100 / blue-600 / blue-500
- * - دعم كامل لاتجاه RTL عبر الخصائص المنطقية (gap / shrink-0)
+ * BaseerLogo — المكون الرسمي الموحد لشعار وهوية تطبيق بَصير (Baseer)
+ * دقة متجهة فائقة (Pure Vector Precision) بدون أي تشويه بكسلي على الحواسيب والهواتف.
  */
 export const BaseerLogo: React.FC<BaseerLogoProps> = ({
   variant = 'brand',
@@ -61,15 +58,36 @@ export const BaseerLogo: React.FC<BaseerLogoProps> = ({
       ? 'fill-current'
       : 'fill-[#2563EB] dark:fill-[#3B82F6]';
 
-  const svgElement = (
+  const svgElement = isAppIcon ? (
     <svg
-      width={isAppIcon ? '80%' : size}
-      height={isAppIcon ? '80%' : size}
+      width={size}
+      height={size}
       viewBox="0 0 256 256"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="شعار بَصير"
+      shapeRendering="geometricPrecision"
+      className="shrink-0"
+    >
+      <rect width="256" height="256" rx="56" fill="#2563EB" />
+      <g transform="translate(25.60 25.60) scale(0.8000)">
+        <path fill="#FFFFFF" d={paths.bottomArc} />
+        <path fill="#FFFFFF" d={paths.upperMainArc} />
+        <path fill="#FFFFFF" d={paths.upperAccentSegment} />
+        <path fill="#FFFFFF" d={paths.centerPointer} />
+      </g>
+    </svg>
+  ) : (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 256 256"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="شعار بَصير"
+      shapeRendering="geometricPrecision"
       className="shrink-0"
     >
       <path className={primaryClass} d={paths.bottomArc} />
@@ -79,28 +97,20 @@ export const BaseerLogo: React.FC<BaseerLogoProps> = ({
     </svg>
   );
 
-  const markNode = isAppIcon ? (
-    <span
-      style={{ width: size, height: size }}
-      className="inline-flex items-center justify-center rounded-xl bg-[#2563EB] shrink-0"
-    >
-      {svgElement}
-    </span>
-  ) : (
-    svgElement
-  );
-
   if (!showWordmark) {
-    return <span className={`inline-flex items-center shrink-0 ${className}`}>{markNode}</span>;
+    return (
+      <span
+        className={`inline-flex items-center justify-center shrink-0 ${isAppIcon ? 'rounded-2xl' : ''} ${className}`}
+      >
+        {svgElement}
+      </span>
+    );
   }
 
   return (
-    <span className={`inline-flex items-center gap-2.5 select-none shrink-0 ${className}`}>
-      {markNode}
-      <span
-        style={{ fontSize: Math.max(16, Math.round(size * 0.62)) }}
-        className="font-extrabold tracking-tight leading-none text-[#09090B] dark:text-[#F4F4F5]"
-      >
+    <span className={`inline-flex items-center gap-3 select-none shrink-0 ${className}`}>
+      {svgElement}
+      <span className="text-2xl font-black tracking-tight leading-none text-zinc-900 dark:text-white">
         بَصير
       </span>
     </span>

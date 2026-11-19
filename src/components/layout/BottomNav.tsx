@@ -14,7 +14,6 @@ import { cn } from '../../lib/cn'
 import { triggerHaptic } from '../../lib/haptics'
 import { springSheet, springSnappy, springBounce, isTestEnv } from '../../lib/motionTokens'
 import { useSelectedMonth } from '../../hooks/useSelectedMonth'
-import { BaseerLogo } from '../ui/BaseerLogo'
 import { smartTools, managementItems } from './navConfig'
 
 export interface BottomNavProps {
@@ -172,12 +171,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenAddModal }) => {
 
                   {/* Header */}
                   <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <BaseerLogo variant="app-icon" size={26} />
-                      <h3 className="font-extrabold text-base text-zinc-900 dark:text-zinc-100">
-                        جميع الأدوات والميزات
-                      </h3>
-                    </div>
+                    <h3 className="font-extrabold text-base text-zinc-900 dark:text-zinc-100">
+                      جميع الأدوات والميزات
+                    </h3>
                     <button
                       type="button"
                       onClick={() => {

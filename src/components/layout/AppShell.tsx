@@ -289,21 +289,9 @@ export const AppShell: React.FC = () => {
                 </div>
               )}
             </Link>
-            <Link
-              to="/"
-              onClick={() => {
-                if (!isCurrentMonth) {
-                  goToCurrentMonth()
-                }
-              }}
-              className="flex items-center gap-2 shrink-0 cursor-pointer"
-              aria-label="الرئيسية — بَصير"
-            >
-              <BaseerLogo variant="app-icon" size={30} />
-              <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
-                بَصير
-              </span>
-            </Link>
+            <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
+              بَصير
+            </span>
           </div>
 
           <div className="hidden lg:flex items-center gap-2">

@@ -221,7 +221,7 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-sm bg-white dark:bg-[#121215] rounded-2xl p-6 sm:p-8 border border-[#E4E4E7] dark:border-[#27272A] shadow-xl text-center space-y-6">
         {/* App Logo */}
         <div className="flex justify-center">
-          <BaseerLogo variant="app-icon" size={64} className="shadow-xs" />
+          <BaseerLogo variant="app-icon" size={64} />
         </div>
 
         {/* Brand Details */}
