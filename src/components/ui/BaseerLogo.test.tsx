@@ -41,13 +41,13 @@ describe('BaseerLogo Component', () => {
     })
   })
 
-  it('applies smallOpticalCut when specified or when size <= 24', () => {
-    const { container: smallContainer } = render(<BaseerLogo size={20} />)
+  it('applies smallOpticalCut when specified or when size <= 48', () => {
+    const { container: smallContainer } = render(<BaseerLogo size={40} />)
     const smallPath = smallContainer.querySelectorAll('path')[2] // upperAccentSegment
     // small cut has M 177.40 90.50
     expect(smallPath.getAttribute('d')).toContain('177.40')
 
-    const { container: masterContainer } = render(<BaseerLogo size={40} />)
+    const { container: masterContainer } = render(<BaseerLogo size={64} />)
     const masterPath = masterContainer.querySelectorAll('path')[2]
     // master cut has M 174.19 87.35
     expect(masterPath.getAttribute('d')).toContain('174.19')

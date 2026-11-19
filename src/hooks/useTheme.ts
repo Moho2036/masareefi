@@ -86,10 +86,12 @@ export function useTheme() {
       root.classList.remove('dark')
     }
 
-    const themeColorMeta = document.querySelector('meta[name="theme-color"]')
-    if (themeColorMeta) {
-      themeColorMeta.setAttribute('content', resolvedTheme === 'dark' ? '#09090B' : '#F4F4F5')
-    }
+    const metas = document.querySelectorAll('meta[name="theme-color"]')
+    const color = resolvedTheme === 'dark' ? '#09090B' : '#F4F4F5'
+    metas.forEach((meta) => {
+      meta.setAttribute('content', color)
+      meta.removeAttribute('media')
+    })
   }, [theme, resolvedTheme, loading])
 
   // Listen to system prefers-color-scheme changes

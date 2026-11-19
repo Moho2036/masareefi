@@ -43,8 +43,12 @@ export const BaseerLogo: React.FC<BaseerLogoProps> = ({
 }) => {
   const isAppIcon = variant === 'app-icon';
   const isMono = variant === 'mono';
-  const useSmallCut = smallOpticalCut ?? size <= 24;
+  // Use optical cut for sizes <= 48px to keep the diagonal slit open and crisp at 100% and 125% zoom
+  const useSmallCut = smallOpticalCut ?? size <= 48;
   const paths = useSmallCut ? SMALL_CUT_PATHS : MASTER_PATHS;
+  const iconTransform = useSmallCut
+    ? 'translate(20.48 20.48) scale(0.8400)'
+    : 'translate(25.60 25.60) scale(0.8000)';
 
   const primaryClass = isAppIcon
     ? 'fill-white'
@@ -67,15 +71,14 @@ export const BaseerLogo: React.FC<BaseerLogoProps> = ({
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="شعار بَصير"
-      shapeRendering="geometricPrecision"
       className="shrink-0"
     >
       <rect width="256" height="256" rx="56" fill="#2563EB" />
-      <g transform="translate(25.60 25.60) scale(0.8000)">
-        <path fill="#FFFFFF" d={paths.bottomArc} />
-        <path fill="#FFFFFF" d={paths.upperMainArc} />
-        <path fill="#FFFFFF" d={paths.upperAccentSegment} />
-        <path fill="#FFFFFF" d={paths.centerPointer} />
+      <g transform={iconTransform}>
+        <path fill="#FFFFFF" stroke="#FFFFFF" strokeWidth="0.5" strokeLinejoin="round" d={paths.bottomArc} />
+        <path fill="#FFFFFF" stroke="#FFFFFF" strokeWidth="0.5" strokeLinejoin="round" d={paths.upperMainArc} />
+        <path fill="#FFFFFF" stroke="#FFFFFF" strokeWidth="0.5" strokeLinejoin="round" d={paths.upperAccentSegment} />
+        <path fill="#FFFFFF" stroke="#FFFFFF" strokeWidth="0.5" strokeLinejoin="round" d={paths.centerPointer} />
       </g>
     </svg>
   ) : (
@@ -87,7 +90,6 @@ export const BaseerLogo: React.FC<BaseerLogoProps> = ({
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="شعار بَصير"
-      shapeRendering="geometricPrecision"
       className="shrink-0"
     >
       <path className={primaryClass} d={paths.bottomArc} />

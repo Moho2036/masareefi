@@ -2,14 +2,13 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico?v=4.0" sizes="any" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4.0" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=4.0" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=4.0" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=4.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=5.0" />
+    <link rel="icon" href="/favicon.ico?v=5.0" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=5.0" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=5.0" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=5.0" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#F4F4F5" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#09090B" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#09090B" />
     <meta name="description" content="بَصير - بصيرتك المالية لإدارة المصاريف والمداخيل وتتبع الميزانية الشخصية" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,14 +22,23 @@
     <script>
       (function() {
         try {
-          if ('caches' in window) {
-            var BRAND_KEY = 'baseer_asset_v4_0';
-            if (localStorage.getItem(BRAND_KEY) !== 'done') {
-              localStorage.setItem(BRAND_KEY, 'done');
+          var CURRENT_APP_VERSION = 'baseer_v5_2_sharp_release';
+          if (localStorage.getItem('baseer_app_version') !== CURRENT_APP_VERSION) {
+            localStorage.setItem('baseer_app_version', CURRENT_APP_VERSION);
+            if ('caches' in window) {
               caches.keys().then(function(keys) {
                 keys.forEach(function(k) { caches.delete(k); });
               });
             }
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+              });
+            }
+            if (localStorage.getItem('baseer_has_visited')) {
+              window.location.reload();
+            }
+            localStorage.setItem('baseer_has_visited', 'true');
           }
         } catch (e) {}
       })();
@@ -61,10 +69,12 @@
           } else {
             document.documentElement.classList.remove('dark');
           }
-          var themeColorMeta = document.querySelector('meta[name="theme-color"]');
-          if (themeColorMeta) {
-            themeColorMeta.setAttribute('content', isDark ? '#09090B' : '#F4F4F5');
-          }
+          var color = isDark ? '#09090B' : '#F4F4F5';
+          var metas = document.querySelectorAll('meta[name="theme-color"]');
+          metas.forEach(function(m) {
+            m.setAttribute('content', color);
+            m.removeAttribute('media');
+          });
         } catch (e) {}
       })();
     </script>
