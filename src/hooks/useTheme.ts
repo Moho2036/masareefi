@@ -87,7 +87,7 @@ export function useTheme() {
     }
 
     const metas = document.querySelectorAll('meta[name="theme-color"]')
-    const color = resolvedTheme === 'dark' ? '#09090B' : '#F4F4F5'
+    const color = '#09090B'
     metas.forEach((meta) => {
       meta.setAttribute('content', color)
       meta.removeAttribute('media')
