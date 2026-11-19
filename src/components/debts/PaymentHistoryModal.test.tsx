@@ -685,4 +685,66 @@ describe('PaymentHistoryModal', () => {
     fireEvent.click(addPaymentBtn)
     expect(mockOpenPaymentModal).toHaveBeenCalledWith(sampleDebt)
   })
+
+  it('toggles collapse for entries and payments when clicking their header buttons', () => {
+    const sampleDebt: Debt = {
+      id: 'd-test-collapse',
+      personName: 'حمزة',
+      type: 'lent',
+      amountFils: 80000,
+      paidFils: 20000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      entries: [
+        {
+          id: 'e-1',
+          amountFils: 80000,
+          date: new Date('2026-01-01'),
+          title: 'سلفة أولى',
+          note: '',
+          createdAt: new Date(),
+        },
+      ],
+      payments: [
+        {
+          id: 'p-1',
+          amountFils: 20000,
+          date: new Date('2026-01-10'),
+          note: 'دفعة أولى',
+          createdAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+    }
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={sampleDebt}
+      />
+    )
+
+    expect(screen.getAllByText('سلفة أولى')).toHaveLength(2)
+    expect(screen.getAllByText(/دفعة أولى/)).toHaveLength(2)
+
+    // Click entries header button to collapse
+    const entriesHeaderBtn = screen.getByRole('button', { name: /قائمة السلف/i })
+    fireEvent.click(entriesHeaderBtn)
+    expect(screen.getAllByText('سلفة أولى')).toHaveLength(1) // Only print report remains
+
+    // Click entries header button to expand again
+    fireEvent.click(entriesHeaderBtn)
+    expect(screen.getAllByText('سلفة أولى')).toHaveLength(2)
+
+    // Click payments header button to collapse
+    const paymentsHeaderBtn = screen.getByRole('button', { name: /قائمة الدفعات/i })
+    fireEvent.click(paymentsHeaderBtn)
+    expect(screen.getAllByText(/دفعة أولى/)).toHaveLength(1) // Only print report remains
+
+    // Click payments header button to expand again
+    fireEvent.click(paymentsHeaderBtn)
+    expect(screen.getAllByText(/دفعة أولى/)).toHaveLength(2)
+  })
 })

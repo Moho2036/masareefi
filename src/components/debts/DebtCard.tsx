@@ -24,6 +24,7 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
   const progress = getDebtProgress(debt)
   const overdue = isDebtOverdue(debt)
   const isLent = debt.type === 'lent'
+  const isMerged = Boolean(debt.entries && debt.entries.length > 1)
 
   // Initials (2 letters for multi-word, 1 letter for single word)
   const initials = React.useMemo(() => {
@@ -124,14 +125,19 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
         </div>
 
         <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
-          <span>المبلغ الأصلي: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums"><FormattedMoney amountFils={debt.amountFils} /></strong></span>
+          <span>{isMerged ? 'إجمالي السلف: ' : isLent ? 'أصل السلفة: ' : 'أصل الالتزام: '} <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums"><FormattedMoney amountFils={debt.amountFils} /></strong></span>
           <span>المسدد: <strong className="text-zinc-700 dark:text-zinc-300 tabular-nums"><FormattedMoney amountFils={debt.paidFils || 0} /></strong></span>
         </div>
 
         {/* Progress Bar (Anchored to right in RTL) */}
         <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden mt-2 flex justify-start">
           <div
-            className="h-full transition-all duration-300 rounded-full bg-blue-600 dark:bg-blue-500"
+            className={cn(
+              'h-full transition-all duration-300 rounded-full',
+              debt.settled
+                ? 'bg-zinc-400 dark:bg-zinc-600'
+                : 'bg-blue-600 dark:bg-blue-500'
+            )}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -181,16 +187,21 @@ export const DebtCard: React.FC<DebtCardProps> = React.memo(({
                 e.stopPropagation()
                 onOpenPaymentModal(debt)
               }}
-              className="w-full h-11 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 active:scale-[0.98] shadow-2xs"
+              className="w-full h-11 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-2xs dark:shadow-none active:scale-[0.98]"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>تسجيل {isLent ? 'دفعة استرداد' : 'دفعة سداد'}</span>
             </button>
           )
         ) : (
-          <div className="w-full h-11 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>تم السداد بالكامل</span>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-xs text-zinc-600 dark:text-zinc-300 font-bold flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>تم السداد بالكامل</span>
+            </span>
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:underline">
+              عرض السجل والكشف ←
+            </span>
           </div>
         )}
       </div>

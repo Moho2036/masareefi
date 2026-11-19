@@ -98,15 +98,32 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
   return (
     <div className="space-y-2.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
       <div className="flex items-center justify-between py-1 select-none">
-        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-          <span>تفاصيل السلف وأصل الديون المسجلة</span>
+        <button
+          type="button"
+          onClick={() => {
+            triggerHaptic('tick')
+            setIsCollapsed((prev) => !prev)
+          }}
+          aria-expanded={!isEffectiveCollapsed}
+          aria-label={isEffectiveCollapsed ? 'توسيع قائمة السلف' : 'طي قائمة السلف'}
+          className="flex items-center gap-2 text-start cursor-pointer group py-1 select-none"
+        >
+          <ChevronDown
+            className={cn(
+              'w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-transform duration-200 shrink-0',
+              isEffectiveCollapsed && '-rotate-90'
+            )}
+          />
+          <span className="text-xs font-black text-zinc-800 dark:text-zinc-200">
+            تفاصيل السلف وأصل الديون المسجلة
+          </span>
           <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
             {rawEntries.length}
           </span>
-        </h3>
+        </button>
 
-        {/* Left side actions: Add Entry Button + Small Chevron */}
-        <div className="flex items-center gap-1.5 print-hide">
+        {/* Left side actions: Add Entry Button ONLY */}
+        <div className="print-hide">
           <button
             type="button"
             onClick={() => {
@@ -118,24 +135,6 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>إضافة سلفة</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic('tick')
-              setIsCollapsed((prev) => !prev)
-            }}
-            aria-expanded={!isEffectiveCollapsed}
-            aria-label={isEffectiveCollapsed ? 'توسيع قائمة السلف' : 'طي قائمة السلف'}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          >
-            <ChevronDown
-              className={cn(
-                'w-3.5 h-3.5 transition-transform duration-200',
-                isEffectiveCollapsed && '-rotate-90'
-              )}
-            />
           </button>
         </div>
       </div>
