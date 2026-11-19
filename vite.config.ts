@@ -25,7 +25,7 @@ export default defineConfig({
         short_name: 'بَصير',
         description: 'تطبيق مالي شخصي يوحّد الرصيد والالتزامات والمصاريف والتقارير في مكان واحد.',
         theme_color: '#09090B',
-        background_color: '#09090B',
+        background_color: '#F4F4F5',
         display: 'standalone',
         orientation: 'any',
         dir: 'rtl',

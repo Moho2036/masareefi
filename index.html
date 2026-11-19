@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=5.0" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=5.0" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#09090B" />
+    <meta name="theme-color" content="#F4F4F5" />
     <meta name="description" content="بَصير - بصيرتك المالية لإدارة المصاريف والمداخيل وتتبع الميزانية الشخصية" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -22,9 +22,9 @@
     <script>
       (function() {
         try {
-          var CURRENT_APP_VERSION = 'baseer_v5_2_sharp_release';
-          if (localStorage.getItem('baseer_app_version') !== CURRENT_APP_VERSION) {
-            localStorage.setItem('baseer_app_version', CURRENT_APP_VERSION);
+          var PURGE_VERSION = 'baseer_v8_purge_system_bar';
+          if (localStorage.getItem('baseer_pwa_version') !== PURGE_VERSION) {
+            localStorage.setItem('baseer_pwa_version', PURGE_VERSION);
             if ('caches' in window) {
               caches.keys().then(function(keys) {
                 keys.forEach(function(k) { caches.delete(k); });
@@ -32,13 +32,12 @@
             }
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(regs) {
-                regs.forEach(function(r) { r.unregister(); });
+                var unregisterPromises = regs.map(function(r) { return r.unregister(); });
+                Promise.all(unregisterPromises).then(function() {
+                  window.location.reload();
+                });
               });
             }
-            if (localStorage.getItem('baseer_has_visited')) {
-              window.location.reload();
-            }
-            localStorage.setItem('baseer_has_visited', 'true');
           }
         } catch (e) {}
       })();
