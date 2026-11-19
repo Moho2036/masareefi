@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { DebtsPage } from './DebtsPage'
 import { deleteDebt, checkDebtInitialTransactionExists, mergePersonDebts } from '../services/debts'
@@ -169,18 +169,23 @@ describe('DebtsPage Component', () => {
 
   it('opens delete confirmation modal with deleteTransactions checked by default to prevent orphaned records', async () => {
     renderDebtsPage()
-    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
-    fireEvent.click(deleteButtons[0]) // أحمد محمود has paidFils > 0
+    // Open debt dossier first
+    fireEvent.click(screen.getByText('أحمد محمود'))
+    // Click delete inside dossier
+    const deleteBtn = screen.getByTitle('حذف هذا الدين')
+    fireEvent.click(deleteBtn)
 
-    expect(screen.getByText(/تأكيد حذف الدين/i)).toBeInTheDocument()
-    const toggle = screen.getByRole('switch', {
+    const deleteDialog = await screen.findByRole('dialog', { name: /تأكيد حذف الدين/i })
+    expect(deleteDialog).toBeInTheDocument()
+
+    const toggle = within(deleteDialog).getByRole('switch', {
       name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
     })
     expect(toggle).toBeInTheDocument()
     expect(toggle.getAttribute('aria-checked')).toBe('true')
 
-    // Click confirm delete
-    const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
+    // Click confirm delete inside the confirmation dialog
+    const confirmBtn = within(deleteDialog).getByRole('button', { name: /^حذف الدين$/i })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
@@ -190,16 +195,20 @@ describe('DebtsPage Component', () => {
 
   it('allows unchecking deleteTransactions and calls deleteDebt with deleteTransactions = false', async () => {
     renderDebtsPage()
-    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
-    fireEvent.click(deleteButtons[0])
+    // Open debt dossier first
+    fireEvent.click(screen.getByText('أحمد محمود'))
+    // Click delete inside dossier
+    const deleteBtn = screen.getByTitle('حذف هذا الدين')
+    fireEvent.click(deleteBtn)
 
-    const toggle = screen.getByRole('switch', {
+    const deleteDialog = await screen.findByRole('dialog', { name: /تأكيد حذف الدين/i })
+    const toggle = within(deleteDialog).getByRole('switch', {
       name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
     })
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-checked')).toBe('false')
 
-    const confirmBtn = screen.getByRole('button', { name: /^حذف الدين$/i })
+    const confirmBtn = within(deleteDialog).getByRole('button', { name: /^حذف الدين$/i })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
@@ -211,12 +220,14 @@ describe('DebtsPage Component', () => {
     vi.mocked(checkDebtInitialTransactionExists).mockResolvedValue(true)
 
     renderDebtsPage()
-    const deleteButtons = screen.getAllByRole('button', { name: /حذف/i })
-    // debt-3 has paidFils: 0 and payments: [] (index 1 after debt-1)
-    fireEvent.click(deleteButtons[1])
+    // debt-3 has paidFils: 0 and payments: [] (خالد عبد الله)
+    fireEvent.click(screen.getByText('خالد عبد الله'))
+    const deleteBtn = screen.getByTitle('حذف هذا الدين')
+    fireEvent.click(deleteBtn)
 
     await waitFor(() => {
-      const toggle = screen.getByRole('switch', {
+      const deleteDialog = screen.getByRole('dialog', { name: /تأكيد حذف الدين/i })
+      const toggle = within(deleteDialog).getByRole('switch', {
         name: /حذف المعاملات المالية المرتبطة بهذا الدين \(أصل الدين والدفعات\) من المحفظة أيضاً/i,
       })
       expect(toggle).toBeInTheDocument()

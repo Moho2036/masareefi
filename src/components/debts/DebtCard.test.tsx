@@ -66,10 +66,9 @@ describe('DebtCard Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /تسجيل دفعة استرداد/i }))
     expect(onOpenPaymentModal).toHaveBeenCalledWith(sampleDebt)
 
-    fireEvent.click(screen.getByTitle('حذف'))
-    expect(onDelete).toHaveBeenCalledWith(sampleDebt)
-
-    // Edit button is NOT on the exterior card (moved inside history dossier per design)
+    // Delete, History, and Edit buttons are NOT on the exterior card (moved inside history dossier per design)
+    expect(screen.queryByTitle('حذف')).toBeNull()
+    expect(screen.queryByTitle('سجل الحركات وكشف الحساب')).toBeNull()
     expect(screen.queryByTitle('تعديل')).toBeNull()
 
     // Clicking the card itself opens the history modal

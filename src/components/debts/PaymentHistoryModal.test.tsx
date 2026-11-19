@@ -493,7 +493,7 @@ describe('PaymentHistoryModal', () => {
     expect(screen.getAllByText('سلفة أولى')[0]).toBeInTheDocument()
 
     // Open add entry form
-    const addEntryBtn = screen.getByText('إضافة سلفة جديدة على هذا الحساب')
+    const addEntryBtn = screen.getByTitle('إضافة سلفة جديدة على هذا الحساب')
     fireEvent.click(addEntryBtn)
 
     expect(screen.getByPlaceholderText('0.000')).toBeInTheDocument()
@@ -654,5 +654,35 @@ describe('PaymentHistoryModal', () => {
     const deleteBtn = screen.getByRole('button', { name: /حذف الدين/i })
     fireEvent.click(deleteBtn)
     expect(mockDelete).toHaveBeenCalledWith(sampleDebt)
+  })
+
+  it('calls onOpenPaymentModal when clicking add payment button in payments section', () => {
+    const sampleDebt: Debt = {
+      id: 'd-test-pay-action',
+      personName: 'حمزة',
+      type: 'lent',
+      amountFils: 80000,
+      paidFils: 20000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    const mockOpenPaymentModal = vi.fn()
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={sampleDebt}
+        onOpenPaymentModal={mockOpenPaymentModal}
+      />
+    )
+
+    const addPaymentBtn = screen.getByRole('button', { name: /تسجيل دفعة/i })
+    fireEvent.click(addPaymentBtn)
+    expect(mockOpenPaymentModal).toHaveBeenCalledWith(sampleDebt)
   })
 })

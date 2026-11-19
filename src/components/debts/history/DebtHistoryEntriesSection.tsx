@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { AlertTriangle, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { AlertTriangle, Pencil, Trash2, ChevronDown, Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
@@ -97,28 +97,48 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
 
   return (
     <div className="space-y-2.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-      <button
-        type="button"
-        onClick={() => {
-          triggerHaptic('tick')
-          setIsCollapsed((prev) => !prev)
-        }}
-        aria-expanded={!isEffectiveCollapsed}
-        className="w-full flex items-center justify-between text-start cursor-pointer group py-1 select-none"
-      >
+      <div className="flex items-center justify-between py-1 select-none">
         <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
           <span>تفاصيل السلف وأصل الديون المسجلة</span>
           <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
             {rawEntries.length}
           </span>
         </h3>
-        <ChevronDown
-          className={cn(
-            'w-4 h-4 text-zinc-400 transition-transform duration-200 group-hover:text-zinc-600 dark:group-hover:text-zinc-200',
-            isEffectiveCollapsed && '-rotate-90'
-          )}
-        />
-      </button>
+
+        {/* Left side actions: Add Entry Button + Small Chevron */}
+        <div className="flex items-center gap-1.5 print-hide">
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('tick')
+              setIsAddingEntry((prev) => !prev)
+            }}
+            className="press-scale inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg cursor-pointer transition-colors"
+            title="إضافة سلفة جديدة على هذا الحساب"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>إضافة سلفة</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('tick')
+              setIsCollapsed((prev) => !prev)
+            }}
+            aria-expanded={!isEffectiveCollapsed}
+            aria-label={isEffectiveCollapsed ? 'توسيع قائمة السلف' : 'طي قائمة السلف'}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <ChevronDown
+              className={cn(
+                'w-3.5 h-3.5 transition-transform duration-200',
+                isEffectiveCollapsed && '-rotate-90'
+              )}
+            />
+          </button>
+        </div>
+      </div>
 
       {!isEffectiveCollapsed && (
         <div className="space-y-2.5">

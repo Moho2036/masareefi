@@ -117,9 +117,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           onPrint={handlePrint}
           onEdit={onEdit}
           onDelete={onDelete}
-          onOpenPaymentModal={onOpenPaymentModal}
-          onToggleAddEntry={() => entriesState.setIsAddingEntry((prev) => !prev)}
-          isAddingEntry={entriesState.isAddingEntry}
         />
 
         <DebtHistoryEntriesSection
@@ -192,6 +189,8 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           onStartEdit={paymentsState.handleStartEdit}
           onCancelEdit={paymentsState.handleCancelEdit}
           onSaveEdit={paymentsState.handleSaveEdit}
+          onOpenPaymentModal={() => onOpenPaymentModal?.(activeDebt)}
+          isSettled={activeDebt.settled}
         />
       </div>
 

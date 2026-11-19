@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { AlertCircle, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { AlertCircle, Pencil, Trash2, ChevronDown, Plus } from 'lucide-react'
 import { motion } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
@@ -40,6 +40,8 @@ export interface DebtHistoryPaymentsSectionProps {
   onStartEdit: (p: DebtPayment) => void
   onCancelEdit: () => void
   onSaveEdit: (p: DebtPayment) => void
+  onOpenPaymentModal?: () => void
+  isSettled?: boolean
 }
 
 export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProps> = ({
@@ -71,33 +73,57 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
+  onOpenPaymentModal,
+  isSettled = false,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
     <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-      <button
-        type="button"
-        onClick={() => {
-          triggerHaptic('tick')
-          setIsCollapsed((prev) => !prev)
-        }}
-        aria-expanded={!isCollapsed}
-        className="w-full flex items-center justify-between text-start cursor-pointer group py-1 select-none"
-      >
+      <div className="flex items-center justify-between py-1 select-none">
         <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
           <span>سجل دفعات السداد</span>
           <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
             {payments.length}
           </span>
         </h3>
-        <ChevronDown
-          className={cn(
-            'w-4 h-4 text-zinc-400 transition-transform duration-200 group-hover:text-zinc-600 dark:group-hover:text-zinc-200',
-            isCollapsed && '-rotate-90'
+
+        {/* Left side actions: Add Payment Button + Small Chevron */}
+        <div className="flex items-center gap-1.5 print-hide">
+          {!isSettled && onOpenPaymentModal && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('impact')
+                onOpenPaymentModal()
+              }}
+              className="press-scale inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg cursor-pointer transition-colors"
+              title="تسجيل دفعة سداد جديدة"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>تسجيل دفعة</span>
+            </button>
           )}
-        />
-      </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('tick')
+              setIsCollapsed((prev) => !prev)
+            }}
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'توسيع قائمة الدفعات' : 'طي قائمة الدفعات'}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <ChevronDown
+              className={cn(
+                'w-3.5 h-3.5 transition-transform duration-200',
+                isCollapsed && '-rotate-90'
+              )}
+            />
+          </button>
+        </div>
+      </div>
 
       {!isCollapsed && (
         <div className="space-y-2">

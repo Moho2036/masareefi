@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Copy, MessageSquare, Share2, Printer, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Copy, MessageSquare, Share2, Printer, ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import { FormattedMoney } from '../../ui/FormattedMoney'
 import { cn } from '../../../lib/cn'
 import { triggerHaptic } from '../../../lib/haptics'
@@ -17,9 +17,6 @@ export interface DebtHistoryActionBarProps {
   onPrint: () => void
   onEdit?: (debt: Debt) => void
   onDelete?: (debt: Debt) => void
-  onOpenPaymentModal?: (debt: Debt) => void
-  onToggleAddEntry?: () => void
-  isAddingEntry?: boolean
 }
 
 export const DebtHistoryActionBar: React.FC<DebtHistoryActionBarProps> = ({
@@ -33,9 +30,6 @@ export const DebtHistoryActionBar: React.FC<DebtHistoryActionBarProps> = ({
   onPrint,
   onEdit,
   onDelete,
-  onOpenPaymentModal,
-  onToggleAddEntry,
-  isAddingEntry = false,
 }) => {
   const [isShareOpen, setIsShareOpen] = useState(() => (isTestEnv ? true : false))
 
@@ -75,44 +69,8 @@ export const DebtHistoryActionBar: React.FC<DebtHistoryActionBarProps> = ({
         </div>
       </div>
 
-      {/* Dedicated Separate Action Buttons Strip */}
+      {/* Management & Sharing Bar */}
       <div className="print-hide space-y-2">
-        {/* Addition Actions Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {!debt.settled && onOpenPaymentModal && (
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('impact')
-                onOpenPaymentModal(debt)
-              }}
-              className="press-scale inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 transition-colors cursor-pointer shadow-2xs"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>تسجيل {isLent ? 'دفعة استرداد' : 'دفعة سداد'}</span>
-            </button>
-          )}
-          {onToggleAddEntry && (
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('tick')
-                onToggleAddEntry()
-              }}
-              className={cn(
-                'press-scale inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer shadow-2xs',
-                isAddingEntry
-                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900'
-                  : 'bg-white dark:bg-zinc-800 border-[#E4E4E7] dark:border-[#27272A] text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700'
-              )}
-            >
-              <Plus className="w-4 h-4 stroke-[2.5] text-blue-600 dark:text-blue-400" />
-              <span>إضافة سلفة جديدة على هذا الحساب</span>
-            </button>
-          )}
-        </div>
-
-        {/* Management & Sharing Bar */}
         <div className="flex items-center gap-2">
           {onEdit && (
             <button
