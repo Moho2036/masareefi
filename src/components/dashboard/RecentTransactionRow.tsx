@@ -135,6 +135,7 @@ export const RecentTransactionRow: React.FC<RecentTransactionRowProps> = ({
           // Direct row click is disabled per [TABOO-17] and user parity requirement
         }}
         onTouchStart={(e) => {
+          if (typeof window !== 'undefined' && window.innerWidth >= 640) return
           touchStartX.current = e.touches[0].clientX
           touchStartY.current = e.touches[0].clientY
           touchDirection.current = null
@@ -206,7 +207,7 @@ export const RecentTransactionRow: React.FC<RecentTransactionRowProps> = ({
           transition: isDragging ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className={cn(
-          'flex items-center justify-between py-2.5 px-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 rounded-xl transition-colors cursor-default bg-white dark:bg-[#121215] relative z-10 min-h-[48px]'
+          'flex items-center justify-between py-2.5 px-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 rounded-xl transition-colors cursor-default bg-white dark:bg-[#121215] relative z-10 min-h-[48px] sm:!transform-none'
         )}
       >
         <div className="flex items-center gap-3 min-w-0">

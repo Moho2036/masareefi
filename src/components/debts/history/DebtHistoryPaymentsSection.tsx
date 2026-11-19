@@ -2,12 +2,12 @@ import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { AlertCircle, Pencil, Trash2, ChevronDown, Plus } from 'lucide-react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
 import { toWesternDigits } from '../../../lib/dates'
 import { triggerHaptic } from '../../../lib/haptics'
-import { springSnappy } from '../../../lib/motionTokens'
+import { springSnappy, isTestEnv } from '../../../lib/motionTokens'
 import { cn } from '../../../lib/cn'
 import type { DebtPayment } from '../../../types'
 
@@ -45,36 +45,12 @@ export interface DebtHistoryPaymentsSectionProps {
 }
 
 export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProps> = ({
-  payments,
-  isLent,
-  debtStartStr,
-  currencySymbol,
-  formatCurrency,
-  isCompacting,
-  onCompact,
-  deletingId,
-  confirmDeleteId,
-  setConfirmDeleteId,
-  deletePaymentTx,
-  setDeletePaymentTx,
-  onDeletePayment,
-  editingPaymentId,
-  editAmountStr,
-  setEditAmountStr,
-  editDateStr,
-  setEditDateStr,
-  editNote,
-  setEditNote,
-  editSyncTx,
-  setEditSyncTx,
-  checkingEditSync,
-  editError,
-  isSavingEdit,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onOpenPaymentModal,
-  isSettled = false,
+  payments, isLent, debtStartStr, currencySymbol, formatCurrency, isCompacting,
+  onCompact, deletingId, confirmDeleteId, setConfirmDeleteId, deletePaymentTx,
+  setDeletePaymentTx, onDeletePayment, editingPaymentId, editAmountStr,
+  setEditAmountStr, editDateStr, setEditDateStr, editNote, setEditNote,
+  editSyncTx, setEditSyncTx, checkingEditSync, editError, isSavingEdit,
+  onStartEdit, onCancelEdit, onSaveEdit, onOpenPaymentModal, isSettled = false,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
@@ -124,8 +100,16 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
         </div>
       </div>
 
-      {!isCollapsed && (
-        <div className="space-y-2">
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.div
+            key="debt-history-payments-content"
+            initial={isTestEnv ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={isTestEnv ? undefined : { opacity: 0, height: 0 }}
+            transition={isTestEnv ? { duration: 0 } : springSnappy}
+            className="overflow-hidden space-y-2"
+          >
 
       {/* Compaction Banner */}
       {payments.length >= 90 && (
@@ -397,8 +381,9 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
             })}
         </div>
       )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

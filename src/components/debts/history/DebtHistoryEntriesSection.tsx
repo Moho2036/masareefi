@@ -7,7 +7,7 @@ import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
 import { toWesternDigits } from '../../../lib/dates'
 import { triggerHaptic } from '../../../lib/haptics'
-import { springSnappy } from '../../../lib/motionTokens'
+import { springSnappy, isTestEnv } from '../../../lib/motionTokens'
 import { cn } from '../../../lib/cn'
 import type { DebtEntry } from '../../../types'
 
@@ -53,44 +53,15 @@ export interface DebtHistoryEntriesSectionProps {
 }
 
 export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps> = ({
-  rawEntries,
-  hasExplicitEntries,
-  entryError,
-  isCompactingEntries,
-  onCompactEntries,
-  isAddingEntry,
-  setIsAddingEntry,
-  newEntryAmountStr,
-  setNewEntryAmountStr,
-  newEntryDateStr,
-  setNewEntryDateStr,
-  newEntryTitle,
-  setNewEntryTitle,
-  newEntryNote,
-  setNewEntryNote,
-  newEntrySync,
-  setNewEntrySync,
-  isSavingEntry,
-  onAddEntry,
-  editingEntryId,
-  editEntryAmountStr,
-  setEditEntryAmountStr,
-  editEntryDateStr,
-  setEditEntryDateStr,
-  editEntryTitle,
-  setEditEntryTitle,
-  editEntryNote,
-  setEditEntryNote,
-  isSavingEditEntry,
-  onStartEditEntry,
-  onCancelEditEntry,
-  onSaveEditEntry,
-  confirmDeleteEntryId,
-  setConfirmDeleteEntryId,
-  isDeletingEntry,
-  onDeleteEntry,
-  currencySymbol,
-  formatCurrency,
+  rawEntries, hasExplicitEntries, entryError, isCompactingEntries, onCompactEntries,
+  isAddingEntry, setIsAddingEntry, newEntryAmountStr, setNewEntryAmountStr,
+  newEntryDateStr, setNewEntryDateStr, newEntryTitle, setNewEntryTitle,
+  newEntryNote, setNewEntryNote, newEntrySync, setNewEntrySync, isSavingEntry,
+  onAddEntry, editingEntryId, editEntryAmountStr, setEditEntryAmountStr,
+  editEntryDateStr, setEditEntryDateStr, editEntryTitle, setEditEntryTitle,
+  editEntryNote, setEditEntryNote, isSavingEditEntry, onStartEditEntry,
+  onCancelEditEntry, onSaveEditEntry, confirmDeleteEntryId, setConfirmDeleteEntryId,
+  isDeletingEntry, onDeleteEntry, currencySymbol, formatCurrency,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const isEffectiveCollapsed = isAddingEntry ? false : isCollapsed
@@ -139,8 +110,16 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
         </div>
       </div>
 
-      {!isEffectiveCollapsed && (
-        <div className="space-y-2.5">
+      <AnimatePresence initial={false}>
+        {!isEffectiveCollapsed && (
+          <motion.div
+            key="debt-history-entries-content"
+            initial={isTestEnv ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={isTestEnv ? undefined : { opacity: 0, height: 0 }}
+            transition={isTestEnv ? { duration: 0 } : springSnappy}
+            className="overflow-hidden space-y-2.5"
+          >
           {entryError && (
             <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/50">
               {entryError}
@@ -430,8 +409,9 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
           )
         })}
       </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

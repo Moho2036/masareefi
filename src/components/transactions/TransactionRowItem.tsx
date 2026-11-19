@@ -89,11 +89,11 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
 
   return (
     <div className="relative overflow-hidden overflow-x-clip select-none group">
-      {/* Touch Swipe-to-Right Action Reveal Strip (Reveals on swipe on all touch screens) */}
+      {/* Touch Swipe-to-Right Action Reveal Strip (Reveals on swipe on mobile screens) */}
       <div
         dir="ltr"
         className={cn(
-          'absolute inset-y-0 left-0 flex items-stretch z-0 print:hidden overflow-hidden',
+          'absolute inset-y-0 left-0 flex items-stretch z-0 sm:hidden print:hidden overflow-hidden',
           effectiveOffset === 0 && 'pointer-events-none'
         )}
         style={{ width: `${maxSwipe}px` }}
@@ -205,6 +205,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
           openEdit(tx)
         }}
         onTouchStart={(e) => {
+          if (typeof window !== 'undefined' && window.innerWidth >= 640) return
           touchStartX.current = e.touches[0].clientX
           touchStartY.current = e.touches[0].clientY
           touchDirection.current = null
@@ -280,7 +281,7 @@ export const TransactionRowItem: React.FC<TransactionRowItemProps> = ({
             : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className={cn(
-          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10'
+          'group flex items-center justify-between p-3 sm:p-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer bg-white dark:bg-[#121215] relative z-10 sm:!transform-none'
         )}
       >
         {/* Right side: Icon + Title + Subline */}
