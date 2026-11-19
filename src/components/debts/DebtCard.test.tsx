@@ -18,7 +18,7 @@ describe('DebtCard Component', () => {
     amountFils: 100000,
     paidFils: 40000,
     startDate: new Date('2026-05-01'),
-    dueDate: new Date('2027-08-01'),
+    dueDate: new Date('2026-08-01'),
     note: 'مساعدة مؤقتة',
     settled: false,
     payments: [
@@ -47,7 +47,7 @@ describe('DebtCard Component', () => {
     expect(screen.getByText('عمر التميمي')).toBeInTheDocument()
     expect(screen.getByText('60')).toBeInTheDocument() // 100 - 40 = 60
     expect(screen.getByText('40% مسدد')).toBeInTheDocument()
-    expect(screen.getByText('مستحق لك')).toBeInTheDocument()
+    expect(screen.getByText('لي (مستحق)')).toBeInTheDocument()
   })
 
   it('calls action callbacks when clicking buttons', () => {
@@ -66,18 +66,17 @@ describe('DebtCard Component', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /استرداد دفعة سداد/i }))
+    fireEvent.click(screen.getByRole('button', { name: /تسجيل دفعة استرداد/i }))
     expect(onOpenPaymentModal).toHaveBeenCalledWith(sampleDebt)
+
+    fireEvent.click(screen.getByTitle('سجل الدفعات'))
+    expect(onOpenHistoryModal).toHaveBeenCalledWith(sampleDebt)
 
     fireEvent.click(screen.getByTitle('تعديل'))
     expect(onEdit).toHaveBeenCalledWith(sampleDebt)
 
     fireEvent.click(screen.getByTitle('حذف'))
     expect(onDelete).toHaveBeenCalledWith(sampleDebt)
-
-    // Clicking the card itself opens the dossier
-    fireEvent.click(screen.getByText('عمر التميمي'))
-    expect(onOpenHistoryModal).toHaveBeenCalledWith(sampleDebt)
   })
 
   it('shows amber compaction button when debt has 100 payments', () => {
