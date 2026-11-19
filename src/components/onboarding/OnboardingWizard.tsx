@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { BaseerLogo } from '../ui/BaseerLogo'
 import { useAuth } from '../../hooks/useAuth'
 import { useUserSettings } from '../../hooks/useUserSettings'
 import { useCategories } from '../../hooks/useCategories'
@@ -301,13 +302,16 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCo
       <div className="p-2 sm:p-3 space-y-5 text-start">
         {/* Header with step progress and Skip button */}
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
-          <div>
-            <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
-              الخطوة {step} من 4: {stepsTitles[step - 1]}
+          <div className="flex items-center gap-3">
+            <BaseerLogo variant="app-icon" size={38} className="shrink-0 shadow-xs" />
+            <div>
+              <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                الخطوة {step} من 4: {stepsTitles[step - 1]}
+              </div>
+              <h2 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 mt-0.5">
+                تجهيز حسابك في بَصير
+              </h2>
             </div>
-            <h2 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 mt-0.5">
-              تجهيز حسابك في بَصير
-            </h2>
           </div>
 
           <button

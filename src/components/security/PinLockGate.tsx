@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Lock } from 'lucide-react'
+import { BaseerLogo } from '../ui/BaseerLogo'
 import { useAuth } from '../../hooks/useAuth'
 import { signOutUser } from '../../services/auth'
 import {
@@ -349,9 +350,14 @@ export const PinLockGate: React.FC<PinLockGateProps> = ({ children }) => {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#F4F4F5] dark:bg-[#09090B] text-zinc-900 dark:text-white p-6 select-none" dir="rtl">
       <div className="w-full max-w-xs flex flex-col items-center text-center space-y-6">
-        {/* Lock Icon */}
-        <div className="w-16 h-16 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-md dark:shadow-none">
-          <Lock className="w-8 h-8 stroke-[2.2]" />
+        {/* App Lock Logo */}
+        <div className="flex flex-col items-center">
+          <div className="relative">
+            <BaseerLogo variant="app-icon" size={64} className="shadow-lg" />
+            <div className="absolute -bottom-1 -start-1 w-6 h-6 rounded-full bg-zinc-900 dark:bg-zinc-800 border-2 border-white dark:border-[#09090B] flex items-center justify-center text-blue-400">
+              <Lock className="w-3 h-3 stroke-[2.5]" />
+            </div>
+          </div>
         </div>
 
         <div>

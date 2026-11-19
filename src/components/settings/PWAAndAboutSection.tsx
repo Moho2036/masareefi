@@ -34,9 +34,7 @@ export const PWAInstallSection: React.FC<PWAInstallSectionProps> = ({
       <div className="pt-2 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-              <Download className="w-5 h-5 stroke-[2.2]" />
-            </div>
+            <BaseerLogo variant="app-icon" size={40} className="shrink-0 shadow-xs" />
             <div>
               <div className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 {isInstalled ? 'التطبيق مثبت حالياً' : 'تطبيق ويب تقدمي (PWA)'}

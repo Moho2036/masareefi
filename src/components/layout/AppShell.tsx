@@ -161,7 +161,7 @@ export const AppShell: React.FC = () => {
           className="flex items-center gap-3 px-2 mb-8 cursor-pointer group"
           aria-label="الرئيسية — بَصير"
         >
-          <BaseerLogo variant="brand" size={36} showWordmark />
+          <BaseerLogo variant="app-icon" size={40} showWordmark />
         </Link>
 
         {/* Navigation Items */}
@@ -296,10 +296,10 @@ export const AppShell: React.FC = () => {
                   goToCurrentMonth()
                 }
               }}
-              className="flex items-center gap-1.5 shrink-0 cursor-pointer"
+              className="flex items-center gap-2 shrink-0 cursor-pointer"
               aria-label="الرئيسية — بَصير"
             >
-              <BaseerLogo variant="brand" size={22} />
+              <BaseerLogo variant="app-icon" size={30} />
               <span className="text-base sm:text-lg font-black text-zinc-900 dark:text-white shrink-0">
                 بَصير
               </span>

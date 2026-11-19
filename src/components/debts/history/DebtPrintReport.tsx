@@ -57,7 +57,7 @@ export const DebtPrintReport: React.FC<DebtPrintReportProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <BaseerLogo variant="brand" size={24} />
+              <BaseerLogo variant="app-icon" size={26} />
               <span className="text-xl font-black tracking-tight text-zinc-900">بَصير</span>
               <span className="text-sm font-bold text-zinc-600">
                 — كشف حساب مالي تفصيلي

@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
+import { BaseerLogo } from './ui/BaseerLogo'
 
 export interface ErrorBoundaryProps {
   children: ReactNode
@@ -116,13 +117,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         >
           <div className="w-full max-w-md rounded-2xl p-6 bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none text-center space-y-4 animate-scale-in">
             {/* Icon */}
-            <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
-              {isChunk ? (
-                <RefreshCw className="w-6 h-6 stroke-[2]" />
-              ) : (
+            {isChunk ? (
+              <div className="flex justify-center mb-1">
+                <BaseerLogo variant="app-icon" size={52} className="shadow-xs" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 stroke-[2]" />
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Title */}
             <h1 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
