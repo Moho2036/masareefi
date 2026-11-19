@@ -403,6 +403,18 @@ export const DebtsPage: React.FC = () => {
         isOpen={Boolean(historyDebtId && historyDebt)}
         onClose={() => setHistoryDebtId(null)}
         debt={historyDebt}
+        onEdit={(debt) => {
+          setHistoryDebtId(null)
+          handleEdit(debt)
+        }}
+        onDelete={(debt) => {
+          setHistoryDebtId(null)
+          handleDelete(debt)
+        }}
+        onOpenPaymentModal={(debt) => {
+          setHistoryDebtId(null)
+          setPaymentDebtId(debt.id)
+        }}
       />
 
       {/* Delete Debt Confirmation Modal */}
