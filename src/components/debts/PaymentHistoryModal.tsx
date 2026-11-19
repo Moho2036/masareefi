@@ -16,6 +16,9 @@ export interface PaymentHistoryModalProps {
   onClose: () => void
   debt: Debt | null
   onSuccess?: () => void
+  onEdit?: (debt: Debt) => void
+  onDelete?: (debt: Debt) => void
+  onOpenPaymentModal?: (debt: Debt) => void
 }
 
 export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
@@ -23,6 +26,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   onClose,
   debt,
   onSuccess,
+  onEdit,
+  onDelete,
+  onOpenPaymentModal,
 }) => {
   const { showToast } = useToast()
   const { format: formatCurrency, config } = useCurrency()
@@ -109,6 +115,11 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           onWhatsAppShare={handleWhatsAppShare}
           onNativeShare={handleNativeShare}
           onPrint={handlePrint}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onOpenPaymentModal={onOpenPaymentModal}
+          onToggleAddEntry={() => entriesState.setIsAddingEntry((prev) => !prev)}
+          isAddingEntry={entriesState.isAddingEntry}
         />
 
         <DebtHistoryEntriesSection

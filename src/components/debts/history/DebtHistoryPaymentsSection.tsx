@@ -1,7 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { AlertCircle, Pencil, Trash2 } from 'lucide-react'
+import { AlertCircle, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { motion } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
@@ -72,13 +72,35 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
   onCancelEdit,
   onSaveEdit,
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
   return (
     <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200">
-          سجل دفعات السداد ({payments.length})
+      <button
+        type="button"
+        onClick={() => {
+          triggerHaptic('tick')
+          setIsCollapsed((prev) => !prev)
+        }}
+        aria-expanded={!isCollapsed}
+        className="w-full flex items-center justify-between text-start cursor-pointer group py-1 select-none"
+      >
+        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+          <span>سجل دفعات السداد</span>
+          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+            {payments.length}
+          </span>
         </h3>
-      </div>
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 text-zinc-400 transition-transform duration-200 group-hover:text-zinc-600 dark:group-hover:text-zinc-200',
+            isCollapsed && '-rotate-90'
+          )}
+        />
+      </button>
+
+      {!isCollapsed && (
+        <div className="space-y-2">
 
       {/* Compaction Banner */}
       {payments.length >= 90 && (
@@ -348,6 +370,8 @@ export const DebtHistoryPaymentsSection: React.FC<DebtHistoryPaymentsSectionProp
                 </div>
               )
             })}
+        </div>
+      )}
         </div>
       )}
     </div>

@@ -243,10 +243,9 @@ export const DebtsPage: React.FC = () => {
       debt={debt}
       onOpenPaymentModal={handleOpenPaymentModal}
       onOpenHistoryModal={handleOpenHistoryModal}
-      onEdit={handleEdit}
       onDelete={handleDelete}
     />
-  ), [handleOpenPaymentModal, handleOpenHistoryModal, handleEdit, handleDelete])
+  ), [handleOpenPaymentModal, handleOpenHistoryModal, handleDelete])
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -403,6 +402,18 @@ export const DebtsPage: React.FC = () => {
         isOpen={Boolean(historyDebtId && historyDebt)}
         onClose={() => setHistoryDebtId(null)}
         debt={historyDebt}
+        onEdit={(debt) => {
+          setHistoryDebtId(null)
+          handleEdit(debt)
+        }}
+        onDelete={(debt) => {
+          setHistoryDebtId(null)
+          handleDelete(debt)
+        }}
+        onOpenPaymentModal={(debt) => {
+          setHistoryDebtId(null)
+          setPaymentDebtId(debt.id)
+        }}
       />
 
       {/* Delete Debt Confirmation Modal */}

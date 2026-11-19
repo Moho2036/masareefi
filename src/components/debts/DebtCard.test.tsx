@@ -39,7 +39,6 @@ describe('DebtCard Component', () => {
         debt={sampleDebt}
         onOpenPaymentModal={vi.fn()}
         onOpenHistoryModal={vi.fn()}
-        onEdit={vi.fn()}
         onDelete={vi.fn()}
       />
     )
@@ -53,7 +52,6 @@ describe('DebtCard Component', () => {
   it('calls action callbacks when clicking buttons', () => {
     const onOpenPaymentModal = vi.fn()
     const onOpenHistoryModal = vi.fn()
-    const onEdit = vi.fn()
     const onDelete = vi.fn()
 
     render(
@@ -61,7 +59,6 @@ describe('DebtCard Component', () => {
         debt={sampleDebt}
         onOpenPaymentModal={onOpenPaymentModal}
         onOpenHistoryModal={onOpenHistoryModal}
-        onEdit={onEdit}
         onDelete={onDelete}
       />
     )
@@ -69,14 +66,15 @@ describe('DebtCard Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /تسجيل دفعة استرداد/i }))
     expect(onOpenPaymentModal).toHaveBeenCalledWith(sampleDebt)
 
-    fireEvent.click(screen.getByTitle('سجل الدفعات'))
-    expect(onOpenHistoryModal).toHaveBeenCalledWith(sampleDebt)
-
-    fireEvent.click(screen.getByTitle('تعديل'))
-    expect(onEdit).toHaveBeenCalledWith(sampleDebt)
-
     fireEvent.click(screen.getByTitle('حذف'))
     expect(onDelete).toHaveBeenCalledWith(sampleDebt)
+
+    // Edit button is NOT on the exterior card (moved inside history dossier per design)
+    expect(screen.queryByTitle('تعديل')).toBeNull()
+
+    // Clicking the card itself opens the history modal
+    fireEvent.click(screen.getByText('عمر التميمي'))
+    expect(onOpenHistoryModal).toHaveBeenCalledWith(sampleDebt)
   })
 
   it('shows amber compaction button when debt has 100 payments', () => {
@@ -101,7 +99,6 @@ describe('DebtCard Component', () => {
         debt={maxDebt}
         onOpenPaymentModal={onOpenPaymentModal}
         onOpenHistoryModal={onOpenHistoryModal}
-        onEdit={vi.fn()}
         onDelete={vi.fn()}
       />
     )

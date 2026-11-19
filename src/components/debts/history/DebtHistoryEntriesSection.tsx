@@ -1,13 +1,14 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { Plus, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { AlertTriangle, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { DatePickerInput } from '../../ui/DatePickerInput'
 import { Toggle } from '../../ui/Toggle'
 import { toWesternDigits } from '../../../lib/dates'
 import { triggerHaptic } from '../../../lib/haptics'
 import { springSnappy } from '../../../lib/motionTokens'
+import { cn } from '../../../lib/cn'
 import type { DebtEntry } from '../../../types'
 
 export interface DebtHistoryEntriesSectionProps {
@@ -91,30 +92,41 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
   currencySymbol,
   formatCurrency,
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const isEffectiveCollapsed = isAddingEntry ? false : isCollapsed
+
   return (
     <div className="space-y-2.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200">
-          تفاصيل السلف وأصل الديون المسجلة ({rawEntries.length})
+      <button
+        type="button"
+        onClick={() => {
+          triggerHaptic('tick')
+          setIsCollapsed((prev) => !prev)
+        }}
+        aria-expanded={!isEffectiveCollapsed}
+        className="w-full flex items-center justify-between text-start cursor-pointer group py-1 select-none"
+      >
+        <h3 className="text-xs font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+          <span>تفاصيل السلف وأصل الديون المسجلة</span>
+          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+            {rawEntries.length}
+          </span>
         </h3>
-        <button
-          type="button"
-          onClick={() => {
-            triggerHaptic('tick')
-            setIsAddingEntry((prev) => !prev)
-          }}
-          className="press-scale inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer print-hide"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>إضافة سلفة جديدة على هذا الحساب</span>
-        </button>
-      </div>
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 text-zinc-400 transition-transform duration-200 group-hover:text-zinc-600 dark:group-hover:text-zinc-200',
+            isEffectiveCollapsed && '-rotate-90'
+          )}
+        />
+      </button>
 
-      {entryError && (
-        <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/50">
-          {entryError}
-        </div>
-      )}
+      {!isEffectiveCollapsed && (
+        <div className="space-y-2.5">
+          {entryError && (
+            <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/50">
+              {entryError}
+            </div>
+          )}
 
       {/* Compaction Warning Banner for Entries */}
       {hasExplicitEntries && rawEntries.length >= 90 && (
@@ -399,6 +411,8 @@ export const DebtHistoryEntriesSection: React.FC<DebtHistoryEntriesSectionProps>
           )
         })}
       </div>
+        </div>
+      )}
     </div>
   )
 }

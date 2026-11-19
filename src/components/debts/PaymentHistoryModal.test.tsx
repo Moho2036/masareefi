@@ -619,4 +619,40 @@ describe('PaymentHistoryModal', () => {
     // Edit button IS available for the active entry
     expect(screen.getByTitle('تعديل السلفة')).toBeInTheDocument()
   })
+
+  it('calls onEdit and onDelete callbacks from top action bar', () => {
+    const sampleDebt: Debt = {
+      id: 'd-test-actions',
+      personName: 'حمزة',
+      type: 'lent',
+      amountFils: 80000,
+      paidFils: 20000,
+      startDate: new Date('2026-01-01'),
+      settled: false,
+      note: '',
+      payments: [],
+      createdAt: new Date(),
+    }
+
+    const mockEdit = vi.fn()
+    const mockDelete = vi.fn()
+
+    render(
+      <PaymentHistoryModal
+        isOpen={true}
+        onClose={vi.fn()}
+        debt={sampleDebt}
+        onEdit={mockEdit}
+        onDelete={mockDelete}
+      />
+    )
+
+    const editBtn = screen.getByRole('button', { name: /تعديل الدين/i })
+    fireEvent.click(editBtn)
+    expect(mockEdit).toHaveBeenCalledWith(sampleDebt)
+
+    const deleteBtn = screen.getByRole('button', { name: /حذف الدين/i })
+    fireEvent.click(deleteBtn)
+    expect(mockDelete).toHaveBeenCalledWith(sampleDebt)
+  })
 })
