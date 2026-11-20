@@ -345,7 +345,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const rolloverStartTime = rolloverStartDate ? rolloverStartDate.getTime() : null
 
     const includeOpeningBalance =
-      Boolean(user) && (rolloverStartTime === null || periodRange.start.getTime() >= rolloverStartTime)
+      Boolean(user) &&
+      isRolloverEnabled &&
+      (rolloverStartTime === null || periodRange.start.getTime() >= rolloverStartTime)
     const openingFils = includeOpeningBalance ? (settings?.openingBalanceFils ?? 0) : 0
     const priorFils = user && isRolloverEnabled ? rolloverBalanceFils : 0
     const effectiveRolloverBalanceFils = priorFils + openingFils

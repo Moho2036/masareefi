@@ -60,10 +60,7 @@ export function useDashboardData() {
       circles,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils:
-        isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
-          ? effectiveRollover
-          : undefined,
+      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
     })
   }, [
     rawTransactions,
@@ -74,7 +71,6 @@ export function useDashboardData() {
     range,
     effectiveRollover,
     isRolloverEnabled,
-    settings?.openingBalanceFils,
   ])
 
   const displayedRollover = forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover
@@ -193,7 +189,7 @@ export function useDashboardData() {
     return new Date()
   }, [rawTransactions, focusTick])
 
-  const hasRolloverEffect = isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
+  const hasRolloverEffect = isRolloverEnabled
   const effectiveAvailableIncome = sums.income + (hasRolloverEffect ? displayedRollover : 0)
   const isTemporaryLiquidityDeficit =
     displayBalance < 0 && forecast.freeBalance > 0 && forecast.upcomingRecurringIncome > 0

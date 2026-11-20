@@ -833,4 +833,22 @@ describe('SettingsPage Extended Features', () => {
       })
     })
   })
+
+  it('restarts tour by clearing storage keys, dispatching baseer-start-tour, and navigating to /', () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+    localStorage.setItem('baseer_tour_shown_user-123', 'true')
+    localStorage.setItem('masareefi_tour_shown_user-123', 'true')
+
+    render(<SettingsPage />)
+
+    const restartBtn = screen.getByRole('button', { name: 'إعادة تشغيل الجولة التعريفية' })
+    fireEvent.click(restartBtn)
+
+    expect(localStorage.getItem('baseer_tour_shown_user-123')).toBeNull()
+    expect(localStorage.getItem('masareefi_tour_shown_user-123')).toBeNull()
+    expect(mockShowToast).toHaveBeenCalledWith('تمت إعادة ضبط الجولة بنجاح، جاري بدء الجولة...', 'info')
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'baseer-start-tour' }))
+
+    dispatchSpy.mockRestore()
+  })
 })

@@ -89,11 +89,11 @@ export function usePeriodRollover(
     localRollover.key === range.start.toISOString() ? localRollover.amount : 0
 
   const effectiveRollover = useMemo(() => {
-    if (isCurrentFiscalMonth) {
-      return appData?.rolloverBalanceFils ?? 0
-    }
     if (!isRolloverEnabled) {
       return 0
+    }
+    if (isCurrentFiscalMonth) {
+      return appData?.rolloverBalanceFils ?? 0
     }
     if (parsedRolloverStartDate && range.start.getTime() < parsedRolloverStartDate.getTime()) {
       return 0

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { RecurringPage } from './RecurringPage'
 import type { Recurring, Category, MoneyCircle } from '../types'
 
@@ -210,5 +210,46 @@ describe('RecurringPage Component', () => {
     // Only rUpcoming (25.000 د.أ) should be counted in 7 days, rOverdue should be excluded!
     expect(screen.getAllByText('25').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('دفعة واحدة قادمة')).toBeInTheDocument()
+  })
+
+  it('instantly updates toggle active button text inside details modal without closing', async () => {
+    const item: Recurring = {
+      id: 'rec-toggle-test',
+      type: 'expense',
+      amountFils: 30000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-12-01'),
+      active: true,
+      title: 'اشتراك شهري قابل للإيقاف',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [item]
+    render(<RecurringPage />)
+
+    // Click on the recurring card to open details modal
+    fireEvent.click(screen.getByText('اشتراك شهري قابل للإيقاف'))
+
+    // The modal is open, and toggle button currently says "إيقاف مؤقت"
+    const pauseBtn = screen.getByRole('button', { name: /إيقاف مؤقت/i })
+    expect(pauseBtn).toBeInTheDocument()
+
+    // Click pause
+    fireEvent.click(pauseBtn)
+
+    // The button immediately updates to "تفعيل" without closing the modal
+    expect(screen.getByRole('button', { name: /تفعيل/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /إيقاف مؤقت/i })).not.toBeInTheDocument()
+
+    // Click activate
+    const activateBtn = screen.getByRole('button', { name: /تفعيل/i })
+    fireEvent.click(activateBtn)
+
+    // The button immediately updates back to "إيقاف مؤقت"
+    expect(screen.getByRole('button', { name: /إيقاف مؤقت/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /تفعيل/i })).not.toBeInTheDocument()
   })
 })

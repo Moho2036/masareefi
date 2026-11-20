@@ -115,15 +115,15 @@ describe('AppDataContext rolloverBalanceFils consistency', () => {
     expect(result.current?.rolloverLoading).toBe(false)
   })
 
-  it('incorporates openingBalanceFils in effective rollover balance whether rolloverBalance is true or false', () => {
+  it('incorporates openingBalanceFils in effective rollover balance strictly when rolloverBalance is enabled', () => {
     const { result } = renderHook(() => useAppData(), { wrapper })
 
-    // When rolloverBalance is false, but openingBalanceFils is 30000
+    // When rolloverBalance is false, openingBalanceFils is excluded (remains 0)
     act(() => {
       mockSettingsCb?.({ uid: 'user-456', rolloverBalance: false, openingBalanceFils: 30000, monthStartDay: 1 })
     })
 
-    expect(result.current?.rolloverBalanceFils).toBe(30000)
+    expect(result.current?.rolloverBalanceFils).toBe(0)
     expect(result.current?.rolloverLoading).toBe(false)
 
     // When rolloverBalance is enabled with prior transactions of 45000

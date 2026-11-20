@@ -123,10 +123,7 @@ export function useReportsData() {
       circles,
       monthStartDay,
       periodRange: range,
-      rolloverBalanceFils:
-        isRolloverEnabled || (settings?.openingBalanceFils ?? 0) > 0
-          ? effectiveRollover
-          : undefined,
+      rolloverBalanceFils: isRolloverEnabled ? effectiveRollover : undefined,
     })
   }, [
     monthTransactions,
@@ -137,7 +134,6 @@ export function useReportsData() {
     range,
     effectiveRollover,
     isRolloverEnabled,
-    settings?.openingBalanceFils,
   ])
 
   // Yearly data hooks

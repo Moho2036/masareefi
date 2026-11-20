@@ -48,17 +48,13 @@ const ParamWatcher: React.FC<{
     const target = recurringItems.find((r) => r.id === confirmId)
     if (target) {
       onConfirm(target)
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          next.delete('confirmId')
-          return next
-        },
-        { replace: true }
-      )
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('confirmId')
+        return next
+      }, { replace: true })
     }
   }, [searchParams, setSearchParams, recurringItems, onConfirm])
-
   return null
 }
 
@@ -85,7 +81,8 @@ export const RecurringPage: React.FC = () => {
   const [confirmSubmitting, setConfirmSubmitting] = useState(false)
   const [confirmError, setConfirmError] = useState<string | null>(null)
 
-  const [selectedDetailsItem, setSelectedDetailsItem] = useState<Recurring | null>(null)
+  const [selectedDetailsId, setSelectedDetailsId] = useState<string | null>(null)
+  const [activeOverride, setActiveOverride] = useState<{ id: string; active: boolean } | null>(null)
   const [skippingId, setSkippingId] = useState<string | null>(null)
   const [depositingCircleId, setDepositingCircleId] = useState<string | null>(null)
 
@@ -133,23 +130,38 @@ export const RecurringPage: React.FC = () => {
     }
   }
 
-  const categoryMap = useMemo(() => {
-    const map = new Map<string, (typeof categories)[0]>()
-    for (const c of categories) {
-      map.set(c.id, c)
+  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+
+  const effectiveOverride = useMemo(() => {
+    if (!activeOverride) return null
+    const current = recurringItems.find((r) => r.id === activeOverride.id)
+    if (current && current.active === activeOverride.active) {
+      return null
     }
-    return map
-  }, [categories])
+    return activeOverride
+  }, [recurringItems, activeOverride])
+
+  const effectiveRecurringItems = useMemo(() => {
+    if (!effectiveOverride) return recurringItems
+    return recurringItems.map((item) =>
+      item.id === effectiveOverride.id ? { ...item, active: effectiveOverride.active } : item
+    )
+  }, [recurringItems, effectiveOverride])
+
+  const selectedDetailsItem = useMemo(() => {
+    if (!selectedDetailsId) return null
+    return effectiveRecurringItems.find((r) => r.id === selectedDetailsId) ?? null
+  }, [effectiveRecurringItems, selectedDetailsId])
 
   const monthlyStats = useMemo(() => {
-    return calculateMonthlyEquivalent(recurringItems, new Date())
-  }, [recurringItems])
+    return calculateMonthlyEquivalent(effectiveRecurringItems, new Date())
+  }, [effectiveRecurringItems])
 
   const dueWithin7DaysStats = useMemo(() => {
     const todayStart = startOfDay(new Date())
     let totalFils = 0
     let count = 0
-    for (const item of recurringItems) {
+    for (const item of effectiveRecurringItems) {
       if (!item.active || item.type !== 'expense') continue
       const nextD = startOfDay(item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate))
       const diff = differenceInDays(nextD, todayStart)
@@ -159,20 +171,18 @@ export const RecurringPage: React.FC = () => {
       }
     }
     return { totalFils, count }
-  }, [recurringItems, settings?.monthStartDay])
+  }, [effectiveRecurringItems, settings?.monthStartDay])
 
   const sortedRecurringItems = useMemo(() => {
-    return [...recurringItems].sort((a, b) => {
+    return [...effectiveRecurringItems].sort((a, b) => {
       const aActive = a.active !== false
       const bActive = b.active !== false
-      if (aActive !== bActive) {
-        return aActive ? -1 : 1
-      }
+      if (aActive !== bActive) return aActive ? -1 : 1
       const aTime = a.nextDate instanceof Date ? a.nextDate.getTime() : new Date(a.nextDate).getTime()
       const bTime = b.nextDate instanceof Date ? b.nextDate.getTime() : new Date(b.nextDate).getTime()
       return aTime - bTime
     })
-  }, [recurringItems])
+  }, [effectiveRecurringItems])
 
   const activeItems = useMemo(
     () => sortedRecurringItems.filter((r) => r.active !== false),
@@ -189,6 +199,7 @@ export const RecurringPage: React.FC = () => {
   const handleToggleActive = async (item: Recurring) => {
     if (!user) return
     const newActive = !item.active
+    setActiveOverride({ id: item.id, active: newActive })
     try {
       await updateRecurring(user.uid, item.id, { active: newActive })
       if (newActive) {
@@ -202,6 +213,7 @@ export const RecurringPage: React.FC = () => {
       )
     } catch (err) {
       console.error('Failed to toggle recurring item:', err)
+      setActiveOverride(null)
       showToast('تعذر تغيير حالة المعاملة', 'error')
     }
   }
@@ -221,6 +233,9 @@ export const RecurringPage: React.FC = () => {
       await deleteRecurring(user.uid, itemToDelete.id)
       showToast('تم حذف المعاملة المتكررة بنجاح', 'info')
       setItemToDelete(null)
+      if (selectedDetailsId === itemToDelete.id) {
+        setSelectedDetailsId(null)
+      }
     } catch (err) {
       console.error('Failed to delete recurring item:', err)
       showToast('تعذر حذف المعاملة', 'error')
@@ -321,7 +336,7 @@ export const RecurringPage: React.FC = () => {
                   skippingId={skippingId}
                   onOpenConfirm={handleOpenConfirm}
                   onSkipOccurrence={handleSkipOccurrence}
-                  onOpenDetails={(it) => setSelectedDetailsItem(it)}
+                  onOpenDetails={(it) => setSelectedDetailsId(it.id)}
                   onDepositCircleDirect={handleDepositCircleDirect}
                 />
               ))}
@@ -366,7 +381,7 @@ export const RecurringPage: React.FC = () => {
                       skippingId={skippingId}
                       onOpenConfirm={handleOpenConfirm}
                       onSkipOccurrence={handleSkipOccurrence}
-                      onOpenDetails={(it) => setSelectedDetailsItem(it)}
+                      onOpenDetails={(it) => setSelectedDetailsId(it.id)}
                       onDepositCircleDirect={handleDepositCircleDirect}
                     />
                   ))}
@@ -403,18 +418,15 @@ export const RecurringPage: React.FC = () => {
 
       <RecurringDetailsModal
         item={selectedDetailsItem}
-        onClose={() => setSelectedDetailsItem(null)}
+        onClose={() => setSelectedDetailsId(null)}
         categoryMap={categoryMap}
         circles={circles}
         monthStartDay={monthStartDay}
         allTransactions={allTransactions}
-        onEdit={(it) => {
-          setEditingItem(it)
-          setIsFormOpen(true)
-        }}
+        onEdit={(it) => { setSelectedDetailsId(null); setEditingItem(it); setIsFormOpen(true) }}
         onDelete={setItemToDelete}
         onToggleActive={handleToggleActive}
-        onOpenConfirm={handleOpenConfirm}
+        onOpenConfirm={(it) => { setSelectedDetailsId(null); handleOpenConfirm(it) }}
         onSkipOccurrence={handleSkipOccurrence}
         onDepositCircleDirect={handleDepositCircleDirect}
         depositingCircleId={depositingCircleId}

@@ -103,10 +103,21 @@ export const SettingsPage: React.FC = () => {
 
   const handleRestartTour = () => {
     try {
-      localStorage.removeItem('baseer_tour_completed')
-      localStorage.removeItem('has_seen_dashboard_tour')
-      showToast('تمت إعادة ضبط الجولة بنجاح، جاري نقلك للرئيسية...', 'info')
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (uid) {
+          localStorage.removeItem(`baseer_tour_shown_${uid}`)
+          localStorage.removeItem(`masareefi_tour_shown_${uid}`)
+        }
+        localStorage.removeItem('baseer_tour_completed')
+        localStorage.removeItem('has_seen_dashboard_tour')
+        localStorage.removeItem('baseer_tour_shown')
+        localStorage.removeItem('masareefi_tour_shown')
+      }
+      showToast('تمت إعادة ضبط الجولة بنجاح، جاري بدء الجولة...', 'info')
       navigate('/')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('baseer-start-tour'))
+      }
     } catch (err) {
       console.error('Failed to restart tour:', err)
       showToast('تعذر إعادة ضبط الجولة', 'error')

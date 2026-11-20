@@ -195,7 +195,7 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
           </div>
         </div>
         <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-          {(isRolloverEnabled || openingBalanceFils > 0) &&
+          {isRolloverEnabled &&
           (forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover) !== 0 ? (
             <>
               صافي الشهر المستقل (الرصيد المتاح مع المرحّل:{' '}
