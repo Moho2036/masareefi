@@ -6,7 +6,6 @@ import {
   Crown,
   CheckCircle2,
   SkipForward,
-  ChevronLeft,
   AlertCircle,
 } from 'lucide-react'
 import { CategoryIcon } from '../ui/CategoryIcon'
@@ -108,7 +107,7 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
         {/* Top Row: Category Icon & Title + Frequency & Status Badges */}
         <div className="flex items-start justify-between gap-3 mb-2.5">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-zinc-50 dark:bg-zinc-900 border border-[#E4E4E7]/60 dark:border-[#27272A]/60">
+            <div className="w-10 h-10 flex items-center justify-center shrink-0">
               <CategoryIcon icon={icon} color={color} size="md" />
             </div>
             <div className="min-w-0">
@@ -134,23 +133,23 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
               {frequencyLabels[item.frequency]}
             </span>
             {!item.active && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold border border-[#E4E4E7] dark:border-[#27272A]">
+              <span className="text-xs px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold border border-[#E4E4E7] dark:border-[#27272A]">
                 متوقفة مؤقتاً
               </span>
             )}
             {item.requireConfirmation && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
+              <span className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
                 {isDueForManualConfirm ? 'بانتظار تأكيدك' : 'تأكيد يدوي'}
               </span>
             )}
           </div>
         </div>
 
-        {/* Middle: Amount & Relative Due Date */}
-        <div className="my-3 flex items-baseline justify-between gap-2">
+        {/* Middle: Prominent Amount & Dedicated Due Date Row (Swiss Typography) */}
+        <div className="space-y-1.5 my-3">
           <div
             className={cn(
-              'text-xl sm:text-2xl font-black select-none',
+              'text-2xl sm:text-3xl font-black select-none tracking-tight tabular-nums',
               isExpense
                 ? 'text-red-500 dark:text-red-400'
                 : 'text-emerald-600 dark:text-emerald-400'
@@ -158,9 +157,22 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
           >
             <FormattedMoney amountFils={item.amountFils} withSign={item.type} />
           </div>
-          <div className="flex items-center gap-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0">
-            <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-            <span>الموعد القادم: {nextDateFormatted} ({relativeDueText})</span>
+
+          <div className="text-[11px] text-zinc-400 dark:text-zinc-500 flex items-center justify-between pt-0.5">
+            <span className="flex items-center gap-1 font-medium">
+              <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <span>الموعد القادم: {nextDateFormatted}</span>
+            </span>
+            <span
+              className={cn(
+                'font-bold',
+                diffDays <= 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-zinc-500 dark:text-zinc-400'
+              )}
+            >
+              {relativeDueText}
+            </span>
           </div>
         </div>
 
@@ -217,10 +229,10 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
         )}
       </div>
 
-      {/* Bottom Row: Direct Primary Actions & Details Hint */}
-      <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
+      {/* Bottom Row: Direct Primary Actions (Zero Clutter, Matching DebtCard) */}
+      <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
         {item.active && !isCurrentMonthTurn ? (
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={(e) => {
@@ -228,9 +240,9 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
                 triggerHaptic('tick')
                 onOpenConfirm(item)
               }}
-              className="flex-1 py-1.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px]"
+              className="flex-1 h-11 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs dark:shadow-none active:scale-[0.98]"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
               <span>{isDueForManualConfirm ? 'تأكيد وتسجيل الآن' : 'تسجيل الدفعة'}</span>
             </button>
 
@@ -242,7 +254,7 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
                 triggerHaptic('warning')
                 onSkipOccurrence(item)
               }}
-              className="py-1.5 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 min-h-[38px]"
+              className="h-11 px-3.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="تخطي الدورة الحالية والانتقال للموعد القادم"
             >
               <SkipForward className="w-3.5 h-3.5" />
@@ -250,16 +262,15 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
             </button>
           </div>
         ) : (
-          <div className="text-xs font-medium text-zinc-400">
-            {!item.active ? 'المعاملة متوقفة مؤقتاً' : 'معفى من الدفع هذا الشهر'}
+          <div className="flex items-center justify-between py-1">
+            <span className="text-xs font-medium text-zinc-400">
+              {!item.active ? 'المعاملة متوقفة مؤقتاً' : 'معفى من الدفع هذا الشهر'}
+            </span>
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:underline">
+              عرض التفاصيل والسجل ←
+            </span>
           </div>
         )}
-
-        {/* Subtle Details Prompt */}
-        <div className="flex items-center gap-0.5 text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors text-xs font-bold shrink-0 ps-2">
-          <span>التفاصيل</span>
-          <ChevronLeft className="w-4 h-4 rtl:rotate-0 ltr:rotate-180" />
-        </div>
       </div>
     </div>
   )

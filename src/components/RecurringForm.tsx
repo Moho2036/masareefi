@@ -292,7 +292,6 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
       onClose={onClose}
       title={initialRecurring ? 'تعديل المعاملة المتكررة' : 'إضافة معاملة متكررة'}
       closeOnBackdropClick={!isDirty && !initialRecurring}
-      hideCloseButton={true}
     >
       <RecurringFormContent
         key={initialRecurring ? `edit-${initialRecurring.id}` : `new-${defaultType}`}

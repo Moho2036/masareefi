@@ -25,7 +25,6 @@ export const ArchiveCategoryModal: React.FC<ArchiveCategoryModalProps> = ({
       isOpen={Boolean(catToArchive)}
       onClose={onClose}
       title="تأكيد أرشفة التصنيف"
-      hideCloseButton={true}
     >
       {catToArchive && (
         <div className="space-y-4">

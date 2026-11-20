@@ -4,7 +4,6 @@ import { ar } from 'date-fns/locale'
 import {
   Pencil,
   Trash2,
-  Calendar,
   Crown,
   History,
   CheckCircle2,
@@ -132,15 +131,14 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
       isOpen={Boolean(item)}
       onClose={onClose}
       title="تفاصيل وكشف المعاملة المتكررة"
-      hideCloseButton={true}
     >
       <div className="space-y-4">
-        {/* Top Summary Card */}
+        {/* Top Summary Card (Swiss Divider Architecture - Zero Box-in-Box) */}
         <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-3.5">
-          {/* Header Row */}
+          {/* Header Row: Category Icon & Title + Frequency & Status Badges */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs">
+              <div className="w-10 h-10 flex items-center justify-center shrink-0">
                 <CategoryIcon icon={icon} color={color} size="md" />
               </div>
               <div className="min-w-0">
@@ -162,26 +160,26 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-              <span className="text-xs px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold border border-[#E4E4E7] dark:border-[#27272A]">
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold border border-[#E4E4E7] dark:border-[#27272A]">
                 {frequencyLabels[item.frequency]}
               </span>
               {!item.active && (
-                <span className="text-xs px-2.5 py-1 rounded-xl bg-zinc-200/80 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold border border-[#E4E4E7] dark:border-[#27272A]">
+                <span className="text-xs px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold border border-[#E4E4E7] dark:border-[#27272A]">
                   متوقفة مؤقتاً
                 </span>
               )}
             </div>
           </div>
 
-          {/* Amount & Due Row */}
-          <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800 flex items-baseline justify-between gap-2">
-            <div>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-medium mb-0.5">
-                {isExpense ? 'قيمة المصروف الدوري' : 'قيمة الدخل الدوري'}
+          {/* Swiss Divider Row 1: Amount & Next Due Date */}
+          <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-3 border-t border-[#E4E4E7] dark:border-[#27272A]">
+            <div className="pe-3">
+              <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 block mb-0.5">
+                {isExpense ? 'المصروف الدوري' : 'الدخل الدوري'}
               </span>
               <div
                 className={cn(
-                  'text-2xl sm:text-3xl font-black select-none',
+                  'text-xl sm:text-2xl font-black select-none tracking-tight tabular-nums',
                   isExpense
                     ? 'text-red-500 dark:text-red-400'
                     : 'text-emerald-600 dark:text-emerald-400'
@@ -191,34 +189,55 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
               </div>
             </div>
 
-            <div className="text-end">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-medium mb-0.5">
-                حالة الاستحقاق
+            <div className="ps-3 text-end">
+              <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 block mb-0.5">
+                الموعد القادم
               </span>
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                <span>{relativeDueText}</span>
+              <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                {nextDateFormatted}
+              </div>
+              <span
+                className={cn(
+                  'text-[11px] font-bold mt-0.5 inline-block',
+                  diffDays <= 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-zinc-500 dark:text-zinc-400'
+                )}
+              >
+                {relativeDueText}
               </span>
             </div>
           </div>
 
-          {/* Schedule Info Pills */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            <div className="p-2.5 rounded-xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A]">
-              <span className="text-[11px] text-zinc-400 block">الموعد القادم:</span>
-              <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                {nextDateFormatted}
+          {/* Swiss Divider Row 2: Cumulative Metrics */}
+          <div className="grid grid-cols-2 divide-x divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] pt-3 border-t border-[#E4E4E7] dark:border-[#27272A]">
+            <div className="pe-3">
+              <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 block mb-0.5">
+                المدفوع تراكمياً
               </span>
+              <div className="text-sm sm:text-base font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">
+                <FormattedMoney amountFils={cumulativeStats.totalFils} />
+              </div>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A]">
-              <span className="text-[11px] text-zinc-400 block">نوع المعالجة:</span>
-              <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                {item.requireConfirmation
-                  ? 'تأكيد يدوي مطلوب قبل القيد'
-                  : 'تسجيل تلقائي عند حلول الموعد'}
+            <div className="ps-3 text-end">
+              <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 block mb-0.5">
+                الدفعات المنفذة
               </span>
+              <div className="text-sm sm:text-base font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">
+                {cumulativeStats.count} {cumulativeStats.count === 1 ? 'دفعة' : 'دفعات'}
+              </div>
             </div>
+          </div>
+
+          {/* Subline: Processing Type */}
+          <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800/80 text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>نوع المعالجة:</span>
+            <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+              {item.requireConfirmation
+                ? 'تأكيد يدوي مطلوب قبل القيد'
+                : 'تسجيل تلقائي عند حلول الموعد'}
+            </span>
           </div>
 
           {/* Circle Banner if applicable */}
@@ -254,25 +273,41 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
               )}
             </div>
           )}
-
-          {/* Cumulative Metrics */}
-          <div className="p-3 rounded-xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs">
-            <div>
-              <span className="text-[11px] text-zinc-400 block">إجمالي ما تم دفعه تراكمياً:</span>
-              <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                <FormattedMoney amountFils={cumulativeStats.totalFils} />
-              </span>
-            </div>
-            <div className="text-end">
-              <span className="text-[11px] text-zinc-400 block">عدد الدفعات المنفذة:</span>
-              <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                {cumulativeStats.count} {cumulativeStats.count === 1 ? 'دفعة' : 'دفعات'}
-              </span>
-            </div>
-          </div>
         </div>
 
-        {/* Administrative Action Bar */}
+        {/* Primary Operational Action Bar: Register / Skip (Top Priority) */}
+        {item.active && !isCurrentMonthTurn && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('tick')
+                onClose()
+                onOpenConfirm(item)
+              }}
+              className="flex-1 h-11 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs dark:shadow-none active:scale-[0.98]"
+            >
+              <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+              <span>تسجيل وتأكيد دفعة هذه الدورة</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={skippingId === item.id}
+              onClick={() => {
+                triggerHaptic('warning')
+                onSkipOccurrence(item)
+              }}
+              className="h-11 px-4 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="تخطي الدورة القادمة والانتقال للموعد الذي يليه"
+            >
+              <SkipForward className="w-4 h-4" />
+              <span>تخطي</span>
+            </button>
+          </div>
+        )}
+
+        {/* Secondary Administrative Bar: Edit / Toggle / Delete */}
         <div className="grid grid-cols-3 gap-2">
           <Button
             type="button"
@@ -295,9 +330,9 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
             size="md"
             icon={
               item.active ? (
-                <Pause className="w-4 h-4 text-amber-500" />
+                <Pause className="w-4 h-4 text-zinc-500" />
               ) : (
-                <Play className="w-4 h-4 text-emerald-500" />
+                <Play className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               )
             }
             onClick={() => {
@@ -325,44 +360,12 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
           </Button>
         </div>
 
-        {/* Fast Operational Execution: Register / Skip Occurrence */}
-        {item.active && !isCurrentMonthTurn && (
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('tick')
-                onClose()
-                onOpenConfirm(item)
-              }}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px]"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>تسجيل وتأكيد دفعة هذه الدورة</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={skippingId === item.id}
-              onClick={() => {
-                triggerHaptic('warning')
-                onSkipOccurrence(item)
-              }}
-              className="py-2.5 px-3.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 min-h-[44px]"
-              title="تخطي الدورة القادمة"
-            >
-              <SkipForward className="w-4 h-4" />
-              <span>تخطي</span>
-            </button>
-          </div>
-        )}
-
-        {/* Previous Executions (History Section) */}
-        <div className="pt-2">
+        {/* Payment History Accordion Section (Zero Nested Scrollbar - TABOO-06) */}
+        <div className="pt-1">
           <button
             type="button"
             onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-            className="flex items-center justify-between w-full py-2.5 px-3 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer select-none"
+            className="flex items-center justify-between w-full py-2.5 px-3 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer select-none border border-[#E4E4E7]/60 dark:border-[#27272A]/60"
           >
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-zinc-500" />
@@ -376,13 +379,13 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
           </button>
 
           {isHistoryExpanded && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2">
               {historyTxs.length === 0 ? (
-                <div className="py-6 text-center text-zinc-400 text-xs bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                <div className="py-6 text-center text-zinc-400 text-xs bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]">
                   لم يتم تسجيل أي دفعات سابقة لهذه المعاملة المتكررة حتى الآن.
                 </div>
               ) : (
-                <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] px-3 bg-white dark:bg-[#121215] max-h-48 overflow-y-auto">
+                <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A] rounded-xl border border-[#E4E4E7] dark:border-[#27272A] px-3 bg-white dark:bg-[#121215]">
                   {historyTxs.map((tx) => {
                     const txDateFormatted = toWesternDigits(
                       formatDate(
@@ -406,7 +409,7 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
                         </div>
                         <span
                           className={cn(
-                            'font-black text-xs select-none shrink-0',
+                            'font-black text-xs select-none shrink-0 tabular-nums',
                             tx.type === 'expense'
                               ? 'text-red-500 dark:text-red-400'
                               : 'text-emerald-600 dark:text-emerald-400'
@@ -421,13 +424,6 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
               )}
             </div>
           )}
-        </div>
-
-        {/* Footer: Single Cancel/Close button */}
-        <div className="flex items-center justify-end pt-3 border-t border-zinc-100 dark:border-zinc-800">
-          <Button variant="outline" size="md" onClick={onClose} className="min-h-[44px]">
-            إغلاق
-          </Button>
         </div>
       </div>
     </Modal>

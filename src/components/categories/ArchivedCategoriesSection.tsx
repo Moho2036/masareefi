@@ -183,7 +183,7 @@ const ArchivedCategoryCard: React.FC<ArchivedCategoryCardProps> = ({
         </div>
 
         {/* Desktop inline hover actions */}
-        <div className="hidden sm:flex items-center gap-1 shrink-0">
+        <div className="hidden sm:flex items-center gap-1 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <Button
             variant="ghost"
             size="sm"

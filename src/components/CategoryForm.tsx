@@ -344,7 +344,6 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialCategory ? 'تعديل التصنيف' : 'إضافة تصنيف جديد'}
-      hideCloseButton={true}
     >
       <CategoryFormContent
         key={initialCategory ? `edit-${initialCategory.id}` : `new-${defaultType}`}
