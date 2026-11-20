@@ -18,6 +18,11 @@ import {
 } from '../components/reports/CategoryBreakdownSection'
 import { AnnualSummaryTable } from '../components/reports/AnnualSummaryTable'
 import { CategoryTransactionsModal } from '../components/reports/CategoryTransactionsModal'
+import {
+  ReportsMonthlySkeleton,
+  ReportsYearlySkeleton,
+} from '../components/skeletons/ReportsSkeleton'
+import { triggerHaptic } from '../lib/haptics'
 import { motion, AnimatePresence } from 'motion/react'
 import { filterCrossFadeVariants, filterTransition, isTestEnv } from '../lib/motionTokens'
 import type { TxType } from '../types'
@@ -70,6 +75,78 @@ export const ReportsPage: React.FC = () => {
     yearCategoryType,
   ])
 
+  const isMonthlyLoading = reports.monthLoading && !reports.hasLoadedMonthOnce
+  const isYearlyLoading = reports.yearLoading && !reports.hasLoadedYearOnce
+
+  const monthlyContent = isMonthlyLoading ? (
+    <ReportsMonthlySkeleton />
+  ) : (
+    <>
+      <SafeDailySpendCard forecast={reports.forecast} />
+      <MonthlyKpiCards
+        monthSums={reports.monthSums}
+        prevMonthSums={reports.prevMonthSums}
+        monthSavingsRate={reports.monthSavingsRate}
+        monthComparison={reports.monthComparison}
+        monthIncomeComparison={reports.monthIncomeComparison}
+        forecast={reports.forecast}
+        isEarlyMonth={reports.isEarlyMonth}
+        effectiveRollover={reports.effectiveRollover}
+        isRolloverEnabled={reports.isRolloverEnabled}
+      />
+      <DailyExpenseSection
+        dailyExpenses={reports.dailyExpenses}
+        dailyStats={reports.dailyStats}
+        isFutureMonth={reports.forecast.isFutureMonth}
+      />
+      <MonthlyCategoryBreakdown
+        categoryDist={monthCategoryDist}
+        categoryType={monthCategoryType}
+        onCategoryTypeChange={setMonthCategoryType}
+        loading={reports.monthLoading}
+        hasLoadedOnce={reports.hasLoadedMonthOnce}
+        onSelectCategory={setSelectedCategoryModal}
+        onSelectPieCategory={handleSelectMonthPieCategory}
+      />
+    </>
+  )
+
+  const yearlyContent = isYearlyLoading ? (
+    <ReportsYearlySkeleton />
+  ) : (
+    <>
+      {reports.monthStartDay > 1 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
+          <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <span>السنة المالية: {reports.financialYearLabel}</span>
+        </div>
+      )}
+      <YearlyKpiCards
+        yearSums={reports.yearSums}
+        yearlySavingsRate={reports.yearlySavingsRate}
+        annualSummary={reports.annualSummary}
+        selectedYear={reports.selectedYear}
+        monthlyAverage={reports.monthlyAverage}
+      />
+      <AnnualSummaryTable
+        yearlyBreakdown={reports.yearlyBreakdown}
+        yearSums={reports.yearSums}
+        selectedYear={reports.selectedYear}
+        currentYear={reports.currentYear}
+        currentFiscalInfo={reports.currentFiscalInfo}
+        monthStartDay={reports.monthStartDay}
+      />
+      <YearlyCategoryBreakdown
+        categoryDist={yearCategoryDist}
+        categoryType={yearCategoryType}
+        onCategoryTypeChange={setYearCategoryType}
+        loading={reports.yearLoading}
+        hasLoadedOnce={reports.hasLoadedYearOnce}
+        onSelectCategory={setSelectedCategoryModal}
+      />
+    </>
+  )
+
   return (
     <div className="space-y-6 animate-slide-up min-w-0 max-w-full overflow-x-clip">
       <PageHeader
@@ -79,7 +156,10 @@ export const ReportsPage: React.FC = () => {
           <div className="flex items-center gap-2.5 flex-wrap">
             <SegmentedControl<'monthly' | 'yearly'>
               value={reports.reportPeriod}
-              onChange={reports.setReportPeriod}
+              onChange={(val) => {
+                triggerHaptic('tick')
+                reports.setReportPeriod(val)
+              }}
               options={[
                 { value: 'monthly', label: 'تقرير شهري' },
                 { value: 'yearly', label: 'تقرير سنوي' },
@@ -105,7 +185,7 @@ export const ReportsPage: React.FC = () => {
               size="sm"
               onClick={() => window.print()}
               icon={<Printer className="w-3.5 h-3.5" />}
-              className="print-hide inline-flex"
+              className="print-hide hidden sm:inline-flex"
             >
               طباعة / حفظ PDF
             </Button>
@@ -135,67 +215,9 @@ export const ReportsPage: React.FC = () => {
       {/* Content Section with Cross-Fade */}
       {isTestEnv ? (
         reports.reportPeriod === 'monthly' ? (
-          <div className="space-y-6">
-            <SafeDailySpendCard forecast={reports.forecast} />
-            <MonthlyKpiCards
-              monthSums={reports.monthSums}
-              prevMonthSums={reports.prevMonthSums}
-              monthSavingsRate={reports.monthSavingsRate}
-              monthComparison={reports.monthComparison}
-              monthIncomeComparison={reports.monthIncomeComparison}
-              forecast={reports.forecast}
-              isEarlyMonth={reports.isEarlyMonth}
-              effectiveRollover={reports.effectiveRollover}
-              isRolloverEnabled={reports.isRolloverEnabled}
-              openingBalanceFils={reports.settings?.openingBalanceFils ?? 0}
-            />
-            <DailyExpenseSection
-              dailyExpenses={reports.dailyExpenses}
-              dailyStats={reports.dailyStats}
-              isFutureMonth={reports.forecast.isFutureMonth}
-            />
-            <MonthlyCategoryBreakdown
-              categoryDist={monthCategoryDist}
-              categoryType={monthCategoryType}
-              onCategoryTypeChange={setMonthCategoryType}
-              loading={reports.monthLoading}
-              hasLoadedOnce={reports.hasLoadedMonthOnce}
-              onSelectCategory={setSelectedCategoryModal}
-              onSelectPieCategory={handleSelectMonthPieCategory}
-            />
-          </div>
+          <div className="space-y-6">{monthlyContent}</div>
         ) : (
-          <div className="space-y-6">
-            {reports.monthStartDay > 1 && (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
-                <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                <span>السنة المالية: {reports.financialYearLabel}</span>
-              </div>
-            )}
-            <YearlyKpiCards
-              yearSums={reports.yearSums}
-              yearlySavingsRate={reports.yearlySavingsRate}
-              annualSummary={reports.annualSummary}
-              selectedYear={reports.selectedYear}
-              monthlyAverage={reports.monthlyAverage}
-            />
-            <AnnualSummaryTable
-              yearlyBreakdown={reports.yearlyBreakdown}
-              yearSums={reports.yearSums}
-              selectedYear={reports.selectedYear}
-              currentYear={reports.currentYear}
-              currentFiscalInfo={reports.currentFiscalInfo}
-              monthStartDay={reports.monthStartDay}
-            />
-            <YearlyCategoryBreakdown
-              categoryDist={yearCategoryDist}
-              categoryType={yearCategoryType}
-              onCategoryTypeChange={setYearCategoryType}
-              loading={reports.yearLoading}
-              hasLoadedOnce={reports.hasLoadedYearOnce}
-              onSelectCategory={setSelectedCategoryModal}
-            />
-          </div>
+          <div className="space-y-6">{yearlyContent}</div>
         )
       ) : (
         <AnimatePresence mode="wait">
@@ -208,69 +230,7 @@ export const ReportsPage: React.FC = () => {
             transition={filterTransition}
             className="space-y-6"
           >
-            {reports.reportPeriod === 'monthly' ? (
-              <>
-                <SafeDailySpendCard forecast={reports.forecast} />
-                <MonthlyKpiCards
-                  monthSums={reports.monthSums}
-                  prevMonthSums={reports.prevMonthSums}
-                  monthSavingsRate={reports.monthSavingsRate}
-                  monthComparison={reports.monthComparison}
-                  monthIncomeComparison={reports.monthIncomeComparison}
-                  forecast={reports.forecast}
-                  isEarlyMonth={reports.isEarlyMonth}
-                  effectiveRollover={reports.effectiveRollover}
-                  isRolloverEnabled={reports.isRolloverEnabled}
-                  openingBalanceFils={reports.settings?.openingBalanceFils ?? 0}
-                />
-                <DailyExpenseSection
-                  dailyExpenses={reports.dailyExpenses}
-                  dailyStats={reports.dailyStats}
-                  isFutureMonth={reports.forecast.isFutureMonth}
-                />
-                <MonthlyCategoryBreakdown
-                  categoryDist={monthCategoryDist}
-                  categoryType={monthCategoryType}
-                  onCategoryTypeChange={setMonthCategoryType}
-                  loading={reports.monthLoading}
-                  hasLoadedOnce={reports.hasLoadedMonthOnce}
-                  onSelectCategory={setSelectedCategoryModal}
-                  onSelectPieCategory={handleSelectMonthPieCategory}
-                />
-              </>
-            ) : (
-              <>
-                {reports.monthStartDay > 1 && (
-                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-xs font-bold text-blue-800 dark:text-blue-300">
-                    <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                    <span>السنة المالية: {reports.financialYearLabel}</span>
-                  </div>
-                )}
-                <YearlyKpiCards
-                  yearSums={reports.yearSums}
-                  yearlySavingsRate={reports.yearlySavingsRate}
-                  annualSummary={reports.annualSummary}
-                  selectedYear={reports.selectedYear}
-                  monthlyAverage={reports.monthlyAverage}
-                />
-                <AnnualSummaryTable
-                  yearlyBreakdown={reports.yearlyBreakdown}
-                  yearSums={reports.yearSums}
-                  selectedYear={reports.selectedYear}
-                  currentYear={reports.currentYear}
-                  currentFiscalInfo={reports.currentFiscalInfo}
-                  monthStartDay={reports.monthStartDay}
-                />
-                <YearlyCategoryBreakdown
-                  categoryDist={yearCategoryDist}
-                  categoryType={yearCategoryType}
-                  onCategoryTypeChange={setYearCategoryType}
-                  loading={reports.yearLoading}
-                  hasLoadedOnce={reports.hasLoadedYearOnce}
-                  onSelectCategory={setSelectedCategoryModal}
-                />
-              </>
-            )}
+            {reports.reportPeriod === 'monthly' ? monthlyContent : yearlyContent}
           </motion.div>
         </AnimatePresence>
       )}

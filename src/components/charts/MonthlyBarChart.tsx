@@ -21,6 +21,21 @@ export interface MonthlyBarChartProps {
   height?: number
 }
 
+const SHORT_MONTH_NAMES: Record<string, string> = {
+  'يناير': 'ينا',
+  'فبراير': 'فبر',
+  'مارس': 'مار',
+  'أبريل': 'أبر',
+  'مايو': 'مايو',
+  'يونيو': 'يون',
+  'يوليو': 'يول',
+  'أغسطس': 'أغس',
+  'سبتمبر': 'سبت',
+  'أكتوبر': 'أكت',
+  'نوفمبر': 'نوف',
+  'ديسمبر': 'ديس',
+}
+
 interface CustomTooltipProps {
   active?: boolean
   payload?: Array<{ payload: MonthlyBreakdownItem }>
@@ -101,6 +116,21 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [isCompact, setIsCompact] = React.useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(max-width: 640px)').matches
+    }
+    return false
+  })
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const media = window.matchMedia('(max-width: 640px)')
+    const listener = (e: MediaQueryListEvent) => setIsCompact(e.matches)
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
+  }, [])
+
   React.useEffect(() => {
     let ticking = false
     const dismissTooltip = () => {
@@ -170,11 +200,17 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       {/* Legend */}
       <div className="flex items-center justify-end gap-4 text-xs font-bold pe-2">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#16A34A]" />
+          <span
+            className="w-2.5 h-2.5 rounded-sm"
+            style={{ backgroundColor: isDark ? '#34D399' : '#16A34A' }}
+          />
           <span className="text-zinc-600 dark:text-zinc-300">المداخيل</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#DC2626]" />
+          <span
+            className="w-2.5 h-2.5 rounded-sm"
+            style={{ backgroundColor: isDark ? '#F87171' : '#DC2626' }}
+          />
           <span className="text-zinc-600 dark:text-zinc-300">المصاريف</span>
         </div>
       </div>
@@ -183,7 +219,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
       <div
         ref={containerRef}
         onTouchEnd={handleTouchEnd}
-        className="w-full relative min-w-0 max-w-full overflow-hidden"
+        className="w-full relative min-w-0 max-w-full overflow-hidden touch-pan-y"
         style={{ height }}
       >
         <ResponsiveContainer width="100%" height="100%">
@@ -205,6 +241,7 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = React.memo(({
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-zinc-400 dark:text-zinc-500 font-medium"
               dy={8}
+              tickFormatter={(val: string) => (isCompact ? (SHORT_MONTH_NAMES[val] ?? val) : val)}
             />
             <YAxis
               width={55}

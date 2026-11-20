@@ -134,5 +134,6 @@ All must pass. Report exact output summary.
 ## Do NOT
 - Deploy to production (Firebase Hosting / `firebase deploy`), run `firebase login`, or modify live projects UNLESS explicitly requested by the user. Otherwise, use local checks and the Firebase Emulator Suite only.
 - Write `firestore.rules` yourself (the manager handles it via a specialist).
-- Update `docs/PROJECT_BIBLE.md` on routine edits or feature extensions; update it ONLY upon major architectural changes or upon explicit user request.
+- Update `docs/PROJECT_BIBLE.md` on routine edits or feature extensions; update it ONLY upon major architectural changes or upon explicit user request (record pending doc updates in `docs/PENDING_DOC_UPDATES.md`).
+  - عند تلقي الأمر المباشر من المستخدم **"نفّذ مزامنة التوثيق"** (أو ما يعادله): اقرأ التوجيهات المثبتة في أعلى `docs/PENDING_DOC_UPDATES.md` ونفّذها حرفياً خطوة بخطوة.
 - Start long-running dev servers without stopping them.

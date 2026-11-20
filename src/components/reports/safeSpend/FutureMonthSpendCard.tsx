@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { ShieldCheck, AlertTriangle, AlertCircle, Calendar, Info } from 'lucide-react'
 import { Card } from '../../ui/Card'
+import { FormattedMoney } from '../../ui/FormattedMoney'
 import { useCurrency } from '../../../hooks/useCurrency'
 import type { ForecastResult } from '../../../lib/forecast'
 import { cn } from '../../../lib/cn'
@@ -109,11 +110,11 @@ export const FutureMonthSpendCard: React.FC<FutureMonthSpendCardProps> = ({
             </div>
             <div
               className={cn(
-                'text-2xl sm:text-3xl font-black select-none tracking-tight',
+                'text-2xl sm:text-3xl font-black select-none tracking-tight inline-flex items-baseline gap-1.5',
                 dailySafeFils > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400'
               )}
             >
-              {format(dailySafeFils)}{' '}
+              <FormattedMoney amountFils={dailySafeFils} />
               <span className="text-xs font-semibold text-zinc-400">/ اليوم</span>
             </div>
           </div>

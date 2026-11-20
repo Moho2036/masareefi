@@ -101,7 +101,7 @@ const validCircle = () => ({
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: 'demo-masareefi',
+    projectId: 'demo-baseer',
     firestore: {
       rules: readFileSync(resolve(__dirname, '..', 'firestore.rules'), 'utf8'),
     },

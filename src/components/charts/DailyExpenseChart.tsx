@@ -14,6 +14,7 @@ import { ar } from 'date-fns/locale'
 import { fromFils, formatCompactNumber } from '../../lib/money'
 import { toWesternDigits } from '../../lib/dates'
 import { useCurrency } from '../../hooks/useCurrency'
+import { useTheme } from '../../hooks/useTheme'
 import { cn } from '../../lib/cn'
 import type { DailyExpenseItem } from '../../lib/reports'
 
@@ -56,6 +57,9 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
   height = 240,
 }) => {
   const { hideBalances } = useCurrency()
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
+  const strokeColor = isDark ? '#F87171' : '#DC2626'
   const isMasked = hideBalances
   const containerRef = React.useRef<HTMLDivElement>(null)
   const touchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -130,7 +134,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
     <div
       ref={containerRef}
       onTouchEnd={handleTouchEnd}
-      className={cn('w-full relative min-w-0 max-w-full overflow-hidden', className)}
+      className={cn('w-full relative min-w-0 max-w-full overflow-hidden touch-pan-y', className)}
       style={{ height }}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -140,8 +144,8 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
         >
           <defs>
             <linearGradient id="expenseTrendGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#DC2626" stopOpacity={0.15} />
-              <stop offset="95%" stopColor="#DC2626" stopOpacity={0.0} />
+              <stop offset="5%" stopColor={strokeColor} stopOpacity={0.15} />
+              <stop offset="95%" stopColor={strokeColor} stopOpacity={0.0} />
             </linearGradient>
           </defs>
           <CartesianGrid
@@ -171,7 +175,7 @@ export const DailyExpenseChart: React.FC<DailyExpenseChartProps> = React.memo(({
           <Area
             type="monotone"
             dataKey="jod"
-            stroke="#DC2626"
+            stroke={strokeColor}
             strokeWidth={2.5}
             fillOpacity={1}
             fill="url(#expenseTrendGradient)"

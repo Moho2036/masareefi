@@ -33,6 +33,8 @@ export function useReportsData() {
   const periodParam = searchParams.get('period')
   const reportPeriod: 'monthly' | 'yearly' = periodParam === 'yearly' ? 'yearly' : 'monthly'
 
+  const { range } = useSelectedMonth()
+
   const setReportPeriod = useCallback(
     (period: 'monthly' | 'yearly') => {
       setSearchParams(
@@ -40,6 +42,9 @@ export function useReportsData() {
           const next = new URLSearchParams(prev)
           if (period === 'yearly') {
             next.set('period', 'yearly')
+            if (!next.has('year')) {
+              next.set('year', String(range.start.getFullYear()))
+            }
           } else {
             next.delete('period')
           }
@@ -48,10 +53,8 @@ export function useReportsData() {
         { replace: true }
       )
     },
-    [setSearchParams]
+    [setSearchParams, range.start]
   )
-
-  const { range } = useSelectedMonth()
   const { data: settings } = useUserSettings()
   const { data: debts } = useDebts()
   const { data: recurring } = useRecurring()

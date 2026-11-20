@@ -10,8 +10,8 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-masareefi \"vitest run tests/firestore.rules.test.ts\"",
-    "emulators": "firebase emulators:start --project demo-masareefi"
+    "test:rules": "firebase emulators:exec --only firestore --project demo-baseer \"vitest run tests/firestore.rules.test.ts\"",
+    "emulators": "firebase emulators:start --project demo-baseer"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

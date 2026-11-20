@@ -11,9 +11,9 @@ import {
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-masareefi.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-masareefi',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'demo-masareefi.appspot.com',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-baseer.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-baseer',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'demo-baseer.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1234567890',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:1234567890:web:demo',
 }

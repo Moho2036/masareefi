@@ -29,7 +29,7 @@ export const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps>
     >
       <div className="space-y-4 pt-1">
         {category && (
-          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-700/50">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-50 dark:bg-[#18181B] border border-[#E4E4E7] dark:border-[#27272A]">
             <div className="flex items-center gap-2.5">
               <CategoryIcon icon={category.icon} color={category.color} size="md" />
               <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
@@ -52,7 +52,7 @@ export const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps>
             لا توجد معاملات مسجلة في هذا التصنيف خلال هذه الفترة
           </div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-[50vh] overflow-y-auto ps-1 pe-2 -me-2">
+          <div className="divide-y divide-[#E4E4E7] dark:divide-[#27272A]">
             {transactions.map((tx) => {
               const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date)
               return (
@@ -70,7 +70,7 @@ export const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps>
                       'font-black text-sm',
                       tx.type === 'income'
                         ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-red-500 dark:text-red-400'
+                        : 'text-red-600 dark:text-red-400'
                     )}
                   >
                     <FormattedMoney amountFils={tx.amountFils} />
@@ -80,8 +80,9 @@ export const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps>
             })}
           </div>
         )}
-        <div className="pt-2 flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+
+        <div className="pt-2">
+          <Button type="button" variant="outline" className="w-full h-11 rounded-xl" onClick={onClose}>
             إغلاق
           </Button>
         </div>

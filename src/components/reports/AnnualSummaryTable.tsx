@@ -23,6 +23,8 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
   currentFiscalInfo,
   monthStartDay,
 }) => {
+  const isYearEmpty = yearSums.income === 0 && yearSums.expense === 0
+
   return (
     <div className="space-y-6">
       {/* Large Grouped Bar Chart */}
@@ -45,27 +47,15 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
             </span>
           </div>
         </div>
-        {monthStartDay > 1 && (
-          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-2">
-            الأشهر المعروضة تحتسب وفق يوم بداية الشهر المالي المخصص (من يوم {monthStartDay} في كل شهر).
-          </p>
-        )}
         <MonthlyBarChart data={yearlyBreakdown} className="pt-2" />
       </Card>
 
       {/* Monthly Breakdown Table */}
       <Card className="p-5">
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-700/60">
-          <div>
-            <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
-              تفاصيل الشهور
-            </h2>
-            {monthStartDay > 1 && (
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                الدورة المالية تبدأ يوم {monthStartDay}
-              </span>
-            )}
-          </div>
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+          <h2 className="text-sm sm:text-base font-extrabold text-zinc-800 dark:text-zinc-100">
+            تفاصيل الشهور
+          </h2>
           <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">
             12 شهراً
           </span>
@@ -75,7 +65,9 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
           <table className="w-full text-start border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400">
-                <th className="p-2.5 text-start font-bold">الشهر</th>
+                <th className="p-2.5 text-start font-bold sticky start-0 z-10 bg-white dark:bg-[#121215]">
+                  الشهر
+                </th>
                 <th className="p-2.5 text-start font-bold">المداخيل</th>
                 <th className="p-2.5 text-start font-bold">المصاريف</th>
                 <th className="p-2.5 text-start font-bold">صافي الادخار</th>
@@ -98,12 +90,18 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
                   <tr
                     key={row.monthIndex}
                     className={cn(
-                      'border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-50/60 dark:hover:bg-zinc-700/30 transition-colors',
-                      isCurrentRowMonth &&
-                        'bg-blue-50/70 dark:bg-blue-950/40 font-bold border-s-4 border-blue-600'
+                      'border-b border-zinc-100 dark:border-zinc-800/60 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition-colors',
+                      isCurrentRowMonth && 'bg-blue-50/60 dark:bg-blue-950/30 font-bold'
                     )}
                   >
-                    <td className="p-2.5 font-bold text-zinc-700 dark:text-zinc-200">
+                    <td
+                      className={cn(
+                        'p-2.5 font-bold sticky start-0 z-10 transition-colors',
+                        isCurrentRowMonth
+                          ? 'bg-blue-50/90 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
+                          : 'bg-white dark:bg-[#121215] text-zinc-700 dark:text-zinc-200'
+                      )}
+                    >
                       <div className="flex flex-col gap-0.5">
                         <span className="inline-flex items-center gap-1.5 flex-wrap">
                           <span>{row.monthName}</span>
@@ -131,7 +129,7 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
                         <FormattedMoney amountFils={row.income} />
                       )}
                     </td>
-                    <td className="p-2.5 font-bold text-red-500 dark:text-red-400">
+                    <td className="p-2.5 font-bold text-red-600 dark:text-red-400">
                       {isUnstartedFuture ? (
                         <span className="text-zinc-400 dark:text-zinc-500 italic text-[11px] font-normal">
                           لم يبدأ بعد
@@ -147,7 +145,7 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
                         'p-2.5 font-extrabold',
                         row.balance >= 0
                           ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-500 dark:text-red-400'
+                          : 'text-red-600 dark:text-red-400'
                       )}
                     >
                       {isUnstartedFuture ? (
@@ -167,25 +165,42 @@ export const AnnualSummaryTable: React.FC<AnnualSummaryTableProps> = ({
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-zinc-300 dark:border-zinc-600 bg-zinc-50/80 dark:bg-zinc-800/80 font-black">
-                <td className="p-2.5 text-zinc-800 dark:text-zinc-100 font-black">
+              <tr className="border-t border-[#E4E4E7] dark:border-[#27272A] bg-zinc-50/80 dark:bg-[#18181B] font-black">
+                <td className="p-2.5 text-zinc-800 dark:text-zinc-100 font-black sticky start-0 z-10 bg-zinc-50 dark:bg-[#18181B]">
                   الإجمالي السنوي
                 </td>
-                <td className="p-2.5 text-emerald-600 dark:text-emerald-400 font-black">
-                  <FormattedMoney amountFils={yearSums.income} />
-                </td>
-                <td className="p-2.5 text-red-500 dark:text-red-400 font-black">
-                  <FormattedMoney amountFils={yearSums.expense} />
-                </td>
-                <td
-                  className={cn(
-                    'p-2.5 font-black',
-                    yearSums.balance >= 0
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-red-500 dark:text-red-400'
+                <td className="p-2.5 font-black">
+                  {isYearEmpty ? (
+                    <span className="text-zinc-400 dark:text-zinc-500 font-normal">—</span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      <FormattedMoney amountFils={yearSums.income} />
+                    </span>
                   )}
-                >
-                  <FormattedMoney amountFils={yearSums.balance} />
+                </td>
+                <td className="p-2.5 font-black">
+                  {isYearEmpty ? (
+                    <span className="text-zinc-400 dark:text-zinc-500 font-normal">—</span>
+                  ) : (
+                    <span className="text-red-600 dark:text-red-400">
+                      <FormattedMoney amountFils={yearSums.expense} />
+                    </span>
+                  )}
+                </td>
+                <td className="p-2.5 font-black">
+                  {isYearEmpty ? (
+                    <span className="text-zinc-400 dark:text-zinc-500 font-normal">—</span>
+                  ) : (
+                    <span
+                      className={
+                        yearSums.balance >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }
+                    >
+                      <FormattedMoney amountFils={yearSums.balance} />
+                    </span>
+                  )}
                 </td>
               </tr>
             </tfoot>

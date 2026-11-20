@@ -23,7 +23,6 @@ export interface MonthlyKpiCardsProps {
   isEarlyMonth: boolean
   effectiveRollover: number
   isRolloverEnabled: boolean
-  openingBalanceFils: number
 }
 
 export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
@@ -36,7 +35,6 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
   isEarlyMonth,
   effectiveRollover,
   isRolloverEnabled,
-  openingBalanceFils,
 }) => {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -60,10 +58,10 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
             <span className="text-zinc-400 dark:text-zinc-500">
               {forecast.isFutureMonth
                 ? 'الشهر لم يبدأ بعد'
-                : isEarlyMonth
-                  ? 'الشهر في بدايته — لم يُسجل دخل بعد'
+                : (forecast.isCurrentMonth || isEarlyMonth)
+                  ? 'بانتظار دورة الدخل لهذا الشهر'
                   : prevMonthSums.income > 0 ? (
-                      <span className="font-bold inline-flex items-center gap-0.5 text-red-500 dark:text-red-400">
+                      <span className="font-bold inline-flex items-center gap-0.5 text-red-600 dark:text-red-400">
                         <ArrowDownRight className="w-3 h-3" />
                         <span>أقل بـ 100% عن الشهر السابق</span>
                       </span>
@@ -82,7 +80,7 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
                   'font-bold inline-flex items-center gap-0.5',
                   monthIncomeComparison.isIncrease
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-red-500 dark:text-red-400'
+                    : 'text-red-600 dark:text-red-400'
                 )}
               >
                 {monthIncomeComparison.isIncrease ? (
@@ -188,7 +186,7 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
               'text-lg sm:text-2xl font-black select-none',
               monthSums.balance >= 0
                 ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-500 dark:text-red-400'
+                : 'text-red-600 dark:text-red-400'
             )}
           >
             <FormattedMoney amountFils={monthSums.balance} />
@@ -198,8 +196,8 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
           {isRolloverEnabled &&
           (forecast.isFutureMonth ? forecast.rolloverBalance : effectiveRollover) !== 0 ? (
             <>
-              صافي الشهر المستقل (الرصيد المتاح مع المرحّل:{' '}
-              <span dir="ltr" className="inline-block font-semibold">
+              المتبقي مع الرصيد المرحّل:{' '}
+              <span dir="ltr" className="inline-block font-semibold text-zinc-600 dark:text-zinc-300">
                 <FormattedMoney
                   amountFils={
                     monthSums.balance +
@@ -207,7 +205,6 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
                   }
                 />
               </span>
-              )
             </>
           ) : (
             'المبلغ المتبقي من دخل هذا الشهر بعد المصاريف'
@@ -235,6 +232,7 @@ export const MonthlyKpiCards: React.FC<MonthlyKpiCardsProps> = ({
                   ? 'text-red-500 dark:text-red-400'
                   : 'text-emerald-600 dark:text-emerald-400'
             )}
+            dir="ltr"
           >
             {monthSums.income === 0 ? '—' : `%${monthSavingsRate}`}
           </div>
@@ -301,7 +299,7 @@ export const YearlyKpiCards: React.FC<YearlyKpiCardsProps> = ({
               <TrendingDown className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-red-500 dark:text-red-400 select-none">
+          <div className="text-lg sm:text-2xl font-black text-red-600 dark:text-red-400 select-none">
             <FormattedMoney amountFils={yearSums.expense} />
           </div>
         </div>
@@ -337,7 +335,7 @@ export const YearlyKpiCards: React.FC<YearlyKpiCardsProps> = ({
               'text-lg sm:text-2xl font-black select-none',
               yearSums.balance >= 0
                 ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-500 dark:text-red-400'
+                : 'text-red-600 dark:text-red-400'
             )}
           >
             <FormattedMoney amountFils={yearSums.balance} />
@@ -368,6 +366,7 @@ export const YearlyKpiCards: React.FC<YearlyKpiCardsProps> = ({
                   ? 'text-red-500 dark:text-red-400'
                   : 'text-emerald-600 dark:text-emerald-400'
             )}
+            dir="ltr"
           >
             {yearSums.income === 0 ? '—' : `%${yearlySavingsRate}`}
           </div>

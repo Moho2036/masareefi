@@ -42,7 +42,7 @@ export const AppShell: React.FC = () => {
   const { user } = useAuth()
   const { openAdd } = useTransactionModal()
   const isOnline = useOnlineStatus()
-  const { goToCurrentMonth, isCurrentMonth } = useSelectedMonth()
+  const { goToCurrentMonth, isCurrentMonth, range } = useSelectedMonth()
   const [searchParams, setSearchParams] = useSearchParams()
   const isReportsYearly = pathname === '/reports' && searchParams.get('period') === 'yearly'
 
@@ -346,7 +346,7 @@ export const AppShell: React.FC = () => {
             {isReportsYearly ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <YearSelector
-                  selectedYear={searchParams.get('year') ? Number(searchParams.get('year')) : new Date().getFullYear()}
+                  selectedYear={searchParams.get('year') ? Number(searchParams.get('year')) : range.start.getFullYear()}
                   onSelectYear={(year) => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.set('year', String(year)); return next }, { replace: true })}
                 />
               </div>
