@@ -90,6 +90,12 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
     item.active &&
     (item.nextDate instanceof Date ? item.nextDate : new Date(item.nextDate)) <= new Date()
 
+  const isExpired = Boolean(
+    item.endDate &&
+      startOfDay(item.endDate instanceof Date ? item.endDate : new Date(item.endDate)) <
+        startOfDay(new Date())
+  )
+
   return (
     <div
       onClick={() => {
@@ -137,6 +143,11 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
                 متوقفة مؤقتاً
               </span>
             )}
+            {isExpired && (
+              <span className="text-xs px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold border border-[#E4E4E7] dark:border-[#27272A]">
+                منتهية الصلاحية
+              </span>
+            )}
             {item.requireConfirmation && (
               <span className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
                 {isDueForManualConfirm ? 'بانتظار تأكيدك' : 'تأكيد يدوي'}
@@ -151,7 +162,7 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
             className={cn(
               'text-2xl sm:text-3xl font-black select-none tracking-tight tabular-nums',
               isExpense
-                ? 'text-red-500 dark:text-red-400'
+                ? 'text-red-600 dark:text-red-400'
                 : 'text-emerald-600 dark:text-emerald-400'
             )}
           >

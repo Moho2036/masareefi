@@ -5,6 +5,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { toWesternDigits } from '../../lib/dates'
+import { useCurrency } from '../../hooks/useCurrency'
 import type { Recurring, Category } from '../../types'
 
 export interface RecurringConfirmModalProps {
@@ -28,6 +29,8 @@ export const RecurringConfirmModal: React.FC<RecurringConfirmModalProps> = ({
   error,
   categoryMap,
 }) => {
+  const { config } = useCurrency()
+
   return (
     <Modal
       isOpen={Boolean(item)}
@@ -64,6 +67,7 @@ export const RecurringConfirmModal: React.FC<RecurringConfirmModalProps> = ({
               inputMode="decimal"
               value={amountStr}
               onChange={(e) => setAmountStr(toWesternDigits(e.target.value))}
+              endIcon={<span className="text-xs font-bold text-zinc-400">{config.symbol}</span>}
               required
             />
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">

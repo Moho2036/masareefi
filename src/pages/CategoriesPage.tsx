@@ -303,8 +303,8 @@ export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDa
               updateSettings({ categorySortMode: mode })
             }}
             options={[
-              { value: 'usage', label: 'تلقائي (الاستخدام)' },
-              { value: 'manual', label: 'يدوي (مخصص)' },
+              { value: 'usage', label: 'تلقائي' },
+              { value: 'manual', label: 'يدوي' },
             ]}
             className="text-xs"
           />

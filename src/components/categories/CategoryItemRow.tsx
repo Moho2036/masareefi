@@ -214,13 +214,18 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 truncate">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               {currentMonthStats && currentMonthStats.count > 0 ? (
                 <span className="inline-flex items-center gap-1.5 flex-wrap">
                   <FormattedMoney
                     amountFils={currentMonthStats.totalFils}
                     currencyCode={currencyCode}
-                    className="font-bold text-zinc-800 dark:text-zinc-200"
+                    className={cn(
+                      'font-bold',
+                      cat.type === 'income'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-red-600 dark:text-red-400'
+                    )}
                   />
                   <span>•</span>
                   <span>

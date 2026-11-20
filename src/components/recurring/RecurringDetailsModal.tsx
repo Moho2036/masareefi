@@ -181,7 +181,7 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
                 className={cn(
                   'text-xl sm:text-2xl font-black select-none tracking-tight tabular-nums',
                   isExpense
-                    ? 'text-red-500 dark:text-red-400'
+                    ? 'text-red-600 dark:text-red-400'
                     : 'text-emerald-600 dark:text-emerald-400'
                 )}
               >
@@ -411,7 +411,7 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
                           className={cn(
                             'font-black text-xs select-none shrink-0 tabular-nums',
                             tx.type === 'expense'
-                              ? 'text-red-500 dark:text-red-400'
+                              ? 'text-red-600 dark:text-red-400'
                               : 'text-emerald-600 dark:text-emerald-400'
                           )}
                         >
