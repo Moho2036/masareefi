@@ -33,6 +33,7 @@ export const RecurringConfirmModal: React.FC<RecurringConfirmModalProps> = ({
       isOpen={Boolean(item)}
       onClose={onClose}
       title="تأكيد وتسجيل الدفعة الدورية"
+      hideCloseButton={true}
     >
       {item && (
         <form onSubmit={onSubmit} noValidate className="space-y-4">

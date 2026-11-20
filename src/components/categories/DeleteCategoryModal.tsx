@@ -49,6 +49,7 @@ export const DeleteCategoryModal: React.FC<DeleteCategoryModalProps> = ({
       isOpen={Boolean(catToDelete)}
       onClose={onClose}
       title={catToDelete.archived ? 'تأكيد حذف التصنيف المؤرشف' : 'تأكيد حذف أو أرشفة التصنيف'}
+      hideCloseButton={true}
     >
       {usageDetails.isInUse ? (
         catToDelete.archived ? (

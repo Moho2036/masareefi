@@ -58,12 +58,7 @@ export const RecurringCategoryPicker: React.FC<RecurringCategoryPickerProps> = (
         </div>
       ) : (
         <div>
-          <div
-            className={cn(
-              'grid grid-cols-3 gap-1.5 p-0.5',
-              isCategoriesExpanded ? 'max-h-48 overflow-y-auto' : ''
-            )}
-          >
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-0.5">
             {displayedCategories.map((cat) => {
               const isSelected = activeCategoryId === cat.id
               return (

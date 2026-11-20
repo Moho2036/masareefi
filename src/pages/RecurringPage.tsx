@@ -16,7 +16,7 @@ import { RecurringKpiCards } from '../components/recurring/RecurringKpiCards'
 import { RecurringItemCard } from '../components/recurring/RecurringItemCard'
 import { RecurringDeleteModal } from '../components/recurring/RecurringDeleteModal'
 import { RecurringConfirmModal } from '../components/recurring/RecurringConfirmModal'
-import { RecurringHistoryModal } from '../components/recurring/RecurringHistoryModal'
+import { RecurringDetailsModal } from '../components/recurring/RecurringDetailsModal'
 import { useAuth } from '../hooks/useAuth'
 import { useCategories } from '../hooks/useCategories'
 import { useRecurring } from '../hooks/useRecurring'
@@ -85,7 +85,7 @@ export const RecurringPage: React.FC = () => {
   const [confirmSubmitting, setConfirmSubmitting] = useState(false)
   const [confirmError, setConfirmError] = useState<string | null>(null)
 
-  const [historyItem, setHistoryItem] = useState<Recurring | null>(null)
+  const [selectedDetailsItem, setSelectedDetailsItem] = useState<Recurring | null>(null)
   const [skippingId, setSkippingId] = useState<string | null>(null)
   const [depositingCircleId, setDepositingCircleId] = useState<string | null>(null)
 
@@ -244,17 +244,6 @@ export const RecurringPage: React.FC = () => {
     }
   }
 
-  const historyTxs = useMemo(() => {
-    if (!historyItem) return []
-    return allTransactions
-      .filter((t) => t.recurringId === historyItem.id)
-      .sort((a, b) => {
-        const aDate = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
-        const bDate = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
-        return bDate - aDate
-      })
-  }, [allTransactions, historyItem])
-
   return (
     <div className="space-y-6 animate-slide-up">
       {inRouter && (
@@ -332,13 +321,7 @@ export const RecurringPage: React.FC = () => {
                   skippingId={skippingId}
                   onOpenConfirm={handleOpenConfirm}
                   onSkipOccurrence={handleSkipOccurrence}
-                  onHistory={setHistoryItem}
-                  onEdit={(it) => {
-                    setEditingItem(it)
-                    setIsFormOpen(true)
-                  }}
-                  onDelete={setItemToDelete}
-                  onToggleActive={handleToggleActive}
+                  onOpenDetails={(it) => setSelectedDetailsItem(it)}
                   onDepositCircleDirect={handleDepositCircleDirect}
                 />
               ))}
@@ -383,13 +366,7 @@ export const RecurringPage: React.FC = () => {
                       skippingId={skippingId}
                       onOpenConfirm={handleOpenConfirm}
                       onSkipOccurrence={handleSkipOccurrence}
-                      onHistory={setHistoryItem}
-                      onEdit={(it) => {
-                        setEditingItem(it)
-                        setIsFormOpen(true)
-                      }}
-                      onDelete={setItemToDelete}
-                      onToggleActive={handleToggleActive}
+                      onOpenDetails={(it) => setSelectedDetailsItem(it)}
                       onDepositCircleDirect={handleDepositCircleDirect}
                     />
                   ))}
@@ -424,11 +401,24 @@ export const RecurringPage: React.FC = () => {
         categoryMap={categoryMap}
       />
 
-      <RecurringHistoryModal
-        item={historyItem}
-        onClose={() => setHistoryItem(null)}
-        historyTxs={historyTxs}
+      <RecurringDetailsModal
+        item={selectedDetailsItem}
+        onClose={() => setSelectedDetailsItem(null)}
         categoryMap={categoryMap}
+        circles={circles}
+        monthStartDay={monthStartDay}
+        allTransactions={allTransactions}
+        onEdit={(it) => {
+          setEditingItem(it)
+          setIsFormOpen(true)
+        }}
+        onDelete={setItemToDelete}
+        onToggleActive={handleToggleActive}
+        onOpenConfirm={handleOpenConfirm}
+        onSkipOccurrence={handleSkipOccurrence}
+        onDepositCircleDirect={handleDepositCircleDirect}
+        depositingCircleId={depositingCircleId}
+        skippingId={skippingId}
       />
     </div>
   )

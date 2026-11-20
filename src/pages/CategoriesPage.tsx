@@ -183,6 +183,7 @@ export const CategoriesPage: React.FC<{ referenceDate?: Date }> = ({ referenceDa
     if (userSettings?.categorySortMode !== 'manual') {
       try {
         await updateSettings({ categorySortMode: 'manual' })
+        showToast('تم تفعيل الترتيب اليدوي', 'info')
       } catch (err) {
         console.error('Failed to update sort mode to manual:', err)
       }

@@ -22,6 +22,7 @@ export const RecurringDeleteModal: React.FC<RecurringDeleteModalProps> = ({
       isOpen={Boolean(item)}
       onClose={onClose}
       title="تأكيد حذف المعاملة المتكررة"
+      hideCloseButton={true}
     >
       <div className="space-y-4">
         <div className="flex items-center gap-3">

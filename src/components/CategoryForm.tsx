@@ -21,9 +21,14 @@ export interface CategoryFormProps {
 }
 
 const COMMON_EMOJIS = [
+  // Original 30 Core Emojis (Preserved)
   '🛒', '☕', '⛽', '🏠', '💡', '📱', '💊', '👕', '🎮', '📚',
   '🔁', '🎁', '➕', '🍔', '🚗', '✈️', '🎬', '🏋️', '🏥', '👶',
   '🐕', '🛠️', '🧾', '💳', '✂️', '💼', '💻', '📈', '💰', '🪙',
+  // New Diverse Additions (Documents, Utilities, Health, Tech, Travel, Home...)
+  '📄', '📑', '💧', '🔥', '🩺', '📺', '📶', '🎧', '🧳', '🚌',
+  '🛍️', '⌚', '📖', '🎨', '🔨', '🛋️', '🔑', '🎯', '🏆', '🗂️',
+  '🍽️',
 ]
 
 const PALETTE_COLORS = [
@@ -204,14 +209,14 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
         </div>
 
         {/* Quick-pick Emojis Grid */}
-        <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] max-h-36 overflow-y-auto mb-2">
+        <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] max-h-44 sm:max-h-48 overflow-y-auto mb-2">
           {COMMON_EMOJIS.map((em) => (
             <button
               key={em}
               type="button"
               onClick={() => setIcon(em)}
               className={cn(
-                'h-8 w-8 rounded-lg flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer select-none',
+                'min-w-[36px] min-h-[36px] sm:min-w-[38px] sm:min-h-[38px] rounded-xl flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer select-none',
                 icon === em && 'bg-blue-50 dark:bg-blue-950/60 ring-2 ring-blue-600'
               )}
             >
@@ -281,15 +286,19 @@ const CategoryFormContent: React.FC<CategoryFormContentProps> = ({
               key={c}
               type="button"
               onClick={() => setColor(c)}
-              style={{ backgroundColor: c }}
-              className={cn(
-                'w-6 h-6 rounded-full shrink-0 transition-transform cursor-pointer',
-                color === c
-                  ? 'ring-2 ring-offset-2 ring-zinc-800 dark:ring-zinc-100 scale-110'
-                  : 'hover:scale-105'
-              )}
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center p-1 rounded-full cursor-pointer transition-transform hover:scale-105"
               aria-label={`اختيار اللون ${c}`}
-            />
+            >
+              <span
+                style={{ backgroundColor: c }}
+                className={cn(
+                  'w-6 h-6 rounded-full shrink-0 transition-transform',
+                  color === c
+                    ? 'ring-2 ring-offset-2 ring-zinc-800 dark:ring-zinc-100 scale-110'
+                    : ''
+                )}
+              />
+            </button>
           ))}
         </div>
       </div>
@@ -335,6 +344,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={initialCategory ? 'تعديل التصنيف' : 'إضافة تصنيف جديد'}
+      hideCloseButton={true}
     >
       <CategoryFormContent
         key={initialCategory ? `edit-${initialCategory.id}` : `new-${defaultType}`}

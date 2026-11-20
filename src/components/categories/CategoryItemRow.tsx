@@ -190,7 +190,7 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
           }
         }}
         className={cn(
-          'group bg-white dark:bg-[#121215] rounded-2xl p-3.5 sm:p-4 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none hover:border-zinc-300 dark:hover:border-zinc-700 flex items-center justify-between gap-3 relative z-10',
+          'group bg-white dark:bg-[#121215] rounded-2xl p-3.5 sm:p-4 border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none hover:border-zinc-300 dark:hover:border-zinc-700 flex items-center justify-between gap-3 relative z-10 sm:!transform-none',
           isLastMoved && 'ring-2 ring-blue-500/70 scale-[1.01] shadow-sm z-20'
         )}
       >
@@ -258,11 +258,11 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
                 onMove(cat, 'up')
               }}
               disabled={index === 0}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+              className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
               aria-label={`تحريك تصنيف ${cat.name} للأعلى`}
               title="تحريك للأعلى"
             >
-              <ArrowUp className="w-3.5 h-3.5" />
+              <ArrowUp className="w-4 h-4" />
             </button>
             <button
               type="button"
@@ -271,23 +271,23 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
                 onMove(cat, 'down')
               }}
               disabled={index === totalCount - 1}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+              className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
               aria-label={`تحريك تصنيف ${cat.name} للأسفل`}
               title="تحريك للأسفل"
             >
-              <ArrowDown className="w-3.5 h-3.5" />
+              <ArrowDown className="w-4 h-4" />
             </button>
           </div>
 
           {/* Desktop Hover Quick Actions (Hidden on Mobile - Mobile relies exclusively on swipe-to-right) */}
-          <div className="hidden sm:flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
+          <div className="hidden sm:flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity print:hidden">
             <button
               type="button"
               onClick={() => {
                 triggerHaptic('tick')
                 onEdit(cat)
               }}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               aria-label={`تعديل تصنيف ${cat.name}`}
               title="تعديل التصنيف"
             >
@@ -299,7 +299,7 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
                 triggerHaptic('warning')
                 onArchive(cat)
               }}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+              className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
               aria-label={`أرشفة تصنيف ${cat.name}`}
               title="أرشفة التصنيف"
             >
@@ -311,7 +311,7 @@ export const CategoryItemRow: React.FC<CategoryItemRowProps> = ({
                 triggerHaptic('destructive')
                 onDelete(cat)
               }}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+              className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
               aria-label={`حذف تصنيف ${cat.name}`}
               title="حذف التصنيف"
             >
