@@ -184,7 +184,7 @@ describe('SpotlightTour Component', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'جولة بَصير السريعة' })
     expect(dialog).toBeInTheDocument()
-    expect(dialog).toHaveStyle({ width: '420px' })
+    expect(dialog).toHaveStyle({ width: '440px' })
 
     document.body.removeChild(targetEl)
   })

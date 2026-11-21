@@ -23,6 +23,15 @@ interface Rect {
   right: number
 }
 
+interface ComputedPosition {
+  top: number
+  left: number
+  width: number
+  maxHeight: number
+  arrowPlacement: 'top' | 'bottom' | null
+  arrowLeft: number
+}
+
 function findVisibleTarget(targetKey: string): HTMLElement | null {
   if (typeof document === 'undefined') return null
   const elements = document.querySelectorAll(`[data-tour="${targetKey}"]`)
@@ -37,6 +46,95 @@ function findVisibleTarget(targetKey: string): HTMLElement | null {
     return el
   }
   return null
+}
+
+function computeCardPosition(
+  targetRect: Rect | null,
+  vw: number,
+  vh: number
+): ComputedPosition {
+  const isMobile = vw < 640
+  const cardWidth = isMobile ? Math.min(vw - 24, 420) : 440
+  const defaultMaxHeight = isMobile
+    ? Math.min(460, Math.floor(vh * 0.58))
+    : Math.min(520, vh - 40)
+
+  // 1. Fallback: No target element in DOM -> perfectly centered
+  if (!targetRect) {
+    const left = Math.max(12, Math.round((vw - cardWidth) / 2))
+    const top = Math.max(16, Math.round((vh - defaultMaxHeight) / 2))
+    return {
+      top,
+      left,
+      width: cardWidth,
+      maxHeight: defaultMaxHeight,
+      arrowPlacement: null,
+      arrowLeft: 16,
+    }
+  }
+
+  // 2. Mobile positioning: dock to bottom or top depending on target location
+  if (isMobile) {
+    const targetMidY = targetRect.top + targetRect.height / 2
+    const targetInUpperHalf = targetMidY < vh * 0.52
+    const left = Math.max(12, Math.round((vw - cardWidth) / 2))
+
+    const top = targetInUpperHalf
+      ? Math.max(12, vh - defaultMaxHeight - 12)
+      : 12
+
+    return {
+      top,
+      left,
+      width: cardWidth,
+      maxHeight: defaultMaxHeight,
+      arrowPlacement: null,
+      arrowLeft: 16,
+    }
+  }
+
+  // 3. Desktop positioning: strictly clamped within viewport
+  const spaceBelow = vh - targetRect.bottom - 20
+  const spaceAbove = targetRect.top - 20
+  const idealLeft = targetRect.left + targetRect.width / 2 - cardWidth / 2
+  let left = Math.max(16, Math.min(idealLeft, vw - cardWidth - 16))
+  const arrowLeft = Math.max(
+    20,
+    Math.min(cardWidth - 28, targetRect.left + targetRect.width / 2 - left - 6)
+  )
+
+  let top: number
+  let maxHeight: number
+  let arrowPlacement: 'top' | 'bottom' | null
+
+  if (spaceBelow >= 340) {
+    // Fits comfortably below target
+    top = targetRect.bottom + 12
+    maxHeight = Math.min(520, spaceBelow)
+    arrowPlacement = 'top'
+  } else if (spaceAbove >= 340) {
+    // Fits comfortably above target
+    maxHeight = Math.min(520, spaceAbove)
+    top = targetRect.top - 12 - maxHeight
+    arrowPlacement = 'bottom'
+  } else {
+    // Target is tall (e.g. large section) or centrally placed: dock to the side
+    const targetCenter = targetRect.left + targetRect.width / 2
+    if (targetCenter > vw / 2) {
+      left = 24
+    } else {
+      left = Math.max(16, vw - cardWidth - 24)
+    }
+    maxHeight = Math.min(520, vh - 40)
+    top = Math.max(16, vh - maxHeight - 20)
+    arrowPlacement = null
+  }
+
+  // ABSOLUTE SAFETY CLAMP: Guarantees top is NEVER < 16px and bottom NEVER > vh - 16px
+  maxHeight = Math.min(maxHeight, vh - 32)
+  top = Math.max(16, Math.min(top, vh - maxHeight - 16))
+
+  return { top, left, width: cardWidth, maxHeight, arrowPlacement, arrowLeft }
 }
 
 export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }) => {
@@ -162,106 +260,34 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
   if (typeof document === 'undefined') return null
 
   const stepData = TOUR_STEPS[currentStep]
-  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 640 : false
-  const cardWidth = typeof window !== 'undefined' ? Math.min(420, window.innerWidth - 24) : 420
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const isMobile = vw < 640
 
-  // Smart Viewport Calculation: determine vertical position & max height
-  let cardStyle: React.CSSProperties = {}
-  let arrowPlacement: 'top' | 'bottom' | null = null
-  let arrowLeft = 16
-
-  if (targetRect && typeof window !== 'undefined') {
-    const vh = window.innerHeight
-    const vw = window.innerWidth
-
-    if (isMobile) {
-      // On mobile screens, dock to top or bottom depending on which half contains the target
-      const targetMidY = targetRect.top + targetRect.height / 2
-      const targetInUpperHalf = targetMidY < vh * 0.52
-
-      if (targetInUpperHalf) {
-        // Target is at top: dock card at bottom
-        cardStyle = {
-          position: 'fixed',
-          bottom: '12px',
-          left: '12px',
-          right: '12px',
-          width: 'auto',
-          maxWidth: '420px',
-          margin: '0 auto',
-          maxHeight: `${Math.min(460, Math.max(260, vh - targetRect.bottom - 24))}px`,
-        }
-      } else {
-        // Target is at bottom: dock card at top
-        cardStyle = {
-          position: 'fixed',
-          top: '12px',
-          left: '12px',
-          right: '12px',
-          width: 'auto',
-          maxWidth: '420px',
-          margin: '0 auto',
-          maxHeight: `${Math.min(460, Math.max(260, targetRect.top - 24))}px`,
-        }
-      }
-    } else {
-      // On desktop screens: calculate clamped position
-      const spaceBelow = vh - targetRect.bottom - 24
-      const spaceAbove = targetRect.top - 24
-      const cardLeft = Math.max(
-        16,
-        Math.min(vw - cardWidth - 16, targetRect.left + targetRect.width / 2 - cardWidth / 2)
-      )
-      arrowLeft = Math.max(20, Math.min(cardWidth - 28, targetRect.left + targetRect.width / 2 - cardLeft - 6))
-
-      if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-        // Place below target
-        const clampedTop = targetRect.bottom + 12
-        cardStyle = {
-          position: 'fixed',
-          top: `${clampedTop}px`,
-          left: `${cardLeft}px`,
-          width: `${cardWidth}px`,
-          maxHeight: `${Math.min(520, Math.max(280, spaceBelow))}px`,
-        }
-        arrowPlacement = 'top'
-      } else {
-        // Place above target
-        const clampedBottom = vh - targetRect.top + 12
-        cardStyle = {
-          position: 'fixed',
-          bottom: `${clampedBottom}px`,
-          left: `${cardLeft}px`,
-          width: `${cardWidth}px`,
-          maxHeight: `${Math.min(520, Math.max(280, spaceAbove))}px`,
-        }
-        arrowPlacement = 'bottom'
-      }
-    }
-  }
+  const pos = computeCardPosition(targetRect, vw, vh)
 
   const renderCardContent = () => (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* 1. FIXED HEADER: Step counter, Title, and Skip button (ALWAYS VISIBLE) */}
-      <div className="shrink-0 p-4 sm:p-5 pb-3 border-b border-zinc-100 dark:border-zinc-800/80 flex items-start justify-between gap-3 bg-white dark:bg-[#121215]">
+      {/* 1. FIXED HEADER: Step counter, Title, and Skip button (ALWAYS VISIBLE AT TOP) */}
+      <div className="shrink-0 p-3 sm:p-4 pb-2.5 border-b border-zinc-100 dark:border-zinc-800/80 flex items-start justify-between gap-3 bg-white dark:bg-[#121215]">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-0.5">
             <span className="text-xs font-black text-blue-600 dark:text-blue-400 tabular-nums">
               {currentStep + 1} / {TOUR_STEPS.length}
             </span>
             <span className="text-zinc-300 dark:text-zinc-700">•</span>
-            <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500">
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 dark:text-zinc-500">
               جولة تعريفية متعمقة
             </span>
           </div>
-          <h3 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100 truncate">
+          <h3 className="text-sm sm:text-base font-black text-zinc-900 dark:text-zinc-100 truncate">
             {stepData.title}
           </h3>
         </div>
         <button
           type="button"
           onClick={handleFinishTour}
-          className="text-xs font-semibold px-2 py-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+          className="text-xs font-bold px-2 py-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
           aria-label="إغلاق الجولة"
         >
           تخطي
@@ -273,7 +299,7 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         ref={bodyScrollRef}
         tabIndex={0}
         aria-label="محتوى الخطوة"
-        className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 py-3 space-y-3 min-h-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/30"
+        className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 py-2 space-y-2.5 min-h-0 focus:outline-none [scrollbar-width:thin] [scrollbar-color:#a1a1aa_#f4f4f5] dark:[scrollbar-color:#52525b_#18181b]"
       >
         {/* Description */}
         <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -281,9 +307,9 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         </p>
 
         {/* Deep Feature Highlights */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {stepData.highlights.map((h, idx) => (
-            <div key={idx} className="flex items-start gap-1.5 text-xs">
+            <div key={idx} className="flex items-start gap-1.5 text-[11px] sm:text-xs">
               <span className="text-blue-600 dark:text-blue-400 font-bold shrink-0 mt-0.5">•</span>
               <div className="leading-snug">
                 <strong className="font-extrabold text-zinc-900 dark:text-zinc-100">{h.label}: </strong>
@@ -294,16 +320,16 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         </div>
 
         {/* Desktop vs Mobile Context Tip */}
-        <div className="p-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/60 border border-[#E4E4E7]/60 dark:border-[#27272A] space-y-1 text-[11px]">
+        <div className="p-2 sm:p-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/60 border border-[#E4E4E7]/60 dark:border-[#27272A] space-y-1 text-[10.5px] sm:text-[11px]">
           <div className="flex items-start gap-1.5">
-            <Laptop className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-            <span className="text-zinc-700 dark:text-zinc-300">
+            <Laptop className="w-3 h-3 text-zinc-500 shrink-0 mt-0.5" />
+            <span className="text-zinc-700 dark:text-zinc-300 leading-snug">
               <strong>الحاسوب:</strong> {stepData.deviceTip.desktop}
             </span>
           </div>
           <div className="flex items-start gap-1.5 pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60">
-            <Smartphone className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-            <span className="text-zinc-700 dark:text-zinc-300">
+            <Smartphone className="w-3 h-3 text-zinc-500 shrink-0 mt-0.5" />
+            <span className="text-zinc-700 dark:text-zinc-300 leading-snug">
               <strong>الهاتف:</strong> {stepData.deviceTip.mobile}
             </span>
           </div>
@@ -316,8 +342,8 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         )}
       </div>
 
-      {/* 3. FIXED FOOTER: Progress Dots & Action Buttons (ALWAYS VISIBLE) */}
-      <div className="shrink-0 p-4 sm:p-5 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-white dark:bg-[#121215]">
+      {/* 3. FIXED FOOTER: Progress Dots & Action Buttons (ALWAYS VISIBLE AT BOTTOM) */}
+      <div className="shrink-0 p-3 sm:p-4 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-white dark:bg-[#121215]">
         {/* Dots */}
         <div className="flex items-center gap-1">
           {TOUR_STEPS.map((_, idx) => (
@@ -369,9 +395,9 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
   const hasTarget = Boolean(targetRect && targetRect.width > 0 && targetRect.height > 0)
 
   return createPortal(
-    hasTarget && targetRect ? (
-      <div className="fixed inset-0 z-[110]">
-        {/* Spotlight cutout */}
+    <div className="fixed inset-0 z-[110] pointer-events-none">
+      {/* 1. Backdrop / Spotlight cutout */}
+      {hasTarget && targetRect ? (
         <div
           className="pointer-events-none fixed z-[111] transition-all duration-200 rounded-2xl border border-blue-500/80 dark:border-blue-400/80"
           style={{
@@ -382,45 +408,40 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
             boxShadow: '0 0 0 9999px rgba(9, 9, 11, 0.72)',
           }}
         />
+      ) : (
+        <div className="fixed inset-0 z-[111] bg-black/70 pointer-events-auto" />
+      )}
 
-        {/* Floating / Docked Card */}
-        <div
-          ref={cardRef}
-          role="dialog"
-          aria-label="جولة بَصير السريعة"
-          className="z-[112] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-2xl select-none animate-fade-in overflow-hidden"
-          style={cardStyle}
-        >
-          {/* Pointer Arrow (Desktop only, when positioned above or below) */}
-          {!isMobile && arrowPlacement === 'top' && (
-            <div
-              className="absolute -top-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-t border-s border-[#E4E4E7] dark:border-[#27272A] z-20"
-              style={{ left: `${arrowLeft}px` }}
-            />
-          )}
-          {!isMobile && arrowPlacement === 'bottom' && (
-            <div
-              className="absolute -bottom-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-b border-e border-[#E4E4E7] dark:border-[#27272A] z-20"
-              style={{ left: `${arrowLeft}px` }}
-            />
-          )}
+      {/* 2. Floating / Docked Tour Card with Pointer Event Passthrough */}
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-label="جولة بَصير السريعة"
+        className="pointer-events-auto fixed z-[112] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-2xl select-none animate-fade-in overflow-hidden flex flex-col"
+        style={{
+          top: `${pos.top}px`,
+          left: `${pos.left}px`,
+          width: `${pos.width}px`,
+          maxHeight: `${pos.maxHeight}px`,
+        }}
+      >
+        {/* Pointer Arrow (Desktop only, when positioned above or below target) */}
+        {!isMobile && pos.arrowPlacement === 'top' && (
+          <div
+            className="absolute -top-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-t border-s border-[#E4E4E7] dark:border-[#27272A] z-20 pointer-events-none"
+            style={{ left: `${pos.arrowLeft}px` }}
+          />
+        )}
+        {!isMobile && pos.arrowPlacement === 'bottom' && (
+          <div
+            className="absolute -bottom-1.5 w-3 h-3 rotate-45 bg-white dark:bg-[#121215] border-b border-e border-[#E4E4E7] dark:border-[#27272A] z-20 pointer-events-none"
+            style={{ left: `${pos.arrowLeft}px` }}
+          />
+        )}
 
-          {renderCardContent()}
-        </div>
+        {renderCardContent()}
       </div>
-    ) : (
-      <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-3">
-        <div
-          ref={cardRef}
-          role="dialog"
-          aria-label="جولة بَصير السريعة"
-          className="w-full bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-2xl select-none animate-fade-in overflow-hidden"
-          style={{ maxWidth: `${cardWidth}px`, maxHeight: 'min(520px, calc(100vh - 24px))' }}
-        >
-          {renderCardContent()}
-        </div>
-      </div>
-    ),
+    </div>,
     document.body
   )
 }

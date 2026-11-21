@@ -131,7 +131,7 @@ export const TransactionsPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-slide-up min-w-0 overflow-x-clip">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div data-tour="transactions-toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader title="المعاملات" subtitle="سجل كامل بجميع المصاريف والمداخيل وتفاصيلها" />
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap print-hide">
           <Button
@@ -166,7 +166,7 @@ export const TransactionsPage: React.FC = () => {
         </div>
       </div>
 
-      <div data-tour="transactions-toolbar" className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:block min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:block min-w-0">
         <TransactionFilterToolbar
           filterType={filterType}
           onFilterTypeChange={(val) => {
