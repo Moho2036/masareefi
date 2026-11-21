@@ -140,7 +140,7 @@ export const MoneyCirclesManager: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top action bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div data-tour="tools-circles" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />

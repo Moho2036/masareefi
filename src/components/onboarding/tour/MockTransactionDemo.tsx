@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   Pencil,
   Copy,
@@ -18,15 +18,45 @@ export const MockTransactionDemo: React.FC = () => {
   const [isSwiped, setIsSwiped] = useState(false)
   const [demoActionFeedback, setDemoActionFeedback] = useState<string | null>(null)
 
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartXRef = useRef<number | null>(null)
+
+  // Clear timeout on unmount (fixes BUG-06 memory leak)
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
   const handleSimulateAction = (actionName: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
     setDemoActionFeedback(`محاكاة: تم تجربة "${actionName}" بنجاح!`)
-    setTimeout(() => {
+    timerRef.current = setTimeout(() => {
       setDemoActionFeedback(null)
     }, 2800)
   }
 
+  // Real Touch Swipe Support (fixes BUG-15)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null) return
+    const touchEndX = e.changedTouches[0].clientX
+    const deltaX = touchEndX - touchStartXRef.current
+
+    // In RTL, dragging from left to right (positive delta) reveals the action strip
+    if (deltaX > 40) {
+      setIsSwiped(true)
+    } else if (deltaX < -40) {
+      setIsSwiped(false)
+    }
+    touchStartXRef.current = null
+  }
+
   return (
-    <div className="mt-3 p-3 sm:p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5">
+    <div className="mt-3 p-3 sm:p-3.5 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/40 border border-[#E4E4E7] dark:border-[#27272A] space-y-2.5">
       {/* Top Demo Header & Device Mode Switcher */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1.5">
@@ -36,7 +66,7 @@ export const MockTransactionDemo: React.FC = () => {
           </span>
         </div>
 
-        {/* Device Switcher Pills */}
+        {/* Device Switcher Pills (min-h-[36px] for touch accessibility) */}
         <div className="flex items-center bg-zinc-200/70 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-bold">
           <button
             type="button"
@@ -46,13 +76,13 @@ export const MockTransactionDemo: React.FC = () => {
               setDemoActionFeedback(null)
             }}
             className={cn(
-              'flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer',
+              'flex items-center gap-1 px-2.5 py-1.5 rounded-md transition-all cursor-pointer min-h-[36px]',
               deviceMode === 'desktop'
                 ? 'bg-white dark:bg-[#121215] text-blue-600 dark:text-blue-400 shadow-2xs font-black'
                 : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
-            <Laptop className="w-3 h-3" />
+            <Laptop className="w-3.5 h-3.5" />
             <span>الحاسوب (الفأرة)</span>
           </button>
           <button
@@ -63,30 +93,30 @@ export const MockTransactionDemo: React.FC = () => {
               setDemoActionFeedback(null)
             }}
             className={cn(
-              'flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer',
+              'flex items-center gap-1 px-2.5 py-1.5 rounded-md transition-all cursor-pointer min-h-[36px]',
               deviceMode === 'mobile'
                 ? 'bg-white dark:bg-[#121215] text-blue-600 dark:text-blue-400 shadow-2xs font-black'
                 : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
             )}
           >
-            <Smartphone className="w-3 h-3" />
+            <Smartphone className="w-3.5 h-3.5" />
             <span>الهاتف (السحب)</span>
           </button>
         </div>
       </div>
 
-      {/* Mode Instruction Hint */}
+      {/* Mode Instruction Hint with Vector Icons (fixes BUG-22) */}
       <div className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
         {deviceMode === 'desktop' ? (
-          <p className="flex items-center gap-1">
-            <span>💻</span>
+          <p className="flex items-center gap-1.5">
+            <Laptop className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
             <span>
-              <strong>على الحاسوب:</strong> مرّر الفأرة فوق الصف لإظهار أزرار التعديل والحذف.
+              <strong>على الحاسوب:</strong> مرّر الفأرة فوق الصف لتجربة كشف الأزرار السريعة.
             </span>
           </p>
         ) : (
-          <p className="flex items-center gap-1">
-            <span>📱</span>
+          <p className="flex items-center gap-1.5">
+            <Smartphone className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
             <span>
               <strong>على الهاتف:</strong> اضغط "اسحب لليمين" لتكشف أزرار الإجراءات السريعة.
             </span>
@@ -94,9 +124,13 @@ export const MockTransactionDemo: React.FC = () => {
         )}
       </div>
 
-      {/* Interactive Mock Transaction Row Container */}
-      <div className="relative overflow-hidden rounded-xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#121215] shadow-2xs select-none">
-        {/* Mobile Swipe Action Reveal Strip (rendered underneath) */}
+      {/* Interactive Mock Transaction Row (Single clean Swiss surface, fixes BUG-16) */}
+      <div
+        className="relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] select-none"
+        onTouchStart={deviceMode === 'mobile' ? handleTouchStart : undefined}
+        onTouchEnd={deviceMode === 'mobile' ? handleTouchEnd : undefined}
+      >
+        {/* Mobile Swipe Action Reveal Strip (Neutral Swiss styling, fixes BUG-17) */}
         {deviceMode === 'mobile' && (
           <div
             dir="ltr"
@@ -109,7 +143,7 @@ export const MockTransactionDemo: React.FC = () => {
             <button
               type="button"
               onClick={() => handleSimulateAction('تعديل المعاملة')}
-              className="flex-1 bg-zinc-600 hover:bg-zinc-700 text-white flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer"
+              className="flex-1 bg-zinc-700 hover:bg-zinc-800 text-zinc-100 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer transition-colors"
             >
               <Pencil className="w-3.5 h-3.5" />
               <span>تعديل</span>
@@ -117,7 +151,7 @@ export const MockTransactionDemo: React.FC = () => {
             <button
               type="button"
               onClick={() => handleSimulateAction('تكرار المعاملة')}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer"
+              className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-blue-400 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer transition-colors border-x border-zinc-700/60"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>تكرار</span>
@@ -125,7 +159,7 @@ export const MockTransactionDemo: React.FC = () => {
             <button
               type="button"
               onClick={() => handleSimulateAction('حذف المعاملة')}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer"
+              className="flex-1 bg-zinc-800 hover:bg-zinc-900 text-red-400 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>حذف</span>
@@ -175,7 +209,7 @@ export const MockTransactionDemo: React.FC = () => {
               -14.500 د.أ
             </div>
 
-            {/* Desktop Hover Action Icons */}
+            {/* Desktop Hover Action Icons (Neutral Swiss surfaces, fixes BUG-17) */}
             {deviceMode === 'desktop' && (
               <div
                 className={cn(
@@ -190,9 +224,9 @@ export const MockTransactionDemo: React.FC = () => {
                     handleSimulateAction('تعديل المعاملة')
                   }}
                   title="تعديل المعاملة"
-                  className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex items-center justify-center cursor-pointer transition-colors"
+                  className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 flex items-center justify-center cursor-pointer transition-colors"
                 >
-                  <Pencil className="w-3 h-3" />
+                  <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
@@ -201,9 +235,9 @@ export const MockTransactionDemo: React.FC = () => {
                     handleSimulateAction('تكرار المعاملة')
                   }}
                   title="تكرار المعاملة"
-                  className="w-6 h-6 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center cursor-pointer transition-colors"
+                  className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400 flex items-center justify-center cursor-pointer transition-colors"
                 >
-                  <Copy className="w-3 h-3" />
+                  <Copy className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
@@ -212,9 +246,9 @@ export const MockTransactionDemo: React.FC = () => {
                     handleSimulateAction('حذف المعاملة')
                   }}
                   title="حذف المعاملة"
-                  className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center cursor-pointer transition-colors"
+                  className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-red-600 dark:text-red-400 flex items-center justify-center cursor-pointer transition-colors"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -228,29 +262,29 @@ export const MockTransactionDemo: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsSwiped((prev) => !prev)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold hover:bg-blue-100 cursor-pointer transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors min-h-[36px]"
           >
             {isSwiped ? (
               <>
-                <RotateCcw className="w-3 h-3" />
+                <RotateCcw className="w-3.5 h-3.5" />
                 <span>إعادة إغلاق السحب</span>
               </>
             ) : (
               <>
-                <ArrowRight className="w-3 h-3" />
+                <ArrowRight className="w-3.5 h-3.5" />
                 <span>جرّب السحب لليمين الآن</span>
               </>
             )}
           </button>
         ) : (
           <span className="text-zinc-500 font-medium">
-            {isHovered ? '✅ ظهرت الأزرار بالتمرير!' : '← مرّر الفأرة فوق الصف للتجربة'}
+            {isHovered ? 'تم إظهار أزرار التعديل والحذف بالتمرير!' : 'مرّر الفأرة فوق الصف لإظهار أزرار التعديل والحذف'}
           </span>
         )}
 
         {demoActionFeedback && (
           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold animate-fade-in">
-            <CheckCircle2 className="w-3 h-3" />
+            <CheckCircle2 className="w-3.5 h-3.5" />
             <span>{demoActionFeedback}</span>
           </span>
         )}

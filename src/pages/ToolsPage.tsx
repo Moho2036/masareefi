@@ -33,7 +33,7 @@ export const ToolsPage: React.FC = () => {
   if (activeTool === 'circles') {
     return (
       <div className="space-y-6 max-w-5xl mx-auto animate-slide-up">
-        <div data-tour="tools-circles" className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <button
             type="button"
             onClick={handleBackToDirectory}

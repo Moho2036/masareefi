@@ -206,4 +206,278 @@ describe('SpotlightTour Component', () => {
     const nextBtn = screen.getByRole('button', { name: 'التالي' })
     expect(nextBtn).toBeInTheDocument()
   })
+
+  it('closes tour and saves flags when Escape key is pressed', () => {
+    const onFinish = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={onFinish} />
+      </MemoryRouter>
+    )
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onFinish).toHaveBeenCalledTimes(1)
+    expect(window.localStorage.getItem('baseer_tour_shown_user-tour-1')).toBe('true')
+    expect(window.localStorage.getItem('masareefi_tour_shown_user-tour-1')).toBe('true')
+  })
+
+  it('centers card and renders solid backdrop overlay when target element is not in DOM', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'جولة بَصير السريعة' })
+    expect(dialog).toBeInTheDocument()
+    // No target element -> no directional arrow
+    expect(dialog.querySelector('.rotate-45')).toBeNull()
+
+    // Solid backdrop rendered into document.body portal
+    const backdrop = document.querySelector('.bg-black\\/70')
+    expect(backdrop).toBeInTheDocument()
+  })
+
+  it('renders all 8 progress indicator dots with active indicator matching current step', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const activeDots = document.querySelectorAll('.w-4.bg-blue-600')
+    expect(activeDots.length).toBe(1)
+    const inactiveDots = document.querySelectorAll('.w-1\\.5.bg-zinc-200')
+    expect(inactiveDots.length).toBe(7)
+  })
+
+  it('renders MockDataCard for debt on step 4 with progress bar, balance, and WhatsApp preview', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    // Advance 3 times to step 4
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    }
+
+    expect(screen.getByText('4 / 8')).toBeInTheDocument()
+    expect(screen.getByText('معاينة: دين مسجل (سلفة أحمد)')).toBeInTheDocument()
+    expect(screen.getByText(/الأصل: 50.000 د.أ • سُدّد: 30.000 د.أ/)).toBeInTheDocument()
+    expect(screen.getByText('المتبقي: 20.000 د.أ')).toBeInTheDocument()
+    expect(screen.getByText('مشاركة واتساب')).toBeInTheDocument()
+  })
+
+  it('renders MockDataCard for recurring on step 5 with recurrence details and due badge', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    }
+
+    expect(screen.getByText('5 / 8')).toBeInTheDocument()
+    expect(screen.getByText('معاينة: التزام دوري مجدول')).toBeInTheDocument()
+    expect(screen.getByText('اشتراك الإنترنت المنزلي')).toBeInTheDocument()
+    expect(screen.getByText('-25.000 د.أ')).toBeInTheDocument()
+    expect(screen.getByText('يستحق بعد 4 أيام')).toBeInTheDocument()
+  })
+
+  it('renders MockDataCard for money circle on step 6 with turn and payout info', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    }
+
+    expect(screen.getByText('6 / 8')).toBeInTheDocument()
+    expect(screen.getByText('معاينة: صندوق جمعية عائلية')).toBeInTheDocument()
+    expect(screen.getByText('دورك: الشهر رقم 3 من 10')).toBeInTheDocument()
+    expect(screen.getByText('الاستلام: 1,000.000 د.أ')).toBeInTheDocument()
+  })
+
+  it('renders MockDataCard for report on step 7 with multi-segment distribution preview', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    }
+
+    expect(screen.getByText('7 / 8')).toBeInTheDocument()
+    expect(screen.getByText('معاينة: تحليل توزيع المصاريف')).toBeInTheDocument()
+    expect(screen.getByText('بقالة 45%')).toBeInTheDocument()
+    expect(screen.getByText('فواتير 25%')).toBeInTheDocument()
+    expect(screen.getByText('مطاعم 18%')).toBeInTheDocument()
+    expect(screen.getByText('وفر +15% هذا الشهر')).toBeInTheDocument()
+  })
+
+  it('handles localStorage errors gracefully without throwing', () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    const onFinish = vi.fn()
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={onFinish} />
+      </MemoryRouter>
+    )
+
+    const skipBtn = screen.getByRole('button', { name: 'إغلاق الجولة' })
+    fireEvent.click(skipBtn)
+
+    expect(onFinish).toHaveBeenCalledTimes(1)
+    setItemSpy.mockRestore()
+  })
+
+  it('toggles mobile swipe state when clicking row and closes via reset button', () => {
+    render(
+      <MemoryRouter initialEntries={['/transactions']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    fireEvent.click(screen.getByRole('button', { name: /الهاتف/ }))
+
+    const row = screen.getByText('مشتريات بقالة وسوبرماركت').closest('.relative.z-10')!
+    expect(row).toHaveStyle({ transform: 'none' })
+
+    // Click row directly to toggle swipe open
+    fireEvent.click(row)
+    expect(row).toHaveStyle({ transform: 'translateX(165px)' })
+
+    // Close via reset button
+    const closeBtn = screen.getByRole('button', { name: 'إعادة إغلاق السحب' })
+    fireEvent.click(closeBtn)
+    expect(row).toHaveStyle({ transform: 'none' })
+  })
+
+  it('simulates edit and duplicate action feedback in mobile demo mode', () => {
+    render(
+      <MemoryRouter initialEntries={['/transactions']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    fireEvent.click(screen.getByRole('button', { name: /الهاتف/ }))
+    fireEvent.click(screen.getByRole('button', { name: /جرّب السحب لليمين الآن/ }))
+
+    // Edit action feedback
+    fireEvent.click(screen.getByRole('button', { name: 'تعديل' }))
+    expect(screen.getByText(/محاكاة: تم تجربة "تعديل المعاملة" بنجاح!/)).toBeInTheDocument()
+
+    // Duplicate action feedback
+    fireEvent.click(screen.getByRole('button', { name: 'تكرار' }))
+    expect(screen.getByText(/محاكاة: تم تجربة "تكرار المعاملة" بنجاح!/)).toBeInTheDocument()
+  })
+
+  it('positions card docked to top (top: 12px) on mobile viewport when target is in lower half', () => {
+    window.innerWidth = 375
+    window.innerHeight = 667
+
+    const targetEl = document.createElement('div')
+    targetEl.setAttribute('data-tour', 'hero-balance')
+    targetEl.getBoundingClientRect = vi.fn().mockReturnValue({
+      top: 450,
+      left: 20,
+      width: 300,
+      height: 100,
+      bottom: 550,
+      right: 320,
+    })
+    document.body.appendChild(targetEl)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'جولة بَصير السريعة' })
+    expect(dialog).toHaveStyle({ top: '12px', width: '351px' })
+
+    document.body.removeChild(targetEl)
+    window.innerWidth = 1280
+    window.innerHeight = 800
+  })
+
+  it('responds to window resize event by updating layout without crashing', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    fireEvent(window, new Event('resize'))
+    expect(screen.getByRole('dialog', { name: 'جولة بَصير السريعة' })).toBeInTheDocument()
+  })
+
+  it('renders pointer-events-auto backdrop to prevent background clickthrough (BUG-01)', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const backdrop = document.querySelector('.bg-black\\/70')
+    expect(backdrop).toHaveClass('pointer-events-auto')
+  })
+
+  it('traps keyboard focus inside dialog and announces step via aria-live (BUG-19)', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'جولة بَصير السريعة' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+
+    const liveAnnouncement = screen.getByText(/الخطوة 1 من 8: لوحة التحكم وحد الصرف اليومي/)
+    expect(liveAnnouncement).toBeInTheDocument()
+
+    // Tab key cycling
+    const skipBtn = screen.getByRole('button', { name: 'إغلاق الجولة' })
+    const nextBtn = screen.getByRole('button', { name: 'التالي' })
+    nextBtn.focus()
+    expect(document.activeElement).toBe(nextBtn)
+
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(skipBtn)
+  })
+
+  it('safely clamps step navigation to prevent array out of bounds (BUG-02)', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    // Advance to step 8
+    for (let i = 0; i < 7; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'التالي' }))
+    }
+
+    expect(screen.getByText('8 / 8')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'فهمت، ابدأ الآن' })).toBeInTheDocument()
+    // No next button to click, no out-of-bounds crash
+    expect(screen.queryByRole('button', { name: 'التالي' })).toBeNull()
+  })
 })

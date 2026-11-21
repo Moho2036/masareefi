@@ -72,6 +72,13 @@ export const AppShell: React.FC = () => {
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false)
   const [hasMountedNotifications, setHasMountedNotifications] = useState<boolean>(false)
 
+  const [prevUid, setPrevUid] = useState(uid)
+  if (prevUid !== uid) {
+    setPrevUid(uid)
+    if (showTour) setShowTour(false)
+    if (showWizard) setShowWizard(false)
+  }
+
   // Check onboarding eligibility for new vs existing users
   useEffect(() => {
     if (!uid || settingsLoading || !settings) return
@@ -403,7 +410,7 @@ export const AppShell: React.FC = () => {
           <OnboardingWizard isOpen={showWizard} onComplete={handleOnboardingComplete} />
         )}
         {showTour && uid && (
-          <SpotlightTour isOpen={showTour} onFinish={() => setShowTour(false)} />
+          <SpotlightTour key={uid} isOpen={showTour} onFinish={() => setShowTour(false)} />
         )}
         {hasMountedNotifications && (
           <NotificationCenterModal

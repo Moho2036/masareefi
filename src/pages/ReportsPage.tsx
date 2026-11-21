@@ -83,17 +83,19 @@ export const ReportsPage: React.FC = () => {
   ) : (
     <>
       <SafeDailySpendCard forecast={reports.forecast} />
-      <MonthlyKpiCards
-        monthSums={reports.monthSums}
-        prevMonthSums={reports.prevMonthSums}
-        monthSavingsRate={reports.monthSavingsRate}
-        monthComparison={reports.monthComparison}
-        monthIncomeComparison={reports.monthIncomeComparison}
-        forecast={reports.forecast}
-        isEarlyMonth={reports.isEarlyMonth}
-        effectiveRollover={reports.effectiveRollover}
-        isRolloverEnabled={reports.isRolloverEnabled}
-      />
+      <div data-tour="reports-view">
+        <MonthlyKpiCards
+          monthSums={reports.monthSums}
+          prevMonthSums={reports.prevMonthSums}
+          monthSavingsRate={reports.monthSavingsRate}
+          monthComparison={reports.monthComparison}
+          monthIncomeComparison={reports.monthIncomeComparison}
+          forecast={reports.forecast}
+          isEarlyMonth={reports.isEarlyMonth}
+          effectiveRollover={reports.effectiveRollover}
+          isRolloverEnabled={reports.isRolloverEnabled}
+        />
+      </div>
       <DailyExpenseSection
         dailyExpenses={reports.dailyExpenses}
         dailyStats={reports.dailyStats}
@@ -153,7 +155,7 @@ export const ReportsPage: React.FC = () => {
         title="التقارير المالية"
         subtitle="تحليل تفصيلي وإحصائيات لأداء ميزانيتك ومصاريفك"
         actions={
-          <div data-tour="reports-view" className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <SegmentedControl<'monthly' | 'yearly'>
               value={reports.reportPeriod}
               onChange={(val) => {
