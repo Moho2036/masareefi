@@ -229,11 +229,7 @@ export const AppShell: React.FC = () => {
                 />
               ) : (
                 <div
-                  style={{ backgroundColor: settings?.avatarColor || undefined }}
-                  className={cn(
-                    'w-9 h-9 rounded-full text-white font-bold flex items-center justify-center text-sm shrink-0 transition-colors',
-                    !settings?.avatarColor && 'bg-blue-600 dark:bg-blue-600'
-                  )}
+                  className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] font-bold flex items-center justify-center text-sm shrink-0"
                 >
                   {avatarInitial}
                 </div>
@@ -279,11 +275,7 @@ export const AppShell: React.FC = () => {
                 />
               ) : (
                 <div
-                  style={{ backgroundColor: settings?.avatarColor || undefined }}
-                  className={cn(
-                    'w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs transition-colors',
-                    !settings?.avatarColor && 'bg-blue-600'
-                  )}
+                  className="w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] font-bold flex items-center justify-center text-xs shrink-0 shadow-xs"
                 >
                   {avatarInitial}
                 </div>

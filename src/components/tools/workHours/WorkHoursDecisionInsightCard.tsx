@@ -42,6 +42,17 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
 
   if (itemPrice <= 0) return null
 
+  const itemFils = toFils(itemPrice, config.decimals)
+  const isDanger =
+    forecast.freeBalance <= 0 ||
+    itemFils > forecast.freeBalance ||
+    (forecast.freeBalance > 0 && itemFils >= forecast.freeBalance * 0.8)
+  const isWarning =
+    !isDanger &&
+    forecast.freeBalance > 0 &&
+    (itemFils >= forecast.freeBalance * 0.4 ||
+      (forecast.dailySafeFils > 0 && dailySafeDropFils >= forecast.dailySafeFils * 0.4))
+
   return (
     <>
       <Card
@@ -88,9 +99,9 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
             </div>
           )}
 
-          {/* Metrics Grid: responsive on mobile to prevent truncation */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+          {/* Metrics Grid: Swiss divided container eliminating Box-in-Box clutter */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 rounded-xl border border-[#E4E4E7] dark:border-[#27272A] divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-[#E4E4E7] dark:divide-[#27272A] overflow-hidden bg-zinc-50/70 dark:bg-zinc-900/40">
+            <div className="p-3 flex flex-col justify-between">
               <div>
                 <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                   نسبة الاستهلاك من الرصيد الحر
@@ -108,7 +119,7 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
               </span>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+            <div className="p-3 flex flex-col justify-between">
               <div>
                 <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                   الأثر على حد الصرف اليومي
@@ -134,7 +145,7 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
               </span>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex flex-col justify-between">
+            <div className="p-3 flex flex-col justify-between">
               <div>
                 <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 block mb-1">
                   الأيام المتبقية في الشهر المالي
@@ -152,16 +163,16 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
           {/* Quick Record Action */}
           <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800">
             <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-              اتخذت قرارك النهائي بشراء هذه السلعة؟
+              إدراج السلعة في الميزانية
             </span>
             <Button
               type="button"
-              variant="primary"
+              variant={isDanger ? 'danger' : isWarning ? 'warning' : 'primary'}
               size="md"
               onClick={() => setIsTxModalOpen(true)}
               icon={<ShoppingBag className="w-4 h-4" />}
             >
-              تسجيل كمصروف الآن
+              تسجيل المصروف
             </Button>
           </div>
         </div>
@@ -172,6 +183,7 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
         isOpen={isTxModalOpen}
         onClose={() => setIsTxModalOpen(false)}
         title="تسجيل مصروف السلعة"
+        hideCloseButton={true}
       >
         {isTxModalOpen && (
           <TransactionForm
@@ -181,7 +193,7 @@ export const WorkHoursDecisionInsightCard: React.FC<WorkHoursDecisionInsightCard
               type: 'expense',
               amountFils: itemPriceFils,
               title: itemName || 'مشتريات جديدة',
-              note: `شراء ${itemName || 'سلعة'} (محسوبة من حاسبة ساعات العمل)`,
+              note: itemName ? `شراء ${itemName}` : '',
               categoryId: '',
               date: new Date(),
               createdAt: new Date(),

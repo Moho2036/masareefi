@@ -234,7 +234,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
                 disabled={exportingJson || !user}
                 className="flex-1 font-bold text-xs sm:text-sm"
               >
-                {exportingJson ? 'جاري التحضير...' : 'تنزيل نسخة احتياطية شاملة (JSON)'}
+                {exportingJson ? 'جارٍ التحضير...' : 'تنزيل نسخة احتياطية شاملة (JSON)'}
               </Button>
 
               <Button
@@ -272,7 +272,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
               disabled={exportingCsv || !user}
               className="w-full font-bold text-xs sm:text-sm"
             >
-              {exportingCsv ? 'جاري التصدير...' : 'تصدير السجل المالي الشامل (Excel / CSV)'}
+              {exportingCsv ? 'جارٍ التصدير...' : 'تصدير السجل المالي الشامل (Excel / CSV)'}
             </Button>
           </div>
         </div>
@@ -283,6 +283,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
         isOpen={Boolean(restoreValidation?.valid)}
         onClose={() => setRestoreValidation(null)}
         title="تأكيد استعادة النسخة الاحتياطية"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -362,7 +363,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  يضيف ويحدث السجلات الموجودة في النسخة الاحتياطية دون حذف المعاملات أو الديون الأحدث التي أضافها المستخدم في حسابه.
+                  إضافة وتحديث السجلات مع الاحتفاظ الكامل ببياناتك ومعاملاتك الحالية دون أي حذف.
                 </p>
               </button>
 
@@ -390,7 +391,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  يمسح السجلات غير الموجودة في النسخة الاحتياطية ويعيد الحساب تماماً كما كان وقت النسخة.
+                  حذف السجلات غير الموجودة في النسخة ومطابقة بيانات الحساب لوقت أخذ النسخة بدقة.
                 </p>
               </button>
             </div>
@@ -432,7 +433,7 @@ export const BackupExportSection: React.FC<BackupExportSectionProps> = ({
               disabled={restoringJson}
             >
               {restoringJson
-                ? 'جاري الاستعادة...'
+                ? 'جارٍ الاستعادة...'
                 : restoreMode === 'replace'
                   ? 'استبدال كافة البيانات'
                   : 'تأكيد ودمج البيانات'}

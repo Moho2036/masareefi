@@ -35,6 +35,7 @@ export const RecurringConfirmModal: React.FC<RecurringConfirmModalProps> = ({
     <Modal
       isOpen={Boolean(item)}
       onClose={onClose}
+      enableHistoryBack={false}
       title="تأكيد وتسجيل الدفعة الدورية"
     >
       {item && (

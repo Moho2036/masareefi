@@ -252,7 +252,7 @@ const RecurringFormContent: React.FC<RecurringFormContentProps> = ({
           variant="primary"
           disabled={submitting}
         >
-          {submitting ? 'جاري الحفظ...' : isEditing ? 'تعديل المعاملة' : 'حفظ'}
+          {submitting ? 'جارٍ الحفظ...' : isEditing ? 'تعديل المعاملة' : 'حفظ'}
         </Button>
       </div>
 
@@ -290,6 +290,7 @@ export const RecurringForm: React.FC<RecurringFormProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      enableHistoryBack={false}
       title={initialRecurring ? 'تعديل المعاملة المتكررة' : 'إضافة معاملة متكررة'}
       closeOnBackdropClick={!isDirty && !initialRecurring}
     >

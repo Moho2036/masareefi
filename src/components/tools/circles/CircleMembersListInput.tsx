@@ -23,7 +23,7 @@ export const CircleMembersListInput: React.FC<CircleMembersListInputProps> = ({
       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
         ترتيب وأسماء الأعضاء:
       </label>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1">
         {Array.from({ length: membersCount }, (_, i) => {
           const turn = i + 1
           const isUser = turn === myTurnMonth
@@ -37,7 +37,7 @@ export const CircleMembersListInput: React.FC<CircleMembersListInputProps> = ({
               </span>
               <Input
                 type="text"
-                className="py-1.5 text-xs flex-1"
+                className="text-base sm:text-sm flex-1"
                 value={customMembers[i] ?? defaultVal}
                 onChange={(e) => {
                   const val = e.target.value

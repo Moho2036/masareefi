@@ -1,13 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useSearchParams, useInRouterContext } from 'react-router'
 import { differenceInDays, startOfDay } from 'date-fns'
-import {
-  RefreshCw,
-  Plus,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-} from 'lucide-react'
+import { RefreshCw, Plus, ChevronDown, ChevronUp, Clock } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -205,12 +199,7 @@ export const RecurringPage: React.FC = () => {
       if (newActive) {
         await processDueRecurring(user.uid)
       }
-      showToast(
-        newActive
-          ? 'تم تفعيل المعاملة المتكررة'
-          : 'تم إيقاف المعاملة المتكررة مؤقتاً',
-        'info'
-      )
+      showToast(newActive ? 'تم تفعيل المعاملة المتكررة' : 'تم إيقاف المعاملة المتكررة مؤقتاً', 'info')
     } catch (err) {
       console.error('Failed to toggle recurring item:', err)
       setActiveOverride(null)
@@ -244,6 +233,17 @@ export const RecurringPage: React.FC = () => {
     }
   }
 
+  const handleEditItem = (item: Recurring) => {
+    setSelectedDetailsId(null)
+    setEditingItem(item)
+    setIsFormOpen(true)
+  }
+
+  const handleDeleteItem = (item: Recurring) => {
+    setSelectedDetailsId(null)
+    setItemToDelete(item)
+  }
+
   const handleDepositCircleDirect = async (circle: MoneyCircle) => {
     if (!user) return
     setDepositingCircleId(circle.id)
@@ -274,10 +274,7 @@ export const RecurringPage: React.FC = () => {
           <Button
             variant="primary"
             icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-            onClick={() => {
-              setEditingItem(null)
-              setIsFormOpen(true)
-            }}
+            onClick={() => { setEditingItem(null); setIsFormOpen(true) }}
             className="font-semibold"
           >
             إضافة متكررة
@@ -311,10 +308,7 @@ export const RecurringPage: React.FC = () => {
               variant="primary"
               size="md"
               icon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-              onClick={() => {
-                setEditingItem(null)
-                setIsFormOpen(true)
-              }}
+              onClick={() => { setEditingItem(null); setIsFormOpen(true) }}
             >
               إضافة أول معاملة متكررة
             </Button>
@@ -338,6 +332,8 @@ export const RecurringPage: React.FC = () => {
                   onSkipOccurrence={handleSkipOccurrence}
                   onOpenDetails={(it) => setSelectedDetailsId(it.id)}
                   onDepositCircleDirect={handleDepositCircleDirect}
+                  onEdit={handleEditItem}
+                  onDelete={handleDeleteItem}
                 />
               ))}
             </div>
@@ -383,6 +379,8 @@ export const RecurringPage: React.FC = () => {
                       onSkipOccurrence={handleSkipOccurrence}
                       onOpenDetails={(it) => setSelectedDetailsId(it.id)}
                       onDepositCircleDirect={handleDepositCircleDirect}
+                      onEdit={handleEditItem}
+                      onDelete={handleDeleteItem}
                     />
                   ))}
                 </div>
@@ -394,7 +392,10 @@ export const RecurringPage: React.FC = () => {
 
       <RecurringForm
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          setIsFormOpen(false)
+          setEditingItem(null)
+        }}
         initialRecurring={editingItem}
       />
 
@@ -423,10 +424,13 @@ export const RecurringPage: React.FC = () => {
         circles={circles}
         monthStartDay={monthStartDay}
         allTransactions={allTransactions}
-        onEdit={(it) => { setSelectedDetailsId(null); setEditingItem(it); setIsFormOpen(true) }}
-        onDelete={setItemToDelete}
+        onEdit={handleEditItem}
+        onDelete={handleDeleteItem}
         onToggleActive={handleToggleActive}
-        onOpenConfirm={(it) => { setSelectedDetailsId(null); handleOpenConfirm(it) }}
+        onOpenConfirm={(it) => {
+          setSelectedDetailsId(null)
+          handleOpenConfirm(it)
+        }}
         onSkipOccurrence={handleSkipOccurrence}
         onDepositCircleDirect={handleDepositCircleDirect}
         depositingCircleId={depositingCircleId}

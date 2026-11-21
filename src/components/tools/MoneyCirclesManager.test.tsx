@@ -1194,7 +1194,7 @@ describe('MoneyCirclesManager Component', () => {
     const doubleShareBtn = screen.getByRole('button', { name: /سهمان \(دورين\)/i })
     fireEvent.click(doubleShareBtn)
 
-    expect(screen.getByText(/المبلغ الإجمالي المقبوض:/i)).toBeInTheDocument()
+    expect(screen.getByText(/الحصة عند الاستلام:/i)).toBeInTheDocument()
     expect(screen.getByText(/الصافي المودع بعد استقطاع قسط الشهرين:/i)).toBeInTheDocument()
   })
 

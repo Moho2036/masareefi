@@ -1,7 +1,5 @@
 import React from 'react'
 import {
-  Users,
-  Crown,
   Pencil,
   Trash2,
   CheckCircle2,
@@ -180,50 +178,34 @@ export const CircleCard: React.FC<CircleCardProps> = ({
     >
       {/* Circle Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-lg shrink-0',
-              isUserTurn
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
+        <div>
+          <h4 className="text-base font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
+            <span>{circle.name}</span>
+            {circle.shareType === 'half' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                نصف سهم
+              </span>
             )}
-          >
-            {isUserTurn ? (
-              <Crown className="w-5 h-5 text-white" />
-            ) : (
-              <Users className="w-5 h-5" />
+            {circle.shareType === 'double' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                سهمان: شهر {circle.myTurnMonth} و {circle.secondTurnMonth}
+              </span>
             )}
-          </div>
-          <div>
-            <h4 className="text-base font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
-              <span>{circle.name}</span>
-              {circle.shareType === 'half' && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-                  نصف سهم
-                </span>
-              )}
-              {circle.shareType === 'double' && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-                  سهمان: شهر {circle.myTurnMonth} و {circle.secondTurnMonth}
-                </span>
-              )}
-              {circle.isManager && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-                  أنت المدير
-                </span>
-              )}
-              {(circle.status === 'completed' || isCompleted) && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
-                  مكتملة
-                </span>
-              )}
-            </h4>
-            <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
-              <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /> / شهر</span>
-              <span>•</span>
-              <span>{circle.membersCount} أشهر ({circle.membersCount} أعضاء)</span>
-            </div>
+            {circle.isManager && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                أنت المدير
+              </span>
+            )}
+            {(circle.status === 'completed' || isCompleted) && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-[#E4E4E7] dark:border-[#27272A]">
+                مكتملة
+              </span>
+            )}
+          </h4>
+          <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
+            <span>قسط: <FormattedMoney amountFils={userMonthlyFils} /> / شهر</span>
+            <span>•</span>
+            <span>{circle.membersCount} أشهر ({circle.membersCount} أعضاء)</span>
           </div>
         </div>
 
@@ -255,7 +237,7 @@ export const CircleCard: React.FC<CircleCardProps> = ({
           )}
 
           <div className="text-end me-2">
-            <div className="text-[11px] text-zinc-400">إجمالي المقبوض</div>
+            <div className="text-[11px] text-zinc-400">الحصة عند الاستلام</div>
             <div className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100 select-none">
               <FormattedMoney amountFils={userTotalGrossFils} />
             </div>
@@ -264,18 +246,11 @@ export const CircleCard: React.FC<CircleCardProps> = ({
           <button
             type="button"
             onClick={() => handleOpenEditModal(circle)}
-            className="p-2 rounded-xl text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/30 transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700/80"
             title="تعديل الجمعية"
+            aria-label="تعديل الجمعية"
           >
             <Pencil className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteCircleId(circle.id)}
-            className="p-2 rounded-xl text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-            title="حذف الجمعية"
-          >
-            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -440,6 +415,20 @@ export const CircleCard: React.FC<CircleCardProps> = ({
           )}
         </>
       )}
+
+      {/* Delete Circle Action at bottom */}
+      <div className="pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800">
+        <Button
+          type="button"
+          variant="danger"
+          size="md"
+          onClick={() => setDeleteCircleId(circle.id)}
+          icon={<Trash2 className="w-4 h-4" />}
+          className="w-full"
+        >
+          حذف الجمعية
+        </Button>
+      </div>
     </Card>
   )
 }

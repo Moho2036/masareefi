@@ -1,5 +1,5 @@
-import React from 'react'
-import { CheckCircle2, Crown, AlertCircle, ArrowLeftRight } from 'lucide-react'
+import React, { useRef } from 'react'
+import { CheckCircle2, Crown, AlertCircle, ArrowLeftRight, ChevronRight, ChevronLeft } from 'lucide-react'
 import { FormattedMoney } from '../../ui/FormattedMoney'
 import { addMonths } from 'date-fns'
 import { format as formatDate } from 'date-fns'
@@ -30,6 +30,14 @@ export const CircleMembersSchedule: React.FC<CircleMembersScheduleProps> = ({
   onToggleMemberPayment,
   onOpenSwapModal,
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  const handleScroll = (delta: number) => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: delta, behavior: 'smooth' })
+    }
+  }
+
   return (
     <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
       {/* Month selector for viewing past/current/future payments */}
@@ -37,35 +45,60 @@ export const CircleMembersSchedule: React.FC<CircleMembersScheduleProps> = ({
         <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
           عرض دفعات الشهر:
         </span>
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 max-w-full">
-          {Array.from({ length: circle.membersCount }, (_, i) => i + 1).map((mNum) => (
+        <div className="flex items-center gap-1 max-w-full">
+          {circle.membersCount > 4 && (
             <button
-              key={mNum}
               type="button"
-              aria-label={`شهر ${mNum}`}
-              onClick={() => onSelectMonth(mNum)}
-              className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0',
-                viewingMonth === mNum
-                  ? 'bg-blue-600 text-white shadow-2xs'
-                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-              )}
+              onClick={() => handleScroll(150)}
+              aria-label="الأشهر السابقة"
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 hidden sm:flex items-center justify-center"
             >
-              شهر {mNum}
-              <span className="text-[10px] opacity-80 ms-1 font-normal">
-                (
-                {formatDate(
-                  addMonths(
-                    circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
-                    mNum - 1
-                  ),
-                  'MMM yyyy',
-                  { locale: ar }
-                )}
-                )
-              </span>
+              <ChevronRight className="w-4 h-4" />
             </button>
-          ))}
+          )}
+          <div
+            ref={scrollContainerRef}
+            className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 max-w-full scroll-smooth"
+          >
+            {Array.from({ length: circle.membersCount }, (_, i) => i + 1).map((mNum) => (
+              <button
+                key={mNum}
+                type="button"
+                aria-label={`شهر ${mNum}`}
+                onClick={() => onSelectMonth(mNum)}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0',
+                  viewingMonth === mNum
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                )}
+              >
+                شهر {mNum}
+                <span className="text-[10px] opacity-80 ms-1 font-normal">
+                  (
+                  {formatDate(
+                    addMonths(
+                      circle.startDate instanceof Date ? circle.startDate : new Date(circle.startDate),
+                      mNum - 1
+                    ),
+                    'MMM yyyy',
+                    { locale: ar }
+                  )}
+                  )
+                </span>
+              </button>
+            ))}
+          </div>
+          {circle.membersCount > 4 && (
+            <button
+              type="button"
+              onClick={() => handleScroll(-150)}
+              aria-label="الأشهر التالية"
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 hidden sm:flex items-center justify-center"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 

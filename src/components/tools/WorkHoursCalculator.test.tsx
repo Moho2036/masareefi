@@ -10,6 +10,7 @@ import {
   clampWorkDaysPerMonth,
   parseNumeric,
 } from '../../lib/workHours'
+import { clearWorkHoursPrefs, STORAGE_KEY, LEGACY_STORAGE_KEY } from './workHours/workHoursPrefs'
 
 describe('WorkHoursCalculator component', () => {
   beforeEach(() => {
@@ -199,10 +200,10 @@ describe('WorkHoursCalculator component', () => {
 
     expect(screen.getByText('بصيرة القرار الشرائي على ميزانية هذا الشهر')).toBeInTheDocument()
     expect(screen.getByText('الأثر على حد الصرف اليومي')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /تسجيل كمصروف الآن/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /تسجيل المصروف/i })).toBeInTheDocument()
   })
 
-  it('opens transaction modal with "حفظ" (and not "حفظ النسخة") when clicking "تسجيل كمصروف الآن"', () => {
+  it('opens transaction modal with "حفظ" (and not "حفظ النسخة") when clicking "تسجيل المصروف"', () => {
     render(
       <ToastProvider>
         <SelectedMonthProvider>
@@ -213,11 +214,24 @@ describe('WorkHoursCalculator component', () => {
       </ToastProvider>
     )
 
-    const recordBtn = screen.getByRole('button', { name: /تسجيل كمصروف الآن/i })
+    const recordBtn = screen.getByRole('button', { name: /تسجيل المصروف/i })
     fireEvent.click(recordBtn)
 
     expect(screen.getByText('تسجيل مصروف السلعة')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'حفظ' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'حفظ النسخة' })).not.toBeInTheDocument()
+  })
+
+  it('clearWorkHoursPrefs successfully cleans both primary and legacy localStorage keys', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ salary: '1000' }))
+    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ salary: '1000' }))
+
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).not.toBeNull()
+
+    clearWorkHoursPrefs()
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull()
   })
 })

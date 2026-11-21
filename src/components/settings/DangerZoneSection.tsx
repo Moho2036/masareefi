@@ -10,6 +10,7 @@ import {
   reauthenticateCurrentGoogle,
 } from '../../services/auth'
 import { resetUserData, deleteUserFirestoreData } from '../../services/userProfile'
+import { clearWorkHoursPrefs } from '../tools/workHours/workHoursPrefs'
 import type { User } from 'firebase/auth'
 
 export interface DangerZoneSectionProps {
@@ -68,6 +69,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
     setResettingData(true)
     try {
       await resetUserData(user.uid)
+      clearWorkHoursPrefs()
       showToast('تم تصفير جميع المعاملات والديون والجمعيات بنجاح', 'success')
       setShowResetModal(false)
       setResetConfirmText('')
@@ -97,6 +99,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
         Object.keys(localStorage).forEach((k) => {
           if (k.includes(user.uid)) localStorage.removeItem(k)
         })
+        clearWorkHoursPrefs()
       }
       showToast('تم حذف الحساب نهائياً، نتمنى رؤيتك قريباً', 'info')
     } catch (err: unknown) {
@@ -148,9 +151,11 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
       setReauthPassword('')
       if (pendingActionRef.current === 'delete-account') {
         pendingActionRef.current = null
-        await executeAccountDeletion()
+        setShowDeleteModal(true)
+        setDeleteConfirmText('')
+        showToast('تم تأكيد الهوية بنجاح، يرجى تأكيد حذف الحساب نهائياً', 'info')
       } else {
-        showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
+        showToast('تم تأكيد الهوية بنجاح، يمكنك متابعة الإجراء الآن', 'success')
       }
     } catch (err) {
       console.error('Password re-auth failed:', err)
@@ -169,9 +174,11 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
       setShowReauthModal(false)
       if (pendingActionRef.current === 'delete-account') {
         pendingActionRef.current = null
-        await executeAccountDeletion()
+        setShowDeleteModal(true)
+        setDeleteConfirmText('')
+        showToast('تم تأكيد الهوية بنجاح، يرجى تأكيد حذف الحساب نهائياً', 'info')
       } else {
-        showToast('تم تأكيد الهوية بنجاح، يمكنك إعادة تنفيذ الإجراء الآن', 'success')
+        showToast('تم تأكيد الهوية بنجاح، يمكنك متابعة الإجراء الآن', 'success')
       }
     } catch (err) {
       console.error('Google re-auth failed:', err)
@@ -242,6 +249,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
         }}
         enableHistoryBack={false}
         title="تأكيد تصفير بيانات الحساب"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-800 dark:text-red-300 leading-relaxed">
@@ -261,7 +269,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
               disabled={exportingJson || !user}
               className="font-bold text-xs shrink-0"
             >
-              {exportingJson ? 'جاري التنزيل...' : 'تنزيل نسخة احتياطية أولاً'}
+              {exportingJson ? 'جارٍ التنزيل...' : 'تنزيل نسخة احتياطية أولاً'}
             </Button>
           </div>
 
@@ -295,7 +303,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
               onClick={handleResetUserData}
               disabled={resetConfirmText.trim() !== 'تصفير' || resettingData}
             >
-              {resettingData ? 'جاري تصفير البيانات...' : 'تأكيد تصفير كافة البيانات'}
+              {resettingData ? 'جارٍ تصفير البيانات...' : 'تأكيد تصفير كافة البيانات'}
             </Button>
           </div>
         </div>
@@ -310,6 +318,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
         }}
         enableHistoryBack={false}
         title="حذف الحساب نهائياً"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-800 dark:text-red-300 leading-relaxed">
@@ -346,9 +355,8 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
               size="md"
               onClick={handleDeleteAccount}
               disabled={deleteConfirmText.trim() !== 'حذف نهائي' || deletingAccount}
-              className="bg-red-700 hover:bg-red-800"
             >
-              {deletingAccount ? 'جاري حذف الحساب...' : 'حذف الحساب نهائياً'}
+              {deletingAccount ? 'جارٍ حذف الحساب...' : 'حذف الحساب نهائياً'}
             </Button>
           </div>
         </div>
@@ -363,12 +371,13 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
         }}
         enableHistoryBack={false}
         title="تأكيد الهوية (إعادة تسجيل الدخول)"
+        hideCloseButton={true}
       >
         <div className="space-y-4 text-start">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
             {isGoogleOnly
-              ? 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس إعادة التحقق عبر حساب Google قبل الاستمرار:'
-              : 'لأسباب أمنية مشددة، يتطلب هذا الإجراء الحساس تأكيد كلمة المرور أو إعادة التحقق عبر حسابك قبل الاستمرار:'}
+              ? 'يرجى تأكيد هويتك عبر حساب Google للمتابعة:'
+              : 'يرجى تأكيد كلمة المرور للمتابعة:'}
           </p>
 
           {!isGoogleOnly && hasPasswordProvider && (
@@ -395,13 +404,13 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
                 disabled={reauthenticating}
                 className="w-full sm:w-auto"
               >
-                {reauthenticating ? 'جاري التحقق...' : 'إعادة التحقق عبر Google'}
+                {reauthenticating ? 'جارٍ التحقق...' : 'إعادة التحقق عبر Google'}
               </Button>
             )}
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setShowReauthModal(false)
@@ -418,7 +427,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
                   onClick={handleReauthWithGoogle}
                   disabled={reauthenticating}
                 >
-                  {reauthenticating ? 'جاري التحقق...' : 'تأكيد الهوية عبر حساب Google'}
+                  {reauthenticating ? 'جارٍ التحقق...' : 'تأكيد الهوية عبر حساب Google'}
                 </Button>
               ) : (
                 <Button
@@ -427,7 +436,7 @@ export const DangerZoneSection: React.FC<DangerZoneSectionProps> = ({
                   onClick={handleReauthWithPassword}
                   disabled={reauthenticating || !reauthPassword.trim()}
                 >
-                  {reauthenticating ? 'جاري التحقق...' : 'تأكيد ومتابعة'}
+                  {reauthenticating ? 'جارٍ التحقق...' : 'تأكيد ومتابعة'}
                 </Button>
               )}
             </div>

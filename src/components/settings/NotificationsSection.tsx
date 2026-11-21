@@ -113,7 +113,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
               تنبيهات الجمعيات وموعد القبض
             </label>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              إشعارك عند حلول دورك في الاستلام، ومتابعة الأقساط المعلقة للأعضاء إذا كنت مدير الجمعية.
+              إشعارك عند حلول دورك في الاستلام أو متابعة أقساط الأعضاء.
             </p>
           </div>
           <Toggle
@@ -130,7 +130,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
               تحذيرات الميزانية وتجاوز الصرف
             </label>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              تنبيه ذكي عند استهلاك 80% من الميزانية أو توقع حدوث عجز في نهاية الشهر.
+              تنبيهك عند استهلاك معظم الميزانية أو توقع حدوث عجز مالي.
             </p>
           </div>
           <Toggle
@@ -147,7 +147,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
               التذكير اليومي لتسجيل المصاريف
             </label>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              رسالة تذكير مسائية لتسجيل فواتير ومصاريف يومك للحفاظ على دقة السجلات.
+              تذكير مسائي لتسجيل مصاريف اليوم وحفظ انتظام السجلات.
             </p>
           </div>
           <Toggle

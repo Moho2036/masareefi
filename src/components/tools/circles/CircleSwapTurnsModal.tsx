@@ -26,6 +26,7 @@ export const CircleSwapTurnsModal: React.FC<CircleSwapTurnsModalProps> = ({
       isOpen={Boolean(swapTarget)}
       onClose={onClose}
       title="تبديل الدور بين الأعضاء"
+      hideCloseButton={true}
     >
       <div className="space-y-4">
         <p className="text-xs text-zinc-600 dark:text-zinc-300">
@@ -47,7 +48,7 @@ export const CircleSwapTurnsModal: React.FC<CircleSwapTurnsModalProps> = ({
 
         <div className="flex items-center justify-end gap-2 pt-2">
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={onClose}
             disabled={isSwapping}
           >
@@ -58,7 +59,7 @@ export const CircleSwapTurnsModal: React.FC<CircleSwapTurnsModalProps> = ({
             onClick={onConfirm}
             disabled={isSwapping || !swapWithMemberId}
           >
-            {isSwapping ? 'جاري التبديل...' : 'تأكيد تبديل الدور'}
+            {isSwapping ? 'جارٍ التبديل...' : 'تأكيد تبديل الدور'}
           </Button>
         </div>
       </div>

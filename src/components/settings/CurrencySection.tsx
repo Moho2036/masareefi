@@ -172,7 +172,7 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                   variant="primary"
                   className="w-full sm:w-auto font-bold"
                 >
-                  {savingCurrency ? 'جاري الحفظ...' : 'تطبيق العملة'}
+                  {savingCurrency ? 'جارٍ الحفظ...' : 'تطبيق العملة'}
                 </Button>
                 <Button
                   onClick={() => {

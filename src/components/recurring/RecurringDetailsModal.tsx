@@ -130,6 +130,7 @@ export const RecurringDetailsModal: React.FC<RecurringDetailsModalProps> = ({
     <Modal
       isOpen={Boolean(item)}
       onClose={onClose}
+      enableHistoryBack={false}
       title="تفاصيل وكشف المعاملة المتكررة"
     >
       <div className="space-y-4">

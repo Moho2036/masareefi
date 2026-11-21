@@ -111,6 +111,7 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
       onClose={onClose}
       title={editingCircle ? 'تعديل الجمعية المالية' : 'إنشاء جمعية مالية جديدة'}
       closeOnBackdropClick={Boolean(!editingCircle && !name.trim())}
+      hideCloseButton={true}
     >
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         {formError && (
@@ -323,7 +324,7 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
           return (
             <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] text-xs flex flex-col gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
               <div className="flex items-center justify-between">
-                <span>المبلغ الإجمالي المقبوض:</span>
+                <span>الحصة عند الاستلام:</span>
                 <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">
                   <FormattedMoney amountFils={grossPayoutFils} />
                   {shareType === 'double' ? ' (لكل دور استلام)' : ''}
@@ -350,7 +351,7 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
               setAutoScheduleTouched(true)
             }}
             label="جدولة القسط في المعاملات المتكررة"
-            description={`يخصم القسط شهرياً تلقائياً، مع تخطي الخصم تلقائياً في شهر استلامك (الشهر ${myTurnMonth})`}
+            description="خصم شهري تلقائي مع تخطي شهر استلامك"
           />
         </div>
 
@@ -394,7 +395,7 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
               }
             }}
             label="أنا مدير الجمعية (تتبع أسماء ودفعات جميع الأعضاء)"
-            description="فعّل هذا الخيار إذا كنت أنت من يدير الجمعية وترغب بتسجيل أسماء جميع المشتركين ومتابعة من دفع ومن لم يدفع كل شهر."
+            description="تسجيل أسماء المشتركين ومتابعة سدادهم شهرياً"
           />
         </div>
 
@@ -410,10 +411,17 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
           />
         )}
 
+        {formError && (
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{formError}</span>
+          </div>
+        )}
+
         <div className="sticky bottom-0 z-10 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xs pt-3 pb-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             onClick={onClose}
           >
             إلغاء
@@ -421,8 +429,8 @@ export const CircleFormModal: React.FC<CircleFormModalProps> = ({
           <Button type="submit" variant="primary" disabled={submitting}>
             {submitting
               ? editingCircle
-                ? 'جاري الحفظ...'
-                : 'جاري الإنشاء...'
+                ? 'جارٍ الحفظ...'
+                : 'جارٍ الإنشاء...'
               : editingCircle
                 ? 'حفظ التعديلات'
                 : 'إنشاء الجمعية'}

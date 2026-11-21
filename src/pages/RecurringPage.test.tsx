@@ -252,4 +252,112 @@ describe('RecurringPage Component', () => {
     expect(screen.getByRole('button', { name: /إيقاف مؤقت/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /تفعيل/i })).not.toBeInTheDocument()
   })
+
+  it('opens edit form when clicking edit in details modal and allows saving', async () => {
+    const item: Recurring = {
+      id: 'rec-edit-test',
+      type: 'expense',
+      amountFils: 40000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-12-01'),
+      active: true,
+      title: 'اشتراك قابل للتعديل',
+      note: 'ملاحظة قديمة',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [item]
+    render(<RecurringPage />)
+
+    // Open details
+    fireEvent.click(screen.getByText('اشتراك قابل للتعديل'))
+
+    // Click edit button in details modal
+    const editBtn = screen.getByRole('button', { name: /^تعديل$/ })
+    fireEvent.click(editBtn)
+
+    // Check if edit modal is open
+    expect(screen.getByText('تعديل المعاملة المتكررة')).toBeInTheDocument()
+  })
+
+  it('opens delete confirmation modal when clicking delete in details modal and allows confirming deletion', async () => {
+    const item: Recurring = {
+      id: 'rec-delete-test',
+      type: 'expense',
+      amountFils: 40000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-12-01'),
+      active: true,
+      title: 'اشتراك قابل للحذف',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [item]
+    render(<RecurringPage />)
+
+    // Open details
+    fireEvent.click(screen.getByText('اشتراك قابل للحذف'))
+
+    // Click delete button in details modal
+    const deleteBtn = screen.getByRole('button', { name: /^حذف$/ })
+    fireEvent.click(deleteBtn)
+
+    // Check if delete confirmation modal is open
+    expect(screen.getByText('تأكيد حذف المعاملة المتكررة')).toBeInTheDocument()
+    expect(screen.getByText('هل أنت متأكد من حذف هذه المعاملة المتكررة؟ لن يتم إنشاء أي معاملات مستقبلية منها.')).toBeInTheDocument()
+  })
+
+  it('opens edit form directly when clicking edit action button on recurring item card', () => {
+    const item: Recurring = {
+      id: 'rec-card-edit-test',
+      type: 'expense',
+      amountFils: 35000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-12-01'),
+      active: true,
+      title: 'اشتراك مباشر للتعديل',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [item]
+    render(<RecurringPage />)
+
+    const cardEditBtn = screen.getByRole('button', { name: 'تعديل المعاملة المتكررة' })
+    fireEvent.click(cardEditBtn)
+
+    expect(screen.getByText('تعديل المعاملة المتكررة')).toBeInTheDocument()
+  })
+
+  it('opens delete confirmation modal directly when clicking delete action button on recurring item card', () => {
+    const item: Recurring = {
+      id: 'rec-card-delete-test',
+      type: 'expense',
+      amountFils: 35000,
+      categoryId: 'cat-1',
+      frequency: 'monthly',
+      startDate: new Date('2026-01-01'),
+      nextDate: new Date('2026-12-01'),
+      active: true,
+      title: 'اشتراك مباشر للحذف',
+      note: '',
+      createdAt: new Date('2026-01-01'),
+    }
+
+    mockRecurring = [item]
+    render(<RecurringPage />)
+
+    const cardDeleteBtn = screen.getByRole('button', { name: 'حذف المعاملة المتكررة' })
+    fireEvent.click(cardDeleteBtn)
+
+    expect(screen.getByText('تأكيد حذف المعاملة المتكررة')).toBeInTheDocument()
+    expect(screen.getByText('هل أنت متأكد من حذف هذه المعاملة المتكررة؟ لن يتم إنشاء أي معاملات مستقبلية منها.')).toBeInTheDocument()
+  })
 })

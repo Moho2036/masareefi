@@ -846,9 +846,61 @@ describe('SettingsPage Extended Features', () => {
 
     expect(localStorage.getItem('baseer_tour_shown_user-123')).toBeNull()
     expect(localStorage.getItem('masareefi_tour_shown_user-123')).toBeNull()
-    expect(mockShowToast).toHaveBeenCalledWith('تمت إعادة ضبط الجولة بنجاح، جاري بدء الجولة...', 'info')
+    expect(mockShowToast).toHaveBeenCalledWith('تمت إعادة ضبط الجولة بنجاح، جارٍ بدء الجولة...', 'info')
     expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'baseer-start-tour' }))
 
     dispatchSpy.mockRestore()
+  })
+
+  it('allows negative balance input for overdraft reconciliation and supports Eastern Arabic digits', async () => {
+    mockGetAllTransactions.mockResolvedValue([])
+    mockCategoriesData = [
+      { id: 'cat-general', name: 'أخرى', type: 'expense', archived: false },
+    ]
+
+    render(<SettingsPage />)
+
+    const openBtn = screen.getByRole('button', { name: 'تسوية وتعديل الرصيد' })
+    fireEvent.click(openBtn)
+
+    const amountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(amountInput, { target: { value: '-٥٠' } }) // -50 in Eastern Arabic digits
+
+    const saveBtn = screen.getByRole('button', { name: 'حفظ وتسوية الرصيد' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      // Net past txs = 0. Target = -50000 fils.
+      // Required opening = -50000 - 0 = -50000.
+      // Negative required opening sets openingBalanceFils to 0 and adds diff expense transaction of 50000.
+      expect(mockAddTransaction).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          type: 'expense',
+          amountFils: 50000,
+          categoryId: 'cat-general',
+        })
+      )
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        openingBalanceFils: 0,
+      })
+    })
+  })
+
+  it('toggles PIN visibility when clicking show/hide PIN in PIN setup modal', () => {
+    render(<SettingsPage />)
+
+    const setupBtn = screen.getByRole('button', { name: /تعيين رمز PIN/i })
+    fireEvent.click(setupBtn)
+
+    const pinInputs = screen.getAllByPlaceholderText('••••') as HTMLInputElement[]
+    expect(pinInputs[0].type).toBe('password')
+
+    const toggleBtn = screen.getByRole('button', { name: /إظهار الرمز/i })
+    fireEvent.click(toggleBtn)
+
+    const visibleInputs = screen.getAllByPlaceholderText('1234') as HTMLInputElement[]
+    expect(visibleInputs[0].type).toBe('text')
+    expect(screen.getByRole('button', { name: /إخفاء الرمز/i })).toBeInTheDocument()
   })
 })

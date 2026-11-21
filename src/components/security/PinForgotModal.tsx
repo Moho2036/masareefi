@@ -19,6 +19,7 @@ export const PinForgotModal: React.FC<PinForgotModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="استعادة رمز الدخول"
+      hideCloseButton={true}
     >
       <div className="space-y-4 text-start">
         <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -26,7 +27,7 @@ export const PinForgotModal: React.FC<PinForgotModalProps> = ({
         </p>
         <div className="flex items-center justify-end gap-2.5 pt-2">
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={onClose}
           >
             إلغاء

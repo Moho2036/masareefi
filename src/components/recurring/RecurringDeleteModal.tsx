@@ -21,6 +21,7 @@ export const RecurringDeleteModal: React.FC<RecurringDeleteModalProps> = ({
     <Modal
       isOpen={Boolean(item)}
       onClose={onClose}
+      enableHistoryBack={false}
       title="تأكيد حذف المعاملة المتكررة"
     >
       <div className="space-y-4">
@@ -30,7 +31,7 @@ export const RecurringDeleteModal: React.FC<RecurringDeleteModalProps> = ({
             هل أنت متأكد من حذف هذه المعاملة المتكررة؟ لن يتم إنشاء أي معاملات مستقبلية منها.
           </p>
         </div>
-        <div className="flex items-center justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-2.5 pt-2">
           <Button
             variant="outline"
             size="md"
@@ -45,7 +46,7 @@ export const RecurringDeleteModal: React.FC<RecurringDeleteModalProps> = ({
             onClick={onConfirm}
             disabled={deleting}
           >
-            {deleting ? 'جاري الحذف...' : 'حذف المعاملة المتكررة'}
+            {deleting ? 'جارٍ الحذف...' : 'حذف المعاملة المتكررة'}
           </Button>
         </div>
       </div>

@@ -65,21 +65,18 @@ export const WorkHoursInputsCard: React.FC<WorkHoursInputsCardProps> = ({
       {/* Work & Salary Card */}
       <Card title="بيانات العمل والراتب">
         {/* Mobile Compact Summary Bar */}
-        <div className="lg:hidden flex items-center justify-between gap-2 pb-2 text-xs border-b border-zinc-100 dark:border-zinc-800">
-          <div className="text-zinc-600 dark:text-zinc-300 font-medium truncate">
-            <span>
-              الراتب: {salaryStr || '0'} {config.symbol} • أجر الساعة:{' '}
-            </span>
-            <span className="font-bold text-blue-600 dark:text-blue-400">
-              <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} />
-            </span>
+        <div className="lg:hidden flex items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="text-zinc-500 dark:text-zinc-400 text-xs font-medium flex items-center gap-2 flex-wrap">
+            <span>الراتب: <span className="text-zinc-800 dark:text-zinc-200 font-bold">{salaryStr || '0'} {config.symbol}</span></span>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <span>أجر الساعة: <span className="text-blue-600 dark:text-blue-400 font-bold"><FormattedMoney amountFils={hourlyWageFils} maskAmount={false} /></span></span>
           </div>
           <button
             type="button"
             onClick={() => setIsSalaryExpanded((prev) => !prev)}
-            className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer py-0.5 px-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40"
+            className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer py-1 px-2 rounded-lg bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60"
           >
-            <span>تعديل</span>
+            <span>{isSalaryExpanded ? 'إخفاء' : 'تعديل'}</span>
             {isSalaryExpanded ? (
               <ChevronUp className="w-3.5 h-3.5" />
             ) : (
@@ -166,9 +163,9 @@ export const WorkHoursInputsCard: React.FC<WorkHoursInputsCardProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
-            <span className="font-medium">صافي أجرك في الساعة الواحدة:</span>
-            <span className="font-bold text-blue-600 dark:text-blue-400">
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between text-sm text-zinc-700 dark:text-zinc-200">
+            <span className="font-bold">صافي أجرك في الساعة الواحدة:</span>
+            <span className="text-base font-black text-blue-600 dark:text-blue-400">
               <FormattedMoney amountFils={hourlyWageFils} maskAmount={false} /> / ساعة
             </span>
           </div>

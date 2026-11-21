@@ -9,6 +9,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { WorkHoursCalculator } from '../components/tools/WorkHoursCalculator'
 import { MoneyCirclesManager } from '../components/tools/MoneyCirclesManager'
+import { triggerHaptic } from '../lib/haptics'
 
 type ToolKey = 'work_hours' | 'circles'
 
@@ -19,10 +20,12 @@ export const ToolsPage: React.FC = () => {
     rawParam === 'circles' ? 'circles' : rawParam === 'work_hours' ? 'work_hours' : null
 
   const handleOpenTool = (tool: ToolKey) => {
+    triggerHaptic('tick')
     setSearchParams({ tool })
   }
 
   const handleBackToDirectory = () => {
+    triggerHaptic('tick')
     setSearchParams({})
   }
 
@@ -86,7 +89,18 @@ export const ToolsPage: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Tool 1: Money Circles */}
-        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/40 transition-all group">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => handleOpenTool('circles')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              handleOpenTool('circles')
+            }
+          }}
+          className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center shrink-0 transition-colors">
               <Users className="w-5 h-5 stroke-[2.2]" />
@@ -101,20 +115,25 @@ export const ToolsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-5 mt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => handleOpenTool('circles')}
-              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-2xs dark:shadow-none cursor-pointer transition-colors"
-            >
-              <span>فتح أداة الجمعيات</span>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+          <div className="pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400">
+            <span className="group-hover:underline">فتح أداة الجمعيات</span>
+            <ChevronLeft className="w-4 h-4 rtl:rotate-0 group-hover:-translate-x-1 transition-transform" />
           </div>
         </div>
 
         {/* Tool 2: Work Hours Calculator */}
-        <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/40 transition-all group">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => handleOpenTool('work_hours')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              handleOpenTool('work_hours')
+            }
+          }}
+          className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121215] border border-[#E4E4E7] dark:border-[#27272A] shadow-xs dark:shadow-none hover:border-blue-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center shrink-0 transition-colors">
               <Clock className="w-5 h-5 stroke-[2.2]" />
@@ -129,15 +148,9 @@ export const ToolsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-5 mt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => handleOpenTool('work_hours')}
-              className="press-scale w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-2xs dark:shadow-none cursor-pointer transition-colors"
-            >
-              <span>فتح حاسبة ساعات العمل</span>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+          <div className="pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400">
+            <span className="group-hover:underline">فتح حاسبة ساعات العمل</span>
+            <ChevronLeft className="w-4 h-4 rtl:rotate-0 group-hover:-translate-x-1 transition-transform" />
           </div>
         </div>
       </div>

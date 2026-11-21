@@ -128,16 +128,13 @@ export const CircleTurnBanners: React.FC<CircleTurnBannersProps> = ({
               <span>هذا الشهر هو دورك في الاستلام! ستقبض <FormattedMoney amountFils={turnGrossFils} />.</span>
             </div>
             <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-              حان موعد استلام حصتك من الجمعية! الصافي بعد حسم قسطك لهذا الشهر (<FormattedMoney amountFils={userMonthlyFils} />):{' '}
+              حان موعد استلام حصتك من الجمعية! تم استقطاع قسط هذا الشهر داخلياً من حصتك (<FormattedMoney amountFils={userMonthlyFils} />)، الصافي المودع:{' '}
               <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
                 <FormattedMoney amountFils={netAmountFils} />
               </strong>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
-              لا يُخصم منك قسط
-            </span>
             <Button
               type="button"
               variant="primary"
@@ -161,14 +158,14 @@ export const CircleTurnBanners: React.FC<CircleTurnBannersProps> = ({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shrink-0">
-              {hasUserDeposited ? 'تم إيداع الصافي في الرصيد' : 'لا يُخصم منك قسط'}
+              {hasUserDeposited ? 'تم إيداع الصافي في الرصيد' : 'يُستقطع قسطك داخلياً من حصتك'}
             </span>
             {hasUserDeposited && (
               <button
                 type="button"
                 onClick={() => onUndoDepositCircleNet(circle, isSecondTurnActiveNow ? 't2' : 't1')}
                 disabled={depositingCircleId === circle.id}
-                className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 underline cursor-pointer disabled:opacity-50"
+                className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 underline cursor-pointer disabled:opacity-50 min-h-[44px] flex items-center px-1"
               >
                 إلغاء الإيداع
               </button>
@@ -292,7 +289,7 @@ export const CircleTurnBanners: React.FC<CircleTurnBannersProps> = ({
               <span>حان موعد استلام حصتك من الجمعية!</span>
             </div>
             <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-              الصافي بعد حسم قسطك لهذا الشهر (<FormattedMoney amountFils={userMonthlyFils} />):{' '}
+              تم استقطاع قسط هذا الشهر داخلياً من حصتك (<FormattedMoney amountFils={userMonthlyFils} />)، الصافي المودع:{' '}
               <strong className="text-zinc-900 dark:text-zinc-100 font-bold">
                 <FormattedMoney amountFils={netAmountFils} />
               </strong>

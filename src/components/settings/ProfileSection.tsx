@@ -14,7 +14,6 @@ import { Input } from '../ui/Input'
 import { Modal } from '../ui/Modal'
 import { updateUserDisplayName, sendUserEmailVerification } from '../../services/auth'
 import { toWesternDigits } from '../../lib/dates'
-import { cn } from '../../lib/cn'
 import type { User } from 'firebase/auth'
 import type { UserSettings } from '../../types'
 
@@ -43,8 +42,6 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
   setDisplayNameInput: propSetDisplayNameInput,
   effectiveDisplayName: propEffectiveDisplayName,
 }) => {
-  const avatarColors = ['#2563EB', '#059669', '#DC2626', '#D97706', '#7C3AED', '#DB2777']
-
   const defaultEffectiveDisplayName =
     settings?.displayName?.trim() || user?.displayName?.trim() || user?.email?.split('@')[0] || 'المستخدم'
   const effectiveDisplayName = propEffectiveDisplayName ?? defaultEffectiveDisplayName
@@ -93,16 +90,6 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
     }
   }
 
-  const handleAvatarColorSelect = async (color: string) => {
-    try {
-      await updateSettings({ avatarColor: color })
-      showToast('تم تحديث لون الصورة الرمزية', 'success')
-    } catch (err) {
-      console.error('Failed to update avatar color:', err)
-      showToast('تعذر تحديث اللون', 'error')
-    }
-  }
-
   const handleSendVerificationEmail = async () => {
     try {
       await sendUserEmailVerification()
@@ -115,7 +102,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
 
   return (
     <>
-      <Card title="الملف الشخصي والهوية" subtitle="بيانات حسابك، لون الرمز الشخصي، وحالة التحقق">
+      <Card title="الملف الشخصي والهوية" subtitle="بيانات حسابك وحالة التحقق والمزامنة السحابية">
         <div className="pt-2 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
@@ -128,11 +115,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                 />
               ) : (
                 <div
-                  style={{ backgroundColor: settings?.avatarColor || undefined }}
-                  className={cn(
-                    'w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-xs shrink-0 transition-colors',
-                    !settings?.avatarColor && 'bg-blue-600'
-                  )}
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-[#E4E4E7] dark:border-[#27272A] shadow-xs shrink-0"
                 >
                   {effectiveDisplayName.charAt(0) || 'ب'}
                 </div>
@@ -157,7 +140,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                       disabled={savingName || !displayNameInput.trim()}
                       className="shrink-0 text-xs font-bold"
                     >
-                      {savingName ? 'جاري الحفظ...' : 'حفظ'}
+                      {savingName ? 'جارٍ الحفظ...' : 'حفظ'}
                     </Button>
                     <Button
                       variant="outline"
@@ -180,11 +163,11 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsEditingName(true)}
-                      className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      className="p-2 sm:p-2.5 min-w-[44px] min-h-[44px] rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer inline-flex items-center justify-center"
                       title="تعديل الاسم"
                       aria-label="تعديل الاسم"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="w-4 h-4" />
                     </button>
                   </div>
                 )}
@@ -210,29 +193,6 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
             >
               تسجيل الخروج
             </Button>
-          </div>
-
-          {/* Avatar Color Palette */}
-          <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between flex-wrap gap-3">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-              تخصيص لون الصورة الرمزية:
-            </span>
-            <div className="flex items-center gap-2">
-              {avatarColors.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => handleAvatarColorSelect(color)}
-                  className={`w-7 h-7 rounded-xl border-2 transition-transform cursor-pointer ${
-                    settings?.avatarColor === color
-                      ? 'border-zinc-900 dark:border-white scale-110 shadow-xs'
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
           </div>
 
           {/* Email Verification & Cloud Status */}
@@ -306,10 +266,11 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
         onClose={() => setShowSignOutModal(false)}
         enableHistoryBack={false}
         title="تأكيد تسجيل الخروج"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
-            هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ بياناتك محفوظة بأمان على السحابة وستتمكن من الوصول إليها فور تسجيل الدخول مجدداً.
+            هل أنت متأكد من رغبتك في تسجيل الخروج؟ بياناتك محفوظة بأمان على السحابة.
           </p>
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
@@ -326,7 +287,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({
               onClick={onSignOut}
               disabled={loggingOut}
             >
-              {loggingOut ? 'جاري تسجيل الخروج...' : 'تسجيل الخروج'}
+              {loggingOut ? 'جارٍ تسجيل الخروج...' : 'تسجيل الخروج'}
             </Button>
           </div>
         </div>

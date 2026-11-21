@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   SkipForward,
   AlertCircle,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { CategoryIcon } from '../ui/CategoryIcon'
 import { FormattedMoney } from '../ui/FormattedMoney'
@@ -48,6 +50,8 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
   onSkipOccurrence,
   onOpenDetails,
   onDepositCircleDirect,
+  onEdit,
+  onDelete,
 }) => {
   const cat = categoryMap.get(item.categoryId)
   const icon = cat?.icon ?? '➕'
@@ -152,6 +156,36 @@ export const RecurringItemCard: React.FC<RecurringItemCardProps> = ({
               <span className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-[#E4E4E7] dark:border-[#27272A]">
                 {isDueForManualConfirm ? 'بانتظار تأكيدك' : 'تأكيد يدوي'}
               </span>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  triggerHaptic('tick')
+                  onEdit(item)
+                }}
+                className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-100 dark:hover:text-blue-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer min-w-[32px] min-h-[32px] flex items-center justify-center border border-zinc-200/80 dark:border-zinc-800"
+                title="تعديل المعاملة المتكررة"
+                aria-label="تعديل المعاملة المتكررة"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  triggerHaptic('warning')
+                  onDelete(item)
+                }}
+                className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors cursor-pointer min-w-[32px] min-h-[32px] flex items-center justify-center border border-zinc-200/80 dark:border-zinc-800"
+                title="حذف المعاملة المتكررة"
+                aria-label="حذف المعاملة المتكررة"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-500/80" />
+              </button>
             )}
           </div>
         </div>

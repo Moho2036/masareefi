@@ -36,19 +36,7 @@ export const WorkHoursVisualResultCard: React.FC<WorkHoursVisualResultCardProps>
       <div className="space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
           <span className="text-xs font-bold text-zinc-400">التكلفة الفعلية للشراء</span>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full',
-              impactTier === 'none' &&
-                'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400',
-              impactTier === 'light' &&
-                'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300',
-              impactTier === 'medium' &&
-                'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300',
-              impactTier === 'heavy' &&
-                'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
-            )}
-          >
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700/80">
             <span
               className={cn(
                 'w-2 h-2 rounded-full shrink-0',

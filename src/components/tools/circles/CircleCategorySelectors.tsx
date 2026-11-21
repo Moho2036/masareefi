@@ -31,7 +31,7 @@ export const CircleCategorySelectors: React.FC<CircleCategorySelectorsProps> = (
         <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
           تصنيف أقساط المصاريف
         </label>
-        <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
+        <div className="grid grid-cols-2 gap-2 p-0.5">
           {categories
             .filter(
               (c) =>
@@ -77,7 +77,7 @@ export const CircleCategorySelectors: React.FC<CircleCategorySelectorsProps> = (
         <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
           تصنيف إيداع الصافي (دخل)
         </label>
-        <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-0.5">
+        <div className="grid grid-cols-2 gap-2 p-0.5">
           {categories
             .filter(
               (c) =>

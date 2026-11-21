@@ -323,6 +323,7 @@ export const SecuritySection: React.FC<SecuritySectionProps> = ({
           setConfirmPassword('')
         }}
         title="تغيير كلمة المرور"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <div>
@@ -376,7 +377,7 @@ export const SecuritySection: React.FC<SecuritySectionProps> = ({
               onClick={handleChangePassword}
               disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
             >
-              {changingPassword ? 'جاري الحفظ...' : 'حفظ كلمة المرور'}
+              {changingPassword ? 'جارٍ الحفظ...' : 'حفظ كلمة المرور'}
             </Button>
           </div>
         </div>

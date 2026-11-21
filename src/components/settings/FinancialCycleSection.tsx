@@ -7,7 +7,7 @@ import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { FormattedMoney } from '../ui/FormattedMoney'
-import { getFinancialMonthRange } from '../../lib/dates'
+import { getFinancialMonthRange, toWesternDigits } from '../../lib/dates'
 import { toFils, fromFils, PRESET_CURRENCIES, getCurrencyConfig, MAX_AMOUNT_FILS } from '../../lib/money'
 import {
   calculateReconciliation,
@@ -114,18 +114,19 @@ export const FinancialCycleSection: React.FC<FinancialCycleSectionProps> = ({
 
   const handleSaveReconciliation = async () => {
     if (!uid) return
-    const trimmed = reconcileAmount.trim()
-    if (!trimmed || trimmed.startsWith('-')) {
+    const rawDigits = toWesternDigits(reconcileAmount)
+    const trimmed = rawDigits.trim()
+    if (!trimmed) {
       showToast('يرجى إدخال مبلغ صالح', 'error')
       return
     }
     const decimals = settings?.customCurrencyDecimals ?? PRESET_CURRENCIES[activeCurrency]?.decimals ?? 3
     const targetFils = toFils(trimmed, decimals)
-    if (isNaN(targetFils) || targetFils < 0) {
+    if (isNaN(targetFils)) {
       showToast('يرجى إدخال مبلغ صالح', 'error')
       return
     }
-    if (targetFils > MAX_AMOUNT_FILS) {
+    if (Math.abs(targetFils) > MAX_AMOUNT_FILS) {
       showToast('المبلغ يتجاوز الحد الأقصى المسموح به', 'error')
       return
     }
@@ -190,7 +191,7 @@ export const FinancialCycleSection: React.FC<FinancialCycleSectionProps> = ({
               value={currentStartDay}
               onChange={handleStartDayChange}
               options={dayOptions}
-              helperText="تبدأ جميع تقاريرك الشهرية وحسابات الصرف والحد اليومي الآمن من هذا اليوم (أقصى يوم هو 28 لضمان انتظام الحساب في شهر فبراير وكافة الأشهر)."
+              helperText="تبدأ تقاريرك الشهرية وحد الصرف اليومي من هذا اليوم (حتى يوم 28 لضمان انتظام كافة الأشهر)."
             />
           </div>
 
@@ -263,6 +264,7 @@ export const FinancialCycleSection: React.FC<FinancialCycleSectionProps> = ({
         isOpen={showReconcileModal}
         onClose={() => setShowReconcileModal(false)}
         title="تسوية وتعديل الرصيد الفعلي"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -276,7 +278,7 @@ export const FinancialCycleSection: React.FC<FinancialCycleSectionProps> = ({
               type="text"
               inputMode="decimal"
               value={reconcileAmount}
-              onChange={(e) => setReconcileAmount(e.target.value)}
+              onChange={(e) => setReconcileAmount(toWesternDigits(e.target.value))}
               placeholder="0.00"
               dir="ltr"
               className="font-mono"
@@ -297,7 +299,7 @@ export const FinancialCycleSection: React.FC<FinancialCycleSectionProps> = ({
               onClick={handleSaveReconciliation}
               disabled={savingReconcile || !reconcileAmount.trim()}
             >
-              {savingReconcile ? 'جاري التسوية...' : 'حفظ وتسوية الرصيد'}
+              {savingReconcile ? 'جارٍ التسوية...' : 'حفظ وتسوية الرصيد'}
             </Button>
           </div>
         </div>

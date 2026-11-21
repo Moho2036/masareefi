@@ -36,6 +36,7 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
         isOpen={deleteCircleId !== null}
         onClose={onCloseDelete}
         title="تأكيد حذف الجمعية"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
@@ -47,13 +48,13 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
               checked={deleteTransactions}
               onChange={setDeleteTransactions}
               label="حذف الأقساط والإيداعات المسجلة في المحفظة لهذه الجمعية"
-              description="تنبيه: إذا قمت بتفعيل هذا الخيار، ستُحذف المعاملات وتتغير أرصدة محفظتك السابقة. الإبقاء عليها دون تفعيل يضمن دقة تقاريرك المالية وسجل مصروفاتك التاريخي."
+              description="حذف المعاملات المالية المرتبطة بالجمعية وتحديث رصيد المحفظة"
             />
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={onCloseDelete}
             >
               إلغاء
@@ -63,7 +64,7 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
               onClick={onConfirmDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? 'جاري الحذف...' : 'نعم، حذف الجمعية'}
+              {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف الجمعية'}
             </Button>
           </div>
         </div>
@@ -74,6 +75,7 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
         isOpen={Boolean(confirmCompleteCircle)}
         onClose={onCloseComplete}
         title="تأكيد إنهاء الجمعية"
+        hideCloseButton={true}
       >
         <div className="space-y-4">
           <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -84,7 +86,7 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
           </p>
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={onCloseComplete}
             >
               إلغاء
@@ -94,7 +96,7 @@ export const CircleConfirmationModals: React.FC<CircleConfirmationModalsProps> =
               disabled={isCompleting}
               onClick={onConfirmComplete}
             >
-              {isCompleting ? 'جاري الإنهاء...' : 'تأكيد الإنهاء'}
+              {isCompleting ? 'جارٍ الإنهاء...' : 'تأكيد الإنهاء'}
             </Button>
           </div>
         </div>

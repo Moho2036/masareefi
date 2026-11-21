@@ -113,7 +113,7 @@ export const SettingsPage: React.FC = () => {
         localStorage.removeItem('baseer_tour_shown')
         localStorage.removeItem('masareefi_tour_shown')
       }
-      showToast('تمت إعادة ضبط الجولة بنجاح، جاري بدء الجولة...', 'info')
+      showToast('تمت إعادة ضبط الجولة بنجاح، جارٍ بدء الجولة...', 'info')
       navigate('/')
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('baseer-start-tour'))

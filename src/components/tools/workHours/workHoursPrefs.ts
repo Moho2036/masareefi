@@ -121,3 +121,12 @@ export function loadStoredPrefs(currencyCode: string): {
     hasInteracted: false,
   }
 }
+
+export function clearWorkHoursPrefs(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
