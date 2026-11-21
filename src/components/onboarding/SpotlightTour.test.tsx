@@ -188,4 +188,22 @@ describe('SpotlightTour Component', () => {
 
     document.body.removeChild(targetEl)
   })
+
+  it('renders a dedicated scrollable container for content while keeping header and footer pinned', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SpotlightTour isOpen={true} onFinish={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    const scrollContainer = screen.getByLabelText('محتوى الخطوة')
+    expect(scrollContainer).toBeInTheDocument()
+    expect(scrollContainer).toHaveClass('overflow-y-auto')
+
+    const skipBtn = screen.getByRole('button', { name: 'إغلاق الجولة' })
+    expect(skipBtn).toBeInTheDocument()
+
+    const nextBtn = screen.getByRole('button', { name: 'التالي' })
+    expect(nextBtn).toBeInTheDocument()
+  })
 })
