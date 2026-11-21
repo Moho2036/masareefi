@@ -152,17 +152,19 @@ export const SettingsPage: React.FC = () => {
         updateSettings={updateSettings}
       />
 
-      <FinancialCycleSection
-        uid={uid}
-        settings={settings}
-        updateSettings={updateSettings}
-        selectedDay={selectedDay}
-        setSelectedDay={setSelectedDay}
-        categories={categories}
-        activeCurrency={activeCurrency}
-        showToast={showToast}
-        refreshData={refreshData}
-      />
+      <div data-tour="settings-view">
+        <FinancialCycleSection
+          uid={uid}
+          settings={settings}
+          updateSettings={updateSettings}
+          selectedDay={selectedDay}
+          setSelectedDay={setSelectedDay}
+          categories={categories}
+          activeCurrency={activeCurrency}
+          showToast={showToast}
+          refreshData={refreshData}
+        />
+      </div>
 
       <CurrencySection
         activeCurrency={activeCurrency}

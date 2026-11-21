@@ -36,7 +36,7 @@ export const DebtsSummaryCards: React.FC<DebtsSummaryCardsProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+    <div data-tour="debts-summary" className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       {/* Card 1: مستحقات لي */}
       <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex flex-col justify-between h-full">
         <div>

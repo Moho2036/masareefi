@@ -153,7 +153,7 @@ export const ReportsPage: React.FC = () => {
         title="التقارير المالية"
         subtitle="تحليل تفصيلي وإحصائيات لأداء ميزانيتك ومصاريفك"
         actions={
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div data-tour="reports-view" className="flex items-center gap-2.5 flex-wrap">
             <SegmentedControl<'monthly' | 'yearly'>
               value={reports.reportPeriod}
               onChange={(val) => {

@@ -166,7 +166,7 @@ export const TransactionsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:block min-w-0">
+      <div data-tour="transactions-toolbar" className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:block min-w-0">
         <TransactionFilterToolbar
           filterType={filterType}
           onFilterTypeChange={(val) => {

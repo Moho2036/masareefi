@@ -32,7 +32,7 @@ export const ToolsPage: React.FC = () => {
   // 1. Dedicated View for Money Circles
   if (activeTool === 'circles') {
     return (
-      <div className="space-y-6 max-w-5xl mx-auto animate-slide-up">
+      <div data-tour="tools-circles" className="space-y-6 max-w-5xl mx-auto animate-slide-up">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <button
             type="button"
@@ -90,6 +90,7 @@ export const ToolsPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Tool 1: Money Circles */}
         <div
+          data-tour="tools-circles"
           role="button"
           tabIndex={0}
           onClick={() => handleOpenTool('circles')}

@@ -1,58 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router'
+import { Laptop, Smartphone } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { cn } from '../../lib/cn'
+import { TOUR_STEPS } from './tour/tourSteps'
+import { MockTransactionDemo } from './tour/MockTransactionDemo'
+import { MockDataCard } from './tour/MockDataCard'
 
 export interface SpotlightTourProps {
   isOpen: boolean
   onFinish: () => void
 }
-
-interface TourStep {
-  target: string
-  title: string
-  description: string
-}
-
-const TOUR_STEPS: TourStep[] = [
-  {
-    target: 'hero-balance',
-    title: 'الرصيد المتاح وحد الصرف اليومي',
-    description:
-      'تعرض سيولتك الفعلية ومجموع دخلك ومصروفك، وفي أسفلها يظهر الحد اليومي الآمن للصرف لحمايتك من العجز قبل نهاية الشهر.',
-  },
-  {
-    target: 'add-transaction-btn',
-    title: 'إضافة معاملة سريعة (+)',
-    description:
-      'سجّل أي مصروف أو دخل في ثوانٍ من أي شاشة، مع إمكانية إجراء عمليات حسابية مباشرة داخل حقل المبلغ أو جعلها معاملة دورية.',
-  },
-  {
-    target: 'transactions-nav',
-    title: 'سجل المعاملات',
-    description:
-      'استعرض حركاتك المالية مجمعةً بالأيام، وابحث فيها أو صفِّها حسب التصنيف والفترة، مع إمكانية تصديرها لملف Excel أو طباعتها كـ PDF.',
-  },
-  {
-    target: 'debts-nav',
-    title: 'دفتر الديون والالتزامات',
-    description:
-      'وثّق ما لك وما عليك من ديون وسلف، وسجّل الدفعات الجزئية، وشارك كشف حساب مفصل مع الطرف الآخر عبر واتساب.',
-  },
-  {
-    target: 'more-and-tools',
-    title: 'التقارير والتحليلات المالية',
-    description:
-      'استعرض الرسوم البيانية التفاعلية ومخططات الإنفاق الشهري والسنوي، ومعدلات الادخار لمتابعة أداء ميزانيتك بدقة.',
-  },
-  {
-    target: 'notifications-bell',
-    title: 'مركز التنبيهات',
-    description:
-      'يذكّرك تلقائياً بمواعيد الفواتير المتكررة التي تنتظر تأكيدك، وأقساط الجمعيات، ومواعيد استحقاق الديون.',
-  },
-]
 
 interface Rect {
   top: number
@@ -82,8 +42,11 @@ function findVisibleTarget(targetKey: string): HTMLElement | null {
 export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }) => {
   const { user } = useAuth()
   const uid = user?.uid
+  const navigate = useNavigate()
+
   const [currentStep, setCurrentStep] = useState<number>(0)
   const [targetRect, setTargetRect] = useState<Rect | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   const handleFinishTour = useCallback(() => {
     if (uid && typeof window !== 'undefined' && window.localStorage) {
@@ -94,11 +57,20 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         // ignore
       }
     }
+    if (navigate) {
+      try {
+        navigate('/')
+      } catch {
+        // ignore
+      }
+    }
     onFinish()
-  }, [uid, onFinish])
+  }, [uid, navigate, onFinish])
 
   const updateRect = useCallback(() => {
-    const el = findVisibleTarget(TOUR_STEPS[currentStep].target)
+    const step = TOUR_STEPS[currentStep]
+    if (!step) return
+    const el = findVisibleTarget(step.target)
     if (!el) {
       setTargetRect(null)
       return
@@ -114,11 +86,26 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
     })
   }, [currentStep])
 
+  // Navigate to step route when step changes
+  useEffect(() => {
+    if (!isOpen) return
+    const step = TOUR_STEPS[currentStep]
+    if (navigate && step?.route) {
+      try {
+        navigate(step.route)
+      } catch {
+        // ignore navigation errors in non-browser/test environments
+      }
+    }
+  }, [isOpen, currentStep, navigate])
+
   /* eslint-disable react-hooks/set-state-in-effect */
+  // Watch for target element appearing / resizing / scrolling
   useEffect(() => {
     if (!isOpen) return
 
-    const el = findVisibleTarget(TOUR_STEPS[currentStep].target)
+    const step = TOUR_STEPS[currentStep]
+    const el = findVisibleTarget(step.target)
     if (el) {
       const r = el.getBoundingClientRect()
       if (
@@ -134,19 +121,24 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
     }
 
     updateRect()
-    const timer = setTimeout(updateRect, 250)
+    const t1 = setTimeout(updateRect, 150)
+    const t2 = setTimeout(updateRect, 400)
+    const t3 = setTimeout(updateRect, 800)
 
     window.addEventListener('resize', updateRect)
     window.addEventListener('scroll', updateRect, true)
 
     return () => {
-      clearTimeout(timer)
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
       window.removeEventListener('resize', updateRect)
       window.removeEventListener('scroll', updateRect, true)
     }
   }, [isOpen, currentStep, updateRect])
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // Escape key handler
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -162,31 +154,37 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
   if (typeof document === 'undefined') return null
 
   const stepData = TOUR_STEPS[currentStep]
-  const cardWidth = typeof window !== 'undefined' ? Math.min(340, window.innerWidth - 32) : 340
+  const cardWidth = typeof window !== 'undefined' ? Math.min(420, window.innerWidth - 24) : 420
   const isTop =
     targetRect && typeof window !== 'undefined'
-      ? targetRect.bottom + 210 < window.innerHeight || targetRect.top < 180
+      ? targetRect.bottom + 320 < window.innerHeight || targetRect.top < 220
       : true
 
   const cardLeft =
     targetRect && typeof window !== 'undefined'
       ? Math.max(
-          16,
-          Math.min(window.innerWidth - cardWidth - 16, targetRect.left + targetRect.width / 2 - cardWidth / 2)
+          12,
+          Math.min(window.innerWidth - cardWidth - 12, targetRect.left + targetRect.width / 2 - cardWidth / 2)
         )
-      : 16
+      : 12
 
   const arrowLeft = targetRect
     ? Math.max(16, Math.min(cardWidth - 28, targetRect.left + targetRect.width / 2 - cardLeft - 6))
     : 16
 
   const renderCardContent = () => (
-    <>
-      {/* Top Header: Step counter on right, Skip button on left */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold text-zinc-400 tabular-nums">
-          {currentStep + 1} / {TOUR_STEPS.length}
-        </span>
+    <div className="flex flex-col max-h-[82vh] overflow-y-auto">
+      {/* 1. Header: Step counter & Skip button */}
+      <div className="flex items-center justify-between mb-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-blue-600 dark:text-blue-400 tabular-nums">
+            {currentStep + 1} / {TOUR_STEPS.length}
+          </span>
+          <span className="text-zinc-300 dark:text-zinc-700">•</span>
+          <span className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500">
+            جولة تعريفية متعمقة
+          </span>
+        </div>
         <button
           type="button"
           onClick={handleFinishTour}
@@ -197,18 +195,54 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         </button>
       </div>
 
-      {/* Step title & description */}
-      <div>
-        <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 dark:text-zinc-100">
+      {/* 2. Step Title & Description */}
+      <div className="shrink-0">
+        <h3 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100">
           {stepData.title}
         </h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mt-1">
+        <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed mt-1">
           {stepData.description}
         </p>
       </div>
 
-      {/* Bottom: Progress dots on right, Previous & Next / Finish on left */}
-      <div className="pt-3 mt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+      {/* 3. Deep Feature Highlights */}
+      <div className="mt-3 space-y-1.5 shrink-0">
+        {stepData.highlights.map((h, idx) => (
+          <div key={idx} className="flex items-start gap-1.5 text-xs">
+            <span className="text-blue-600 dark:text-blue-400 font-bold shrink-0 mt-0.5">•</span>
+            <div className="leading-snug">
+              <strong className="font-extrabold text-zinc-900 dark:text-zinc-100">{h.label}: </strong>
+              <span className="text-zinc-500 dark:text-zinc-400">{h.text}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. Desktop vs Mobile Context Tip */}
+      <div className="mt-3 p-2.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-800/60 border border-[#E4E4E7]/60 dark:border-[#27272A] space-y-1 text-[11px] shrink-0">
+        <div className="flex items-start gap-1.5">
+          <Laptop className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
+          <span className="text-zinc-700 dark:text-zinc-300">
+            <strong>الحاسوب:</strong> {stepData.deviceTip.desktop}
+          </span>
+        </div>
+        <div className="flex items-start gap-1.5 pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60">
+          <Smartphone className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
+          <span className="text-zinc-700 dark:text-zinc-300">
+            <strong>الهاتف:</strong> {stepData.deviceTip.mobile}
+          </span>
+        </div>
+      </div>
+
+      {/* 5. Mock Demo / Simulation for Empty States */}
+      {stepData.mockType === 'transaction' && <MockTransactionDemo />}
+      {stepData.mockType && stepData.mockType !== 'transaction' && (
+        <MockDataCard type={stepData.mockType} />
+      )}
+
+      {/* 6. Footer: Progress Dots & Action Buttons */}
+      <div className="pt-3 mt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
+        {/* Dots */}
         <div className="flex items-center gap-1">
           {TOUR_STEPS.map((_, idx) => (
             <div
@@ -223,6 +257,7 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
           ))}
         </div>
 
+        {/* Buttons */}
         <div className="flex items-center gap-2">
           {currentStep > 0 && (
             <Button
@@ -252,7 +287,7 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 
   const hasTarget = Boolean(targetRect && targetRect.width > 0 && targetRect.height > 0)
@@ -274,6 +309,7 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
 
         {/* Floating Card */}
         <div
+          ref={cardRef}
           role="dialog"
           aria-label="جولة بَصير السريعة"
           className="fixed z-[112] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-xl p-4 sm:p-5 select-none animate-fade-in"
@@ -302,11 +338,13 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({ isOpen, onFinish }
         </div>
       </div>
     ) : (
-      <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-3">
         <div
+          ref={cardRef}
           role="dialog"
           aria-label="جولة بَصير السريعة"
-          className="w-full max-w-[340px] bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-xl p-4 sm:p-5 select-none animate-fade-in"
+          className="w-full bg-white dark:bg-[#121215] text-zinc-950 dark:text-zinc-50 border border-[#E4E4E7] dark:border-[#27272A] rounded-2xl shadow-xl p-4 sm:p-5 select-none animate-fade-in"
+          style={{ maxWidth: `${cardWidth}px` }}
         >
           {renderCardContent()}
         </div>

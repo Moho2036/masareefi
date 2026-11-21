@@ -11,10 +11,14 @@
             "id": "8babb7d340e7e09d",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "02_موجز_المشروع/موجز_التطبيق_الشامل.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "موجز_التطبيق_الشامل"
             }
           }
         ]
@@ -95,6 +99,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "02_موجز_المشروع/موجز_التطبيق_الشامل.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -113,6 +118,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "02_موجز_المشروع/موجز_التطبيق_الشامل.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -155,6 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "02_موجز_المشروع/موجز_التطبيق_الشامل.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -181,7 +188,7 @@
       "bases:Create new base": false
     }
   },
-  "active": "f33995b7165c78cd",
+  "active": "8babb7d340e7e09d",
   "lastOpenFiles": [
     "01_النظرة_الشاملة/تقرير_الصفحة_الواحدة.md",
     "03_الأدلة_العميقة/05_دليل_التصميم_وتجربة_المستخدم.md",

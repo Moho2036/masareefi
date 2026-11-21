@@ -16,7 +16,7 @@ export const RecurringKpiCards: React.FC<RecurringKpiCardsProps> = ({
   dueWithin7DaysCount,
 }) => {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+    <div data-tour="recurring-summary" className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       {/* Income Card */}
       <div className="bg-white dark:bg-[#121215] p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] shadow-2xs dark:shadow-none flex items-center justify-between">
         <div>
